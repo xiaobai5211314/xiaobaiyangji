@@ -1,0 +1,356 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>科技军团 - 多账户量化系统</title>
+    <script src="https://cdn.staticfile.net/echarts/5.5.0/echarts.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #101423;
+            color: #fff;
+            font-family: 'Segoe UI', sans-serif;
+            overflow-x: hidden;
+        }
+
+        .header {
+            padding: 15px 20px;
+            border-bottom: 1px solid #2a3045;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+            .header h1 {
+                margin: 0;
+                font-size: 22px;
+                color: #00e5ff;
+                letter-spacing: 2px;
+            }
+
+        /* 酷炫的控制面板 */
+        .control-panel {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+            .control-panel input {
+                background: #1a2035;
+                border: 1px solid #2a3045;
+                color: #00e5ff;
+                padding: 6px 10px;
+                border-radius: 4px;
+                outline: none;
+                width: 130px;
+            }
+
+        .btn-add {
+            background: #00e5ff;
+            color: #000;
+            border: none;
+            padding: 7px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .btn-logout {
+            background: transparent;
+            color: #ff4d4f;
+            border: 1px solid #ff4d4f;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        /* 个人持仓标签区 */
+        #fund-list {
+            padding: 10px 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            background: #0a0d18;
+        }
+
+        .fund-tag {
+            background: #1a2035;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid #2a3045;
+        }
+
+            .fund-tag span {
+                color: #00e5ff;
+            }
+
+            .fund-tag button {
+                background: none;
+                border: none;
+                color: #ff4d4f;
+                cursor: pointer;
+                font-weight: bold;
+                padding: 0 5px;
+            }
+
+                .fund-tag button:hover {
+                    color: #fff;
+                    background: #ff4d4f;
+                    border-radius: 50%;
+                }
+
+        #chart-container {
+            width: 100vw;
+            height: calc(100vh - 120px);
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        /* 登录遮罩层 */
+        #loginOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(16, 20, 35, 0.95);
+            z-index: 999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(5px);
+        }
+
+        .login-box {
+            background: #1a2035;
+            padding: 40px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid #00e5ff;
+            box-shadow: 0 0 20px rgba(0,229,255,0.2);
+        }
+
+            .login-box input {
+                width: 100%;
+                box-sizing: border-box;
+                margin: 20px 0;
+                padding: 12px;
+                background: #0a0d18;
+                border: 1px solid #2a3045;
+                color: #00e5ff;
+                font-size: 16px;
+                text-align: center;
+            }
+
+            .login-box button {
+                width: 100%;
+                padding: 12px;
+                background: #00e5ff;
+                color: #000;
+                font-size: 16px;
+                font-weight: bold;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+    </style>
+</head>
+<body>
+
+    <div id="loginOverlay">
+        <div class="login-box">
+            <h2 style="color: #00e5ff; margin-top: 0;">⚡ 指挥中心验证身份</h2>
+            <input type="text" id="usernameInput" placeholder="请输入您的专属代号" autocomplete="off">
+            <input type="password" id="passwordInput" placeholder="请输入安全访问密码" autocomplete="off" onkeypress="if(event.keyCode==13) login()">
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button onclick="login()">验证并登录</button>
+                <button onclick="register()" style="background: transparent; border: 1px solid #00e5ff; color: #00e5ff;">注册新军团</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="header">
+        <h1>🦾 科技军团 · 个人专属大屏 (<span id="currentUserDisp"></span>)</h1>
+        <div class="control-panel">
+            <input type="text" id="fundCode" placeholder="基金代码 (如 017811)">
+            <input type="number" id="fundAmount" placeholder="持有本金 (元)">
+            <button class="btn-add" onclick="addFund()">+ 添加/修改</button>
+            <button class="btn-logout" onclick="logout()">退出登录</button>
+        </div>
+    </div>
+
+    <div id="fund-list"></div>
+
+    <div id="chart-container"></div>
+
+    <script>
+        var currentUser = localStorage.getItem('fund_username');
+        if (currentUser) {
+            document.getElementById('loginOverlay').style.display = 'none';
+            document.getElementById('currentUserDisp').innerText = currentUser;
+            loadData();
+        }
+
+        // 注册逻辑
+        function register() {
+            var name = document.getElementById('usernameInput').value.trim();
+            var pwd = document.getElementById('passwordInput').value.trim();
+            if (!name || !pwd) return alert("账号和密码不能为空！");
+
+            let fd = new FormData(); fd.append('username', name); fd.append('password', pwd);
+            fetch('/api/auth/register', { method: 'POST', body: fd })
+                .then(r => r.json().then(data => ({ status: r.status, body: data })))
+                .then(res => {
+                    if (res.status === 200) alert("✅ 注册成功！系统已为您分配独立空间，请点击登录。");
+                    else alert("❌ " + (res.body || "注册失败"));
+                });
+        }
+
+        // 登录逻辑
+        function login() {
+            var name = document.getElementById('usernameInput').value.trim();
+            var pwd = document.getElementById('passwordInput').value.trim();
+            if (!name || !pwd) return alert("账号和密码不能为空！");
+
+            let fd = new FormData(); fd.append('username', name); fd.append('password', pwd);
+            fetch('/api/auth/login', { method: 'POST', body: fd })
+                .then(r => {
+                    if (r.ok) {
+                        localStorage.setItem('fund_username', name);
+                        location.reload();
+                    } else {
+                        alert("❌ 账号或密码错误，拒绝访问！");
+                    }
+                });
+        }
+
+        // 登出逻辑
+        function logout() {
+            localStorage.removeItem('fund_username');
+            location.reload();
+        }
+
+        // 添加基金
+        function addFund() {
+            const code = document.getElementById('fundCode').value.trim();
+            const amount = document.getElementById('fundAmount').value.trim();
+            if (!code || !amount) return alert("请输入完整的代码和金额！");
+
+            const formData = new FormData();
+            formData.append('username', currentUser);
+            formData.append('code', code);
+            formData.append('amount', amount);
+
+            fetch('/api/fund/add', { method: 'POST', body: formData })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(`✅ 成功添加: ${data.name}`);
+                        location.reload();
+                    }
+                });
+        }
+
+        // 删除基金
+        function deleteFund(code, name) {
+            if (confirm(`⚠️ 确定要从您的大屏中移除 [${name}] 吗？`)) {
+                const formData = new FormData();
+                formData.append('username', currentUser);
+                formData.append('code', code);
+
+                fetch('/api/fund/delete', { method: 'POST', body: formData })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) location.reload();
+                    });
+            }
+        }
+
+        // 加载当前用户的专属图表数据
+        function loadData() {
+            var myChart = echarts.init(document.getElementById('chart-container'), 'dark');
+            var holdAmounts = {};
+
+            fetch(`/api/fund/today?username=${encodeURIComponent(currentUser)}`)
+                .then(response => response.json())
+                .then(apiData => {
+
+                    // 动态生成上方“我的持仓”标签和删除按钮
+                    var fundListHtml = '';
+                    var seriesData = apiData.map(fund => {
+                        holdAmounts[fund.name] = fund.amount;
+
+                        fundListHtml += `<div class="fund-tag">${fund.name} <span>(本金: ${fund.amount})</span> <button onclick="deleteFund('${fund.code}', '${fund.name}')" title="删除">✕</button></div>`;
+
+                        return {
+                            name: fund.name,
+                            type: 'line',
+                            smooth: true,
+                            symbol: 'none',
+                            lineStyle: { width: 2 },
+                            endLabel: {
+                                show: true,
+                                color: 'inherit',
+                                fontSize: 14,
+                                fontWeight: 'bold',
+                                formatter: function (params) {
+                                    let profit = (fund.amount * params.value[1] / 100).toFixed(2);
+                                    let symbol = profit >= 0 ? '+' : '';
+                                    return `${symbol}${profit} 元`;
+                                }
+                            },
+                            data: fund.data
+                        };
+                    });
+
+                    if (apiData.length === 0) {
+                        fundListHtml = '<span style="color:#666; font-size:13px;">暂无持仓，请在右上方添加基金</span>';
+                    }
+                    document.getElementById('fund-list').innerHTML = fundListHtml;
+
+                    var d = new Date();
+                    var todayStr = d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0');
+
+                    var option = {
+                        backgroundColor: 'transparent',
+                        tooltip: {
+                            trigger: 'axis',
+                            formatter: function (params) {
+                                let html = params[0].axisValueLabel + '<br/>';
+                                params.forEach(p => {
+                                    let amount = holdAmounts[p.seriesName];
+                                    let profit = (amount * p.data[1] / 100).toFixed(2);
+                                    let color = profit >= 0 ? '#ff4d4f' : '#52c41a';
+                                    let symbol = profit >= 0 ? '+' : '';
+                                    html += `${p.marker} ${p.seriesName}: <span style="color:${color};font-weight:bold;font-size:15px;">${symbol}${profit} 元</span> (${p.data[1]}%)<br/>`;
+                                });
+                                return html;
+                            }
+                        },
+                        legend: { top: '0%', textStyle: { color: '#ccc' } },
+                        grid: { left: '3%', right: '12%', bottom: '3%', containLabel: true },
+                        xAxis: {
+                            type: 'time',
+                            splitLine: { show: false },
+                            min: todayStr + ' 09:30:00',
+                            max: todayStr + ' 15:00:00',
+                            axisLabel: { formatter: '{HH}:{mm}' }
+                        },
+                        yAxis: { type: 'value', axisLabel: { formatter: '{value} %' }, splitLine: { lineStyle: { color: '#2a3045' } } },
+                        series: seriesData
+                    };
+                    myChart.setOption(option);
+                    window.addEventListener('resize', function () { myChart.resize(); });
+                });
+        }
+
+        setInterval(() => { if (currentUser) location.reload(); }, 60000);
+    </script>
+</body>
+</html>

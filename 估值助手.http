@@ -1,0 +1,6 @@
+@估值助手_HostAddress = http://localhost:5194
+
+GET {{估值助手_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
