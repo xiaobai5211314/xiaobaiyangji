@@ -12,13 +12,6 @@ namespace 估值助手.Models
         {
         }
 
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-        {
-            // 极其轻量级，直接在程序运行目录下生成一个 db 文件
-            if (!optionsBuilder.IsConfigured)
-            {
-                optionsBuilder.UseSqlite("Data Source=fund_data.db");
-            }
-        }
+       
     }
 }
