@@ -62,7 +62,7 @@ namespace 估值助手.Controllers
         {
             if (string.IsNullOrEmpty(username)) return Unauthorized("请提供指挥官代号");
 
-            // 1. 查出当前用户自己的专属持仓
+            // 1.查出当前用户自己的专属持仓
             var myFunds = await _context.MyFunds.Where(f => f.Username == username).ToListAsync();
             var myFundCodes = myFunds.Select(f => f.FundCode).ToList();
 
