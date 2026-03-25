@@ -1,4 +1,4 @@
-﻿namespace 估值助手.Models
+namespace 估值助手.Models
 {
     public class FundData
     {

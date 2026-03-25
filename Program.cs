@@ -22,7 +22,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    // 如果宝塔里没有这些表，它会自动创建 User表 和 基金表
+    // 如果宝塔里没有这些表，它会自动创建 User表 和基金表
     dbContext.Database.EnsureCreated();
 }
 
