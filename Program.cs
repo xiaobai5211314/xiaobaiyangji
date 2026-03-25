@@ -1,7 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using 估值助手.Models;
 using 估值助手.Services;
-Console.OutputEncoding = System.Text.Encoding.UTF8;  // ← 加这行
+Console.OutputEncoding = System.Text.Encoding.UTF8;  //  加这行
 var builder = WebApplication.CreateBuilder(args);
 
 // 1. 注册 SQLite 数据库（与 AppDbContext.OnConfiguring 里一致，用 fund_data.db）
