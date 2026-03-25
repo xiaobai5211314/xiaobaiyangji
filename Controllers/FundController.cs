@@ -55,7 +55,7 @@ namespace 估值助手.Controllers
             return BadRequest("未找到该基金配置");
         }
 
-        // 👉 获取今日数据
+        // 👉 获取今日数据 (只返回当前用户的基金！)
         [HttpGet("today")]
         public async Task<IActionResult> GetTodayData([FromQuery] string username)
         {
@@ -63,22 +63,61 @@ namespace 估值助手.Controllers
 
             var myFunds = await _context.MyFunds.Where(f => f.Username == username).ToListAsync();
             var myFundCodes = myFunds.Select(f => f.FundCode).ToList();
-            var today = DateTime.Today;
-            var records = await _context.FundRecords
+
+            // 🚀 【核心修复】：强行注入 UTC+8 亚洲时间！不管服务器在哪，永远对齐北京/新加坡时间
+            var localTime = DateTime.UtcNow.AddHours(8);
+            var today = localTime.Date;
+
+            // 严格强制使用斜杠，防止 Linux 乱转横杠导致前端解析失败
+            string todayStr = localTime.ToString("yyyy'/'MM'/'dd");
+
+            // 抓取今天的盘中数据
+            var todayRecords = await _context.FundRecords
                 .Where(r => r.FetchTime >= today && myFundCodes.Contains(r.FundCode))
                 .OrderBy(r => r.FetchTime)
                 .ToListAsync();
 
-            var result = records.GroupBy(r => r.FundCode).Select(g => {
-                var config = myFunds.First(f => f.FundCode == g.Key);
+            // 抓取昨天的真实净值做“基准点”
+            var lastRecords = new List<FundData>();
+            foreach (var code in myFundCodes)
+            {
+                var lr = await _context.FundRecords
+                    .Where(r => r.FetchTime < today && r.FundCode == code)
+                    .OrderByDescending(r => r.FetchTime)
+                    .FirstOrDefaultAsync();
+                if (lr != null) lastRecords.Add(lr);
+            }
+
+            var result = myFunds.Select(config => {
+                var fundRecords = todayRecords.Where(r => r.FundCode == config.FundCode).ToList();
+                var lastRecord = lastRecords.FirstOrDefault(r => r.FundCode == config.FundCode);
+
+                var dataPoints = new List<object[]>();
+
+                // 魔法起点：把昨天的最终结果，强行钉在今天 09:30 作为起跑线
+                if (lastRecord != null)
+                {
+                    dataPoints.Add(new object[] { todayStr + " 09:30:00", lastRecord.EstimatedRate });
+                }
+
+                // 加入今天的正常走势
+                dataPoints.AddRange(fundRecords.Select(r => new object[] { r.FetchTime.ToString("yyyy'/'MM'/'dd HH:mm:ss"), r.EstimatedRate }));
+
+                // 如果连历史数据都没有（比如刚加的新基金），塞个 0 防止图表崩盘
+                if (dataPoints.Count == 0)
+                {
+                    dataPoints.Add(new object[] { todayStr + " 09:30:00", 0 });
+                }
+
                 return new
                 {
-                    code = g.Key,
+                    code = config.FundCode,
                     name = config.FundName,
                     amount = config.HoldAmount,
-                    data = g.Select(r => new object[] { r.FetchTime.ToString("yyyy/MM/dd HH:mm:ss"), r.EstimatedRate }).ToList()
+                    data = dataPoints
                 };
             });
+
             return Ok(result);
         }
 
