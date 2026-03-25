@@ -339,7 +339,7 @@
                             type: 'time',
                             splitLine: { show: false },
                             min: todayStr + ' 09:30:00',
-                            max: todayStr + ' 15:00:00',
+                            max: todayStr + ' 16:00:00', // 👉 核心修复：图表轴拉长到16点
                             axisLabel: { formatter: '{HH}:{mm}' }
                         },
                         yAxis: { type: 'value', axisLabel: { formatter: '{value} %' }, splitLine: { lineStyle: { color: '#2a3045' } } },
