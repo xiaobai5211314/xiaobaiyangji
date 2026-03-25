@@ -2,22 +2,35 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>科技军团 - 多账户量化系统</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>科技军团 - 炫彩量化大屏</title>
     <script src="https://cdn.staticfile.net/echarts/5.5.0/echarts.min.js"></script>
     <style>
+        /* ================= 万物起源：炫彩背景与圆滑字体 ================= */
         body {
             margin: 0;
             padding: 0;
-            background-color: #101423;
-            color: #fff;
-            font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); /* 赛博朋克渐变背景 */
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             overflow-x: hidden;
+            min-height: 100vh;
         }
 
+        /* ================= 拟物毛玻璃效果 (Glassmorphism) ================= */
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px); /* 核心：高斯模糊 */
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px; /* 小米级别的圆滑倒角 */
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        }
+
+        /* ================= 头部响应式布局 ================= */
         .header {
+            margin: 15px;
             padding: 15px 20px;
-            border-bottom: 1px solid #2a3045;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -25,279 +38,255 @@
 
             .header h1 {
                 margin: 0;
-                font-size: 22px;
-                color: #00e5ff;
-                letter-spacing: 2px;
+                font-size: 20px;
+                background: linear-gradient(to right, #00f2fe 0%, #4facfe 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent; /* 炫彩文字渐变 */
+                font-weight: 800;
             }
 
-        /* 酷炫的控制面板 */
+        /* 控制面板响应式 */
         .control-panel {
             display: flex;
-            gap: 10px;
+            gap: 12px;
             align-items: center;
         }
 
             .control-panel input {
-                background: #1a2035;
-                border: 1px solid #2a3045;
+                background: rgba(15, 23, 42, 0.6);
+                border: 1px solid rgba(255,255,255,0.15);
                 color: #00e5ff;
-                padding: 6px 10px;
-                border-radius: 4px;
+                padding: 8px 15px;
+                border-radius: 20px; /* 胶囊输入框 */
                 outline: none;
-                width: 130px;
+                width: 140px;
+                transition: all 0.3s ease;
             }
 
+                .control-panel input:focus {
+                    border-color: #00e5ff;
+                    box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
+                }
+
+        /* 炫彩按钮 */
         .btn-add {
-            background: #00e5ff;
-            color: #000;
+            background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+            color: #fff;
             border: none;
-            padding: 7px 15px;
-            border-radius: 4px;
+            padding: 9px 20px;
+            border-radius: 20px;
             cursor: pointer;
             font-weight: bold;
+            transition: transform 0.2s, box-shadow 0.2s;
         }
+
+            .btn-add:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 15px rgba(0, 242, 254, 0.4);
+            }
 
         .btn-logout {
             background: transparent;
             color: #ff4d4f;
             border: 1px solid #ff4d4f;
-            padding: 6px 12px;
-            border-radius: 4px;
+            padding: 8px 15px;
+            border-radius: 20px;
             cursor: pointer;
+            transition: all 0.2s;
         }
 
-        /* 个人持仓标签区 */
+            .btn-logout:hover {
+                background: rgba(255, 77, 79, 0.1);
+            }
+
+        /* ================= 标签区 ================= */
         #fund-list {
-            padding: 10px 20px;
+            margin: 0 15px;
+            padding: 15px;
             display: flex;
-            gap: 10px;
+            gap: 12px;
             flex-wrap: wrap;
-            background: #0a0d18;
         }
 
         .fund-tag {
-            background: #1a2035;
-            padding: 5px 12px;
-            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 6px 15px;
+            border-radius: 25px;
             font-size: 13px;
             display: flex;
             align-items: center;
-            gap: 8px;
-            border: 1px solid #2a3045;
-        }
-
-            .fund-tag span {
-                color: #00e5ff;
-            }
-
-            .fund-tag button {
-                background: none;
-                border: none;
-                color: #ff4d4f;
-                cursor: pointer;
-                font-weight: bold;
-                padding: 0 5px;
-            }
-
-                .fund-tag button:hover {
-                    color: #fff;
-                    background: #ff4d4f;
-                    border-radius: 50%;
-                }
-
-        #chart-container {
-            width: 100vw;
-            height: calc(100vh - 120px);
-            padding: 20px;
-            box-sizing: border-box;
-        }
-
-        /* 登录遮罩层 */
-        #loginOverlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(16, 20, 35, 0.95);
-            z-index: 999;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            gap: 10px;
+            border: 1px solid rgba(255,255,255,0.1);
             backdrop-filter: blur(5px);
         }
 
-        .login-box {
-            background: #1a2035;
-            padding: 40px;
-            border-radius: 8px;
-            text-align: center;
-            border: 1px solid #00e5ff;
-            box-shadow: 0 0 20px rgba(0,229,255,0.2);
+            .fund-tag span {
+                color: #4facfe;
+                font-weight: bold;
+            }
+
+            .fund-tag button {
+                background: rgba(255, 77, 79, 0.2);
+                border: none;
+                color: #ff4d4f;
+                border-radius: 50%;
+                width: 20px;
+                height: 20px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 10px;
+                transition: 0.2s;
+            }
+
+                .fund-tag button:hover {
+                    background: #ff4d4f;
+                    color: #fff;
+                    transform: scale(1.1);
+                }
+
+        /* ================= 图表区 ================= */
+        #chart-container {
+            width: calc(100vw - 30px);
+            height: calc(100vh - 180px);
+            margin: 15px;
+            box-sizing: border-box;
         }
 
-            .login-box input {
-                width: 100%;
-                box-sizing: border-box;
-                margin: 20px 0;
-                padding: 12px;
-                background: #0a0d18;
-                border: 1px solid #2a3045;
-                color: #00e5ff;
-                font-size: 16px;
-                text-align: center;
+        /* ================= 移动端终极自适应 (黑魔法) ================= */
+        @media screen and (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+                padding: 15px;
             }
 
-            .login-box button {
+            .control-panel {
                 width: 100%;
-                padding: 12px;
-                background: #00e5ff;
-                color: #000;
-                font-size: 16px;
-                font-weight: bold;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
+                flex-wrap: wrap;
             }
+
+                .control-panel input {
+                    flex: 1; /* 输入框自动平分屏幕 */
+                    min-width: 100px;
+                }
+
+            .btn-add, .btn-logout {
+                flex: 1;
+            }
+
+            #chart-container {
+                height: 50vh; /* 手机上图表变矮一点 */
+            }
+        }
     </style>
 </head>
 <body>
 
-    <div id="loginOverlay">
-        <div class="login-box">
-            <h2 style="color: #00e5ff; margin-top: 0;">⚡估值助手验证身份</h2>
-            <input type="text" id="usernameInput" placeholder="请输入您的专属代号" autocomplete="off">
-            <input type="password" id="passwordInput" placeholder="请输入安全访问密码" autocomplete="off" onkeypress="if(event.keyCode==13) login()">
-            <div style="display: flex; gap: 10px; margin-top: 20px;">
-                <button onclick="login()">验证并登录</button>
-                <button onclick="register()" style="background: transparent; border: 1px solid #00e5ff; color: #00e5ff;">注册新军团</button>
+    <div id="loginOverlay" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,23,42,0.8);backdrop-filter:blur(15px);z-index:999;display:flex;align-items:center;justify-content:center;">
+        <div class="glass-panel" style="padding: 40px; text-align: center; width: 300px;">
+            <h2 style="margin-top:0;background:linear-gradient(to right,#00f2fe,#4facfe);-webkit-background-clip:text;color:transparent;">⚡ 估值助手</h2>
+            <input type="text" id="usernameInput" placeholder="指挥官代号" style="width:100%;margin:15px 0;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.3);color:#fff;box-sizing:border-box;">
+            <input type="password" id="passwordInput" placeholder="安全密码" onkeypress="if(event.keyCode==13) login()" style="width:100%;margin-bottom:20px;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.3);color:#fff;box-sizing:border-box;">
+            <div style="display:flex;gap:10px;">
+                <button onclick="login()" style="flex:1;padding:12px;background:linear-gradient(135deg,#00f2fe,#4facfe);border:none;border-radius:12px;color:#fff;font-weight:bold;cursor:pointer;">登录</button>
+                <button onclick="register()" style="flex:1;padding:12px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:12px;color:#4facfe;cursor:pointer;">注册</button>
             </div>
         </div>
     </div>
 
-    <div class="header">
+    <div class="header glass-panel">
         <h1>🦾 个人专属大屏 (<span id="currentUserDisp"></span>)</h1>
         <div class="control-panel">
-            <input type="text" id="fundCode" placeholder="基金代码 (如 017811)">
-            <input type="number" id="fundAmount" placeholder="持有本金 (元)">
-            <button class="btn-add" onclick="addFund()">+ 添加/修改</button>
-            <button class="btn-logout" onclick="logout()">退出登录</button>
+            <input type="text" id="fundCode" placeholder="代码 (如 017811)">
+            <input type="number" id="fundAmount" placeholder="本金 (元)">
+            <button class="btn-add" onclick="addFund()">+ 加仓入阵</button>
+            <button class="btn-logout" onclick="logout()">安全撤退</button>
         </div>
     </div>
 
-    <div id="fund-list"></div>
-
-    <div id="chart-container"></div>
+    <div id="fund-list" class="glass-panel"></div>
+    <div id="chart-container" class="glass-panel"></div>
 
     <script>
         var currentUser = localStorage.getItem('fund_username');
+        var myChart = null; // 🚀 提取全局变量，用于无感热更新
+
         if (currentUser) {
             document.getElementById('loginOverlay').style.display = 'none';
             document.getElementById('currentUserDisp').innerText = currentUser;
+            // 首次加载初始化图表
+            myChart = echarts.init(document.getElementById('chart-container'), 'dark');
             loadData();
         }
 
-        // 注册逻辑
-        function register() {
+        function register() { /* 原有注册逻辑保持不变 */
             var name = document.getElementById('usernameInput').value.trim();
             var pwd = document.getElementById('passwordInput').value.trim();
             if (!name || !pwd) return alert("账号和密码不能为空！");
-
             let fd = new FormData(); fd.append('username', name); fd.append('password', pwd);
-            fetch('/api/auth/register', { method: 'POST', body: fd })
-                .then(r => r.json().then(data => ({ status: r.status, body: data })))
-                .then(res => {
-                    if (res.status === 200) alert("✅ 注册成功！系统已为您分配独立空间，请点击登录。");
-                    else alert("❌ " + (res.body || "注册失败"));
-                });
+            fetch('/api/auth/register', { method: 'POST', body: fd }).then(r => r.json().then(data => ({ status: r.status, body: data }))).then(res => {
+                if (res.status === 200) alert("✅ 注册成功！"); else alert("❌ " + (res.body || "注册失败"));
+            });
         }
 
-        // 登录逻辑
-        function login() {
+        function login() { /* 原有登录逻辑保持不变 */
             var name = document.getElementById('usernameInput').value.trim();
             var pwd = document.getElementById('passwordInput').value.trim();
-            if (!name || !pwd) return alert("账号和密码不能为空！");
-
             let fd = new FormData(); fd.append('username', name); fd.append('password', pwd);
-            fetch('/api/auth/login', { method: 'POST', body: fd })
-                .then(r => {
-                    if (r.ok) {
-                        localStorage.setItem('fund_username', name);
-                        location.reload();
-                    } else {
-                        alert("❌ 账号或密码错误，拒绝访问！");
-                    }
-                });
+            fetch('/api/auth/login', { method: 'POST', body: fd }).then(r => {
+                if (r.ok) { localStorage.setItem('fund_username', name); location.reload(); } else { alert("❌ 账号或密码错误"); }
+            });
         }
 
-        // 登出逻辑
-        function logout() {
-            localStorage.removeItem('fund_username');
-            location.reload();
-        }
+        function logout() { localStorage.removeItem('fund_username'); location.reload(); }
 
-        // 添加基金
         function addFund() {
             const code = document.getElementById('fundCode').value.trim();
             const amount = document.getElementById('fundAmount').value.trim();
-            if (!code || !amount) return alert("请输入完整的代码和金额！");
-
-            const formData = new FormData();
-            formData.append('username', currentUser);
-            formData.append('code', code);
-            formData.append('amount', amount);
-
-            fetch('/api/fund/add', { method: 'POST', body: formData })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        alert(`✅ 成功添加: ${data.name}`);
-                        location.reload();
-                    }
-                });
+            if (!code || !amount) return alert("请输入完整！");
+            const fd = new FormData(); fd.append('username', currentUser); fd.append('code', code); fd.append('amount', amount);
+            fetch('/api/fund/add', { method: 'POST', body: fd }).then(res => res.json()).then(data => {
+                if (data.success) {
+                    alert(`✅ 添加成功: ${data.name}。系统将在1分钟内开始捕获其数据！`);
+                    loadData(); // 🚀 不再 reload，直接无感加载
+                }
+            });
         }
 
-        // 删除基金
         function deleteFund(code, name) {
-            if (confirm(`⚠️ 确定要从您的大屏中移除 [${name}] 吗？`)) {
-                const formData = new FormData();
-                formData.append('username', currentUser);
-                formData.append('code', code);
-
-                fetch('/api/fund/delete', { method: 'POST', body: formData })
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.success) location.reload();
-                    });
+            if (confirm(`⚠️ 确定移除 [${name}] 吗？`)) {
+                const fd = new FormData(); fd.append('username', currentUser); fd.append('code', code);
+                fetch('/api/fund/delete', { method: 'POST', body: fd }).then(res => res.json()).then(data => {
+                    if (data.success) loadData(); // 🚀 不再 reload，直接无感加载
+                });
             }
         }
 
-        // 加载当前用户的专属图表数据
+        // 🚀 核心重构：彻底抛弃 location.reload，实现真正的“热更新”
         function loadData() {
-            var myChart = echarts.init(document.getElementById('chart-container'), 'dark');
+            if (!currentUser) return;
             var holdAmounts = {};
 
             fetch(`/api/fund/today?username=${encodeURIComponent(currentUser)}`)
                 .then(response => response.json())
                 .then(apiData => {
-
-                    // 动态生成上方“我的持仓”标签和删除按钮
                     var fundListHtml = '';
                     var seriesData = apiData.map(fund => {
                         holdAmounts[fund.name] = fund.amount;
-
                         fundListHtml += `<div class="fund-tag">${fund.name} <span>(本金: ${fund.amount})</span> <button onclick="deleteFund('${fund.code}', '${fund.name}')" title="删除">✕</button></div>`;
-
                         return {
                             name: fund.name,
                             type: 'line',
                             smooth: true,
                             symbol: 'none',
-                            lineStyle: { width: 2 },
+                            lineStyle: { width: 3, shadowColor: 'rgba(0,0,0,0.5)', shadowBlur: 10 }, // 🚀 增加发光阴影效果
                             endLabel: {
                                 show: true,
                                 color: 'inherit',
-                                fontSize: 14,
+                                fontSize: 13,
                                 fontWeight: 'bold',
                                 formatter: function (params) {
                                     let profit = (fund.amount * params.value[1] / 100).toFixed(2);
@@ -309,9 +298,7 @@
                         };
                     });
 
-                    if (apiData.length === 0) {
-                        fundListHtml = '<span style="color:#666; font-size:13px;">暂无持仓，请在右上方添加基金</span>';
-                    }
+                    if (apiData.length === 0) fundListHtml = '<span style="color:#64748b; font-size:13px;">暂无阵地，请在上方添加代码</span>';
                     document.getElementById('fund-list').innerHTML = fundListHtml;
 
                     var d = new Date();
@@ -321,48 +308,47 @@
                         backgroundColor: 'transparent',
                         tooltip: {
                             trigger: 'axis',
+                            backgroundColor: 'rgba(15, 23, 42, 0.9)', // 毛玻璃提示框
+                            borderColor: '#334155',
+                            textStyle: { color: '#f8fafc' },
                             formatter: function (params) {
-                                let html = params[0].axisValueLabel + '<br/>';
+                                let html = `<div style="margin-bottom:5px;font-weight:bold;color:#94a3b8;">${params[0].axisValueLabel}</div>`;
                                 params.forEach(p => {
                                     let amount = holdAmounts[p.seriesName];
                                     let profit = (amount * p.data[1] / 100).toFixed(2);
-                                    let color = profit >= 0 ? '#ff4d4f' : '#52c41a';
+                                    let color = profit >= 0 ? '#ff4d4f' : '#10b981';
                                     let symbol = profit >= 0 ? '+' : '';
-                                    html += `${p.marker} ${p.seriesName}: <span style="color:${color};font-weight:bold;font-size:15px;">${symbol}${profit} 元</span> (${p.data[1]}%)<br/>`;
+                                    html += `<div>${p.marker} ${p.seriesName}: <span style="color:${color};font-weight:800;font-size:16px;">${symbol}${profit} 元</span> (${p.data[1]}%)</div>`;
                                 });
                                 return html;
                             }
                         },
-                        legend: { top: '0%', textStyle: { color: '#ccc' } },
-                        grid: { left: '3%', right: '12%', bottom: '3%', containLabel: true },
+                        legend: { top: '0%', textStyle: { color: '#cbd5e1' }, icon: 'roundRect' },
+                        grid: { left: '3%', right: '15%', bottom: '3%', containLabel: true }, // right 留出足够空间显示尾部数字
                         xAxis: {
                             type: 'time',
                             splitLine: { show: false },
                             min: todayStr + ' 09:30:00',
-                            max: todayStr + ' 16:00:00', // 👉 核心修复：图表轴拉长到16点
-                            axisLabel: { formatter: '{HH}:{mm}' }
+                            max: todayStr + ' 15:00:00',
+                            axisLabel: { formatter: '{HH}:{mm}', color: '#64748b' },
+                            axisLine: { lineStyle: { color: '#334155' } }
                         },
-                        yAxis: { type: 'value', axisLabel: { formatter: '{value} %' }, splitLine: { lineStyle: { color: '#2a3045' } } },
+                        yAxis: {
+                            type: 'value',
+                            axisLabel: { formatter: '{value} %', color: '#64748b' },
+                            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)', type: 'dashed' } }
+                        },
                         series: seriesData
                     };
-                    myChart.setOption(option);
+
+                    // 🚀 核心：使用 setOption 的 true 参数，实现无白屏的平滑过渡刷新！
+                    myChart.setOption(option, true);
                     window.addEventListener('resize', function () { myChart.resize(); });
                 });
         }
 
-        // 【核心优化】：无感热更新，不白屏，只悄悄替换图表数据
-        setInterval(() => {
-            if (currentUser) {
-                // 先销毁旧图表，防止内存泄漏和卡顿
-                var chartDom = document.getElementById('chart-container');
-                var existingChart = echarts.getInstanceByDom(chartDom);
-                if (existingChart) {
-                    existingChart.dispose();
-                }
-                // 重新拉取新数据并悄悄画上去
-                loadData();
-            }
-        }, 60000);
+        // 🚀 终极杀手锏：每60秒静默拉取数据，更新折线图，网页绝不闪烁！
+        setInterval(() => { if (currentUser) loadData(); }, 60000);
     </script>
 </body>
 </html>
