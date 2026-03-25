@@ -26,14 +26,14 @@ namespace 估值助手.Services
             _logger.LogInformation("🌙 夜间清算引擎已挂载，等待入夜...");
             while (!stoppingToken.IsCancellationRequested)
             {
-                // 每半小时醒来检查一次
-                await Task.Delay(TimeSpan.FromMinutes(30), stoppingToken);
-
-                // 只有在晚上 21:00 到 23:59 之间才执行清算
+                // 1. 醒来第一件事：先干活！如果是晚上 9 点以后，立刻清算！
                 if (DateTime.Now.Hour >= 21)
                 {
                     await SettleTodayNavAsync();
                 }
+
+                // 2. 干完活：再去睡 30 分钟的回笼觉
+                await Task.Delay(TimeSpan.FromMinutes(30), stoppingToken);
             }
         }
 
