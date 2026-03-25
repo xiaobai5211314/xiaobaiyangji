@@ -29,7 +29,6 @@ namespace 估值助手.Controllers
                     var root = JsonDocument.Parse(match.Groups[1].Value).RootElement;
                     string name = root.GetProperty("name").GetString() ?? "未知";
 
-                    // 检查该用户是否已添加此基金
                     var exist = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && f.FundCode == code);
                     if (exist != null) exist.HoldAmount = amount;
                     else _context.MyFunds.Add(new MyFundConfig { Username = username, FundCode = code, FundName = name, HoldAmount = amount });
@@ -56,17 +55,14 @@ namespace 估值助手.Controllers
             return BadRequest("未找到该基金配置");
         }
 
-        // 👉 获取今日数据 (只返回当前用户的基金！)
+        // 👉 获取今日数据
         [HttpGet("today")]
         public async Task<IActionResult> GetTodayData([FromQuery] string username)
         {
             if (string.IsNullOrEmpty(username)) return Unauthorized("请提供指挥官代号");
 
-            // 1.查出当前用户自己的专属持仓
             var myFunds = await _context.MyFunds.Where(f => f.Username == username).ToListAsync();
             var myFundCodes = myFunds.Select(f => f.FundCode).ToList();
-
-            // 2. 只从总历史记录里， 提取该用户持有的基金数据
             var today = DateTime.Today;
             var records = await _context.FundRecords
                 .Where(r => r.FetchTime >= today && myFundCodes.Contains(r.FundCode))
@@ -83,8 +79,82 @@ namespace 估值助手.Controllers
                     data = g.Select(r => new object[] { r.FetchTime.ToString("yyyy/MM/dd HH:mm:ss"), r.EstimatedRate }).ToList()
                 };
             });
-
             return Ok(result);
+        }
+
+        // 🚀🚀🚀 【新增的核心武器】：手动核武按钮与战报输出
+        [HttpGet("force-settle")]
+        public async Task<IActionResult> ForceSettle()
+        {
+            using var client = new HttpClient();
+            // 终极浏览器伪装：防拦截三板斧
+            client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+            client.DefaultRequestHeaders.Add("Accept", "application/json, text/javascript, */*; q=0.01");
+
+            var targetFunds = await _context.MyFunds.Select(f => f.FundCode).Distinct().ToListAsync();
+            var localTime = DateTime.UtcNow.AddHours(8);
+            string todayStr = localTime.ToString("yyyy-MM-dd");
+            var todayStart = localTime.Date;
+            var tomorrowStart = todayStart.AddDays(1);
+
+            var resultLog = new List<string>();
+            resultLog.Add($"===== 科技军团 T+1 手动清算诊断战报 =====");
+            resultLog.Add($"当前系统校验时间: {localTime.ToString("yyyy-MM-dd HH:mm:ss")}");
+
+            foreach (var code in targetFunds)
+            {
+                try
+                {
+                    string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize=1";
+                    string response = await client.GetStringAsync(url);
+
+                    // 查杀 WAF 拦截
+                    if (!response.Contains("LSJZList"))
+                    {
+                        resultLog.Add($"❌ [{code}] 遭防火墙拦截！东方财富返回: {response.Substring(0, Math.Min(response.Length, 60))}...");
+                        continue;
+                    }
+
+                    using var doc = JsonDocument.Parse(response);
+                    var dataArray = doc.RootElement.GetProperty("Data").GetProperty("LSJZList");
+
+                    if (dataArray.GetArrayLength() > 0)
+                    {
+                        var latestData = dataArray[0];
+                        string fsrq = latestData.GetProperty("FSRQ").GetString() ?? "";
+                        string jzzzlStr = latestData.GetProperty("JZZZL").GetString() ?? "";
+
+                        if (fsrq == todayStr && double.TryParse(jzzzlStr, out double actualRate))
+                        {
+                            var targetRecord = await _context.FundRecords
+                                .Where(r => r.FundCode == code && r.FetchTime >= todayStart && r.FetchTime < tomorrowStart)
+                                .OrderByDescending(r => r.FetchTime)
+                                .FirstOrDefaultAsync();
+
+                            if (targetRecord != null)
+                            {
+                                targetRecord.EstimatedRate = actualRate;
+                                resultLog.Add($"✅ [{code}] 清算成功！已精准覆盖为真实净值: {actualRate}%");
+                            }
+                            else
+                            {
+                                resultLog.Add($"⚠️ [{code}] 找不到今天({todayStr})的盘中估值记录，无法覆盖！");
+                            }
+                        }
+                        else
+                        {
+                            resultLog.Add($"⏳ [{code}] 东方财富接口慢了！今日({todayStr})真实财报还未出，其最新停留在: {fsrq}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    resultLog.Add($"🔥 [{code}] 发生致命代码报错: {ex.Message}");
+                }
+            }
+            await _context.SaveChangesAsync();
+            return Ok(resultLog); // 直接在浏览器打印战报！
         }
     }
 }
