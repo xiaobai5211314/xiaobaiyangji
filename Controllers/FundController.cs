@@ -87,8 +87,9 @@ namespace 估值助手.Controllers
         public async Task<IActionResult> ForceSettle()
         {
             using var client = new HttpClient();
-            // 终极浏览器伪装：防拦截三板斧
-            client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
+            // 👇 加装强制熔断器：如果东方财富5秒不理我，直接强行切断，防止拖死服务器！
+            client.Timeout = TimeSpan.FromSeconds(5);
+         
             client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
             client.DefaultRequestHeaders.Add("Accept", "application/json, text/javascript, */*; q=0.01");
 
