@@ -350,7 +350,19 @@
                 });
         }
 
-        setInterval(() => { if (currentUser) location.reload(); }, 60000);
+        // 【核心优化】：无感热更新，不白屏，只悄悄替换图表数据
+        setInterval(() => {
+            if (currentUser) {
+                // 先销毁旧图表，防止内存泄漏和卡顿
+                var chartDom = document.getElementById('chart-container');
+                var existingChart = echarts.getInstanceByDom(chartDom);
+                if (existingChart) {
+                    existingChart.dispose();
+                }
+                // 重新拉取新数据并悄悄画上去
+                loadData();
+            }
+        }, 60000);
     </script>
 </body>
 </html>
