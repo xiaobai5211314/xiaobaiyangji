@@ -2,6 +2,7 @@ namespace 估值助手
 {
     public class WeatherForecast
     {
+
         public DateOnly Date { get; set; }
 
         public int TemperatureC { get; set; }
