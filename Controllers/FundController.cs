@@ -66,7 +66,7 @@ namespace 估值助手.Controllers
             var myFunds = await _context.MyFunds.Where(f => f.Username == username).ToListAsync();
             var myFundCodes = myFunds.Select(f => f.FundCode).ToList();
 
-            // 2. 只从总历史记录里，提取该用户持有的基金数据
+            // 2. 只从总历史记录里， 提取该用户持有的基金数据
             var today = DateTime.Today;
             var records = await _context.FundRecords
                 .Where(r => r.FetchTime >= today && myFundCodes.Contains(r.FundCode))
