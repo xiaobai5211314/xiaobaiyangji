@@ -1,5 +1,6 @@
 ﻿using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore; // 👉 新增：用于支持 AnyAsync 异步查询
 using 估值助手.Models;
 
 namespace 估值助手.Services
@@ -53,15 +54,23 @@ namespace 估值助手.Services
                         var root = System.Text.Json.JsonDocument.Parse(match.Groups[1].Value).RootElement;
                         double rate = double.Parse(root.GetProperty("gszzl").GetString() ?? "0");
                         string timeStr = root.GetProperty("gztime").GetString() ?? DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+                        DateTime parsedTime = DateTime.Parse(timeStr);
 
-                        dbContext.FundRecords.Add(new FundData
+                        // 【核心修复】：防重校验，防止收盘后无限插入相同时间的数据
+                        bool exists = await dbContext.FundRecords
+                            .AnyAsync(r => r.FundCode == fund.FundCode && r.FetchTime == parsedTime);
+
+                        if (!exists)
                         {
-                            FundCode = fund.FundCode,
-                            FundName = fund.FundName,
-                            EstimatedRate = rate,
-                            FetchTime = DateTime.Parse(timeStr)
-                        });
-                        _logger.LogInformation("[入库成功] {Name} : {Rate}%", fund.FundName, rate);
+                            dbContext.FundRecords.Add(new FundData
+                            {
+                                FundCode = fund.FundCode,
+                                FundName = fund.FundName,
+                                EstimatedRate = rate,
+                                FetchTime = parsedTime
+                            });
+                            _logger.LogInformation("[入库成功] {Name} : {Rate}%", fund.FundName, rate);
+                        }
                     }
                 }
                 catch (Exception ex) { _logger.LogError("抓取 {Code} 失败: {Message}", fund.FundCode, ex.Message); }
