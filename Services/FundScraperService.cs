@@ -54,6 +54,11 @@ namespace 估值助手.Services
                         var root = System.Text.Json.JsonDocument.Parse(match.Groups[1].Value).RootElement;
                         double rate = double.Parse(root.GetProperty("gszzl").GetString() ?? "0");
                         string timeStr = root.GetProperty("gztime").GetString() ?? DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+                        DateTime parsedTime = DateTime.Parse(timeStr);
+
+                        // 【核心修复】：防重校验，防止收盘后无限插入相同时间的数据
+                        bool exists = await dbContext.FundRecords
+                            .AnyAsync(r => r.FundCode == fund.FundCode && r.FetchTime == parsedTime);
 
                         if (!exists)
                         {
