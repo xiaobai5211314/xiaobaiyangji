@@ -15,6 +15,9 @@ builder.Services.AddControllers();
 // 3. 注册后台抓取服务
 builder.Services.AddHostedService<FundScraperService>();
 
+// 👉 加上这行：注册夜间清算服务 (晚上的会计)
+builder.Services.AddHostedService<NavSettlementService>();
+
 var app = builder.Build();
 
 // 4. 自动建表，首次运行时创建 fund_data.db 和相关表
