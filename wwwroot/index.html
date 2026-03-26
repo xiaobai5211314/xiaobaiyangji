@@ -128,6 +128,7 @@
             display: none !important;
         }
 
+        /* 骨架屏动画 */
         .skeleton-box {
             background: linear-gradient(90deg, rgba(40,49,66,0.5) 25%, rgba(55,65,81,0.8) 37%, rgba(40,49,66,0.5) 63%);
             background-size: 400% 100%;
@@ -145,6 +146,7 @@
             }
         }
 
+        /* 移动端响应式 */
         @media screen and (max-width: 768px) {
             .header {
                 flex-direction: column;
@@ -251,6 +253,7 @@
                     📡 正在连接总司令部同步数据...
                 </div>
             </div>
+
             <div v-show="!isLoading" id="chart-container" class="glass-panel" ref="chartRef"></div>
         </div>
     </div>
@@ -276,19 +279,40 @@
                 const chartInstance = shallowRef(null);
                 let timer = null;
 
-                const handleRegister = async () => { /* 同前 */ };
+                const handleRegister = async () => {
+                    if (!loginForm.username || !loginForm.password) return alert("账号密码为空！");
+                    let fd = new FormData(); fd.append('username', loginForm.username); fd.append('password', loginForm.password);
+                    const res = await fetch('/api/auth/register', { method: 'POST', body: fd });
+                    if (res.ok) alert("✅ 注册成功！请登录。"); else alert("❌ 注册失败");
+                };
+
                 const handleLogin = async () => {
                     let fd = new FormData(); fd.append('username', loginForm.username); fd.append('password', loginForm.password);
                     const res = await fetch('/api/auth/login', { method: 'POST', body: fd });
                     if (res.ok) { localStorage.setItem('fund_username', loginForm.username); currentUser.value = loginForm.username; isLoggedIn.value = true; initDashboard(); }
                     else alert("❌ 账号或密码错误");
                 };
+
                 const handleLogout = () => { localStorage.removeItem('fund_username'); location.reload(); };
-                const handleAddFund = async () => { /* 同前 */ };
-                const handleDeleteFund = async (code, name) => { /* 同前 */ };
+
+                const handleAddFund = async () => {
+                    if (!fundForm.code || !fundForm.amount) return alert("请输入完整！");
+                    const fd = new FormData(); fd.append('username', currentUser.value); fd.append('code', fundForm.code); fd.append('amount', fundForm.amount);
+                    const res = await fetch('/api/fund/add', { method: 'POST', body: fd });
+                    if (res.ok) { fundForm.code = ''; fundForm.amount = ''; fetchData(); }
+                };
+
+                const handleDeleteFund = async (code, name) => {
+                    if (confirm(`⚠️ 确定移除 [${name}] 吗？`)) {
+                        const fd = new FormData(); fd.append('username', currentUser.value); fd.append('code', code);
+                        await fetch('/api/fund/delete', { method: 'POST', body: fd });
+                        fetchData();
+                    }
+                };
 
                 const fetchData = async () => {
                     if (!currentUser.value) return;
+                    // 判断日夜状态 (20:00 - 06:00 视为夜间对账期)
                     let currentHour = new Date().getHours();
                     isNight.value = (currentHour >= 20 || currentHour < 6);
 
@@ -305,7 +329,9 @@
                                 tProfit += (fund.amount * latestRate / 100);
                             }
                         });
-                        totalPrincipal.value = tPrincipal; totalProfit.value = tProfit; totalRate.value = tPrincipal > 0 ? (tProfit / tPrincipal * 100) : 0;
+                        totalPrincipal.value = tPrincipal;
+                        totalProfit.value = tProfit;
+                        totalRate.value = tPrincipal > 0 ? (tProfit / tPrincipal * 100) : 0;
 
                         renderChart(apiData);
                         setTimeout(() => { isLoading.value = false; }, 300);
@@ -320,8 +346,7 @@
                     }
 
                     var holdAmounts = {};
-                    // 🚨 核心验资逻辑 🚨
-                    var isAllSettled = true; // 用于记录今天所有基金是不是都已经出真实财报了
+                    var isAllSettled = true;
 
                     var seriesData = apiData.map(fund => {
                         holdAmounts[fund.name] = fund.amount;
@@ -330,21 +355,19 @@
                         let diff = 0;
                         let hasFullData = fund.data.length > 50;
 
-                        // 判断是否已经获取到了“真实净值”
+                        // 核心：计算夜间误差
                         if (isNight.value && hasFullData) {
-                            let realRate = fund.data[fund.data.length - 1][1];   // 最后一个点 (可能是被C#替换的真实值)
-                            let estRate = fund.data[fund.data.length - 2][1];    // 倒数第二个点 (14:59的纯估值)
+                            let realRate = fund.data[fund.data.length - 1][1];
+                            let estRate = fund.data[fund.data.length - 2][1];
 
-                            // 如果他俩的差值大于 0.001，说明后端一定成功覆盖了真实数据！
                             if (Math.abs(realRate - estRate) > 0.001) {
                                 isSettled = true;
                                 diff = (realRate - estRate).toFixed(2);
                             } else {
-                                isAllSettled = false; // 有一只基金没公布，那就不算全公布
+                                isAllSettled = false;
                             }
                         }
 
-                        // 给图表绑上状态，用于渲染不同的文本
                         fund._isSettled = isSettled;
                         fund._diff = diff;
 
@@ -360,14 +383,13 @@
                                     let profit = (fund.amount * p.value[1] / 100).toFixed(2);
                                     let sign = profit >= 0 ? '+' : '';
 
-                                    // 根据【验资状态】精准显示文本，绝不欺骗用户！
                                     if (isSettled) {
                                         let diffSign = fund._diff > 0 ? '+' : '';
                                         return `${sign}${profit} 元\n✅ 真: ${p.value[1]}%\n差: ${diffSign}${fund._diff}%`;
                                     } else if (isNight.value && hasFullData) {
-                                        return `${sign}${profit} 元\n⏳ 等待财报...`; // 基金公司还没发，别急！
+                                        return `${sign}${profit} 元\n⏳ 等待财报...`;
                                     } else {
-                                        return `${sign}${profit} 元\n估: ${p.value[1]}%`; // 白天正常显示估值
+                                        return `${sign}${profit} 元\n估: ${p.value[1]}%`;
                                     }
                                 }
                             },
@@ -389,7 +411,6 @@
                                     let profit = (holdAmounts[p.seriesName] * p.data[1] / 100).toFixed(2);
                                     let color = profit >= 0 ? '#ff4d4f' : '#10b981';
 
-                                    // 找到对应的原始基金数据，获取它是否已经 Settled
                                     let originalFund = apiData.find(f => f.name === p.seriesName);
                                     let labelSuffix = '估';
                                     if (isNight.value && p.dataIndex === p.seriesData.length - 1) {
