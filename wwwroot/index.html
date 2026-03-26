@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>科技军团 -- Vue3 量化终端</title>
+    <title>科技军团 - Vue3 量化终端</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <script src="https://cdn.staticfile.net/echarts/5.5.0/echarts.min.js"></script>
     <style>
@@ -56,7 +56,7 @@
                 padding: 8px 15px;
                 border-radius: 20px;
                 outline: none;
-                width: 120px;
+                width: 140px;
                 transition: 0.3s;
             }
 
@@ -98,9 +98,8 @@
             border: 1px solid rgba(255,255,255,0.1);
         }
 
-            .fund-tag span {
-                color: #4facfe;
-                font-weight: bold;
+            .fund-tag span.info {
+                color: #94a3b8;
             }
 
             .fund-tag button {
@@ -115,7 +114,13 @@
                 align-items: center;
                 justify-content: center;
                 font-size: 10px;
+                transition: 0.3s;
             }
+
+                .fund-tag button:hover {
+                    background: #ff4d4f;
+                    color: #fff;
+                }
 
         #chart-container {
             width: calc(100vw - 30px);
@@ -128,7 +133,6 @@
             display: none !important;
         }
 
-        /* 骨架屏动画 */
         .skeleton-box {
             background: linear-gradient(90deg, rgba(40,49,66,0.5) 25%, rgba(55,65,81,0.8) 37%, rgba(40,49,66,0.5) 63%);
             background-size: 400% 100%;
@@ -146,7 +150,6 @@
             }
         }
 
-        /* 移动端响应式 */
         @media screen and (max-width: 768px) {
             .header {
                 flex-direction: column;
@@ -192,18 +195,16 @@
                 </div>
             </div>
         </div>
-
         <div v-else>
             <div class="header glass-panel">
                 <h1>🦾 指挥官大屏 ({{ currentUser }})</h1>
                 <div class="control-panel">
                     <input v-model="fundForm.code" type="text" placeholder="代码 (如 017811)">
-                    <input v-model="fundForm.amount" type="number" placeholder="本金 (元)">
+                    <input v-model="fundForm.amount" type="number" placeholder="昨日总市值 (元)">
                     <button class="btn-add" @click="handleAddFund">+ 加仓入阵</button>
                     <button class="btn-logout" @click="handleLogout">安全撤退</button>
                 </div>
             </div>
-
             <div class="glass-panel total-panel" style="margin: 0 15px 15px 15px; padding: 20px 30px; display: flex; justify-content: space-around; align-items: center; background: rgba(15, 23, 42, 0.6);">
                 <div style="text-align: center;">
                     <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">⏱️ 系统时间雷达</div>
@@ -213,14 +214,14 @@
                 </div>
                 <div class="divider" style="width: 1px; height: 40px; background: rgba(255,255,255,0.1);"></div>
                 <div style="text-align: center;">
-                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">💎 阵地总本金</div>
+                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">💎 阵地昨日总市值</div>
                     <div style="font-size: 26px; font-weight: 900; color: #f8fafc; font-family: 'Courier New', Courier, monospace;">
                         ¥ {{ totalPrincipal.toFixed(2) }}
                     </div>
                 </div>
                 <div class="divider" style="width: 1px; height: 40px; background: rgba(255,255,255,0.1);"></div>
                 <div style="text-align: center;">
-                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">💰 当前计算盈亏</div>
+                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">💰 当前总盈亏</div>
                     <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: totalProfit >= 0 ? '#ff4d4f' : '#10b981' }">
                         {{ totalProfit >= 0 ? '+' : '' }}{{ totalProfit.toFixed(2) }}
                     </div>
@@ -236,7 +237,13 @@
 
             <div id="fund-list" class="glass-panel">
                 <div v-for="fund in fundsList" :key="fund.code" class="fund-tag">
-                    {{ fund.name }} <span>(本金: {{ fund.amount }})</span>
+                    <span style="font-weight: bold;">{{ fund.name }}</span>
+                    <span class="info">
+                        (昨日市值: {{ fund.amount }} |
+                        <span :style="{color: fund.currentRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold'}">
+                            {{ fund.currentRate > 0 ? '+' : '' }}{{ fund.currentRate }}%
+                        </span>)
+                    </span>
                     <button @click="handleDeleteFund(fund.code, fund.name)" title="删除">✕</button>
                 </div>
                 <span v-if="fundsList.length === 0 && !isLoading" style="color:#64748b; font-size:13px;">暂无阵地，请在上方添加代码</span>
@@ -253,14 +260,11 @@
                     📡 正在连接总司令部同步数据...
                 </div>
             </div>
-
             <div v-show="!isLoading" id="chart-container" class="glass-panel" ref="chartRef"></div>
         </div>
     </div>
-
     <script>
         const { createApp, ref, reactive, onMounted, onUnmounted, nextTick, shallowRef } = Vue;
-
         createApp({
             setup() {
                 const isLoggedIn = ref(false);
@@ -269,18 +273,16 @@
                 const chartRef = ref(null);
                 const isLoading = ref(true);
                 const isNight = ref(false);
-
                 const totalPrincipal = ref(0);
                 const totalProfit = ref(0);
                 const totalRate = ref(0);
-
                 const loginForm = reactive({ username: '', password: '' });
                 const fundForm = reactive({ code: '', amount: '' });
                 const chartInstance = shallowRef(null);
                 let timer = null;
 
                 const handleRegister = async () => {
-                    if (!loginForm.username || !loginForm.password) return alert("账号密码为空!");
+                    if (!loginForm.username || !loginForm.password) return alert("账号密码为空！");
                     let fd = new FormData(); fd.append('username', loginForm.username); fd.append('password', loginForm.password);
                     const res = await fetch('/api/auth/register', { method: 'POST', body: fd });
                     if (res.ok) alert("✅ 注册成功！请登录。"); else alert("❌ 注册失败");
@@ -312,14 +314,11 @@
 
                 const fetchData = async () => {
                     if (!currentUser.value) return;
-                    // 判断日夜状态 (20:00 - 06:00 视为夜间对账期)
                     let currentHour = new Date().getHours();
                     isNight.value = (currentHour >= 20 || currentHour < 6);
-
                     try {
                         const response = await fetch(`/api/fund/today?username=${encodeURIComponent(currentUser.value)}`);
                         const apiData = await response.json();
-                        fundsList.value = apiData;
 
                         let tPrincipal = 0; let tProfit = 0;
                         apiData.forEach(fund => {
@@ -327,12 +326,14 @@
                             if (fund.data && fund.data.length > 0) {
                                 const latestRate = fund.data[fund.data.length - 1][1];
                                 tProfit += (fund.amount * latestRate / 100);
+                                fund.currentRate = latestRate;
+                            } else {
+                                fund.currentRate = 0;
                             }
                         });
-                        totalPrincipal.value = tPrincipal;
-                        totalProfit.value = tProfit;
-                        totalRate.value = tPrincipal > 0 ? (tProfit / tPrincipal * 100) : 0;
 
+                        fundsList.value = apiData;
+                        totalPrincipal.value = tPrincipal; totalProfit.value = tProfit; totalRate.value = tPrincipal > 0 ? (tProfit / tPrincipal * 100) : 0;
                         renderChart(apiData);
                         setTimeout(() => { isLoading.value = false; }, 300);
                     } catch (e) { console.error("抓取失败", e); }
@@ -344,45 +345,31 @@
                         chartInstance.value = echarts.init(chartRef.value, 'dark');
                         window.addEventListener('resize', () => chartInstance.value.resize());
                     }
-
                     var holdAmounts = {};
-                    var isAllSettled = true;
-
                     var seriesData = apiData.map(fund => {
                         holdAmounts[fund.name] = fund.amount;
-
                         let isSettled = false;
                         let diff = 0;
                         let hasFullData = fund.data.length > 50;
-
-                        // 核心：计算夜间误差
                         if (isNight.value && hasFullData) {
                             let realRate = fund.data[fund.data.length - 1][1];
                             let estRate = fund.data[fund.data.length - 2][1];
-
                             if (Math.abs(realRate - estRate) > 0.001) {
                                 isSettled = true;
                                 diff = (realRate - estRate).toFixed(2);
-                            } else {
-                                isAllSettled = false;
                             }
                         }
-
                         fund._isSettled = isSettled;
                         fund._diff = diff;
-
                         return {
                             name: fund.name,
-                            type: 'line',
-                            smooth: true,
-                            symbol: 'none',
+                            type: 'line', smooth: true, symbol: 'none',
                             lineStyle: { width: 3, shadowColor: 'rgba(0,0,0,0.5)', shadowBlur: 10 },
                             endLabel: {
                                 show: true, color: 'inherit', fontSize: 13, fontWeight: 'bold', lineHeight: 20,
                                 formatter: (p) => {
                                     let profit = (fund.amount * p.value[1] / 100).toFixed(2);
                                     let sign = profit >= 0 ? '+' : '';
-
                                     if (isSettled) {
                                         let diffSign = fund._diff > 0 ? '+' : '';
                                         return `${sign}${profit} 元\n✅ 真: ${p.value[1]}%\n差: ${diffSign}${fund._diff}%`;
@@ -396,27 +383,22 @@
                             data: fund.data
                         };
                     });
-
                     var d = new Date();
                     var todayStr = d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0');
-
                     var option = {
                         backgroundColor: 'transparent',
                         tooltip: {
-                            trigger: 'axis',
-                            backgroundColor: 'rgba(15, 23, 42, 0.9)', borderColor: '#334155', textStyle: { color: '#f8fafc' },
+                            trigger: 'axis', backgroundColor: 'rgba(15, 23, 42, 0.9)', borderColor: '#334155', textStyle: { color: '#f8fafc' },
                             formatter: function (params) {
                                 let html = `<div style="margin-bottom:5px;color:#94a3b8;">${params[0].axisValueLabel}</div>`;
                                 params.forEach(p => {
                                     let profit = (holdAmounts[p.seriesName] * p.data[1] / 100).toFixed(2);
                                     let color = profit >= 0 ? '#ff4d4f' : '#10b981';
-
                                     let originalFund = apiData.find(f => f.name === p.seriesName);
                                     let labelSuffix = '估';
                                     if (isNight.value && p.dataIndex === p.seriesData.length - 1) {
                                         labelSuffix = originalFund._isSettled ? '✅ 真' : '⏳ 待更新';
                                     }
-
                                     html += `<div>${p.marker} ${p.seriesName}: <span style="color:${color};font-weight:bold;">${profit >= 0 ? '+' : ''}${profit} 元</span> (${p.data[1]}% [${labelSuffix}])</div>`;
                                 });
                                 return html;
