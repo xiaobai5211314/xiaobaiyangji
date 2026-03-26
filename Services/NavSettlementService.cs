@@ -87,6 +87,28 @@ namespace 估值助手.Services
                 }
             }
             await dbContext.SaveChangesAsync();
+            // ================= 加装：午夜数据清道夫 =================
+            try
+            {
+                // 设定保留期限：只保留最近 7 天的记录，其余全部抹杀！
+                var deadline = DateTime.UtcNow.AddHours(8).Date.AddDays(-7);
+
+                // 找出所有过期的数据
+                var oldRecords = await dbContext.FundRecords
+                    .Where(r => r.FetchTime < deadline)
+                    .ToListAsync();
+
+                if (oldRecords.Any())
+                {
+                    dbContext.FundRecords.RemoveRange(oldRecords);
+                    await dbContext.SaveChangesAsync();
+                    _logger.LogInformation("🧹 [清道夫执行完毕] 成功清理了 {Count} 条七天前的过期废弃数据，数据库成功瘦身！", oldRecords.Count);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("❌ 清道夫运行失败: {Message}", ex.Message);
+            }
         }
     }
 }

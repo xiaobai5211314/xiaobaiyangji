@@ -3,31 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>科技军团 - 炫彩量化大屏</title>
+    <title>科技军团 - Vue3 量化终端</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <script src="https://cdn.staticfile.net/echarts/5.5.0/echarts.min.js"></script>
     <style>
-        /* ================= 万物起源：炫彩背景与圆滑字体 ================= */
+        /* 保持炫彩玻璃风 CSS 不变 */
         body {
             margin: 0;
             padding: 0;
-            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); /* 赛博朋克渐变背景 */
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
             color: #f8fafc;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-family: -apple-system, sans-serif;
             overflow-x: hidden;
             min-height: 100vh;
         }
 
-        /* ================= 拟物毛玻璃效果 (Glassmorphism) ================= */
         .glass-panel {
             background: rgba(30, 41, 59, 0.4);
-            backdrop-filter: blur(12px); /* 核心：高斯模糊 */
+            backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 16px; /* 小米级别的圆滑倒角 */
+            border-radius: 16px;
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
         }
 
-        /* ================= 头部响应式布局 ================= */
         .header {
             margin: 15px;
             padding: 15px 20px;
@@ -41,11 +40,10 @@
                 font-size: 20px;
                 background: linear-gradient(to right, #00f2fe 0%, #4facfe 100%);
                 -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent; /* 炫彩文字渐变 */
+                -webkit-text-fill-color: transparent;
                 font-weight: 800;
             }
 
-        /* 控制面板响应式 */
         .control-panel {
             display: flex;
             gap: 12px;
@@ -57,18 +55,12 @@
                 border: 1px solid rgba(255,255,255,0.15);
                 color: #00e5ff;
                 padding: 8px 15px;
-                border-radius: 20px; /* 胶囊输入框 */
+                border-radius: 20px;
                 outline: none;
-                width: 140px;
-                transition: all 0.3s ease;
+                width: 120px;
+                transition: 0.3s;
             }
 
-                .control-panel input:focus {
-                    border-color: #00e5ff;
-                    box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
-                }
-
-        /* 炫彩按钮 */
         .btn-add {
             background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
             color: #fff;
@@ -77,13 +69,7 @@
             border-radius: 20px;
             cursor: pointer;
             font-weight: bold;
-            transition: transform 0.2s, box-shadow 0.2s;
         }
-
-            .btn-add:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 4px 15px rgba(0, 242, 254, 0.4);
-            }
 
         .btn-logout {
             background: transparent;
@@ -92,14 +78,8 @@
             padding: 8px 15px;
             border-radius: 20px;
             cursor: pointer;
-            transition: all 0.2s;
         }
 
-            .btn-logout:hover {
-                background: rgba(255, 77, 79, 0.1);
-            }
-
-        /* ================= 标签区 ================= */
         #fund-list {
             margin: 0 15px;
             padding: 15px;
@@ -117,7 +97,6 @@
             align-items: center;
             gap: 10px;
             border: 1px solid rgba(255,255,255,0.1);
-            backdrop-filter: blur(5px);
         }
 
             .fund-tag span {
@@ -137,16 +116,8 @@
                 align-items: center;
                 justify-content: center;
                 font-size: 10px;
-                transition: 0.2s;
             }
 
-                .fund-tag button:hover {
-                    background: #ff4d4f;
-                    color: #fff;
-                    transform: scale(1.1);
-                }
-
-        /* ================= 图表区 ================= */
         #chart-container {
             width: calc(100vw - 30px);
             height: calc(100vh - 180px);
@@ -154,13 +125,16 @@
             box-sizing: border-box;
         }
 
-        /* ================= 移动端终极自适应 (黑魔法) ================= */
+        [v-cloak] {
+            display: none !important;
+        }
+        /* 防止 Vue 加载前的闪烁 */
+
         @media screen and (max-width: 768px) {
             .header {
                 flex-direction: column;
                 align-items: flex-start;
                 gap: 15px;
-                padding: 15px;
             }
 
             .control-panel {
@@ -169,137 +143,192 @@
             }
 
                 .control-panel input {
-                    flex: 1; /* 输入框自动平分屏幕 */
-                    min-width: 100px;
+                    flex: 1;
+                    min-width: 90px;
                 }
 
-            .btn-add, .btn-logout {
-                flex: 1;
+            #chart-container {
+                height: 50vh;
+            }
+        }
+        /* 骨架屏心跳动画 */
+        .skeleton-box {
+            background: linear-gradient(90deg, rgba(40,49,66,0.5) 25%, rgba(55,65,81,0.8) 37%, rgba(40,49,66,0.5) 63%);
+            background-size: 400% 100%;
+            animation: skeleton-loading 1.4s ease infinite;
+            border-radius: 8px;
+        }
+
+        @keyframes skeleton-loading {
+            0% {
+                background-position: 100% 50%;
             }
 
-            #chart-container {
-                height: 50vh; /* 手机上图表变矮一点 */
+            100% {
+                background-position: 0 50%;
             }
         }
     </style>
 </head>
 <body>
+    <div id="app" v-cloak>
 
-    <div id="loginOverlay" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,23,42,0.8);backdrop-filter:blur(15px);z-index:999;display:flex;align-items:center;justify-content:center;">
-        <div class="glass-panel" style="padding: 40px; text-align: center; width: 300px;">
-            <h2 style="margin-top:0;background:linear-gradient(to right,#00f2fe,#4facfe);-webkit-background-clip:text;color:transparent;">⚡ 估值助手</h2>
-            <input type="text" id="usernameInput" placeholder="指挥官代号" style="width:100%;margin:15px 0;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.3);color:#fff;box-sizing:border-box;">
-            <input type="password" id="passwordInput" placeholder="安全密码" onkeypress="if(event.keyCode==13) login()" style="width:100%;margin-bottom:20px;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.3);color:#fff;box-sizing:border-box;">
-            <div style="display:flex;gap:10px;">
-                <button onclick="login()" style="flex:1;padding:12px;background:linear-gradient(135deg,#00f2fe,#4facfe);border:none;border-radius:12px;color:#fff;font-weight:bold;cursor:pointer;">登录</button>
-                <button onclick="register()" style="flex:1;padding:12px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:12px;color:#4facfe;cursor:pointer;">注册</button>
+        <div v-if="!isLoggedIn" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,23,42,0.8);backdrop-filter:blur(15px);z-index:999;display:flex;align-items:center;justify-content:center;">
+            <div class="glass-panel" style="padding: 40px; text-align: center; width: 300px;">
+                <h2 style="margin-top:0;background:linear-gradient(to right,#00f2fe,#4facfe);-webkit-background-clip:text;color:transparent;">⚡ Vue 量化引擎</h2>
+                <input v-model="loginForm.username" type="text" placeholder="指挥官代号" style="width:100%;margin:15px 0;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.3);color:#fff;box-sizing:border-box;">
+                <input v-model="loginForm.password" type="password" placeholder="安全密码" @keyup.enter="handleLogin" style="width:100%;margin-bottom:20px;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.3);color:#fff;box-sizing:border-box;">
+                <div style="display:flex;gap:10px;">
+                    <button @click="handleLogin" style="flex:1;padding:12px;background:linear-gradient(135deg,#00f2fe,#4facfe);border:none;border-radius:12px;color:#fff;font-weight:bold;cursor:pointer;">登录</button>
+                    <button @click="handleRegister" style="flex:1;padding:12px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:12px;color:#4facfe;cursor:pointer;">注册</button>
+                </div>
             </div>
         </div>
-    </div>
 
-    <div class="header glass-panel">
-        <h1>🦾 个人专属大屏 (<span id="currentUserDisp"></span>)</h1>
-        <div class="control-panel">
-            <input type="text" id="fundCode" placeholder="代码 (如 017811)">
-            <input type="number" id="fundAmount" placeholder="本金 (元)">
-            <button class="btn-add" onclick="addFund()">+ 加仓入阵</button>
-            <button class="btn-logout" onclick="logout()">安全撤退</button>
+        <div v-else>
+            <div class="header glass-panel">
+                <h1>🦾 个人专属大屏 ({{ currentUser }})</h1>
+                <div class="control-panel">
+                    <input v-model="fundForm.code" type="text" placeholder="代码 (如 017811)">
+                    <input v-model="fundForm.amount" type="number" placeholder="本金 (元)">
+                    <button class="btn-add" @click="handleAddFund">+ 加仓入阵</button>
+                    <button class="btn-logout" @click="handleLogout">安全撤退</button>
+                </div>
+            </div>
+
+            <div id="fund-list" class="glass-panel">
+                <div v-for="fund in fundsList" :key="fund.code" class="fund-tag">
+                    {{ fund.name }} <span>(本金: {{ fund.amount }})</span>
+                    <button @click="handleDeleteFund(fund.code, fund.name)" title="删除">✕</button>
+                </div>
+                <span v-if="fundsList.length === 0" style="color:#64748b; font-size:13px;">暂无阵地，请在上方添加代码</span>
+            </div>
+
+            <div v-show="isLoading" class="glass-panel" style="height: calc(100vh - 180px); margin: 15px; display: flex; flex-direction: column; padding: 20px; box-sizing: border-box; gap: 20px;">
+                <div class="skeleton-box" style="width: 30%; height: 30px;"></div>
+                <div class="skeleton-box" style="width: 100%; height: 2px;"></div>
+                <div style="display: flex; gap: 20px; height: 100%;">
+                    <div class="skeleton-box" style="width: 50px; height: 100%;"></div>
+                    <div class="skeleton-box" style="flex: 1; height: 100%;"></div>
+                </div>
+                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #4facfe; font-weight: bold; font-size: 18px; letter-spacing: 2px;">
+                    📡 正在连接总司令部同步数据...
+                </div>
+            </div>
+
+            <div v-show="!isLoading" id="chart-container" class="glass-panel" ref="chartRef"></div>
         </div>
-    </div>
 
-    <div id="fund-list" class="glass-panel"></div>
-    <div id="chart-container" class="glass-panel"></div>
+    </div>
 
     <script>
-        var currentUser = localStorage.getItem('fund_username');
-        var myChart = null; // 🚀 提取全局变量，用于无感热更新
+        const { createApp, ref, reactive, onMounted, onUnmounted, nextTick, shallowRef } = Vue;
+      
+        createApp({
+            setup() {
+                // ========== 响应式状态库 ==========
+                const isLoggedIn = ref(false);
+                const currentUser = ref(localStorage.getItem('fund_username') || '');
+                const fundsList = ref([]);
+                const chartRef = ref(null);
+                const isLoading = ref(true); // 👈 默认进入时处于加载中
+                // 表单数据绑定
+                const loginForm = reactive({ username: '', password: '' });
+                const fundForm = reactive({ code: '', amount: '' });
 
-        if (currentUser) {
-            document.getElementById('loginOverlay').style.display = 'none';
-            document.getElementById('currentUserDisp').innerText = currentUser;
-            // 首次加载初始化图表
-            myChart = echarts.init(document.getElementById('chart-container'), 'dark');
-            loadData();
-        }
+                // 图表实例 (使用 shallowRef 防止 Vue 代理庞大的 ECharts 对象导致卡顿)
+                const chartInstance = shallowRef(null);
+                let timer = null;
 
-        function register() { /* 原有注册逻辑保持不变 */
-            var name = document.getElementById('usernameInput').value.trim();
-            var pwd = document.getElementById('passwordInput').value.trim();
-            if (!name || !pwd) return alert("账号和密码不能为空！");
-            let fd = new FormData(); fd.append('username', name); fd.append('password', pwd);
-            fetch('/api/auth/register', { method: 'POST', body: fd }).then(r => r.json().then(data => ({ status: r.status, body: data }))).then(res => {
-                if (res.status === 200) alert("✅ 注册成功！"); else alert("❌ " + (res.body || "注册失败"));
-            });
-        }
+                // ========== 认证系统 ==========
+                const handleRegister = async () => {
+                    if (!loginForm.username || !loginForm.password) return alert("账号密码为空！");
+                    let fd = new FormData(); fd.append('username', loginForm.username); fd.append('password', loginForm.password);
+                    const res = await fetch('/api/auth/register', { method: 'POST', body: fd });
+                    if (res.ok) alert("✅ 注册成功！请登录。"); else alert("❌ 注册失败");
+                };
 
-        function login() { /* 原有登录逻辑保持不变 */
-            var name = document.getElementById('usernameInput').value.trim();
-            var pwd = document.getElementById('passwordInput').value.trim();
-            let fd = new FormData(); fd.append('username', name); fd.append('password', pwd);
-            fetch('/api/auth/login', { method: 'POST', body: fd }).then(r => {
-                if (r.ok) { localStorage.setItem('fund_username', name); location.reload(); } else { alert("❌ 账号或密码错误"); }
-            });
-        }
+                const handleLogin = async () => {
+                    if (!loginForm.username || !loginForm.password) return alert("账号密码为空！");
+                    let fd = new FormData(); fd.append('username', loginForm.username); fd.append('password', loginForm.password);
+                    const res = await fetch('/api/auth/login', { method: 'POST', body: fd });
+                    if (res.ok) {
+                        localStorage.setItem('fund_username', loginForm.username);
+                        currentUser.value = loginForm.username;
+                        isLoggedIn.value = true;
+                        initDashboard(); // 登录后无刷新直接进系统
+                    } else alert("❌ 账号或密码错误");
+                };
 
-        function logout() { localStorage.removeItem('fund_username'); location.reload(); }
+                const handleLogout = () => {
+                    localStorage.removeItem('fund_username');
+                    isLoggedIn.value = false;
+                    if (chartInstance.value) chartInstance.value.dispose();
+                    if (timer) clearInterval(timer);
+                };
 
-        function addFund() {
-            const code = document.getElementById('fundCode').value.trim();
-            const amount = document.getElementById('fundAmount').value.trim();
-            if (!code || !amount) return alert("请输入完整！");
-            const fd = new FormData(); fd.append('username', currentUser); fd.append('code', code); fd.append('amount', amount);
-            fetch('/api/fund/add', { method: 'POST', body: fd }).then(res => res.json()).then(data => {
-                if (data.success) {
-                    alert(`✅ 添加成功: ${data.name}。系统将在1分钟内开始捕获其数据！`);
-                    loadData(); // 🚀 不再 reload，直接无感加载
-                }
-            });
-        }
+                // ========== 业务操作 ==========
+                const handleAddFund = async () => {
+                    if (!fundForm.code || !fundForm.amount) return alert("请输入完整！");
+                    const fd = new FormData(); fd.append('username', currentUser.value); fd.append('code', fundForm.code); fd.append('amount', fundForm.amount);
+                    const res = await fetch('/api/fund/add', { method: 'POST', body: fd });
+                    if (res.ok) {
+                        fundForm.code = ''; fundForm.amount = ''; // 清空输入框
+                        fetchData(); // 悄悄更新数据
+                    }
+                };
 
-        function deleteFund(code, name) {
-            if (confirm(`⚠️ 确定移除 [${name}] 吗？`)) {
-                const fd = new FormData(); fd.append('username', currentUser); fd.append('code', code);
-                fetch('/api/fund/delete', { method: 'POST', body: fd }).then(res => res.json()).then(data => {
-                    if (data.success) loadData(); // 🚀 不再 reload，直接无感加载
-                });
-            }
-        }
+                const handleDeleteFund = async (code, name) => {
+                    if (confirm(`⚠️ 确定移除 [${name}] 吗？`)) {
+                        const fd = new FormData(); fd.append('username', currentUser.value); fd.append('code', code);
+                        await fetch('/api/fund/delete', { method: 'POST', body: fd });
+                        fetchData();
+                    }
+                };
 
-        // 🚀 核心重构：彻底抛弃 location.reload，实现真正的“热更新”
-        function loadData() {
-            if (!currentUser) return;
-            var holdAmounts = {};
+                // ========== 核心引擎：平滑抓取与渲染 ==========
+             const fetchData = async () => {
+                    if (!currentUser.value) return;
+                    try {
+                        const response = await fetch(`/api/fund/today?username=${encodeURIComponent(currentUser.value)}`);
+                        const apiData = await response.json();
+                        fundsList.value = apiData; 
+                        renderChart(apiData);
+                        
+                        // 👈 数据一到，瞬间关闭骨架屏，显示真实图表！
+                        setTimeout(() => { isLoading.value = false; }, 300); // 加 300ms 延迟让图表渲染更平滑
+                    } catch (e) { console.error("抓取失败", e); }
+                };
 
-            fetch(`/api/fund/today?username=${encodeURIComponent(currentUser)}`)
-                .then(response => response.json())
-                .then(apiData => {
-                    var fundListHtml = '';
+                const renderChart = (apiData) => {
+                    // 确保 DOM 容器存在
+                    if (!chartRef.value) return;
+
+                    // 仅在第一次初始化图表
+                    if (!chartInstance.value) {
+                        chartInstance.value = echarts.init(chartRef.value, 'dark');
+                        window.addEventListener('resize', () => chartInstance.value.resize());
+                    }
+
+                    var holdAmounts = {};
                     var seriesData = apiData.map(fund => {
                         holdAmounts[fund.name] = fund.amount;
-                        fundListHtml += `<div class="fund-tag">${fund.name} <span>(本金: ${fund.amount})</span> <button onclick="deleteFund('${fund.code}', '${fund.name}')" title="删除">✕</button></div>`;
                         return {
                             name: fund.name,
                             type: 'line',
                             smooth: true,
                             symbol: 'none',
-                            lineStyle: { width: 3, shadowColor: 'rgba(0,0,0,0.5)', shadowBlur: 10 }, // 🚀 增加发光阴影效果
+                            lineStyle: { width: 3, shadowColor: 'rgba(0,0,0,0.5)', shadowBlur: 10 },
                             endLabel: {
-                                show: true,
-                                color: 'inherit',
-                                fontSize: 13,
-                                fontWeight: 'bold',
-                                formatter: function (params) {
-                                    let profit = (fund.amount * params.value[1] / 100).toFixed(2);
-                                    let symbol = profit >= 0 ? '+' : '';
-                                    return `${symbol}${profit} 元`;
+                                show: true, color: 'inherit', fontSize: 13, fontWeight: 'bold',
+                                formatter: (p) => {
+                                    let profit = (fund.amount * p.value[1] / 100).toFixed(2);
+                                    return profit >= 0 ? `+${profit} 元` : `${profit} 元`;
                                 }
                             },
                             data: fund.data
                         };
                     });
-
-                    if (apiData.length === 0) fundListHtml = '<span style="color:#64748b; font-size:13px;">暂无阵地，请在上方添加代码</span>';
-                    document.getElementById('fund-list').innerHTML = fundListHtml;
 
                     var d = new Date();
                     var todayStr = d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0');
@@ -308,47 +337,54 @@
                         backgroundColor: 'transparent',
                         tooltip: {
                             trigger: 'axis',
-                            backgroundColor: 'rgba(15, 23, 42, 0.9)', // 毛玻璃提示框
-                            borderColor: '#334155',
-                            textStyle: { color: '#f8fafc' },
+                            backgroundColor: 'rgba(15, 23, 42, 0.9)', borderColor: '#334155', textStyle: { color: '#f8fafc' },
                             formatter: function (params) {
-                                let html = `<div style="margin-bottom:5px;font-weight:bold;color:#94a3b8;">${params[0].axisValueLabel}</div>`;
+                                let html = `<div style="margin-bottom:5px;color:#94a3b8;">${params[0].axisValueLabel}</div>`;
                                 params.forEach(p => {
-                                    let amount = holdAmounts[p.seriesName];
-                                    let profit = (amount * p.data[1] / 100).toFixed(2);
+                                    let profit = (holdAmounts[p.seriesName] * p.data[1] / 100).toFixed(2);
                                     let color = profit >= 0 ? '#ff4d4f' : '#10b981';
-                                    let symbol = profit >= 0 ? '+' : '';
-                                    html += `<div>${p.marker} ${p.seriesName}: <span style="color:${color};font-weight:800;font-size:16px;">${symbol}${profit} 元</span> (${p.data[1]}%)</div>`;
+                                    html += `<div>${p.marker} ${p.seriesName}: <span style="color:${color};font-weight:bold;">${profit >= 0 ? '+' : ''}${profit} 元</span></div>`;
                                 });
                                 return html;
                             }
                         },
-                        legend: { top: '0%', textStyle: { color: '#cbd5e1' }, icon: 'roundRect' },
-                        grid: { left: '3%', right: '15%', bottom: '3%', containLabel: true }, // right 留出足够空间显示尾部数字
-                        xAxis: {
-                            type: 'time',
-                            splitLine: { show: false },
-                            min: todayStr + ' 09:30:00',
-                            max: todayStr + ' 15:00:00',
-                            axisLabel: { formatter: '{HH}:{mm}', color: '#64748b' },
-                            axisLine: { lineStyle: { color: '#334155' } }
-                        },
-                        yAxis: {
-                            type: 'value',
-                            axisLabel: { formatter: '{value} %', color: '#64748b' },
-                            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)', type: 'dashed' } }
-                        },
+                        legend: { top: '0%', textStyle: { color: '#cbd5e1' } },
+                        grid: { left: '3%', right: '15%', bottom: '3%', containLabel: true },
+                        xAxis: { type: 'time', min: todayStr + ' 09:30:00', max: todayStr + ' 15:00:00', splitLine: { show: false } },
+                        yAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)', type: 'dashed' } } },
                         series: seriesData
                     };
 
-                    // 🚀 核心：使用 setOption 的 true 参数，实现无白屏的平滑过渡刷新！
-                    myChart.setOption(option, true);
-                    window.addEventListener('resize', function () { myChart.resize(); });
-                });
-        }
+                    // 【彻底解决闪烁的核心】：不传 true，让 ECharts 进行数据差异合并(Merge)！折线会像贪吃蛇一样丝滑延伸！
+                    chartInstance.value.setOption(option);
+                };
 
-        // 🚀 终极杀手锏：每60秒静默拉取数据，更新折线图，网页绝不闪烁！
-        setInterval(() => { if (currentUser) loadData(); }, 60000);
+                const initDashboard = () => {
+                    nextTick(() => { // 确保 Vue 渲染完大屏的 DOM 后再画图
+                        fetchData();
+                        timer = setInterval(fetchData, 60000); // 无感热抓取
+                    });
+                };
+
+                // ========== 生命周期钩子 ==========
+                onMounted(() => {
+                    if (currentUser.value) {
+                        isLoggedIn.value = true;
+                        initDashboard();
+                    }
+                });
+
+                onUnmounted(() => {
+                    if (timer) clearInterval(timer);
+                    if (chartInstance.value) chartInstance.value.dispose();
+                });
+
+                return {
+                    isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm,
+                    handleRegister, handleLogin, handleLogout, handleAddFund, handleDeleteFund
+                };
+            }
+        }).mount('#app');
     </script>
 </body>
 </html>
