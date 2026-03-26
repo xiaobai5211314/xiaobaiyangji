@@ -280,7 +280,7 @@
                 let timer = null;
 
                 const handleRegister = async () => {
-                    if (!loginForm.username || !loginForm.password) return alert("账号密码为空！!");
+                    if (!loginForm.username || !loginForm.password) return alert("账号密码为空!");
                     let fd = new FormData(); fd.append('username', loginForm.username); fd.append('password', loginForm.password);
                     const res = await fetch('/api/auth/register', { method: 'POST', body: fd });
                     if (res.ok) alert("✅ 注册成功！请登录。"); else alert("❌ 注册失败");
