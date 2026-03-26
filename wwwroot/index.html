@@ -389,7 +389,7 @@
                                     let profit = (holdAmounts[p.seriesName] * p.data[1] / 100).toFixed(2);
                                     let color = profit >= 0 ? '#ff4d4f' : '#10b981';
 
-                                    // 找到对应的原始基金数据，获取它是否已经Settled
+                                    // 找到对应的原始基金数据，获取它是否已经 Settled
                                     let originalFund = apiData.find(f => f.name === p.seriesName);
                                     let labelSuffix = '估';
                                     if (isNight.value && p.dataIndex === p.seriesData.length - 1) {
