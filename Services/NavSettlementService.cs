@@ -24,26 +24,21 @@ namespace 估值助手.Services
             _logger.LogInformation("🌙 夜间清算引擎已挂载...");
             while (!stoppingToken.IsCancellationRequested)
             {
-                // 无视服务器时区，强行获取北京/新加坡时间 (UTC+8)
                 var localTime = DateTime.UtcNow.AddHours(8);
-
-                // 只要过了晚上 20 点，立刻查账！
                 if (localTime.Hour >= 20 || localTime.Hour < 2)
                 {
                     await SettleTodayNavAsync(localTime);
                 }
-
-                // 查完睡 10 分钟
                 await Task.Delay(TimeSpan.FromMinutes(10), stoppingToken);
             }
         }
 
-                private async Task SettleTodayNavAsync(DateTime localTime)
+        private async Task SettleTodayNavAsync(DateTime localTime)
         {
             using var scope = _serviceProvider.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-            // 💥 黑客级自动补丁：无视版本直接强行给数据库加字段！（如果已经有了它会自动忽略报错）
+            // 💥 黑客级自动补丁：无视版本直接强行给数据库加字段！
             try {
                 await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE FundRecords ADD COLUMN ActualRate DOUBLE NOT NULL DEFAULT 0;");
                 await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE FundRecords ADD COLUMN DiffRate DOUBLE NOT NULL DEFAULT 0;");
@@ -61,7 +56,7 @@ namespace 估值助手.Services
                 {
                     long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                     string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize=1&_={timestamp}";
-                    
+
                     _httpClient.DefaultRequestHeaders.Remove("Accept");
                     _httpClient.DefaultRequestHeaders.Add("Accept", "application/json, text/javascript, */*; q=0.01");
 
@@ -87,7 +82,7 @@ namespace 估值助手.Services
                                 // 🚨 探针核心逻辑：保留原来的估值，把真实净值和误差单独存起来！
                                 targetRecord.ActualRate = actualRate;
                                 targetRecord.DiffRate = Math.Round(actualRate - targetRecord.EstimatedRate, 2);
-                                
+
                                 _logger.LogInformation("✅ [雷达探针生效] {Code} 真实净值: {Rate}%, 捕捉到调仓误差: {Diff}%", code, actualRate, targetRecord.DiffRate);
                             }
                         }
@@ -99,7 +94,20 @@ namespace 估值助手.Services
                 }
             }
             await dbContext.SaveChangesAsync();
-            _logger.LogInformation("🧹 [清道夫执行完毕] 成功清理了 {Count} 条过期废弃数据！", oldRecords.Count);
+
+            // ================= 加装：午夜数据清道夫 =================
+            try
+            {
+                var deadline = DateTime.UtcNow.AddHours(8).Date.AddDays(-7);
+                var oldRecords = await dbContext.FundRecords
+                    .Where(r => r.FetchTime < deadline)
+                    .ToListAsync();
+
+                if (oldRecords.Any())
+                {
+                    dbContext.FundRecords.RemoveRange(oldRecords);
+                    await dbContext.SaveChangesAsync();
+                    _logger.LogInformation("🧹 [清道夫执行完毕] 成功清理了 {Count} 条过期废弃数据！", oldRecords.Count);
                 }
             }
             catch (Exception ex)
