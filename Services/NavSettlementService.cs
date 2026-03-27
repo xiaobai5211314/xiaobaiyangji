@@ -38,10 +38,16 @@ namespace 估值助手.Services
             }
         }
 
-        private async Task SettleTodayNavAsync(DateTime localTime)
+                private async Task SettleTodayNavAsync(DateTime localTime)
         {
             using var scope = _serviceProvider.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            // 💥 黑客级自动补丁：无视版本直接强行给数据库加字段！（如果已经有了它会自动忽略报错）
+            try {
+                await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE FundRecords ADD COLUMN ActualRate DOUBLE NOT NULL DEFAULT 0;");
+                await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE FundRecords ADD COLUMN DiffRate DOUBLE NOT NULL DEFAULT 0;");
+            } catch { /* 忽略列已存在的报错 */ }
 
             var targetFunds = await dbContext.MyFunds.Select(f => f.FundCode).Distinct().ToListAsync();
 
@@ -53,16 +59,13 @@ namespace 估值助手.Services
             {
                 try
                 {
-                    // 💥 核心修复：加装时间戳破甲弹，强制打穿天天基金的 CDN 缓存！
                     long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                     string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize=1&_={timestamp}";
-
-                    // 伪装防爬虫
+                    
                     _httpClient.DefaultRequestHeaders.Remove("Accept");
                     _httpClient.DefaultRequestHeaders.Add("Accept", "application/json, text/javascript, */*; q=0.01");
 
                     string response = await _httpClient.GetStringAsync(url);
-
                     using var doc = JsonDocument.Parse(response);
                     var dataArray = doc.RootElement.GetProperty("Data").GetProperty("LSJZList");
 
@@ -79,11 +82,13 @@ namespace 估值助手.Services
                                 .OrderByDescending(r => r.FetchTime)
                                 .FirstOrDefaultAsync();
 
-                            // 只要相差 0.001 就说明真实净值和估值不同，果断覆盖！
                             if (targetRecord != null && Math.Abs(targetRecord.EstimatedRate - actualRate) > 0.001)
                             {
-                                targetRecord.EstimatedRate = actualRate;
-                                _logger.LogInformation("✅ [夜间清算成功] 破甲击穿！{Code} 修正为真实净值: {Rate}%", code, actualRate);
+                                // 🚨 探针核心逻辑：保留原来的估值，把真实净值和误差单独存起来！
+                                targetRecord.ActualRate = actualRate;
+                                targetRecord.DiffRate = Math.Round(actualRate - targetRecord.EstimatedRate, 2);
+                                
+                                _logger.LogInformation("✅ [雷达探针生效] {Code} 真实净值: {Rate}%, 捕捉到调仓误差: {Diff}%", code, actualRate, targetRecord.DiffRate);
                             }
                         }
                     }
@@ -94,22 +99,7 @@ namespace 估值助手.Services
                 }
             }
             await dbContext.SaveChangesAsync();
-
-            // ================= 加装：午夜数据清道夫 =================
-            try
-            {
-                // 只保留最近 7 天的记录
-                var deadline = DateTime.UtcNow.AddHours(8).Date.AddDays(-7);
-
-                var oldRecords = await dbContext.FundRecords
-                    .Where(r => r.FetchTime < deadline)
-                    .ToListAsync();
-
-                if (oldRecords.Any())
-                {
-                    dbContext.FundRecords.RemoveRange(oldRecords);
-                    await dbContext.SaveChangesAsync();
-                    _logger.LogInformation("🧹 [清道夫执行完毕] 成功清理了 {Count} 条过期废弃数据！", oldRecords.Count);
+            _logger.LogInformation("🧹 [清道夫执行完毕] 成功清理了 {Count} 条过期废弃数据！", oldRecords.Count);
                 }
             }
             catch (Exception ex)
