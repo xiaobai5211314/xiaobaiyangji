@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>科技军团 - Vue3 量化终端</title>
+    <title>估值助手</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <script src="https://cdn.staticfile.net/echarts/5.5.0/echarts.min.js"></script>
     <style>
@@ -87,6 +87,22 @@
             flex-wrap: wrap;
         }
 
+        .radar-badge {
+            background: rgba(255, 77, 79, 0.15);
+            color: #ff4d4f;
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 8px;
+            border: 1px solid rgba(255, 77, 79, 0.3);
+            animation: blink 2s infinite; /* 加个呼吸闪烁效果 */
+        }
+
+        @keyframes blink {
+            50% {
+                opacity: 0.5;
+            }
+        }
         .fund-tag {
             background: rgba(255, 255, 255, 0.05);
             padding: 6px 15px;
@@ -237,7 +253,12 @@
 
             <div id="fund-list" class="glass-panel">
                 <div v-for="fund in fundsList" :key="fund.code" class="fund-tag">
-                    <span style="font-weight: bold;">{{ fund.name }}</span>
+                    <span class="fund-name">
+                        {{ fund.name }}
+                        <span v-if="Math.abs(fund.diffRate) > 0.15" class="radar-badge">
+                            🚨 调仓偏离: {{ fund.diffRate }}%
+                        </span>
+                    </span>
                     <span class="info">
                         (昨日市值: {{ fund.amount }} |
                         <span :style="{color: fund.currentRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold'}">

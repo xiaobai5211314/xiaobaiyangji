@@ -55,13 +55,25 @@ namespace 估值助手.Controllers
             return BadRequest("未找到该基金配置");
         }
 
+      
         // 👉 获取今日数据 (只返回当前用户的基金！)
         [HttpGet("today")]
         public async Task<IActionResult> GetTodayData([FromQuery] string username)
         {
             if (string.IsNullOrEmpty(username)) return Unauthorized("请提供指挥官代号");
 
+            // 💥 紧急战地补丁：只要有人打开大屏，立刻检查并强行开辟新字段！
+            try
+            {
+                await _context.Database.ExecuteSqlRawAsync("ALTER TABLE MyFunds ADD COLUMN LastSettledDate VARCHAR(20);");
+                await _context.Database.ExecuteSqlRawAsync("ALTER TABLE FundRecords ADD COLUMN ActualRate DOUBLE NOT NULL DEFAULT 0;");
+                await _context.Database.ExecuteSqlRawAsync("ALTER TABLE FundRecords ADD COLUMN DiffRate DOUBLE NOT NULL DEFAULT 0;");
+            }
+            catch { /* 如果字段已经存在，就当作无事发生，静默忽略 */ }
+
             var myFunds = await _context.MyFunds.Where(f => f.Username == username).ToListAsync();
+
+            // ... (下面保留你原来的代码不变)
             var myFundCodes = myFunds.Select(f => f.FundCode).ToList();
 
             // 🚀 【核心修复】：强行注入 UTC+8 亚洲时间！不管服务器在哪，永远对齐北京/新加坡时间
@@ -114,6 +126,7 @@ namespace 估值助手.Controllers
                     code = config.FundCode,
                     name = config.FundName,
                     amount = config.HoldAmount,
+                    diffRate = lastRecord != null ? lastRecord.DiffRate : 0, // 👈 新增这一行：把昨天雷达抓到的误差传给大屏！
                     data = dataPoints
                 };
             });
