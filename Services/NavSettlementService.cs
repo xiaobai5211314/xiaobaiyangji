@@ -33,15 +33,16 @@ namespace 估值助手.Services
             }
         }
 
-        private async Task SettleTodayNavAsync(DateTime localTime)
+                private async Task SettleTodayNavAsync(DateTime localTime)
         {
             using var scope = _serviceProvider.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-            // 💥 黑客级自动补丁：无视版本直接强行给数据库加字段！
+            // 💥 黑客级自动补丁 2.0：除了雷达字段，再强行开辟一个财务防刷锁字段！
             try {
                 await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE FundRecords ADD COLUMN ActualRate DOUBLE NOT NULL DEFAULT 0;");
                 await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE FundRecords ADD COLUMN DiffRate DOUBLE NOT NULL DEFAULT 0;");
+                await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE MyFunds ADD COLUMN LastSettledDate VARCHAR(20);");
             } catch { /* 忽略列已存在的报错 */ }
 
             var targetFunds = await dbContext.MyFunds.Select(f => f.FundCode).Distinct().ToListAsync();
@@ -70,8 +71,10 @@ namespace 估值助手.Services
                         string fsrq = latestData.GetProperty("FSRQ").GetString() ?? "";
                         string jzzzlStr = latestData.GetProperty("JZZZL").GetString() ?? "";
 
+                        // 如果拿到了今天的真实涨跌幅（比如 1.31）
                         if (fsrq == todayStr && double.TryParse(jzzzlStr, out double actualRate))
                         {
+                            // 【1. 渣男雷达探针逻辑】
                             var targetRecord = await dbContext.FundRecords
                                 .Where(r => r.FundCode == code && r.FetchTime >= todayStart && r.FetchTime < tomorrowStart)
                                 .OrderByDescending(r => r.FetchTime)
@@ -79,11 +82,25 @@ namespace 估值助手.Services
 
                             if (targetRecord != null && Math.Abs(targetRecord.EstimatedRate - actualRate) > 0.001)
                             {
-                                // 🚨 探针核心逻辑：保留原来的估值，把真实净值和误差单独存起来！
                                 targetRecord.ActualRate = actualRate;
                                 targetRecord.DiffRate = Math.Round(actualRate - targetRecord.EstimatedRate, 2);
-
                                 _logger.LogInformation("✅ [雷达探针生效] {Code} 真实净值: {Rate}%, 捕捉到调仓误差: {Diff}%", code, actualRate, targetRecord.DiffRate);
+                            }
+
+                            // 【2. 💰 战术二：自动复利滚存引擎 (带防重刷锁)】
+                            var holdingUsers = await dbContext.MyFunds.Where(f => f.FundCode == code).ToListAsync();
+                            foreach (var holding in holdingUsers)
+                            {
+                                // 检查今天是不是已经结算过了，死死防住“无限刷钱BUG”！
+                                if (holding.LastSettledDate != todayStr)
+                                {
+                                    double oldAmount = holding.HoldAmount;
+                                    // 核心金融算法：老本金 * (1 + 涨幅/100)
+                                    holding.HoldAmount = Math.Round(oldAmount * (1.0 + actualRate / 100.0), 2);
+                                    holding.LastSettledDate = todayStr; // 立刻上锁！
+                                    
+                                    _logger.LogInformation("💰 [自动复利生效] {Name} 本金翻滚: {Old} -> {New}", holding.FundName, oldAmount, holding.HoldAmount);
+                                }
                             }
                         }
                     }
@@ -95,7 +112,7 @@ namespace 估值助手.Services
             }
             await dbContext.SaveChangesAsync();
 
-            // ================= 加装：午夜数据清道夫 =================
+            // ================= 午夜数据清道夫 =================
             try
             {
                 var deadline = DateTime.UtcNow.AddHours(8).Date.AddDays(-7);
@@ -115,5 +132,6 @@ namespace 估值助手.Services
                 _logger.LogError("❌ 清道夫运行失败: {Message}", ex.Message);
             }
         }
+
     }
 }
