@@ -297,7 +297,7 @@
 
         <div v-else>
             <div class="header glass-panel">
-                <h1>🦾 指挥官大屏 ({{ currentUser }})</h1>
+                <h1>估值助手 ({{ currentUser }})</h1>
                 <div class="control-panel">
                     <input v-model="fundForm.code" type="text" placeholder="代码 (如 017811)">
                     <input v-model="fundForm.amount" type="number" placeholder="昨日市值">
@@ -478,8 +478,48 @@
                 const chartInstance = shallowRef(null);
                 let timer = null;
                 const isUploading = ref(false);
-                const showAssets = ref(false); // 🛡️ 隐蔽开关状态
+                const showAssets = ref(false); 
                 const editForm = reactive({ show: false, code: '', name: '', cost: '', originalCode: '' });
+
+                // 📸 前端 Canvas 极限压缩核心引擎
+                const compressImageBeforeUpload = (file, successCallback) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = function (e) {
+                        const img = new Image();
+                        img.src = e.target.result;
+                        img.onload = function () {
+                            const canvas = document.createElement('canvas');
+                            const ctx = canvas.getContext('2d');
+
+                            // 锁定最大宽度为 800px，高度等比例缩放
+                            const maxWidth = 800;
+                            let targetWidth = img.width;
+                            let targetHeight = img.height;
+
+                            if (targetWidth > maxWidth) {
+                                targetHeight = Math.round(targetHeight * (maxWidth / targetWidth));
+                                targetWidth = maxWidth;
+                            }
+
+                            canvas.width = targetWidth;
+                            canvas.height = targetHeight;
+
+                            // 填充白底，防止 PNG 等透明图片变黑底影响 OCR
+                            ctx.fillStyle = "#fff";
+                            ctx.fillRect(0, 0, canvas.width, canvas.height);
+                            ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+                            // ⚡ 输出质量为 0.5 (50%) 的 JPEG 图片
+                            canvas.toBlob(function (blob) {
+                                // 重新打包成 File 对象
+                                const fileName = file.name.replace(/\.[^/.]+$/, "") + ".jpg"; // 确保后缀变更为 jpg
+                                const compressedFile = new File([blob], fileName, { type: 'image/jpeg' });
+                                successCallback(compressedFile); 
+                            }, 'image/jpeg', 0.5);
+                        };
+                    };
+                };
 
                 const handleRegister = async () => {
                     if (!loginForm.username || !loginForm.password) return alert("账号密码为空！");
@@ -529,29 +569,36 @@
 
                 const triggerUpload = () => { document.getElementById('ocrInput').click(); };
 
+                // 🚀 集成了压缩的极速上传方法
                 const handleFileUpload = async (event) => {
                     const file = event.target.files[0];
                     if (!file) return;
+                    
                     isUploading.value = true;
-                    const formData = new FormData();
-                    formData.append('imageFile', file);
-                    try {
-                        const response = await fetch(`/api/Fund/import-ocr?username=${encodeURIComponent(currentUser.value)}`, { method: 'POST', body: formData });
-                        if (response.ok) {
-                            const result = await response.text();
-                            alert("✅ " + result);
-                            fundsList.value = [];
-                            fetchData();
-                        } else {
-                            const errorMsg = await response.text();
-                            alert("❌ 识别受阻: " + errorMsg);
+
+                    // ⚡ 先在手机端压缩图片
+                    compressImageBeforeUpload(file, async (compressedFile) => {
+                        const formData = new FormData();
+                        formData.append('imageFile', compressedFile); // 发送压缩后的极小图片
+
+                        try {
+                            const response = await fetch(`/api/Fund/import-ocr?username=${encodeURIComponent(currentUser.value)}`, { method: 'POST', body: formData });
+                            if (response.ok) {
+                                const result = await response.text();
+                                alert(result);
+                                fundsList.value = [];
+                                fetchData();
+                            } else {
+                                const errorMsg = await response.text();
+                                alert("❌ 识别受阻: " + errorMsg);
+                            }
+                        } catch (error) {
+                            alert("🌐 失去与云端智脑的连接，请检查网络！");
+                        } finally {
+                            isUploading.value = false;
+                            event.target.value = ''; // 清空 input 允许重复上传同名文件
                         }
-                    } catch (error) {
-                        alert("🌐 失去与云端智脑的连接，请检查网络！");
-                    } finally {
-                        isUploading.value = false;
-                        event.target.value = '';
-                    }
+                    });
                 };
 
                 const openEditModal = (fund) => {
@@ -593,15 +640,11 @@
                                 fund.currentRate = 0;
                             }
 
-                            // 🌟 今日预估收益计算
                             fund.todayProfit = (fund.amount * (fund.currentRate / 100)).toFixed(2);
                             tToday += parseFloat(fund.todayProfit);
 
-                            // 💰 累计综合盈亏
                             fund.estimatedProfit = (fund.cost && fund.cost > 0) ? (fund.amount - fund.cost).toFixed(2) : 0;
-                            // 🚀 回本需要涨多少
                             fund.breakEvenRate = (fund.cost && fund.cost > fund.amount) ? ((fund.cost / fund.amount - 1) * 100).toFixed(2) : "0.00";
-                            // 🚀 现有累计收益率
                             fund.existingReturnRate = (fund.cost && fund.cost > 0) ? (((fund.amount - fund.cost) / fund.cost) * 100).toFixed(2) : "0.00";
                         });
 
@@ -646,7 +689,6 @@
                                 formatter: (p) => {
                                     let profit = (fund.amount * p.value[1] / 100).toFixed(2);
                                     let sign = profit >= 0 ? '+' : '';
-                                    // 🛡️ 隐蔽状态判断
                                     let profitDisplay = showAssets.value ? `${sign}${profit} 元` : '**** 元';
 
                                     if (isSettled) {
@@ -679,7 +721,6 @@
                                     if (isNight.value && p.dataIndex === p.seriesData.length - 1) {
                                         labelSuffix = originalFund._isSettled ? '✅ 真' : '⏳ 待更新';
                                     }
-                                    // 🛡️ 隐蔽状态判断
                                     let profitDisplay = showAssets.value ? `${profit >= 0 ? '+' : ''}${profit} 元` : '**** 元';
                                     html += `<div>${p.marker} ${p.seriesName}: <span style="color:${color};font-weight:bold;">${profitDisplay}</span> (${p.data[1]}% [${labelSuffix}])</div>`;
                                 });
@@ -695,7 +736,6 @@
                     chartInstance.value.setOption(option);
                 };
 
-                // 🛡️ 监听隐蔽按钮的切换，动态重新绘制图表数字
                 watch(showAssets, () => {
                     if (fundsList.value.length > 0) renderChart(fundsList.value);
                 });
