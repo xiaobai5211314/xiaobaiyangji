@@ -289,7 +289,53 @@ namespace 估值助手.Controllers
                 return StatusCode(500, $"服务器当场阵亡，死因：{ex.Message} | 详细：{ex.StackTrace}");
             }
         }
+        // 👉 指挥官手动补给：更新本金和代码
+        [HttpPost("update-details")]
+        public async Task<IActionResult> UpdateDetailsAsync([FromQuery] string username, [FromForm] string code, [FromForm] double costAmount, [FromForm] string originalCode)
+        {
+            if (string.IsNullOrEmpty(username)) return Unauthorized("指挥官身份未确认");
+            if (string.IsNullOrEmpty(code) || costAmount <= 0) return BadRequest("本金或东财代码信息不完整");
 
+            try
+            {
+                // 💥 战术细节：我们要处理 OCR 导入产生的临时代码，将其替换为 6 位正规代码
+                var existFund = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && (f.FundCode == code || f.FundCode == originalCode));
+
+                if (existFund != null)
+                {
+                    // 1. 如果它是ocr产生的不正规代码 (待核对_xxx)，我们要更新基金代码和本金
+                    if (originalCode.StartsWith("待核对"))
+                    {
+                        // 先检查新的东财代码是否已经存在了
+                        var checkNewCode = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && f.FundCode == code);
+                        if (checkNewCode != null) return BadRequest($"东财代码 [{code}] 已经在库中，请不要输入重复代码。");
+
+                        existFund.FundCode = code; // 替换代码
+                        existFund.CostAmount = costAmount; // 更新本金
+                        _context.MyFunds.Update(existFund);
+
+                        // 同时，我们需要清理旧的OCR代码在 FundData 数据表里的数据
+                        var oldRecords = await _context.FundRecords.Where(r => r.FundCode == originalCode).ToListAsync();
+                        if (oldRecords.Any()) _context.FundRecords.RemoveRange(oldRecords);
+                    }
+                    else
+                    {
+                        // 2. 如果原本就是正规代码，只更新本金
+                        existFund.CostAmount = costAmount;
+                        _context.MyFunds.Update(existFund);
+                    }
+
+                    await _context.SaveChangesAsync();
+                    return Ok($"本金与 012804 代码补给完成，大屏将自动下周一动算收益！");
+                }
+
+                return BadRequest("未能匹配到该基金阵地信息");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"云端接收异常: {ex.Message}");
+            }
+        }
         // 🚀🚀🚀 【新增的核心武器】：手动核武按钮与战报输出
         [HttpGet("force-settle")]
         public async Task<IActionResult> ForceSettle()
