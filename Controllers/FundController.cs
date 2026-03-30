@@ -1,9 +1,10 @@
+using Baidu.Aip.Ocr;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json.Linq;
+using StackExchange.Redis;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Baidu.Aip.Ocr;
-using Newtonsoft.Json.Linq;
 using 估值助手.Models;
 
 namespace 估值助手.Controllers
@@ -19,36 +20,51 @@ namespace 估值助手.Controllers
             public string Code { get; set; }
             public string Name { get; set; }
         }
-        // 🚀 战术中枢：静态缓存，确保只拉取一次
         private static List<FundInfoCache> _globalFundCache = null;
-        // 📡 从东方财富拉取全量 10000+ 基金名单
+
         private async Task<List<FundInfoCache>> GetAllFundsAsync()
         {
+            // 第一层：内存缓存
             if (_globalFundCache != null) return _globalFundCache;
 
             try
             {
+                // 🔑 连接你的宝塔 Redis (对齐 127.0.0.1:6379)
+                ConnectionMultiplexer redis = ConnectionMultiplexer.Connect("localhost:6379");
+                IDatabase db = redis.GetDatabase();
+
+                string cacheKey = "global_fund_db_cache";
+                var cachedData = await db.StringGetAsync(cacheKey);
+
+                // 第二层：Redis 缓存
+                if (!cachedData.IsNull)
+                {
+                    _globalFundCache = JsonSerializer.Deserialize<List<FundInfoCache>>(cachedData);
+                    return _globalFundCache;
+                }
+
+                // 第三层：远程抓取 (仅在 Redis 为空时执行一次)
                 using var client = new HttpClient();
-                // 增加超时控制，防止卡死
-                client.Timeout = TimeSpan.FromSeconds(10);
                 string jsData = await client.GetStringAsync("http://fund.eastmoney.com/js/fundcode_search.js");
 
-                // 返回格式是 var r = [["000001","HXCZHH","华夏成长混合","混合型"...],...];
                 int startIndex = jsData.IndexOf('[');
                 int endIndex = jsData.LastIndexOf(']');
                 if (startIndex > 0 && endIndex > 0)
                 {
                     string json = jsData.Substring(startIndex, endIndex - startIndex + 1);
-                    var rawList = System.Text.Json.JsonSerializer.Deserialize<List<List<string>>>(json);
-
-                    // 提取 代码[0] 和 名称[2] 存入记忆中枢
+                    var rawList = JsonSerializer.Deserialize<List<List<string>>>(json);
                     _globalFundCache = rawList.Select(x => new FundInfoCache { Code = x[0], Name = x[2] }).ToList();
+
+                    // 💾 写入 Redis，有效期 24 小时
+                    string serialData = JsonSerializer.Serialize(_globalFundCache);
+                    await db.StringSetAsync(cacheKey, serialData, TimeSpan.FromHours(24));
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine("抓取基金总库失败: " + ex.Message);
+                Console.WriteLine("Redis 连接异常: " + ex.Message);
             }
+
             return _globalFundCache ?? new List<FundInfoCache>();
         }
         public FundController(AppDbContext context) { _context = context; }
