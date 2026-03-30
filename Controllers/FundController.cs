@@ -190,31 +190,48 @@ namespace 估值助手.Controllers
 debugLog.Add($"[🔍 百度OCR原文前10行]\n{string.Join("\n", texts.Take(10))}\n");
 
                 // ==========================================
-                // 3. 极速匹配引擎 (这部分保持原样，速度极快)
+                  // ==========================================
+                // 3. 极速匹配引擎 (带跨行打捞 A/C 后缀功能)
                 // ==========================================
                 int importedCount = 0;
-                string numPattern = @"^([-+]?\d{1,3}(,\d{3})*(\.\d{2}))$";
 
-                               for (int i = 0; i < texts.Count; i++)
+                for (int i = 0; i < texts.Count; i++)
                 {
-                    // 🚀 智能拼接升级版：遇到包含数字的行，立刻刹车，防止把名字和金额缝合在一起！
                     string combinedName = texts[i];
-                    for (int step = 1; step <= 2 && (i + step) < texts.Count; step++)
-                    {
-                        string nextLine = texts[i + step].Trim();
-                        if (Regex.IsMatch(nextLine, @"\d")) break; // 踩刹车：下一行有数字，说明读到右边的金额了
-                        combinedName += nextLine;
-                    }
-
                     string pureChinese = Regex.Replace(combinedName, @"[^\u4e00-\u9fa5]", "");
                     
-                    // 把门槛提高到 4 个字，自动过滤掉支付宝顶部的“偏股”、“偏债”、“全部”等干扰词
-                    if (pureChinese.Length < 4) continue; 
+                    // 起始行必须有足够的汉字才配叫基金名字
+                    if (pureChinese.Length < 3) continue; 
+
+                    string ocrClass = ExtractFundClass(combinedName);
+
+                    // 🚀 终极杀招：跨越金额行，寻找“被打断的名字尾巴”（重点捞 A/C 类后缀）
+                    for (int step = 1; step <= 5 && (i + step) < texts.Count; step++)
+                    {
+                        string nextLine = texts[i + step].Trim();
+                        
+                        // 发现是金额或收益率，说明到了数据区，跳过这行，继续往下找尾巴！
+                        if (Regex.IsMatch(nextLine, @"^[-+一_]?\s*[\d,\.]+\s*%?$")) continue;
+                        
+                        // 清洗掉支付宝的干扰词
+                        string cleanNext = Regex.Replace(nextLine, @"(金选|指数基金|市场解读|已更新)", "").Trim();
+                        if (string.IsNullOrEmpty(cleanNext)) continue;
+
+                        // 如果下一行的汉字超过4个，说明大概率是下一只基金了，赶紧刹车！
+                        if (Regex.Replace(cleanNext, @"[^\u4e00-\u9fa5]", "").Length >= 4) break;
+
+                        // 把碎掉的尾巴拼起来（比如 "接(QDI)C"）
+                        combinedName += cleanNext;
+                        
+                        // 重新尝试提取 A/C 类 (只要捞到了就锁定)
+                        if (string.IsNullOrEmpty(ocrClass)) ocrClass = ExtractFundClass(cleanNext);
+                    }
 
                     string normalizedOcr = NormalizeFundName(combinedName);
                     FundInfoCache bestMatch = null;
                     double bestScore = 0;
 
+                    // ⚡ 降维打击：字典秒杀
                     if (_exactMatchDict != null && (_exactMatchDict.TryGetValue(normalizedOcr, out var exactFund) || _exactMatchDict.TryGetValue(combinedName, out exactFund)))
                     {
                         bestMatch = exactFund;
@@ -223,13 +240,14 @@ debugLog.Add($"[🔍 百度OCR原文前10行]\n{string.Join("\n", texts.Take(10)
                     }
                     else
                     {
-                        string ocrClass = ExtractFundClass(combinedName);
+                        // 🐌 模糊匹配
                         var candidates = allFunds.Where(f => f.NormalizedName.Contains(pureChinese) || 
                                                             pureChinese.Contains(f.NormalizedName.Substring(0, Math.Min(3, f.NormalizedName.Length))));
 
                         foreach (var f in candidates)
                         {
                             string dbClass = ExtractFundClass(f.Name);
+                            // 🛡️ 绝对隔离：OCR提取到了C，就绝不允许匹配A！
                             if (!string.IsNullOrEmpty(ocrClass) && !string.IsNullOrEmpty(dbClass) && ocrClass != dbClass) continue;
 
                             double similarity = CalculateSimilarity(normalizedOcr, f.NormalizedName);
@@ -243,6 +261,7 @@ debugLog.Add($"[🔍 百度OCR原文前10行]\n{string.Join("\n", texts.Take(10)
                         }
                     }
 
+                    // 🎯 寻找金额并入库
                     if (bestMatch != null && bestScore > 70)
                     {
                         double marketValue = 0, holdingIncome = 0;
@@ -251,15 +270,20 @@ debugLog.Add($"[🔍 百度OCR原文前10行]\n{string.Join("\n", texts.Take(10)
                         for (int j = 1; j <= 8 && (i + j) < texts.Count; j++)
                         {
                             string next = texts[i + j].Trim();
-                            if (Regex.IsMatch(next, numPattern))
+                            
+                            // 修复 OCR 把负号认成汉字 "一" 的情况
+                            string cleanNumStr = next.Replace("一", "-").Replace("_", "-").Replace(" ", "");
+                            
+                            if (Regex.IsMatch(cleanNumStr, @"^[-+]?\d{1,3}(,\d{3})*(\.\d{2})?$"))
                             {
-                                double val = double.Parse(next.Replace(",", ""));
-                                if (marketValue == 0 && val > 10 && !next.Contains("+") && !next.Contains("-"))
+                                double val = double.Parse(cleanNumStr.Replace(",", ""));
+                                
+                                if (marketValue == 0 && val > 10 && !cleanNumStr.Contains("+") && !cleanNumStr.Contains("-"))
                                 {
                                     marketValue = val;
                                     linesConsumed = Math.Max(linesConsumed, j);
                                 }
-                                else if (holdingIncome == 0 && (next.Contains("+") || next.Contains("-") || marketValue > 0))
+                                else if (holdingIncome == 0 && (cleanNumStr.Contains("+") || cleanNumStr.Contains("-") || marketValue > 0))
                                 {
                                     holdingIncome = val;
                                     linesConsumed = Math.Max(linesConsumed, j);
@@ -297,6 +321,7 @@ debugLog.Add($"[🔍 百度OCR原文前10行]\n{string.Join("\n", texts.Take(10)
                         }
                     }
                 }
+
 
                 await _context.SaveChangesAsync();
                 return Ok($"识别完成！成功同步 {importedCount} 只。\n\n[诊断日志]\n{string.Join("\n", debugLog)}");
