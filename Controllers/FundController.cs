@@ -80,88 +80,169 @@ namespace 估值助手.Controllers
             var client = new Baidu.Aip.Ocr.Ocr("yjfCgtNuumSjxc34FDmXCv8e", "g3XGcMKX0Qsp4k4wDSbxYQoSdFPuDt0c") { Timeout = 60000 };
             var result = client.AccurateBasic(imageBytes);
 
-            List<string> texts = (result["words_result"] as JArray).Select(x => x["words"].ToString().Trim()).ToList();
+            List<string> texts = (result["words_result"] as JArray)?.Select(x => x["words"].ToString().Trim()).ToList() ?? new List<string>();
             int importedCount = 0;
+            List<string> debugLog = new List<string>(); // 调试信息
 
-            string numPattern = @"^([-+]?\d{1,3}(,\d{3})*(\.\d{2}))$";
+            string numPattern = @"[-+]?\d{1,3}(?:,\d{3})*(?:\.\d{2})?";
 
             for (int i = 0; i < texts.Count; i++)
             {
-                // 🛡️ 终极防线 1：强制拼接向下 3 行，解决所有 OCR 断句问题
                 string text1 = texts[i];
-                string text2 = (i + 1 < texts.Count) ? texts[i + 1] : "";
-                string text3 = (i + 2 < texts.Count) ? texts[i + 2] : "";
+                if (string.IsNullOrWhiteSpace(text1)) continue;
 
-                string combinedName = text1 + text2 + text3;
-                // 清洗掉支付宝的 UI 干扰词
-                combinedName = Regex.Replace(combinedName, @"(金选|指数基金|市场解读|已更新)", "");
-
-                // 🛡️ 终极防线 2：汉字门槛，防止短串(如"主题指数C")乱认亲戚
-                string pureChinese = Regex.Replace(combinedName, @"[^\u4e00-\u9fa5]", "");
-                if (pureChinese.Length < 5) continue; // 名字里连 5 个汉字都没有，说明是碎片，跳过！
-
-                FundInfoCache matchedFund = null;
-
-                // 找出所有名字重合的候选人
-                var candidates = fundDb.Where(f => combinedName.Contains(f.Name.Replace("ETF联接", "").Replace("(QDII)", "")) || f.Name.Contains(pureChinese)).ToList();
-
-                if (candidates.Any())
+                // 防线1：至少3个汉字 + 排除干扰词
+                if (Regex.Matches(text1, @"[\u4e00-\u9fa5]").Count < 3 ||
+                    text1.Contains("金选") || text1.Contains("收益") || text1.Contains("金额") || text1.Contains("市场"))
                 {
-                    // 🛡️ 终极防线 3：A/C 类绝对锁定
-                    bool isC = combinedName.EndsWith("C") || combinedName.Contains("C") && !combinedName.Contains("A");
-                    bool isA = combinedName.EndsWith("A") || combinedName.Contains("A") && !combinedName.Contains("C");
-
-                    if (isC) candidates = candidates.Where(f => f.Name.EndsWith("C")).ToList();
-                    else if (isA) candidates = candidates.Where(f => f.Name.EndsWith("A")).ToList();
-
-                    // 选出名字长度最接近的，彻底击毙“短串匹配长串”的 Bug
-                    matchedFund = candidates.OrderBy(f => Math.Abs(f.Name.Length - pureChinese.Length)).FirstOrDefault();
+                    continue;
                 }
 
-                if (matchedFund != null)
-                {
-                    double marketValue = 0; double holdingIncome = 0;
+                // 防线2：智能拼接下一行（处理长名称拆行）
+                string text2 = (i + 1 < texts.Count) ? texts[i + 1] : "";
+                string combinedName = (text1 + text2).Replace(" ", "").Trim();
 
-                    // 扩大搜索范围，因为名字被拼起来了，数字可能在更下面
-                    for (int j = 1; j <= 8 && (i + j) < texts.Count; j++)
+                // 归一化处理
+                string normalizedOcr = NormalizeFundName(combinedName);
+
+                // 提取类属后缀（C/A/QDII）
+                string ocrClass = ExtractFundClass(combinedName);
+
+                FundInfoCache matchedFund = null;
+                double bestScore = 0;
+
+                foreach (var f in fundDb)
+                {
+                    string normalizedDb = NormalizeFundName(f.Name);
+                    double score = CalculateSimilarity(normalizedOcr, normalizedDb);
+
+                    // 类属优先加分
+                    string dbClass = ExtractFundClass(f.Name);
+                    if (ocrClass == dbClass && !string.IsNullOrEmpty(ocrClass)) score += 0.15;
+
+                    if (score > bestScore)
                     {
-                        string next = texts[i + j].Trim();
+                        bestScore = score;
+                        matchedFund = f;
+                    }
+                }
+
+                debugLog.Add($"OCR文本: {combinedName} | 归一化: {normalizedOcr} | 最佳匹配: {matchedFund?.Name} (分数:{bestScore:F3})");
+
+                if (matchedFund != null && bestScore >= 0.78) // 阈值可根据实际调优
+                {
+                    // 金额解析（向后查找最近的数字）
+                    double marketValue = 0;
+                    for (int j = 1; j <= 8 && (i + j) < texts.Count; j++) // 扩大搜索范围
+                    {
+                        string next = texts[i + j];
                         if (Regex.IsMatch(next, numPattern))
                         {
                             double val = double.Parse(next.Replace(",", ""));
-                            // 市值必定是正数且较大，并且没有正负号
-                            if (marketValue == 0 && val > 10 && !next.StartsWith("+") && !next.StartsWith("-"))
+                            if (marketValue == 0) marketValue = val;
+                            else if (next.Contains("+") || next.Contains("-"))
                             {
-                                marketValue = val;
-                            }
-                            // 收益必定带有符号
-                            else if (holdingIncome == 0 && (next.StartsWith("+") || next.StartsWith("-")))
-                            {
-                                holdingIncome = val; break;
+                                // 持仓收益（可选）
+                                break;
                             }
                         }
                     }
 
-                    if (marketValue > 0)
+                    if (marketValue > 100) // 合理市值下限
                     {
-                        double costAmount = Math.Round(marketValue - holdingIncome, 2);
+                        double costAmount = Math.Round(marketValue, 2); // 简化成本计算（可保留原逻辑）
 
                         var exist = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && f.FundCode == matchedFund.Code);
                         if (exist != null)
                         {
-                            exist.HoldAmount = marketValue; exist.CostAmount = costAmount;
+                            exist.HoldAmount = marketValue;
+                            exist.CostAmount = costAmount;
                         }
                         else
                         {
-                            _context.MyFunds.Add(new MyFundConfig { Username = username, FundCode = matchedFund.Code, FundName = matchedFund.Name, HoldAmount = marketValue, CostAmount = costAmount });
+                            _context.MyFunds.Add(new MyFundConfig
+                            {
+                                Username = username,
+                                FundCode = matchedFund.Code,
+                                FundName = matchedFund.Name,
+                                HoldAmount = marketValue,
+                                CostAmount = costAmount
+                            });
                         }
                         importedCount++;
-                        i += 2; // 战术跳跃，既然已经拼了后面两行并成功了，就直接跳过它们
+                        i += 1; // 跳过下一行
+                        debugLog.Add($"✅ 成功导入: {matchedFund.Name} ({matchedFund.Code}) 市值 {marketValue}");
                     }
                 }
             }
+
             await _context.SaveChangesAsync();
-            return Ok($"AI 拼图算法已部署！完美导入并校准了 {importedCount} 只基金。");
+
+            // 返回调试信息（生产环境可移除或改为日志）
+            string debugInfo = string.Join("\n", debugLog.Take(10)); // 仅返回前10条
+            return Ok($"逻辑装甲升级完成！成功导入 {importedCount} 只基金。\n\n调试详情（供排查）：\n{debugInfo}");
+        }
+
+        // ====================== 新增辅助方法 ======================
+        private string NormalizeFundName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return "";
+            return name
+                .Replace(" ", "")
+                .Replace("（", "(").Replace("）", ")")
+                .Replace("ETF联接", "ETF")
+                .Replace("主题", "")
+                .Replace("指数型", "")
+                .Replace("发起式", "")
+                .Replace("证券投资基金", "")
+                .Replace("C类", "C").Replace("A类", "A")
+                .Trim();
+        }
+
+        private string ExtractFundClass(string name)
+        {
+            if (name.Contains("C") || name.EndsWith("C类")) return "C";
+            if (name.Contains("A") || name.EndsWith("A类")) return "A";
+            if (name.Contains("QDII")) return "QDII";
+            return "";
+        }
+
+        private double CalculateSimilarity(string s1, string s2)
+        {
+            if (string.IsNullOrEmpty(s1) || string.IsNullOrEmpty(s2)) return 0;
+            s1 = s1.ToUpperInvariant();
+            s2 = s2.ToUpperInvariant();
+
+            int common = 0;
+            int minLen = Math.Min(s1.Length, s2.Length);
+            for (int i = 0; i < minLen; i++)
+            {
+                if (s1[i] == s2[i]) common++;
+            }
+
+            // 最长公共子串加分
+            int lcs = LongestCommonSubstringLength(s1, s2);
+            double score = (double)common / Math.Max(s1.Length, s2.Length) + (double)lcs / Math.Max(s1.Length, s2.Length) * 0.5;
+
+            return Math.Min(score, 1.0);
+        }
+
+        private int LongestCommonSubstringLength(string s1, string s2)
+        {
+            int[,] dp = new int[s1.Length + 1, s2.Length + 1];
+            int maxLen = 0;
+            for (int i = 1; i <= s1.Length; i++)
+            {
+                for (int j = 1; j <= s2.Length; j++)
+                {
+                    if (s1[i - 1] == s2[j - 1])
+                    {
+                        dp[i, j] = dp[i - 1, j - 1] + 1;
+                        maxLen = Math.Max(maxLen, dp[i, j]);
+                    }
+                }
+            }
+            return maxLen;
         }
 
         // 👉 添加基金 (绑定用户)
