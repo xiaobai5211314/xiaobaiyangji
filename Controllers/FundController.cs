@@ -145,95 +145,94 @@ namespace 估值助手.Controllers
             return BadRequest("未找到该基金配置");
         }
 
-      
+
+       
         // 👉 获取今日数据 (只返回当前用户的基金！)
         [HttpGet("today")]
         public async Task<IActionResult> GetTodayData([FromQuery] string username)
         {
             if (string.IsNullOrEmpty(username)) return Unauthorized("请提供指挥官代号");
 
-            // 💥 紧急战地补丁：只要有人打开大屏，立刻检查并强行开辟新字段！
+            // 🛡️ 注入吐真剂：捕获一切异常并返回给前端！
             try
             {
-                await _context.Database.ExecuteSqlRawAsync("ALTER TABLE MyFunds ADD COLUMN LastSettledDate VARCHAR(20);");
-                await _context.Database.ExecuteSqlRawAsync("ALTER TABLE FundRecords ADD COLUMN ActualRate DOUBLE NOT NULL DEFAULT 0;");
-                await _context.Database.ExecuteSqlRawAsync("ALTER TABLE FundRecords ADD COLUMN DiffRate DOUBLE NOT NULL DEFAULT 0;");
-                // 👇 新增这一行！强行让数据库增加 CostAmount 字段，解决崩溃问题！
-                await _context.Database.ExecuteSqlRawAsync("ALTER TABLE MyFunds ADD COLUMN CostAmount DOUBLE NOT NULL DEFAULT 0;");
+                // 💥 紧急战地补丁
+                try
+                {
+                    await _context.Database.ExecuteSqlRawAsync("ALTER TABLE MyFunds ADD COLUMN LastSettledDate VARCHAR(20);");
+                    await _context.Database.ExecuteSqlRawAsync("ALTER TABLE FundRecords ADD COLUMN ActualRate DOUBLE NOT NULL DEFAULT 0;");
+                    await _context.Database.ExecuteSqlRawAsync("ALTER TABLE FundRecords ADD COLUMN DiffRate DOUBLE NOT NULL DEFAULT 0;");
+                    // 强行增加 CostAmount 字段
+                    await _context.Database.ExecuteSqlRawAsync("ALTER TABLE MyFunds ADD COLUMN CostAmount DOUBLE NOT NULL DEFAULT 0;");
+                }
+                catch { /* 忽略已存在的报错 */ }
+
+                var myFunds = await _context.MyFunds.Where(f => f.Username == username).ToListAsync();
+                var myFundCodes = myFunds.Select(f => f.FundCode).ToList();
+
+                var localTime = DateTime.UtcNow.AddHours(8);
+                var today = localTime.Date;
+                string todayStr = localTime.ToString("yyyy'/'MM'/'dd");
+
+                var todayRecords = await _context.FundRecords
+                    .Where(r => r.FetchTime >= today && myFundCodes.Contains(r.FundCode))
+                    .OrderBy(r => r.FetchTime)
+                    .ToListAsync();
+
+                var lastRecords = new List<FundData>();
+                foreach (var code in myFundCodes)
+                {
+                    var lr = await _context.FundRecords
+                        .Where(r => r.FetchTime < today && r.FundCode == code)
+                        .OrderByDescending(r => r.FetchTime)
+                        .FirstOrDefaultAsync();
+                    if (lr != null) lastRecords.Add(lr);
+                }
+
+                var result = myFunds.Select(config => {
+                    var fundRecords = todayRecords.Where(r => r.FundCode == config.FundCode).ToList();
+                    var lastRecord = lastRecords.FirstOrDefault(r => r.FundCode == config.FundCode);
+
+                    var dataPoints = new List<object[]>();
+
+                    if (lastRecord != null)
+                    {
+                        dataPoints.Add(new object[] { todayStr + " 09:30:00", lastRecord.EstimatedRate });
+                    }
+
+                    dataPoints.AddRange(fundRecords.Select(r => new object[] { r.FetchTime.ToString("yyyy'/'MM'/'dd HH:mm:ss"), r.EstimatedRate }));
+
+                    if (dataPoints.Count == 0)
+                    {
+                        dataPoints.Add(new object[] { todayStr + " 09:30:00", 0 });
+                    }
+
+                    // 💰 挂载核心金融算法
+                    double cost = config.CostAmount;
+                    double currentAmount = config.HoldAmount;
+                    double existingReturnRate = cost > 0 ? Math.Round(((currentAmount - cost) / cost) * 100.0, 2) : 0;
+                    double breakEvenRate = cost > 0 ? Math.Round((currentAmount / cost) * 100.0, 2) : 0;
+
+                    return new
+                    {
+                        code = config.FundCode,
+                        name = config.FundName,
+                        amount = currentAmount,
+                        cost = cost > 0 ? cost : (double?)null,
+                        existingReturnRate = existingReturnRate,
+                        breakEvenRate = breakEvenRate,
+                        diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
+                        data = dataPoints
+                    };
+                });
+
+                return Ok(result);
             }
-            catch { /* 如果字段已经存在，就当作无事发生，静默忽略 */ }
-
-            var myFunds = await _context.MyFunds.Where(f => f.Username == username).ToListAsync();
-
-            // ... (下面保留你原来的代码不变)
-            var myFundCodes = myFunds.Select(f => f.FundCode).ToList();
-
-            // 🚀 【核心修复】：强行注入 UTC+8 亚洲时间！不管服务器在哪，永远对齐北京/新加坡时间
-            var localTime = DateTime.UtcNow.AddHours(8);
-            var today = localTime.Date;
-
-            // 严格强制使用斜杠，防止 Linux 乱转横杠导致前端解析失败
-            string todayStr = localTime.ToString("yyyy'/'MM'/'dd");
-
-            // 抓取今天的盘中数据
-            var todayRecords = await _context.FundRecords
-                .Where(r => r.FetchTime >= today && myFundCodes.Contains(r.FundCode))
-                .OrderBy(r => r.FetchTime)
-                .ToListAsync();
-
-            // 抓取昨天的真实净值做“基准点”
-            var lastRecords = new List<FundData>();
-            foreach (var code in myFundCodes)
+            catch (Exception ex)
             {
-                var lr = await _context.FundRecords
-                    .Where(r => r.FetchTime < today && r.FundCode == code)
-                    .OrderByDescending(r => r.FetchTime)
-                    .FirstOrDefaultAsync();
-                if (lr != null) lastRecords.Add(lr);
+                // 🚨 核武级排雷：把内部报错直接变成文字吐在屏幕上！
+                return StatusCode(500, $"服务器当场阵亡，死因：{ex.Message} | 详细：{ex.StackTrace}");
             }
-
-            var result = myFunds.Select(config => {
-                var fundRecords = todayRecords.Where(r => r.FundCode == config.FundCode).ToList();
-                var lastRecord = lastRecords.FirstOrDefault(r => r.FundCode == config.FundCode);
-
-                var dataPoints = new List<object[]>();
-
-                // 魔法起点：把昨天的最终结果，强行钉在今天 09:30 作为起跑线
-                if (lastRecord != null)
-                {
-                    dataPoints.Add(new object[] { todayStr + " 09:30:00", lastRecord.EstimatedRate });
-                }
-
-                // 加入今天的正常走势
-                dataPoints.AddRange(fundRecords.Select(r => new object[] { r.FetchTime.ToString("yyyy'/'MM'/'dd HH:mm:ss"), r.EstimatedRate }));
-
-                // 如果连历史数据都没有（比如刚加的新基金），塞个 0 防止图表崩盘
-                if (dataPoints.Count == 0)
-                {
-                    dataPoints.Add(new object[] { todayStr + " 09:30:00", 0 });
-                }
-
-                // 👇 替换从这里开始：计算收益并返回给前端
-                double cost = config.CostAmount;
-                double currentAmount = config.HoldAmount;
-                // 挂载收益率公式 (防除0报错)
-                double existingReturnRate = cost > 0 ? Math.Round(((currentAmount - cost) / cost) * 100.0, 2) : 0;
-                double breakEvenRate = cost > 0 ? Math.Round((currentAmount / cost) * 100.0, 2) : 0;
-
-                return new
-                {
-                    code = config.FundCode,
-                    name = config.FundName,
-                    amount = currentAmount,
-                    cost = cost > 0 ? cost : (double?)null, // 有本金就传，没本金前端会显示 --
-                    existingReturnRate = existingReturnRate,
-                    breakEvenRate = breakEvenRate,
-                    diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
-                    data = dataPoints
-                };
-            });
-
-            return Ok(result);
         }
 
         // 🚀🚀🚀 【新增的核心武器】：手动核武按钮与战报输出
