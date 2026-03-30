@@ -262,7 +262,7 @@ debugLog.Add($"[🔍 百度OCR原文前10行]\n{string.Join("\n", texts.Take(10)
                     }
 
                     // 🎯 寻找金额并入库
-                    if (bestMatch != null && bestScore > 70)
+                    if (bestMatch != null && bestScore > 60)
                     {
                         double marketValue = 0, holdingIncome = 0;
                         int linesConsumed = 0;
@@ -292,7 +292,7 @@ debugLog.Add($"[🔍 百度OCR原文前10行]\n{string.Join("\n", texts.Take(10)
                             }
                         }
 
-                        if (marketValue > 100)
+                        if (marketValue > 0)
                         {
                             double costAmount = Math.Round(marketValue - holdingIncome, 2);
 
