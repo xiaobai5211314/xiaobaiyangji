@@ -500,6 +500,12 @@
                         isUploading.value = false;
                         event.target.value = '';
                     }
+                    if (response.ok) {
+                        alert("✅ 识别成功！正在同步走势曲线...");
+                        // 💥 重点：识别成功后，先清理本地旧列表，强迫 fetchData 重新建立 Echarts 实例
+                        fundsList.value = [];
+                        await fetchData();
+                    }
                 };
 
                 // 👉 打开编辑面板

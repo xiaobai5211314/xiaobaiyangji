@@ -12,16 +12,15 @@ namespace 估值助手.Controllers
     [ApiController]
     public class FundController : ControllerBase
     {
-        private readonly AppDbContext _context;
-        // 🏆 战术中枢：全网基金数据库缓存 (只在程序启动时抓取一次，不拖慢速度)
-        private static List<FundInfoCache> _globalFundCache = null;
+        private readonly AppDbContext _context;      
 
         public class FundInfoCache
         {
             public string Code { get; set; }
             public string Name { get; set; }
         }
-
+        // 🚀 战术中枢：静态缓存，确保只拉取一次
+        private static List<FundInfoCache> _globalFundCache = null;
         // 📡 从东方财富拉取全量 10000+ 基金名单
         private async Task<List<FundInfoCache>> GetAllFundsAsync()
         {
@@ -30,7 +29,8 @@ namespace 估值助手.Controllers
             try
             {
                 using var client = new HttpClient();
-                // 这是天天基金的隐藏全量接口
+                // 增加超时控制，防止卡死
+                client.Timeout = TimeSpan.FromSeconds(10);
                 string jsData = await client.GetStringAsync("http://fund.eastmoney.com/js/fundcode_search.js");
 
                 // 返回格式是 var r = [["000001","HXCZHH","华夏成长混合","混合型"...],...];
@@ -73,51 +73,41 @@ namespace 估值助手.Controllers
                 var SECRET_KEY = "g3XGcMKX0Qsp4k4wDSbxYQoSdFPuDt0c";
 
                 var client = new Baidu.Aip.Ocr.Ocr(API_KEY, SECRET_KEY) { Timeout = 60000 };
-                // 🚀 使用高精度含位置版，这是解决“漏解析”的关键
-                var options = new Dictionary<string, object> { { "recognize_granularity", "small" } };
-                var result = client.Accurate(imageBytes, options);
+                var result = client.AccurateBasic(imageBytes); // 使用高精度版
 
                 JArray wordsResult = result["words_result"] as JArray;
-                if (wordsResult == null) return BadRequest("识别失败");
-
-                // 将 OCR 结果转化为带坐标的“战术目标”
-                var allWords = wordsResult.Select(w => new {
-                    Text = w["words"].ToString().Trim(),
-                    Top = (int)w["location"]["top"],
-                    Left = (int)w["location"]["left"]
-                }).OrderBy(w => w.Top).ToList();
+                List<string> texts = wordsResult.Select(x => x["words"].ToString().Trim()).ToList();
 
                 int importedCount = 0;
+                // 匹配金额或收益的正则
                 string numPattern = @"^([-+]?\d{1,3}(,\d{3})*(\.\d{2}))$";
 
-                // 🎯 核心逻辑：以“金额”为锚点，向上寻找“基金名”
-                for (int i = 0; i < allWords.Count; i++)
+                for (int i = 0; i < texts.Count; i++)
                 {
-                    var current = allWords[i];
+                    // 1. 模糊匹配全量库名字
+                    var matchedFund = fundDb.FirstOrDefault(f => f.Name.Length > 4 && (texts[i].Contains(f.Name) || f.Name.Contains(texts[i])));
 
-                    // 如果这一行是金额 (如 20,387.49)
-                    if (Regex.IsMatch(current.Text, numPattern))
+                    if (matchedFund != null)
                     {
-                        double marketValue = double.Parse(current.Text.Replace(",", ""));
-                        if (marketValue < 10) continue; // 过滤掉太小的金额（可能是收益）
+                        double marketValue = 0;
+                        double holdingIncome = 0;
+                        int foundNums = 0;
 
-                        // 🕵️ 向上回溯 150 像素，寻找匹配全量库的基金名字
-                        var matchedFund = fundDb.FirstOrDefault(f =>
-                            allWords.Any(w => w.Top < current.Top && w.Top > current.Top - 150 &&
-                            (f.Name.Contains(w.Text) || w.Text.Contains(f.Name)) && w.Text.Length >= 4)
-                        );
-
-                        if (matchedFund != null)
+                        // 🕵️ 关键：支付宝一行通常有 3 个数字：[市值] [昨日收益] [持有收益]
+                        for (int j = 1; j <= 5 && (i + j) < texts.Count; j++)
                         {
-                            // 💰 自动推算成本：寻找这一行右侧或下方的“持有收益”
-                            // 支付宝排版：金额在左，持有收益在右
-                            double holdingIncome = 0;
-                            var incomeWord = allWords.FirstOrDefault(w =>
-                                Math.Abs(w.Top - current.Top) < 40 && w.Left > current.Left + 50 && Regex.IsMatch(w.Text, numPattern));
+                            if (Regex.IsMatch(texts[i + j], numPattern))
+                            {
+                                foundNums++;
+                                double val = double.Parse(texts[i + j].Replace(",", ""));
+                                if (foundNums == 1) marketValue = val;
+                                if (foundNums == 3) { holdingIncome = val; break; }
+                            }
+                        }
 
-                            if (incomeWord != null) holdingIncome = double.Parse(incomeWord.Text.Replace(",", ""));
-
-                            // 💥 终极公式：本金 = 当前市值 - 持有收益
+                        if (marketValue > 0)
+                        {
+                            // 💥 自动化推算：持仓成本 = 市值 - 持有收益
                             double costAmount = marketValue - holdingIncome;
 
                             var exist = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && f.FundCode == matchedFund.Code);
@@ -138,13 +128,11 @@ namespace 估值助手.Controllers
                                 });
                             }
                             importedCount++;
-                            // 跳过已处理的行，防止重复抓取同一卡片
-                            i += 2;
                         }
                     }
                 }
                 await _context.SaveChangesAsync();
-                return Ok($"解析引擎升级成功！已精准导入 {importedCount} 只基金，成本与回本率已自动同步。");
+                return Ok($"解析完毕！已根据收益自动校准 {importedCount} 只基金的成本。");
             }
             catch (Exception ex) { return StatusCode(500, $"战线受阻: {ex.Message}"); }
         }
