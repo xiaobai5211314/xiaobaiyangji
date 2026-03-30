@@ -15,6 +15,7 @@ namespace 估值助手.Controllers
         private readonly AppDbContext _context;
         public FundController(AppDbContext context) { _context = context; }
 
+       
         // 🏆 OCR 坐标雷达辅助类 (放在 Controller 内部)
         public class OcrWordInfo
         {
