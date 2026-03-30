@@ -427,7 +427,21 @@ namespace 估值助手.Controllers
                 return StatusCode(500, $"自动清算引擎异常: {ex.Message}");
             }
         }
-
+[HttpGet("test-load")]
+public async Task<IActionResult> TestLoad()
+{
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    try
+    {
+        var funds = await GetAllFundsAsync(); // 只测试下载基金库，不搞OCR
+        watch.Stop();
+        return Ok($"✅ 基金库装载成功！共 {funds.Count} 只。总耗时: {watch.ElapsedMilliseconds} 毫秒。");
+    }
+    catch (Exception ex)
+    {
+        return StatusCode(500, $"❌ 装载彻底失败: {ex.Message}");
+    }
+}
         [HttpGet("today")]
         public async Task<IActionResult> GetTodayData([FromQuery] string username)
         {
