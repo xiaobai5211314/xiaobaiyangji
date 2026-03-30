@@ -77,32 +77,51 @@ namespace 估值助手.Controllers
             byte[] imageBytes;
             using (var ms = new MemoryStream()) { await imageFile.CopyToAsync(ms); imageBytes = ms.ToArray(); }
 
-            var client = new Ocr("yjfCgtNuumSjxc34FDmXCv8e", "g3XGcMKX0Qsp4k4wDSbxYQoSdFPuDt0c") { Timeout = 60000 };
-            var result = client.AccurateBasic(imageBytes); // 必须是高精度版
+            var client = new Baidu.Aip.Ocr.Ocr("yjfCgtNuumSjxc34FDmXCv8e", "g3XGcMKX0Qsp4k4wDSbxYQoSdFPuDt0c") { Timeout = 60000 };
+            var result = client.AccurateBasic(imageBytes);
 
             List<string> texts = (result["words_result"] as JArray).Select(x => x["words"].ToString().Trim()).ToList();
             int importedCount = 0;
 
-            // 战术正则：匹配带正负号的收益额 (如 -2,683.92)
             string numPattern = @"^([-+]?\d{1,3}(,\d{3})*(\.\d{2}))$";
 
             for (int i = 0; i < texts.Count; i++)
             {
-                // 🧩 创新：拼接当前行和下一行 (解决“人工智能”换行漏抓)
-                string combinedName = texts[i];
-                if (i + 1 < texts.Count) combinedName += texts[i + 1];
+                string text1 = texts[i];
 
-                // 在东财库里搜寻：单行匹配 OR 拼接匹配
-                var matchedFund = fundDb.FirstOrDefault(f =>
-                    (texts[i].Length > 4 && f.Name.Contains(texts[i])) ||
-                    (combinedName.Length > 8 && f.Name.Contains(combinedName))
-                );
+                // 🛡️ 防线 1：必须包含至少 3 个汉字，直接屏蔽 "(QDII)C"、"指数基金" 等碎片！
+                if (Regex.Matches(text1, @"[\u4e00-\u9fa5]").Count < 3) continue;
+                if (text1.Contains("金选") || text1.Contains("收益") || text1.Contains("金额")) continue;
+
+                // 🛡️ 防线 2：拼接下一行，并清洗干扰词，还原 "天弘恒生科技ETF联接(QDII)C" 真身
+                string text2 = (i + 1 < texts.Count) ? texts[i + 1] : "";
+                string cleanText2 = text2.Replace("金选", "").Replace("指数基金", "").Trim();
+                string combinedName = text1 + cleanText2;
+
+                FundInfoCache matchedFund = null;
+
+                // 优先用【完整拼接名】去东财库里精确匹配
+                matchedFund = fundDb.FirstOrDefault(f => combinedName.Contains(f.Name) || f.Name.Contains(combinedName));
+
+                // 如果拼接没找到，用单行找，并开启 🛡️ 防线 3：A/C 类精准制导
+                if (matchedFund == null)
+                {
+                    var possibleFunds = fundDb.Where(f => text1.Contains(f.Name) || f.Name.Contains(text1)).ToList();
+                    if (possibleFunds.Any())
+                    {
+                        // 如果图片里的名字明确带有 C，就强制匹配带 C 的基金
+                        matchedFund = possibleFunds.FirstOrDefault(f =>
+                            (combinedName.EndsWith("C") || combinedName.EndsWith("C类")) ? f.Name.EndsWith("C") :
+                            (combinedName.EndsWith("A") || combinedName.EndsWith("A类")) ? f.Name.EndsWith("A") : true
+                        );
+                        if (matchedFund == null) matchedFund = possibleFunds.First();
+                    }
+                }
 
                 if (matchedFund != null)
                 {
                     double marketValue = 0; double holdingIncome = 0;
 
-                    // 🎯 寻找对应的数字。支付宝排版规律：名字后紧跟【市值】，再下两行是【持有收益】
                     for (int j = 1; j <= 6 && (i + j) < texts.Count; j++)
                     {
                         string next = texts[i + j];
@@ -110,7 +129,7 @@ namespace 估值助手.Controllers
                         {
                             double val = double.Parse(next.Replace(",", ""));
                             if (marketValue == 0) marketValue = val;
-                            else if (holdingIncome == 0 && next.Contains("+") || next.Contains("-"))
+                            else if (holdingIncome == 0 && (next.Contains("+") || next.Contains("-")))
                             {
                                 holdingIncome = val; break;
                             }
@@ -119,7 +138,6 @@ namespace 估值助手.Controllers
 
                     if (marketValue > 0)
                     {
-                        // 💰 核心反推：本金 = 市值 - 收益
                         double costAmount = Math.Round(marketValue - holdingIncome, 2);
 
                         var exist = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && f.FundCode == matchedFund.Code);
@@ -132,12 +150,12 @@ namespace 估值助手.Controllers
                             _context.MyFunds.Add(new MyFundConfig { Username = username, FundCode = matchedFund.Code, FundName = matchedFund.Name, HoldAmount = marketValue, CostAmount = costAmount });
                         }
                         importedCount++;
-                        i += 1; // 跳过已拼接的行
+                        i += 1; // 成功后战术跳过下一行，防止重复抓取
                     }
                 }
             }
             await _context.SaveChangesAsync();
-            return Ok($"解析引擎升级！已精准对齐并更新 {importedCount} 只基金。");
+            return Ok($"逻辑装甲已升级！成功且精准地导入了 {importedCount} 只基金。");
         }
 
         // 👉 添加基金 (绑定用户)
