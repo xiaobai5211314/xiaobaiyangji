@@ -87,49 +87,55 @@ namespace 估值助手.Controllers
 
             for (int i = 0; i < texts.Count; i++)
             {
+                // 🛡️ 终极防线 1：强制拼接向下 3 行，解决所有 OCR 断句问题
                 string text1 = texts[i];
-
-                // 🛡️ 防线 1：必须包含至少 3 个汉字，直接屏蔽 "(QDII)C"、"指数基金" 等碎片！
-                if (Regex.Matches(text1, @"[\u4e00-\u9fa5]").Count < 3) continue;
-                if (text1.Contains("金选") || text1.Contains("收益") || text1.Contains("金额")) continue;
-
-                // 🛡️ 防线 2：拼接下一行，并清洗干扰词，还原 "天弘恒生科技ETF联接(QDII)C" 真身
                 string text2 = (i + 1 < texts.Count) ? texts[i + 1] : "";
-                string cleanText2 = text2.Replace("金选", "").Replace("指数基金", "").Trim();
-                string combinedName = text1 + cleanText2;
+                string text3 = (i + 2 < texts.Count) ? texts[i + 2] : "";
+
+                string combinedName = text1 + text2 + text3;
+                // 清洗掉支付宝的 UI 干扰词
+                combinedName = Regex.Replace(combinedName, @"(金选|指数基金|市场解读|已更新)", "");
+
+                // 🛡️ 终极防线 2：汉字门槛，防止短串(如"主题指数C")乱认亲戚
+                string pureChinese = Regex.Replace(combinedName, @"[^\u4e00-\u9fa5]", "");
+                if (pureChinese.Length < 5) continue; // 名字里连 5 个汉字都没有，说明是碎片，跳过！
 
                 FundInfoCache matchedFund = null;
 
-                // 优先用【完整拼接名】去东财库里精确匹配
-                matchedFund = fundDb.FirstOrDefault(f => combinedName.Contains(f.Name) || f.Name.Contains(combinedName));
+                // 找出所有名字重合的候选人
+                var candidates = fundDb.Where(f => combinedName.Contains(f.Name.Replace("ETF联接", "").Replace("(QDII)", "")) || f.Name.Contains(pureChinese)).ToList();
 
-                // 如果拼接没找到，用单行找，并开启 🛡️ 防线 3：A/C 类精准制导
-                if (matchedFund == null)
+                if (candidates.Any())
                 {
-                    var possibleFunds = fundDb.Where(f => text1.Contains(f.Name) || f.Name.Contains(text1)).ToList();
-                    if (possibleFunds.Any())
-                    {
-                        // 如果图片里的名字明确带有 C，就强制匹配带 C 的基金
-                        matchedFund = possibleFunds.FirstOrDefault(f =>
-                            (combinedName.EndsWith("C") || combinedName.EndsWith("C类")) ? f.Name.EndsWith("C") :
-                            (combinedName.EndsWith("A") || combinedName.EndsWith("A类")) ? f.Name.EndsWith("A") : true
-                        );
-                        if (matchedFund == null) matchedFund = possibleFunds.First();
-                    }
+                    // 🛡️ 终极防线 3：A/C 类绝对锁定
+                    bool isC = combinedName.EndsWith("C") || combinedName.Contains("C") && !combinedName.Contains("A");
+                    bool isA = combinedName.EndsWith("A") || combinedName.Contains("A") && !combinedName.Contains("C");
+
+                    if (isC) candidates = candidates.Where(f => f.Name.EndsWith("C")).ToList();
+                    else if (isA) candidates = candidates.Where(f => f.Name.EndsWith("A")).ToList();
+
+                    // 选出名字长度最接近的，彻底击毙“短串匹配长串”的 Bug
+                    matchedFund = candidates.OrderBy(f => Math.Abs(f.Name.Length - pureChinese.Length)).FirstOrDefault();
                 }
 
                 if (matchedFund != null)
                 {
                     double marketValue = 0; double holdingIncome = 0;
 
-                    for (int j = 1; j <= 6 && (i + j) < texts.Count; j++)
+                    // 扩大搜索范围，因为名字被拼起来了，数字可能在更下面
+                    for (int j = 1; j <= 8 && (i + j) < texts.Count; j++)
                     {
-                        string next = texts[i + j];
+                        string next = texts[i + j].Trim();
                         if (Regex.IsMatch(next, numPattern))
                         {
                             double val = double.Parse(next.Replace(",", ""));
-                            if (marketValue == 0) marketValue = val;
-                            else if (holdingIncome == 0 && (next.Contains("+") || next.Contains("-")))
+                            // 市值必定是正数且较大，并且没有正负号
+                            if (marketValue == 0 && val > 10 && !next.StartsWith("+") && !next.StartsWith("-"))
+                            {
+                                marketValue = val;
+                            }
+                            // 收益必定带有符号
+                            else if (holdingIncome == 0 && (next.StartsWith("+") || next.StartsWith("-")))
                             {
                                 holdingIncome = val; break;
                             }
@@ -150,12 +156,12 @@ namespace 估值助手.Controllers
                             _context.MyFunds.Add(new MyFundConfig { Username = username, FundCode = matchedFund.Code, FundName = matchedFund.Name, HoldAmount = marketValue, CostAmount = costAmount });
                         }
                         importedCount++;
-                        i += 1; // 成功后战术跳过下一行，防止重复抓取
+                        i += 2; // 战术跳跃，既然已经拼了后面两行并成功了，就直接跳过它们
                     }
                 }
             }
             await _context.SaveChangesAsync();
-            return Ok($"逻辑装甲已升级！成功且精准地导入了 {importedCount} 只基金。");
+            return Ok($"AI 拼图算法已部署！完美导入并校准了 {importedCount} 只基金。");
         }
 
         // 👉 添加基金 (绑定用户)
