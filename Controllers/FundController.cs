@@ -165,23 +165,24 @@ namespace 估值助手.Controllers
                 watch.Restart();
 
                 // 2. OCR 熔断阶段
-                var client = new Baidu.Aip.Ocr.Ocr("yjfCgtNuumSjxc34FDmXCv8e", "g3XGcMKX0Qsp4k4wDSbxYQoSdFPuDt0c");
-                var ocrTask = Task.Run(() => client.GeneralBasic(finalProcessedBytes));
+                  // 2. 调用 OCR（高精度熔断版）
+            var client = new Baidu.Aip.Ocr.Ocr("yjfCgtNuumSjxc34FDmXCv8e", "g3XGcMKX0Qsp4k4wDSbxYQoSdFPuDt0c");
+            
+            // 🚀 【核心变更】：正式切换为 AccurateBasic 高精度版文字识别接口！
+            // 该接口能大幅提高模糊、换行字体的识别率，彻底消灭漏单。
+            var ocrTask = Task.Run(() => client.AccurateBasic(finalProcessedBytes));
 
-                if (await Task.WhenAny(ocrTask, Task.Delay(15000)) != ocrTask)
-                {
-                    return StatusCode(500, $"❌ 识别超时熔断！请检查服务器与百度的网络连通性。");
-                }
+            // ⚡ 熔断机制：高精度处理慢，最多给 20 秒
+            if (await Task.WhenAny(ocrTask, Task.Delay(20000)) != ocrTask)
+            {
+                return StatusCode(500, $"❌ 高精度识别超时！\n图片上传耗时 {debugLog[0]}\n但呼叫百度高精度接口超过 20 秒无响应，请稍后再试或切换回通用版！");
+            }
 
-                var result = await ocrTask;
-                debugLog.Add($"⏱️ 百度 OCR 耗时: {watch.ElapsedMilliseconds} ms");
+            var result = await ocrTask;
+            debugLog.Add($"⏱️ 百度高精度 OCR 耗时: {watch.ElapsedMilliseconds} ms");
 
-                var texts = (result["words_result"] as JArray)?.Select(x => x["words"].ToString().Trim()).ToList() ?? new List<string>();
-                if (texts.Count == 0) return BadRequest("❌ OCR未能识别出任何文字");
-
-                int importedCount = 0;
-                string numPattern = @"^([-+]?\d{1,3}(,\d{3})*(\.\d{2})?)$";
-
+            var texts = (result["words_result"] as JArray)?.Select(x => x["words"].ToString().Trim()).ToList() ?? new List<string>();
+            if (texts.Count == 0) return BadRequest("❌ OCR未能识别出任何文字");
                 // 3. 极速权重匹配引擎
                 for (int i = 0; i < texts.Count; i++)
                 {
