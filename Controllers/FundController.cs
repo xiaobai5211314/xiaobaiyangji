@@ -73,15 +73,24 @@ namespace 估值助手.Controllers
                             {
                                 // 💥 完美捕获！洗出纯净数据
                                 string fundName = currentText;
-                                // 把金额里的逗号去掉，转成 double
                                 double holdAmount = double.Parse(nextText.Replace(",", ""));
 
-                                // 🚨 TODO: 数据库写入指令
-                                // 在这里调用你的数据库代码，将 fundName 和 holdAmount 存入 MyFunds 表
-                                // 例: db.MyFunds.Update(fundName, holdAmount, username);
+                                // 👇 替换原来的 TODO 写入数据库逻辑：
+                                // 在现有持仓里找名字相似的基金
+                                var existFund = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && (f.FundName.Contains(fundName) || fundName.Contains(f.FundName)));
+                                if (existFund != null)
+                                {
+                                    existFund.HoldAmount = holdAmount; // 更新金额
+                                }
+                                else
+                                {
+                                    // 库里没这只基金，直接建档 (代码暂时用占位符，需后续指挥官手动核对)
+                                    _context.MyFunds.Add(new MyFundConfig { Username = username, FundCode = "待核对_" + DateTime.Now.Ticks.ToString().Substring(10), FundName = fundName, HoldAmount = holdAmount });
+                                }
+                                await _context.SaveChangesAsync();
 
                                 successCount++;
-                                break; // 找到金额后，跳出内层循环，继续找下一个基金
+                                break;
                             }
                         }
                     }
@@ -149,6 +158,8 @@ namespace 估值助手.Controllers
                 await _context.Database.ExecuteSqlRawAsync("ALTER TABLE MyFunds ADD COLUMN LastSettledDate VARCHAR(20);");
                 await _context.Database.ExecuteSqlRawAsync("ALTER TABLE FundRecords ADD COLUMN ActualRate DOUBLE NOT NULL DEFAULT 0;");
                 await _context.Database.ExecuteSqlRawAsync("ALTER TABLE FundRecords ADD COLUMN DiffRate DOUBLE NOT NULL DEFAULT 0;");
+                // 👇 新增这一行！强行让数据库增加 CostAmount 字段，解决崩溃问题！
+                await _context.Database.ExecuteSqlRawAsync("ALTER TABLE MyFunds ADD COLUMN CostAmount DOUBLE NOT NULL DEFAULT 0;");
             }
             catch { /* 如果字段已经存在，就当作无事发生，静默忽略 */ }
 
@@ -202,12 +213,22 @@ namespace 估值助手.Controllers
                     dataPoints.Add(new object[] { todayStr + " 09:30:00", 0 });
                 }
 
+                // 👇 替换从这里开始：计算收益并返回给前端
+                double cost = config.CostAmount;
+                double currentAmount = config.HoldAmount;
+                // 挂载收益率公式 (防除0报错)
+                double existingReturnRate = cost > 0 ? Math.Round(((currentAmount - cost) / cost) * 100.0, 2) : 0;
+                double breakEvenRate = cost > 0 ? Math.Round((currentAmount / cost) * 100.0, 2) : 0;
+
                 return new
                 {
                     code = config.FundCode,
                     name = config.FundName,
-                    amount = config.HoldAmount,
-                    diffRate = lastRecord != null ? lastRecord.DiffRate : 0, // 👈 新增这一行：把昨天雷达抓到的误差传给大屏！
+                    amount = currentAmount,
+                    cost = cost > 0 ? cost : (double?)null, // 有本金就传，没本金前端会显示 --
+                    existingReturnRate = existingReturnRate,
+                    breakEvenRate = breakEvenRate,
+                    diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
                     data = dataPoints
                 };
             });
