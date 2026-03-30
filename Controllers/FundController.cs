@@ -24,6 +24,15 @@ namespace 估值助手.Controllers
             public int Width { get; set; }
         }
 
+        // 🏆 OCR 坐标雷达辅助类 (放在 Controller 内部)
+        public class OcrWordInfo
+        {
+            public string Words { get; set; }
+            public int Top { get; set; }
+            public int Left { get; set; }
+            public int Width { get; set; }
+        }
+
         [HttpPost("import-ocr")]
         public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFormFile imageFile)
         {
@@ -39,7 +48,7 @@ namespace 估值助手.Controllers
                     imageBytes = ms.ToArray();
                 }
 
-                // 🔑 你的专属发射密钥已就位
+                // 🔑 你的发射密钥
                 var APP_ID = "122647395";
                 var API_KEY = "yjfCgtNuumSjxc34FDmXCv8e";
                 var SECRET_KEY = "g3XGcMKX0Qsp4k4wDSbxYQoSdFPuDt0c";
@@ -47,117 +56,81 @@ namespace 估值助手.Controllers
                 var client = new Ocr(API_KEY, SECRET_KEY);
                 client.Timeout = 60000;
 
-                // 💥 启动含位置版的高精度识别！
                 var options = new Dictionary<string, object> { { "recognize_granularity", "small" } };
                 var result = client.Accurate(imageBytes, options);
 
                 JArray wordsResult = result["words_result"] as JArray;
-                if (wordsResult == null || wordsResult.Count == 0)
-                    return BadRequest("图像中未识别到有效文字。");
+                if (wordsResult == null || wordsResult.Count == 0) return BadRequest("未识别到文字。");
 
-                // 将返回结果转化为带坐标的雷达目标
                 var allWords = new List<OcrWordInfo>();
                 foreach (var wordObj in wordsResult)
                 {
-                    var location = wordObj["location"];
+                    var loc = wordObj["location"];
                     allWords.Add(new OcrWordInfo
                     {
                         Words = wordObj["words"].ToString().Trim(),
-                        Top = (int)location["top"],
-                        Left = (int)location["left"],
-                        Width = (int)location["width"]
+                        Top = (int)loc["top"],
+                        Left = (int)loc["left"],
+                        Width = (int)loc["width"]
                     });
                 }
 
                 int successCount = 0;
                 var ocrFoundFunds = new List<Tuple<string, double>>();
 
-                // 匹配金额的正则：带有逗号和两位小数的数字 (如 20,387.49 或 0.50)
+                // 匹配金额的正则 (纯数字和小数点，极度安全)
                 string amountPattern = @"^(\d{1,3}(,\d{3})*(\.\d{2}))$";
-                // 匹配基金名：至少包含中文，通常以字母或特定词汇结尾
-                string namePattern = @"([\u4e00-\u9fa5]+[A-Za-z0-9]*(联接|混合|指数|股票|债券|A|C|E|F|LOF|ETF|QDII|科技)+[A-Za-z]*)";
 
-                // 按 Y 轴从上到下排序目标
+                // 🛑 干扰词黑名单（防误抓）
+                string[] blackList = { "金选", "指数基金", "主要包含", "金额", "收益", "定投", "市场解读" };
+
                 var sortedWords = allWords.OrderBy(w => w.Top).ToList();
 
-                for (int i = 0; i < sortedWords.Count; i++)
+                // 🎯 逆向战术：先锁定金额，再抬头找名字
+                foreach (var currentWord in sortedWords)
                 {
-                    var currentWord = sortedWords[i];
-
-                    // 如果锁定到基金名称
-                    if (Regex.IsMatch(currentWord.Words, namePattern) && currentWord.Words.Length > 4)
+                    if (Regex.IsMatch(currentWord.Words, amountPattern) && currentWord.Words.Length >= 4)
                     {
-                        string fundName = currentWord.Words;
+                        double holdAmount = double.Parse(currentWord.Words.Replace(",", ""));
+                        if (holdAmount == 0) continue; // 过滤掉 0.00
 
-                        // 🎯 战术核心：在同一行（Y轴差距<30像素），寻找在它右边（X轴更大）的金额数字
-                        var sameRowWords = sortedWords.Where(w =>
-                                Math.Abs(w.Top - currentWord.Top) < 30 &&
-                                w.Left > currentWord.Left)
-                            .OrderBy(w => w.Left).ToList();
+                        // 在金额上方 90 像素内，找最像基金名字的词
+                        var nameWord = sortedWords
+                            .Where(w => w.Top < currentWord.Top && w.Top > currentWord.Top - 90) // 在上方
+                            .Where(w => w.Words.Length >= 4 && w.Words.Any(c => c >= 0x4e00 && c <= 0x9fa5)) // 包含中文
+                            .Where(w => !blackList.Any(b => w.Words.Contains(b))) // 排除黑名单
+                            .OrderByDescending(w => w.Top) // 离金额越近越好
+                            .FirstOrDefault();
 
-                        var amountWord = sameRowWords.FirstOrDefault(w => Regex.IsMatch(w.Words, amountPattern));
-
-                        // 防御机制：如果同一行没找到，可能排版歪了，向下多看 2 行
-                        if (amountWord == null)
+                        if (nameWord != null && !ocrFoundFunds.Any(f => f.Item1 == nameWord.Words))
                         {
-                            for (int k = 1; k <= 2 && (i + k) < sortedWords.Count; k++)
-                            {
-                                if (Regex.IsMatch(sortedWords[i + k].Words, amountPattern))
-                                {
-                                    amountWord = sortedWords[i + k];
-                                    break;
-                                }
-                            }
-                        }
-
-                        // 洗出纯净数据
-                        if (amountWord != null)
-                        {
-                            double holdAmount = double.Parse(amountWord.Words.Replace(",", ""));
-                            ocrFoundFunds.Add(new Tuple<string, double>(fundName, holdAmount));
+                            ocrFoundFunds.Add(new Tuple<string, double>(nameWord.Words, holdAmount));
                             successCount++;
                         }
                     }
                 }
 
-                // 将清洗出的战利品录入数据库
                 if (ocrFoundFunds.Count > 0)
                 {
                     var existFunds = await _context.MyFunds.Where(f => f.Username == username).ToListAsync();
-
                     foreach (var found in ocrFoundFunds)
                     {
-                        string fundName = found.Item1;
-                        double holdAmount = found.Item2;
-
-                        var existMatch = existFunds.FirstOrDefault(f => f.FundName.Contains(fundName) || fundName.Contains(f.FundName));
-                        if (existMatch != null)
-                        {
-                            existMatch.HoldAmount = holdAmount;
-                        }
+                        var existMatch = existFunds.FirstOrDefault(f => f.FundName.Contains(found.Item1) || found.Item1.Contains(f.FundName));
+                        if (existMatch != null) existMatch.HoldAmount = found.Item2;
                         else
                         {
                             _context.MyFunds.Add(new MyFundConfig
                             {
                                 Username = username,
-                                FundCode = "未定_" + DateTime.Now.Ticks.ToString().Substring(12),
-                                FundName = fundName,
-                                HoldAmount = holdAmount,
-                                CostAmount = 0 // 注意：这里依然是 0，算收益率还需要你去数据库补齐本金！
+                                FundCode = "未定_" + DateTime.Now.Ticks.ToString().Substring(10),
+                                FundName = found.Item1,
+                                HoldAmount = found.Item2,
+                                CostAmount = 0
                             });
                         }
                     }
                     await _context.SaveChangesAsync();
-                    return Ok($"云端坐标雷达解析完毕！精准匹配了 {ocrFoundFunds.Count} 只基金。");
-                }
-
-                return BadRequest("未能从图像中识别出基金与金额的对应关系。");
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, $"云端连接异常: {ex.Message} | {ex.StackTrace}");
-            }
-        }
+                    return Ok
         // 👉 添加基金 (绑定用户)
         [HttpPost("add")]
         public async Task<IActionResult> AddFund([FromForm] string username, [FromForm] string code, [FromForm] double amount)
