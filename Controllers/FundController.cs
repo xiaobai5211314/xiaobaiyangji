@@ -41,67 +41,63 @@ namespace 估值助手.Controllers
                 }
 
                 // 🔑 你的发射密钥
-                var APP_ID = "122647395";
                 var API_KEY = "yjfCgtNuumSjxc34FDmXCv8e";
                 var SECRET_KEY = "g3XGcMKX0Qsp4k4wDSbxYQoSdFPuDt0c";
 
-                var client = new Ocr(API_KEY, SECRET_KEY);
+                var client = new Baidu.Aip.Ocr.Ocr(API_KEY, SECRET_KEY);
                 client.Timeout = 60000;
 
-                var options = new Dictionary<string, object> { { "recognize_granularity", "small" } };
-                var result = client.Accurate(imageBytes, options);
+                // 🚀 指定使用你列表里的【通用文字识别（高精度版）】模型
+                var result = client.AccurateBasic(imageBytes);
 
                 JArray wordsResult = result["words_result"] as JArray;
-                if (wordsResult == null || wordsResult.Count == 0) return BadRequest("未识别到文字。");
+                if (wordsResult == null || wordsResult.Count == 0) return BadRequest("未能识别出文字。");
 
-                var allWords = new List<OcrWordInfo>();
-                foreach (var wordObj in wordsResult)
-                {
-                    var loc = wordObj["location"];
-                    allWords.Add(new OcrWordInfo
-                    {
-                        Words = wordObj["words"].ToString().Trim(),
-                        Top = (int)loc["top"],
-                        Left = (int)loc["left"],
-                        Width = (int)loc["width"]
-                    });
-                }
+                // 把所有文字提取成纯文本列表（百度已经帮我们按从上到下排好序了！）
+                List<string> texts = wordsResult.Select(x => x["words"].ToString().Trim()).ToList();
 
-                int successCount = 0;
                 var ocrFoundFunds = new List<Tuple<string, double>>();
 
-                // 匹配金额的正则 (纯数字和小数点，极度安全)
+                // 🛡️ 匹配基金名：必须包含中文，长度>=4，且过滤掉干扰词
+                string namePattern = @"([\u4e00-\u9fa5]{2,}.*(联接|混合|指数|股票|债券|A|C|E|F|LOF|ETF|QDII|科技|全指|优选|回报)+[A-Za-z0-9]*)";
+                string[] blackList = { "金选", "前端", "收益", "金额", "市场解读", "定投", "主要包含" };
+
+                // 💰 匹配金额的正则：纯数字加小数点，如 20,387.49
                 string amountPattern = @"^(\d{1,3}(,\d{3})*(\.\d{2}))$";
 
-                // 🛑 干扰词黑名单（防误抓）
-                string[] blackList = { "金选", "指数基金", "主要包含", "金额", "收益", "定投", "市场解读" };
-
-                var sortedWords = allWords.OrderBy(w => w.Top).ToList();
-
-                // 🎯 逆向战术：先锁定金额，再抬头找名字
-                foreach (var currentWord in sortedWords)
+                for (int i = 0; i < texts.Count; i++)
                 {
-                    if (Regex.IsMatch(currentWord.Words, amountPattern) && currentWord.Words.Length >= 4)
+                    string currentText = texts[i];
+
+                    // 1. 如果当前行看起来是个真正的基金名字
+                    if (Regex.IsMatch(currentText, namePattern) &&
+                        !blackList.Any(b => currentText.Contains(b)) &&
+                        currentText.Length >= 4)
                     {
-                        double holdAmount = double.Parse(currentWord.Words.Replace(",", ""));
-                        if (holdAmount == 0) continue; // 过滤掉 0.00
-
-                        // 在金额上方 90 像素内，找最像基金名字的词
-                        var nameWord = sortedWords
-                            .Where(w => w.Top < currentWord.Top && w.Top > currentWord.Top - 90) // 在上方
-                            .Where(w => w.Words.Length >= 4 && w.Words.Any(c => c >= 0x4e00 && c <= 0x9fa5)) // 包含中文
-                            .Where(w => !blackList.Any(b => w.Words.Contains(b))) // 排除黑名单
-                            .OrderByDescending(w => w.Top) // 离金额越近越好
-                            .FirstOrDefault();
-
-                        if (nameWord != null && !ocrFoundFunds.Any(f => f.Item1 == nameWord.Words))
+                        // 2. 像人眼一样，接着往下看 1~4 行，寻找属于它的“金额”
+                        for (int j = 1; j <= 4 && (i + j) < texts.Count; j++)
                         {
-                            ocrFoundFunds.Add(new Tuple<string, double>(nameWord.Words, holdAmount));
-                            successCount++;
+                            string nextText = texts[i + j];
+
+                            // 遇到另一个基金名，说明上一个没抓到金额，立刻刹车
+                            if (Regex.IsMatch(nextText, namePattern) && !blackList.Any(b => nextText.Contains(b))) break;
+
+                            // 如果抓到了金额！
+                            if (Regex.IsMatch(nextText, amountPattern))
+                            {
+                                double holdAmount = double.Parse(nextText.Replace(",", ""));
+                                // 过滤掉 0.00 的无效金额（防止误抓到昨日收益的 0.00）
+                                if (holdAmount > 0)
+                                {
+                                    ocrFoundFunds.Add(new Tuple<string, double>(currentText, holdAmount));
+                                }
+                                break; // 找到金额后，结束这只基金的寻找，继续外层循环找下一只
+                            }
                         }
                     }
                 }
 
+                // 3. 数据库录入逻辑
                 if (ocrFoundFunds.Count > 0)
                 {
                     var existFunds = await _context.MyFunds.Where(f => f.Username == username).ToListAsync();
@@ -122,13 +118,13 @@ namespace 估值助手.Controllers
                         }
                     }
                     await _context.SaveChangesAsync();
-                    return Ok($"雷达锁定成功！精准导入了 {ocrFoundFunds.Count} 只基金。");
+                    return Ok($"高精度智脑扫描完毕！完美识别了 {ocrFoundFunds.Count} 只基金。");
                 }
-                return BadRequest("未能匹配出正确的基金。");
+                return BadRequest("未能成功将基金名称与金额配对，请确保截图排版清晰。");
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"连接异常: {ex.Message}");
+                return StatusCode(500, $"云端连接异常: {ex.Message}");
             }
         }
 
