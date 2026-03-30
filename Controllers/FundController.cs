@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Baidu.Aip.Ocr;
+using Newtonsoft.Json.Linq;
 using 估值助手.Models;
 
 namespace 估值助手.Controllers
@@ -13,6 +15,85 @@ namespace 估值助手.Controllers
         private readonly AppDbContext _context;
         public FundController(AppDbContext context) { _context = context; }
 
+        [HttpPost("import-ocr")]
+        public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFormFile imageFile)
+        {
+            if (string.IsNullOrEmpty(username)) return BadRequest("指挥官身份未确认");
+            if (imageFile == null || imageFile.Length == 0) return BadRequest("未检测到图像弹药");
+
+            try
+            {
+                // 1. 将上传的图片转为二进制弹药
+                byte[] imageBytes;
+                using (var ms = new MemoryStream())
+                {
+                    await imageFile.CopyToAsync(ms);
+                    imageBytes = ms.ToArray();
+                }
+
+                // 2. 🔑 呼叫百度 OCR 智脑 (请把这三个换成你刚刚申请的 Key！)
+                var APP_ID = "7582711";
+                var API_KEY = "yjfCgtNuumSjxc34FDmXCv8e";
+                var SECRET_KEY = "g3XGcMKX0Qsp4k4wDSbxYQoSdFPuDt0c";
+
+                var client = new Ocr(API_KEY, SECRET_KEY);
+                client.Timeout = 60000;
+
+                // 调用高精度版 API (不需要坐标，纯文本顺序即可完美破译)
+                var result = client.Accurate(imageBytes);
+
+                // 3. 🛡️ 战损分析与正则清洗 (核心逻辑)
+                JArray wordsResult = result["words_result"] as JArray;
+                if (wordsResult == null || wordsResult.Count == 0)
+                    return BadRequest("图像中未识别到有效文字，请确保截图清晰。");
+
+                // 把所有识别出的文字按顺序提取成一个列表
+                List<string> allTexts = wordsResult.Select(x => x["words"].ToString().Trim()).ToList();
+
+                int successCount = 0;
+
+                // 匹配基金名称的正则：必须包含中文，且通常以字母(A/C)、联接、混合、指数等结尾
+                string namePattern = @"([\u4e00-\u9fa5]+[A-Za-z0-9]*(联接|混合|指数|股票|债券|A|C|E|F|LOF|ETF|QDII)+[A-Za-z]*)";
+                // 匹配金额的正则：带有逗号和两位小数的数字 (如 20,387.49)
+                string amountPattern = @"^(\d{1,3}(,\d{3})*(\.\d{2}))$";
+
+                // 遍历所有文字块，寻找基金名
+                for (int i = 0; i < allTexts.Count; i++)
+                {
+                    string currentText = allTexts[i];
+
+                    // 如果当前文字看起来像个基金名字
+                    if (Regex.IsMatch(currentText, namePattern) && currentText.Length > 4)
+                    {
+                        // 向下看 1~3 行，寻找紧跟着的金额数字
+                        for (int j = 1; j <= 3 && (i + j) < allTexts.Count; j++)
+                        {
+                            string nextText = allTexts[i + j];
+                            if (Regex.IsMatch(nextText, amountPattern))
+                            {
+                                // 💥 完美捕获！洗出纯净数据
+                                string fundName = currentText;
+                                // 把金额里的逗号去掉，转成 double
+                                double holdAmount = double.Parse(nextText.Replace(",", ""));
+
+                                // 🚨 TODO: 数据库写入指令
+                                // 在这里调用你的数据库代码，将 fundName 和 holdAmount 存入 MyFunds 表
+                                // 例: db.MyFunds.Update(fundName, holdAmount, username);
+
+                                successCount++;
+                                break; // 找到金额后，跳出内层循环，继续找下一个基金
+                            }
+                        }
+                    }
+                }
+
+                return Ok($"云端解析完毕！成功清洗并更新了 {successCount} 只基金。");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"云端连接异常: {ex.Message}");
+            }
+        }
         // 👉 添加基金 (绑定用户)
         [HttpPost("add")]
         public async Task<IActionResult> AddFund([FromForm] string username, [FromForm] string code, [FromForm] double amount)

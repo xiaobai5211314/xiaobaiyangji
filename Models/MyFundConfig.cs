@@ -11,6 +11,7 @@ namespace 估值助手.Models
         public string FundName { get; set; } = string.Empty;
         public double HoldAmount { get; set; } // 持仓本金
         public string? LastSettledDate { get; set; }
+        public double CostAmount { get; set; }
 
 
     }
