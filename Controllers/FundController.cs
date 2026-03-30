@@ -182,8 +182,97 @@ namespace 估值助手.Controllers
             return BadRequest("未找到该基金配置");
         }
 
+        // 🌙 战术指令：执行夜间清算，滚动市值，开启复利
+        [HttpPost("settle-nightly")]
+        public async Task<IActionResult> SettleNightly([FromForm] string username, [FromForm] string codes, [FromForm] string rates)
+        {
+            if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(codes)) return BadRequest("指挥官，缺少清算参数！");
 
-       
+            try
+            {
+                var codeList = codes.Split(',');
+                var rateList = rates.Split(',');
+
+                var funds = await _context.MyFunds.Where(f => f.Username == username).ToListAsync();
+                int count = 0;
+
+                for (int i = 0; i < codeList.Length; i++)
+                {
+                    var fund = funds.FirstOrDefault(f => f.FundCode == codeList[i]);
+                    // 确保匹配到了基金，并且有对应的涨跌幅数据
+                    if (fund != null && i < rateList.Length)
+                    {
+                        if (double.TryParse(rateList[i], out double rate))
+                        {
+                            // 💰 核心复利公式：今日收益 = 昨日市值 * (今日涨跌幅 / 100)
+                            double todayProfit = fund.HoldAmount * (rate / 100.0);
+
+                            // 📈 滚动市值：新市值 = 昨日市值 + 今日收益
+                            fund.HoldAmount = Math.Round(fund.HoldAmount + todayProfit, 2);
+                            count++;
+                        }
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+                return Ok($"夜间清算完毕！已将 {count} 只基金的今日收益滚入市值，明天将以新本金计算复利！");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"清算异常: {ex.Message}");
+            }
+        }
+
+        // 🤖 终极自动化：无人值守夜间清算接口
+        [HttpGet("auto-settle")]
+        public async Task<IActionResult> AutoSettle()
+        {
+            try
+            {
+                // 1. 获取全库所有指挥官的所有基金阵地
+                var allFunds = await _context.MyFunds.ToListAsync();
+                if (!allFunds.Any()) return Ok("当前暂无基金需要清算。");
+
+                using var client = new HttpClient();
+                client.Timeout = TimeSpan.FromSeconds(30);
+                int successCount = 0;
+
+                foreach (var fund in allFunds)
+                {
+                    try
+                    {
+                        // 2. 呼叫东方财富接口，获取该基金今日的最终涨跌幅
+                        string url = $"http://fundgz.1234567.com.cn/js/{fund.FundCode}.js?rt={DateTime.Now.Ticks}";
+                        string jsData = await client.GetStringAsync(url);
+
+                        // 3. 用正则提取 gszzl (估值涨跌幅)
+                        var match = Regex.Match(jsData, @"\""gszzl\"":\""([^\""]+)\""");
+                        if (match.Success && double.TryParse(match.Groups[1].Value, out double rate))
+                        {
+                            // 💰 自动复利推演：今日收益 = 昨日市值 * (涨跌幅 / 100)
+                            double todayProfit = fund.HoldAmount * (rate / 100.0);
+
+                            // 📈 滚入本金：新市值 = 老市值 + 今日收益
+                            fund.HoldAmount = Math.Round(fund.HoldAmount + todayProfit, 2);
+                            successCount++;
+                        }
+                    }
+                    catch
+                    {
+                        // 如果单只基金网络波动获取失败，忽略并继续下一只，保证系统不崩溃
+                        continue;
+                    }
+                }
+
+                // 4. 一次性保存所有战果
+                await _context.SaveChangesAsync();
+                return Ok($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] 🌙 夜间自动清算执行完毕！共成功滚动更新了 {successCount} 只基金的市值。");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"自动清算引擎异常: {ex.Message}");
+            }
+        }
         // 👉 获取今日数据 (只返回当前用户的基金！)
         [HttpGet("today")]
         public async Task<IActionResult> GetTodayData([FromQuery] string username)

@@ -71,7 +71,6 @@
             font-weight: bold;
         }
 
-        /* 🤖 智能扫描仪按钮样式 */
         .btn-ocr {
             background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
             color: white;
@@ -97,6 +96,22 @@
                 opacity: 0.7;
             }
 
+        .btn-settle {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white;
+            border: none;
+            padding: 9px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+
+            .btn-settle:hover {
+                box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+                transform: translateY(-2px);
+            }
+
         .btn-logout {
             background: transparent;
             color: #ff4d4f;
@@ -106,7 +121,6 @@
             cursor: pointer;
         }
 
-        /* 💳 战术情报卡片 */
         .fund-list-container {
             margin: 0 15px;
             display: grid;
@@ -125,7 +139,6 @@
             position: relative;
         }
 
-        /* 雷达偏离警报 */
         .radar-badge {
             background: rgba(255, 77, 79, 0.15);
             color: #ff4d4f;
@@ -142,7 +155,6 @@
             }
         }
 
-        /* 专业金融指标区 */
         .metrics-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -168,7 +180,6 @@
             font-weight: bold;
         }
 
-        /* 🛠️ 手动补给面板 (Modal) 样式 */
         .modal-mask {
             position: fixed;
             z-index: 1000;
@@ -214,6 +225,12 @@
 
         [v-cloak] {
             display: none !important;
+        }
+
+        .divider {
+            width: 1px;
+            height: 40px;
+            background: rgba(255,255,255,0.1);
         }
 
         .skeleton-box {
@@ -291,6 +308,10 @@
                         📷 {{ isUploading ? '📡 解析中...' : '智能截图导入' }}
                     </button>
 
+                    <button class="btn-settle" @click="handleSettleNightly" style="margin-left: 10px;" title="将今日收益计入本金">
+                        🌙 结算复利
+                    </button>
+
                     <button class="btn-logout" @click="handleLogout" style="margin-left: 10px;">撤退</button>
                 </div>
             </div>
@@ -302,23 +323,35 @@
                         {{ isNight ? '🌙 夜间清算模式' : '☀️ 盘中盯盘模式' }}
                     </div>
                 </div>
-                <div class="divider" style="width: 1px; height: 40px; background: rgba(255,255,255,0.1);"></div>
+                <div class="divider"></div>
                 <div style="text-align: center;">
-                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">💎 阵地昨日总市值</div>
+                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 5px;">
+                        💎 阵地昨日总市值
+                        <span @click="showAssets = !showAssets" style="cursor: pointer; font-size: 15px; padding: 2px;" title="隐藏/显示金额">
+                            {{ showAssets ? '👁️' : '🙈' }}
+                        </span>
+                    </div>
                     <div style="font-size: 26px; font-weight: 900; color: #f8fafc; font-family: 'Courier New', Courier, monospace;">
-                        ¥ {{ totalPrincipal.toFixed(2) }}
+                        {{ showAssets ? '¥ ' + totalPrincipal.toFixed(2) : '****' }}
                     </div>
                 </div>
-                <div class="divider" style="width: 1px; height: 40px; background: rgba(255,255,255,0.1);"></div>
+                <div class="divider"></div>
                 <div style="text-align: center;">
-                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">💰 当前总盈亏</div>
-                    <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: totalProfit >= 0 ? '#ff4d4f' : '#10b981' }">
-                        {{ totalProfit >= 0 ? '+' : '' }}{{ totalProfit.toFixed(2) }}
+                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">🌟 今日总预估收益</div>
+                    <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: showAssets ? (totalTodayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">
+                        {{ showAssets ? (totalTodayProfit >= 0 ? '+' : '') + totalTodayProfit.toFixed(2) : '****' }}
                     </div>
                 </div>
-                <div class="divider" style="width: 1px; height: 40px; background: rgba(255,255,255,0.1);"></div>
+                <div class="divider"></div>
                 <div style="text-align: center;">
-                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">📈 综合总涨跌幅</div>
+                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">💰 累计总盈亏</div>
+                    <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: showAssets ? (totalProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">
+                        {{ showAssets ? (totalProfit >= 0 ? '+' : '') + totalProfit.toFixed(2) : '****' }}
+                    </div>
+                </div>
+                <div class="divider"></div>
+                <div style="text-align: center;">
+                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">📈 累计总收益率</div>
                     <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: totalRate >= 0 ? '#ff4d4f' : '#10b981' }">
                         {{ totalRate > 0 ? '+' : '' }}{{ totalRate.toFixed(2) }}%
                     </div>
@@ -333,50 +366,52 @@
                             <span style="font-size:10px; color:#64748b; font-weight: normal; margin-top: 2px;">({{ fund.code }})</span>
                         </span>
                         <div style="display: flex; gap: 6px; flex-shrink: 0;">
-                            <button @click="openEditModal(fund)" style="background: rgba(255,255,255,0.1); border: none; color: #cbd5e1; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;" title="修改本金和代码">🔧</button>
-                            <button @click="handleDeleteFund(fund.code, fund.name)" style="background: rgba(255, 77, 79, 0.2); border: none; color: #ff4d4f; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;" title="移除">✕</button>
+                            <button @click="openEditModal(fund)" style="background: rgba(255,255,255,0.1); border: none; color: #cbd5e1; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;">🔧</button>
+                            <button @click="handleDeleteFund(fund.code, fund.name)" style="background: rgba(255, 77, 79, 0.2); border: none; color: #ff4d4f; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;">✕</button>
                         </div>
                     </div>
 
                     <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 6px; margin-top: 5px;">
-                        <span>估值: <span :style="{color: fund.currentRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold'}">{{ fund.currentRate > 0 ? '+' : ''}}{{ fund.currentRate }}%</span></span>
+                        <span>估值涨跌: <span :style="{color: fund.currentRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold'}">{{ fund.currentRate > 0 ? '+' : ''}}{{ fund.currentRate }}%</span></span>
                         <span v-if="Math.abs(fund.diffRate) > 0.15">
-                            <span class="radar-badge">🚨 调仓偏离: {{ fund.diffRate }}%</span>
+                            <span class="radar-badge">🚨 偏离: {{ fund.diffRate }}%</span>
                         </span>
                     </div>
 
                     <div class="metrics-grid">
                         <div class="metric-item">
                             <span class="metric-label">昨日市值</span>
-                            <span class="metric-value">{{ fund.amount }}</span>
+                            <span class="metric-value">{{ showAssets ? fund.amount : '****' }}</span>
                         </div>
-                        <div class="metric-item">
-                            <span class="metric-label">持仓成本</span>
-                            <span class="metric-value" :style="{color: (fund.cost || 0) > 0 ? '#cbd5e1' : '#eab308'}">
-                                {{ fund.cost > 0 ? fund.cost : '未设置' }}
+                        <div class="metric-item" style="background: rgba(79, 172, 254, 0.1); padding: 2px; border-radius: 4px;">
+                            <span class="metric-label" style="color: #4facfe;">今日预估收益</span>
+                            <span class="metric-value" :style="{color: showAssets ? (fund.todayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">
+                                {{ showAssets ? (fund.todayProfit >= 0 ? '+' : '') + fund.todayProfit : '****' }}
                             </span>
                         </div>
                         <div class="metric-item">
-                            <span class="metric-label">持有收益率</span>
+                            <span class="metric-label">持仓成本</span>
+                            <span class="metric-value" :style="{color: showAssets ? ((fund.cost || 0) > 0 ? '#cbd5e1' : '#eab308') : '#cbd5e1'}">
+                                {{ showAssets ? (fund.cost > 0 ? fund.cost : '未设置') : '****' }}
+                            </span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">累计综合盈亏</span>
+                            <span class="metric-value" :style="{color: showAssets ? (fund.estimatedProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">
+                                {{ showAssets ? (fund.estimatedProfit >= 0 ? '+' : '') + fund.estimatedProfit : '****' }}
+                            </span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">累计收益率</span>
                             <span class="metric-value" :style="{color: fund.existingReturnRate >= 0 ? '#ff4d4f' : '#10b981'}">
                                 {{ fund.existingReturnRate }}%
                             </span>
                         </div>
                         <div class="metric-item">
-                            <span class="metric-label">综合盈亏</span>
-                            <span class="metric-value" :style="{color: fund.estimatedProfit >= 0 ? '#ff4d4f' : '#10b981'}">
-                                {{ fund.estimatedProfit >= 0 ? '+' : '' }}{{ fund.estimatedProfit }} 元
-                            </span>
-                        </div>
-                        <div class="metric-item">
-                            <span class="metric-label">回本率</span>
+                            <span class="metric-label">回本涨幅</span>
                             <span class="metric-value" :style="{color: fund.breakEvenRate > 0 ? '#eab308' : '#10b981'}">
-                                {{ fund.breakEvenRate }}%
+                                {{ fund.breakEvenRate > 0 ? fund.breakEvenRate + '%' : '✅ 盈利' }}
                             </span>
-                        </div>
-                        <div class="metric-item">
-                            <span class="metric-label">状态</span>
-                            <span class="metric-value">{{ fund.breakEvenRate > 0 ? '⚓ 套牢' : '✅ 盈利' }}</span>
                         </div>
                     </div>
                 </div>
@@ -397,6 +432,7 @@
                     📡 正在连接总司令部同步数据...
                 </div>
             </div>
+
             <div v-show="!isLoading" id="chart-container" class="glass-panel" ref="chartRef"></div>
 
             <div v-if="editForm.show" class="modal-mask">
@@ -421,7 +457,7 @@
     </div>
 
     <script>
-        const { createApp, ref, reactive, onMounted, onUnmounted, nextTick, shallowRef } = Vue;
+        const { createApp, ref, reactive, onMounted, onUnmounted, nextTick, shallowRef, watch } = Vue;
         createApp({
             setup() {
                 const isLoggedIn = ref(false);
@@ -430,15 +466,19 @@
                 const chartRef = ref(null);
                 const isLoading = ref(true);
                 const isNight = ref(false);
+
+                // 数据指标
                 const totalPrincipal = ref(0);
                 const totalProfit = ref(0);
                 const totalRate = ref(0);
+                const totalTodayProfit = ref(0);
+
                 const loginForm = reactive({ username: '', password: '' });
                 const fundForm = reactive({ code: '', amount: '' });
                 const chartInstance = shallowRef(null);
                 let timer = null;
                 const isUploading = ref(false);
-
+                const showAssets = ref(false); // 🛡️ 隐蔽开关状态
                 const editForm = reactive({ show: false, code: '', name: '', cost: '', originalCode: '' });
 
                 const handleRegister = async () => {
@@ -456,6 +496,21 @@
                 };
 
                 const handleLogout = () => { localStorage.removeItem('fund_username'); location.reload(); };
+
+                const handleSettleNightly = async () => {
+                    if (!confirm("⚠️ 确定执行【夜间复利清算】吗？\n\n这会将大屏上所有基金的【今日预估收益】正式计入【昨日市值】中！")) return;
+                    const fd = new FormData();
+                    fd.append('username', currentUser.value);
+                    const codes = fundsList.value.map(f => f.code).join(',');
+                    const rates = fundsList.value.map(f => f.currentRate).join(',');
+                    fd.append('codes', codes);
+                    fd.append('rates', rates);
+                    try {
+                        const res = await fetch('/api/Fund/settle-nightly', { method: 'POST', body: fd });
+                        if (res.ok) { alert(await res.text()); fundsList.value = []; fetchData(); }
+                        else alert("❌ 清算失败: " + await res.text());
+                    } catch (e) { alert("🌐 清算请求失败"); }
+                };
 
                 const handleAddFund = async () => {
                     if (!fundForm.code || !fundForm.amount) return alert("请输入完整！");
@@ -477,17 +532,15 @@
                 const handleFileUpload = async (event) => {
                     const file = event.target.files[0];
                     if (!file) return;
-
                     isUploading.value = true;
                     const formData = new FormData();
                     formData.append('imageFile', file);
-
                     try {
                         const response = await fetch(`/api/Fund/import-ocr?username=${encodeURIComponent(currentUser.value)}`, { method: 'POST', body: formData });
                         if (response.ok) {
                             const result = await response.text();
-                            alert("✅ 识别成功！正在同步走势曲线...\n" + result);
-                            fundsList.value = []; // 强迫 Echarts 重新渲染
+                            alert("✅ " + result);
+                            fundsList.value = [];
                             fetchData();
                         } else {
                             const errorMsg = await response.text();
@@ -512,26 +565,13 @@
                 const handleSaveDetails = async () => {
                     if (!editForm.cost || editForm.cost <= 0) return alert("请输入真实的成本金，否则收益率依然为0！");
                     if (!editForm.code || !/^\d{6}$/.test(editForm.code)) return alert("请输入东财的 6 位数字代码！");
-
                     const fd = new FormData();
-                    fd.append('username', currentUser.value);
-                    fd.append('code', editForm.code);
-                    fd.append('costAmount', editForm.cost);
-                    fd.append('originalCode', editForm.originalCode);
-
+                    fd.append('username', currentUser.value); fd.append('code', editForm.code); fd.append('costAmount', editForm.cost); fd.append('originalCode', editForm.originalCode);
                     try {
                         const res = await fetch('/api/Fund/update-details', { method: 'POST', body: fd });
-                        if (res.ok) {
-                            alert("✅ 弹药已补给！大屏将自动重新计算盈亏！");
-                            editForm.show = false;
-                            fetchData();
-                        } else {
-                            const error = await res.text();
-                            alert("❌ 保存失败: " + error);
-                        }
-                    } catch (e) {
-                        alert("🌐 连线智脑阵亡");
-                    }
+                        if (res.ok) { alert("✅ 弹药已补给！大屏将自动重新计算盈亏！"); editForm.show = false; fetchData(); }
+                        else alert("❌ 保存失败: " + await res.text());
+                    } catch (e) { alert("🌐 连线智脑阵亡"); }
                 };
 
                 const fetchData = async () => {
@@ -542,31 +582,33 @@
                         const response = await fetch(`/api/fund/today?username=${encodeURIComponent(currentUser.value)}`);
                         const apiData = await response.json();
 
-                        let tPrincipal = 0; let tCost = 0;
+                        let tPrincipal = 0; let tCost = 0; let tToday = 0;
                         apiData.forEach(fund => {
                             tPrincipal += fund.amount;
-                            tCost += (fund.cost || fund.amount); // 用于算总收益率
+                            tCost += (fund.cost || fund.amount);
 
                             if (fund.data && fund.data.length > 0) {
-                                const latestRate = fund.data[fund.data.length - 1][1];
-                                fund.currentRate = latestRate;
+                                fund.currentRate = fund.data[fund.data.length - 1][1];
                             } else {
                                 fund.currentRate = 0;
                             }
 
-                            // 💰 综合盈亏
+                            // 🌟 今日预估收益计算
+                            fund.todayProfit = (fund.amount * (fund.currentRate / 100)).toFixed(2);
+                            tToday += parseFloat(fund.todayProfit);
+
+                            // 💰 累计综合盈亏
                             fund.estimatedProfit = (fund.cost && fund.cost > 0) ? (fund.amount - fund.cost).toFixed(2) : 0;
-
-                            // 🚀 回本需要涨多少公式 (如果成本 > 市值，说明亏了，需要算回本涨幅)
+                            // 🚀 回本需要涨多少
                             fund.breakEvenRate = (fund.cost && fund.cost > fund.amount) ? ((fund.cost / fund.amount - 1) * 100).toFixed(2) : "0.00";
-
-                            // 🚀 现有收益率
+                            // 🚀 现有累计收益率
                             fund.existingReturnRate = (fund.cost && fund.cost > 0) ? (((fund.amount - fund.cost) / fund.cost) * 100).toFixed(2) : "0.00";
                         });
 
                         fundsList.value = apiData;
                         totalPrincipal.value = tPrincipal;
                         totalProfit.value = tPrincipal - tCost;
+                        totalTodayProfit.value = tToday;
                         totalRate.value = tCost > 0 ? ((tPrincipal - tCost) / tCost * 100) : 0;
 
                         renderChart(apiData);
@@ -581,24 +623,20 @@
                         window.addEventListener('resize', () => chartInstance.value.resize());
                     }
                     var holdAmounts = {};
-
                     var validData = apiData.filter(f => f.data && f.data.length > 1);
 
                     var seriesData = validData.map(fund => {
                         holdAmounts[fund.name] = fund.amount;
-                        let isSettled = false;
-                        let diff = 0;
-                        let hasFullData = fund.data.length > 50;
+                        let isSettled = false; let diff = 0; let hasFullData = fund.data.length > 50;
                         if (isNight.value && hasFullData) {
                             let realRate = fund.data[fund.data.length - 1][1];
                             let estRate = fund.data[fund.data.length - 2][1];
                             if (Math.abs(realRate - estRate) > 0.001) {
-                                isSettled = true;
-                                diff = (realRate - estRate).toFixed(2);
+                                isSettled = true; diff = (realRate - estRate).toFixed(2);
                             }
                         }
-                        fund._isSettled = isSettled;
-                        fund._diff = diff;
+                        fund._isSettled = isSettled; fund._diff = diff;
+
                         return {
                             name: fund.name,
                             type: 'line', smooth: true, symbol: 'none',
@@ -608,19 +646,23 @@
                                 formatter: (p) => {
                                     let profit = (fund.amount * p.value[1] / 100).toFixed(2);
                                     let sign = profit >= 0 ? '+' : '';
+                                    // 🛡️ 隐蔽状态判断
+                                    let profitDisplay = showAssets.value ? `${sign}${profit} 元` : '**** 元';
+
                                     if (isSettled) {
                                         let diffSign = fund._diff > 0 ? '+' : '';
-                                        return `${sign}${profit} 元\n✅ 真: ${p.value[1]}%\n差: ${diffSign}${fund._diff}%`;
+                                        return `${profitDisplay}\n✅ 真: ${p.value[1]}%\n差: ${diffSign}${fund._diff}%`;
                                     } else if (isNight.value && hasFullData) {
-                                        return `${sign}${profit} 元\n⏳ 等待财报...`;
+                                        return `${profitDisplay}\n⏳ 等待财报...`;
                                     } else {
-                                        return `${sign}${profit} 元\n估: ${p.value[1]}%`;
+                                        return `${profitDisplay}\n估: ${p.value[1]}%`;
                                     }
                                 }
                             },
                             data: fund.data
                         };
                     });
+
                     var d = new Date();
                     var todayStr = d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0');
                     var option = {
@@ -637,7 +679,9 @@
                                     if (isNight.value && p.dataIndex === p.seriesData.length - 1) {
                                         labelSuffix = originalFund._isSettled ? '✅ 真' : '⏳ 待更新';
                                     }
-                                    html += `<div>${p.marker} ${p.seriesName}: <span style="color:${color};font-weight:bold;">${profit >= 0 ? '+' : ''}${profit} 元</span> (${p.data[1]}% [${labelSuffix}])</div>`;
+                                    // 🛡️ 隐蔽状态判断
+                                    let profitDisplay = showAssets.value ? `${profit >= 0 ? '+' : ''}${profit} 元` : '**** 元';
+                                    html += `<div>${p.marker} ${p.seriesName}: <span style="color:${color};font-weight:bold;">${profitDisplay}</span> (${p.data[1]}% [${labelSuffix}])</div>`;
                                 });
                                 return html;
                             }
@@ -651,16 +695,20 @@
                     chartInstance.value.setOption(option);
                 };
 
+                // 🛡️ 监听隐蔽按钮的切换，动态重新绘制图表数字
+                watch(showAssets, () => {
+                    if (fundsList.value.length > 0) renderChart(fundsList.value);
+                });
+
                 const initDashboard = () => { nextTick(() => { fetchData(); timer = setInterval(fetchData, 60000); }); };
                 onMounted(() => { if (currentUser.value) { isLoggedIn.value = true; initDashboard(); } });
                 onUnmounted(() => { if (timer) clearInterval(timer); if (chartInstance.value) chartInstance.value.dispose(); });
 
                 return {
                     isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
-                    totalPrincipal, totalProfit, totalRate, handleRegister, handleLogin, handleLogout,
-                    handleAddFund, handleDeleteFund,
-                    isUploading, triggerUpload, handleFileUpload,
-                    editForm, openEditModal, handleSaveDetails
+                    totalPrincipal, totalProfit, totalRate, totalTodayProfit, showAssets, isUploading, editForm,
+                    handleRegister, handleLogin, handleLogout, handleAddFund, handleDeleteFund,
+                    triggerUpload, handleFileUpload, openEditModal, handleSaveDetails, handleSettleNightly
                 };
             }
         }).mount('#app');
