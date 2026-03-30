@@ -15,6 +15,15 @@ namespace 估值助手.Controllers
         private readonly AppDbContext _context;
         public FundController(AppDbContext context) { _context = context; }
 
+        // 🏆 OCR 坐标雷达辅助类 (放在 Controller 内部)
+        public class OcrWordInfo
+        {
+            public string Words { get; set; }
+            public int Top { get; set; }  // Y轴坐标
+            public int Left { get; set; } // X轴坐标
+            public int Width { get; set; }
+        }
+
         [HttpPost("import-ocr")]
         public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFormFile imageFile)
         {
@@ -23,7 +32,6 @@ namespace 估值助手.Controllers
 
             try
             {
-                // 1. 将上传的图片转为二进制弹药
                 byte[] imageBytes;
                 using (var ms = new MemoryStream())
                 {
@@ -31,76 +39,123 @@ namespace 估值助手.Controllers
                     imageBytes = ms.ToArray();
                 }
 
-                // 2. 🔑 呼叫百度 OCR 智脑 (请把这三个换成你刚刚申请的 Key！)
-                var APP_ID = "7582711";
+                // 🔑 你的专属发射密钥已就位
+                var APP_ID = "122647395";
                 var API_KEY = "yjfCgtNuumSjxc34FDmXCv8e";
                 var SECRET_KEY = "g3XGcMKX0Qsp4k4wDSbxYQoSdFPuDt0c";
 
                 var client = new Ocr(API_KEY, SECRET_KEY);
                 client.Timeout = 60000;
 
-                // 调用高精度版 API (不需要坐标，纯文本顺序即可完美破译)
-                var result = client.Accurate(imageBytes);
+                // 💥 启动含位置版的高精度识别！
+                var options = new Dictionary<string, object> { { "recognize_granularity", "small" } };
+                var result = client.Accurate(imageBytes, options);
 
-                // 3. 🛡️ 战损分析与正则清洗 (核心逻辑)
                 JArray wordsResult = result["words_result"] as JArray;
                 if (wordsResult == null || wordsResult.Count == 0)
-                    return BadRequest("图像中未识别到有效文字，请确保截图清晰。");
+                    return BadRequest("图像中未识别到有效文字。");
 
-                // 把所有识别出的文字按顺序提取成一个列表
-                List<string> allTexts = wordsResult.Select(x => x["words"].ToString().Trim()).ToList();
+                // 将返回结果转化为带坐标的雷达目标
+                var allWords = new List<OcrWordInfo>();
+                foreach (var wordObj in wordsResult)
+                {
+                    var location = wordObj["location"];
+                    allWords.Add(new OcrWordInfo
+                    {
+                        Words = wordObj["words"].ToString().Trim(),
+                        Top = (int)location["top"],
+                        Left = (int)location["left"],
+                        Width = (int)location["width"]
+                    });
+                }
 
                 int successCount = 0;
+                var ocrFoundFunds = new List<Tuple<string, double>>();
 
-                // 匹配基金名称的正则：必须包含中文，且通常以字母(A/C)、联接、混合、指数等结尾
-                string namePattern = @"([\u4e00-\u9fa5]+[A-Za-z0-9]*(联接|混合|指数|股票|债券|A|C|E|F|LOF|ETF|QDII)+[A-Za-z]*)";
-                // 匹配金额的正则：带有逗号和两位小数的数字 (如 20,387.49)
+                // 匹配金额的正则：带有逗号和两位小数的数字 (如 20,387.49 或 0.50)
                 string amountPattern = @"^(\d{1,3}(,\d{3})*(\.\d{2}))$";
+                // 匹配基金名：至少包含中文，通常以字母或特定词汇结尾
+                string namePattern = @"([\u4e00-\u9fa5]+[A-Za-z0-9]*(联接|混合|指数|股票|债券|A|C|E|F|LOF|ETF|QDII|科技)+[A-Za-z]*)";
 
-                // 遍历所有文字块，寻找基金名
-                for (int i = 0; i < allTexts.Count; i++)
+                // 按 Y 轴从上到下排序目标
+                var sortedWords = allWords.OrderBy(w => w.Top).ToList();
+
+                for (int i = 0; i < sortedWords.Count; i++)
                 {
-                    string currentText = allTexts[i];
+                    var currentWord = sortedWords[i];
 
-                    // 如果当前文字看起来像个基金名字
-                    if (Regex.IsMatch(currentText, namePattern) && currentText.Length > 4)
+                    // 如果锁定到基金名称
+                    if (Regex.IsMatch(currentWord.Words, namePattern) && currentWord.Words.Length > 4)
                     {
-                        // 向下看 1~3 行，寻找紧跟着的金额数字
-                        for (int j = 1; j <= 3 && (i + j) < allTexts.Count; j++)
+                        string fundName = currentWord.Words;
+
+                        // 🎯 战术核心：在同一行（Y轴差距<30像素），寻找在它右边（X轴更大）的金额数字
+                        var sameRowWords = sortedWords.Where(w =>
+                                Math.Abs(w.Top - currentWord.Top) < 30 &&
+                                w.Left > currentWord.Left)
+                            .OrderBy(w => w.Left).ToList();
+
+                        var amountWord = sameRowWords.FirstOrDefault(w => Regex.IsMatch(w.Words, amountPattern));
+
+                        // 防御机制：如果同一行没找到，可能排版歪了，向下多看 2 行
+                        if (amountWord == null)
                         {
-                            string nextText = allTexts[i + j];
-                            if (Regex.IsMatch(nextText, amountPattern))
+                            for (int k = 1; k <= 2 && (i + k) < sortedWords.Count; k++)
                             {
-                                // 💥 完美捕获！洗出纯净数据
-                                string fundName = currentText;
-                                double holdAmount = double.Parse(nextText.Replace(",", ""));
-
-                                // 👇 替换原来的 TODO 写入数据库逻辑：
-                                // 在现有持仓里找名字相似的基金
-                                var existFund = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && (f.FundName.Contains(fundName) || fundName.Contains(f.FundName)));
-                                if (existFund != null)
+                                if (Regex.IsMatch(sortedWords[i + k].Words, amountPattern))
                                 {
-                                    existFund.HoldAmount = holdAmount; // 更新金额
+                                    amountWord = sortedWords[i + k];
+                                    break;
                                 }
-                                else
-                                {
-                                    // 库里没这只基金，直接建档 (代码暂时用占位符，需后续指挥官手动核对)
-                                    _context.MyFunds.Add(new MyFundConfig { Username = username, FundCode = "待核对_" + DateTime.Now.Ticks.ToString().Substring(10), FundName = fundName, HoldAmount = holdAmount });
-                                }
-                                await _context.SaveChangesAsync();
-
-                                successCount++;
-                                break;
                             }
+                        }
+
+                        // 洗出纯净数据
+                        if (amountWord != null)
+                        {
+                            double holdAmount = double.Parse(amountWord.Words.Replace(",", ""));
+                            ocrFoundFunds.Add(new Tuple<string, double>(fundName, holdAmount));
+                            successCount++;
                         }
                     }
                 }
 
-                return Ok($"云端解析完毕！成功清洗并更新了 {successCount} 只基金。");
+                // 将清洗出的战利品录入数据库
+                if (ocrFoundFunds.Count > 0)
+                {
+                    var existFunds = await _context.MyFunds.Where(f => f.Username == username).ToListAsync();
+
+                    foreach (var found in ocrFoundFunds)
+                    {
+                        string fundName = found.Item1;
+                        double holdAmount = found.Item2;
+
+                        var existMatch = existFunds.FirstOrDefault(f => f.FundName.Contains(fundName) || fundName.Contains(f.FundName));
+                        if (existMatch != null)
+                        {
+                            existMatch.HoldAmount = holdAmount;
+                        }
+                        else
+                        {
+                            _context.MyFunds.Add(new MyFundConfig
+                            {
+                                Username = username,
+                                FundCode = "未定_" + DateTime.Now.Ticks.ToString().Substring(12),
+                                FundName = fundName,
+                                HoldAmount = holdAmount,
+                                CostAmount = 0 // 注意：这里依然是 0，算收益率还需要你去数据库补齐本金！
+                            });
+                        }
+                    }
+                    await _context.SaveChangesAsync();
+                    return Ok($"云端坐标雷达解析完毕！精准匹配了 {ocrFoundFunds.Count} 只基金。");
+                }
+
+                return BadRequest("未能从图像中识别出基金与金额的对应关系。");
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"云端连接异常: {ex.Message}");
+                return StatusCode(500, $"云端连接异常: {ex.Message} | {ex.StackTrace}");
             }
         }
         // 👉 添加基金 (绑定用户)
