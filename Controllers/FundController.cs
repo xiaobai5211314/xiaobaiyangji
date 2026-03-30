@@ -25,15 +25,16 @@ namespace 估值助手.Controllers
         {
             public string Code { get; set; }
             public string Name { get; set; }
-            public string NormalizedName { get; set; } // 预存清洗后的名字用于提速
+            public string NormalizedName { get; set; } // 预存清洗后的名字用于匹配加速
         }
 
+        // 静态内存缓存，防止每次请求都去撞 Redis 或下载 JS
         private static List<FundInfoCache> _globalFundCache = null;
 
         public FundController(AppDbContext context) { _context = context; }
 
         /// <summary>
-        /// 获取全量基金库（带 Redis 和内存双重缓存）
+        /// 核心：获取全量基金库（内存 + Redis + 远程下载三级缓存）
         /// </summary>
         private async Task<List<FundInfoCache>> GetAllFundsAsync()
         {
@@ -41,6 +42,7 @@ namespace 估值助手.Controllers
 
             try
             {
+                // 1. 尝试从 Redis 获取
                 ConnectionMultiplexer redis = ConnectionMultiplexer.Connect("localhost:6379");
                 IDatabase db = redis.GetDatabase();
                 string cacheKey = "global_fund_db_cache_v2"; 
@@ -49,10 +51,13 @@ namespace 估值助手.Controllers
                 if (!cachedData.IsNull)
                 {
                     _globalFundCache = JsonSerializer.Deserialize<List<FundInfoCache>>(cachedData);
+                    Console.WriteLine($"[LOG] {DateTime.Now:HH:mm:ss} 成功从 Redis 加载了 {_globalFundCache.Count} 条基金数据");
                     return _globalFundCache;
                 }
 
-                using var client = new HttpClient();
+                // 2. Redis 没有，则从东财下载（设置 10 秒超时防止卡死整个请求）
+                Console.WriteLine($"[LOG] {DateTime.Now:HH:mm:ss} Redis 无数据，开始下载全量基金列表...");
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
                 string jsData = await client.GetStringAsync("http://fund.eastmoney.com/js/fundcode_search.js");
 
                 int startIndex = jsData.IndexOf('[');
@@ -61,6 +66,7 @@ namespace 估值助手.Controllers
                 {
                     string json = jsData.Substring(startIndex, endIndex - startIndex + 1);
                     var rawList = JsonSerializer.Deserialize<List<List<string>>>(json);
+                    
                     _globalFundCache = rawList.Select(x => new FundInfoCache 
                     { 
                         Code = x[0], 
@@ -68,27 +74,33 @@ namespace 估值助手.Controllers
                         NormalizedName = NormalizeFundName(x[2]) 
                     }).ToList();
 
+                    // 写入 Redis，有效期 24 小时
                     await db.StringSetAsync(cacheKey, JsonSerializer.Serialize(_globalFundCache), TimeSpan.FromHours(24));
+                    Console.WriteLine($"[LOG] {DateTime.Now:HH:mm:ss} 下载并解析完毕，共 {_globalFundCache.Count} 条数据");
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Redis 缓存异常: " + ex.Message);
+                Console.WriteLine($"[ERROR] {DateTime.Now:HH:mm:ss} 加载基金库失败: {ex.Message}");
             }
 
             return _globalFundCache ?? new List<FundInfoCache>();
         }
 
         /// <summary>
-        /// 🚀 高性能 OCR 导入引擎
+        /// 🚀 核心导入功能
         /// </summary>
         [HttpPost("import-ocr")]
         public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFormFile imageFile)
         {
-            if (string.IsNullOrEmpty(username)) return Unauthorized("未提供指挥官代号");
+            if (string.IsNullOrEmpty(username)) return Unauthorized("请提供指挥官代号");
+            
+            Console.WriteLine($"[LOG] {DateTime.Now:HH:mm:ss} 收到导入请求，用户: {username}");
 
-            // 1. 预装载：全量基金库 + 用户现有持仓（内存字典化）
+            // 1. 预装载基金库（这是最容易卡住的地方）
             var allFunds = await GetAllFundsAsync();
+            
+            // 2. 预查用户现有持仓，避免循环内查询数据库
             var userFundDict = await _context.MyFunds
                 .Where(f => f.Username == username)
                 .ToDictionaryAsync(f => f.FundCode);
@@ -96,7 +108,7 @@ namespace 估值助手.Controllers
             byte[] finalProcessedBytes;
             List<string> debugLog = new List<string>();
 
-            // 2. 图片压缩处理
+            // 3. 图片压缩处理
             using (var inputStream = imageFile.OpenReadStream())
             {
                 using (Image image = Image.Load(inputStream))
@@ -116,15 +128,17 @@ namespace 估值助手.Controllers
                 }
             }
 
-            // 3. 调用百度 OCR
+            // 4. 调用 OCR
+            Console.WriteLine($"[LOG] {DateTime.Now:HH:mm:ss} 正在调用百度 OCR...");
             var client = new Baidu.Aip.Ocr.Ocr("yjfCgtNuumSjxc34FDmXCv8e", "g3XGcMKX0Qsp4k4wDSbxYQoSdFPuDt0c") { Timeout = 30000 };
             var result = client.GeneralBasic(finalProcessedBytes);
             var texts = (result["words_result"] as JArray)?.Select(x => x["words"].ToString().Trim()).ToList() ?? new List<string>();
+            Console.WriteLine($"[LOG] {DateTime.Now:HH:mm:ss} OCR 识别成功，获得 {texts.Count} 行文本");
 
             int importedCount = 0;
             string numPattern = @"^([-+]?\d{1,3}(,\d{3})*(\.\d{2}))$";
 
-            // 4. 核心匹配循环
+            // 5. 匹配循环
             for (int i = 0; i < texts.Count; i++)
             {
                 string combinedName = texts[i];
@@ -139,7 +153,7 @@ namespace 估值助手.Controllers
                 FundInfoCache bestMatch = null;
                 double bestScore = 0;
 
-                // 🚀 性能优化：两阶段过滤（先通过关键词包含缩小范围，再进行相似度计算）
+                // 🚀 高性能过滤：先通过简单包含筛选候选者，再计算相似度
                 var candidates = allFunds.Where(f => f.NormalizedName.Contains(pureChinese) || 
                                                     pureChinese.Contains(f.NormalizedName.Substring(0, Math.Min(3, f.NormalizedName.Length))));
 
@@ -158,7 +172,7 @@ namespace 估值助手.Controllers
                     }
                 }
 
-                // 5. 数据解析与入库
+                // 6. 解析数据点
                 if (bestMatch != null && bestScore > 70)
                 {
                     double marketValue = 0, holdingIncome = 0;
@@ -188,11 +202,11 @@ namespace 估值助手.Controllers
                     {
                         double costAmount = Math.Round(marketValue - holdingIncome, 2);
 
-                        // 使用内存字典进行更新判断，避免循环内执行 SQL
                         if (userFundDict.TryGetValue(bestMatch.Code, out var exist))
                         {
                             exist.HoldAmount = marketValue;
                             exist.CostAmount = costAmount;
+                            _context.MyFunds.Update(exist);
                         }
                         else
                         {
@@ -215,10 +229,11 @@ namespace 估值助手.Controllers
             }
 
             await _context.SaveChangesAsync();
+            Console.WriteLine($"[LOG] {DateTime.Now:HH:mm:ss} 导入流程结束，共入库 {importedCount} 只");
             return Ok($"识别完成！成功同步 {importedCount} 只基金。\n\n详细日志：\n{string.Join("\n", debugLog)}");
         }
 
-        // ================================= 辅助核心算法 =================================
+        // ================================= 核心辅助方法 =================================
 
         private string ExtractFundClass(string name)
         {
@@ -243,7 +258,6 @@ namespace 估值助手.Controllers
 
             int[] v0 = new int[m + 1];
             int[] v1 = new int[m + 1];
-
             for (int i = 0; i <= m; i++) v0[i] = i;
 
             for (int i = 0; i < n; i++)
@@ -259,49 +273,36 @@ namespace 估值助手.Controllers
             return 1.0 - (double)v0[m] / Math.Max(n, m);
         }
 
-        // ================================= 业务逻辑接口 =================================
+        // ================================= 基础业务接口 =================================
 
         [HttpGet("today")]
         public async Task<IActionResult> GetTodayData([FromQuery] string username)
         {
-            if (string.IsNullOrEmpty(username)) return Unauthorized("请提供指挥官代号");
-
+            if (string.IsNullOrEmpty(username)) return Unauthorized("请提供代号");
             try
             {
-                // 确保数据库字段存在（仅针对 SQLite/调试环境补齐）
-                try { await _context.Database.ExecuteSqlRawAsync("ALTER TABLE MyFunds ADD COLUMN CostAmount DOUBLE NOT NULL DEFAULT 0;"); } catch { }
-
-                // 核心修复：确保使用 EF Core 的异步扩展方法
                 var myFunds = await _context.MyFunds.Where(f => f.Username == username).ToListAsync();
                 var myFundCodes = myFunds.Select(f => f.FundCode).ToList();
 
                 var localTime = DateTime.UtcNow.AddHours(8);
                 var today = localTime.Date;
-                string todayStr = localTime.ToString("yyyy/MM/dd");
 
                 var todayRecords = await _context.FundRecords
                     .Where(r => r.FetchTime >= today && myFundCodes.Contains(r.FundCode))
-                    .OrderBy(r => r.FetchTime)
-                    .ToListAsync();
+                    .OrderBy(r => r.FetchTime).ToListAsync();
 
                 var lastRecords = new List<FundData>();
                 foreach (var code in myFundCodes)
                 {
-                    var lr = await _context.FundRecords
-                        .Where(r => r.FetchTime < today && r.FundCode == code)
-                        .OrderByDescending(r => r.FetchTime)
-                        .FirstOrDefaultAsync();
+                    var lr = await _context.FundRecords.Where(r => r.FundCode == code && r.FetchTime < today)
+                        .OrderByDescending(r => r.FetchTime).FirstOrDefaultAsync();
                     if (lr != null) lastRecords.Add(lr);
                 }
 
                 var result = myFunds.Select(config => {
                     var fundRecords = todayRecords.Where(r => r.FundCode == config.FundCode).ToList();
                     var lastRecord = lastRecords.FirstOrDefault(r => r.FundCode == config.FundCode);
-                    var dataPoints = new List<object[]>();
-
-                    if (lastRecord != null) dataPoints.Add(new object[] { todayStr + " 09:30:00", lastRecord.EstimatedRate });
-                    dataPoints.AddRange(fundRecords.Select(r => new object[] { r.FetchTime.ToString("yyyy/MM/dd HH:mm:ss"), r.EstimatedRate }));
-                    if (dataPoints.Count == 0) dataPoints.Add(new object[] { todayStr + " 09:30:00", 0 });
+                    var dataPoints = fundRecords.Select(r => new object[] { r.FetchTime.ToString("yyyy/MM/dd HH:mm:ss"), r.EstimatedRate }).ToList();
 
                     double cost = config.CostAmount;
                     double currentAmount = config.HoldAmount;
@@ -312,43 +313,12 @@ namespace 估值助手.Controllers
                         amount = currentAmount,
                         cost = cost > 0 ? cost : (double?)null,
                         existingReturnRate = cost > 0 ? Math.Round(((currentAmount - cost) / cost) * 100.0, 2) : 0,
-                        breakEvenRate = cost > 0 ? Math.Round((currentAmount / cost) * 100.0, 2) : 0,
-                        diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
                         data = dataPoints
                     };
                 });
-
                 return Ok(result);
             }
-            catch (Exception ex)
-            {
-                return StatusCode(500, $"获取数据失败: {ex.Message}");
-            }
-        }
-
-        [HttpPost("add")]
-        public async Task<IActionResult> AddFund([FromForm] string username, [FromForm] string code, [FromForm] double amount)
-        {
-            if (string.IsNullOrEmpty(username)) return BadRequest("未登录");
-            using var client = new HttpClient();
-            try
-            {
-                string url = $"http://fundgz.1234567.com.cn/js/{code}.js";
-                string response = await client.GetStringAsync(url);
-                var match = Regex.Match(response, @"jsonpgz\((.*?)\);");
-                if (match.Success)
-                {
-                    var root = JsonDocument.Parse(match.Groups[1].Value).RootElement;
-                    string name = root.GetProperty("name").GetString() ?? "未知";
-                    var exist = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && f.FundCode == code);
-                    if (exist != null) exist.HoldAmount = amount;
-                    else _context.MyFunds.Add(new MyFundConfig { Username = username, FundCode = code, FundName = name, HoldAmount = amount });
-                    await _context.SaveChangesAsync();
-                    return Ok(new { success = true, name = name });
-                }
-                return BadRequest("找不到该基金");
-            }
-            catch { return BadRequest("网络请求失败"); }
+            catch (Exception ex) { return StatusCode(500, ex.Message); }
         }
 
         [HttpPost("delete")]
@@ -361,72 +331,7 @@ namespace 估值助手.Controllers
                 await _context.SaveChangesAsync();
                 return Ok(new { success = true });
             }
-            return BadRequest("未找到该基金配置");
-        }
-
-        [HttpGet("auto-settle")]
-        public async Task<IActionResult> AutoSettle()
-        {
-            try
-            {
-                var allFunds = await _context.MyFunds.ToListAsync();
-                if (!allFunds.Any()) return Ok("当前暂无基金。");
-                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-                int successCount = 0;
-                foreach (var fund in allFunds)
-                {
-                    try
-                    {
-                        string url = $"http://fundgz.1234567.com.cn/js/{fund.FundCode}.js?rt={DateTime.Now.Ticks}";
-                        string jsData = await client.GetStringAsync(url);
-                        var match = Regex.Match(jsData, @"\""gszzl\"":\""([^\""]+)\""");
-                        if (match.Success && double.TryParse(match.Groups[1].Value, out double rate))
-                        {
-                            double todayProfit = fund.HoldAmount * (rate / 100.0);
-                            fund.HoldAmount = Math.Round(fund.HoldAmount + todayProfit, 2);
-                            successCount++;
-                        }
-                    } catch { continue; }
-                }
-                await _context.SaveChangesAsync();
-                return Ok($"[{DateTime.Now}] 自动清算完毕，更新 {successCount} 只。");
-            }
-            catch (Exception ex) { return StatusCode(500, ex.Message); }
-        }
-
-        [HttpGet("force-settle")]
-        public async Task<IActionResult> ForceSettle()
-        {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-            var targetFunds = await _context.MyFunds.Select(f => f.FundCode).Distinct().ToListAsync();
-            var localTime = DateTime.UtcNow.AddHours(8);
-            string todayStr = localTime.ToString("yyyy-MM-dd");
-            var resultLog = new List<string> { $"战报时间: {localTime}" };
-
-            foreach (var code in targetFunds)
-            {
-                try
-                {
-                    string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize=1";
-                    client.DefaultRequestHeaders.Referer = new Uri("http://fund.eastmoney.com/");
-                    string response = await client.GetStringAsync(url);
-                    using var doc = JsonDocument.Parse(response);
-                    var dataArray = doc.RootElement.GetProperty("Data").GetProperty("LSJZList");
-                    if (dataArray.GetArrayLength() > 0)
-                    {
-                        var latest = dataArray[0];
-                        if (latest.GetProperty("FSRQ").GetString() == todayStr && double.TryParse(latest.GetProperty("JZZZL").GetString(), out double actualRate))
-                        {
-                            var record = await _context.FundRecords
-                                .Where(r => r.FundCode == code && r.FetchTime >= localTime.Date)
-                                .OrderByDescending(r => r.FetchTime).FirstOrDefaultAsync();
-                            if (record != null) { record.EstimatedRate = actualRate; resultLog.Add($"✅ [{code}] 覆盖成功: {actualRate}%"); }
-                        }
-                    }
-                } catch { continue; }
-            }
-            await _context.SaveChangesAsync();
-            return Ok(resultLog);
+            return BadRequest("未找到基金");
         }
     }
 }
