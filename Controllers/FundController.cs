@@ -195,13 +195,21 @@ debugLog.Add($"[🔍 百度OCR原文前10行]\n{string.Join("\n", texts.Take(10)
                 int importedCount = 0;
                 string numPattern = @"^([-+]?\d{1,3}(,\d{3})*(\.\d{2}))$";
 
-                for (int i = 0; i < texts.Count; i++)
+                               for (int i = 0; i < texts.Count; i++)
                 {
+                    // 🚀 智能拼接升级版：遇到包含数字的行，立刻刹车，防止把名字和金额缝合在一起！
                     string combinedName = texts[i];
-                    if (i + 1 < texts.Count) combinedName += texts[i + 1];
+                    for (int step = 1; step <= 2 && (i + step) < texts.Count; step++)
+                    {
+                        string nextLine = texts[i + step].Trim();
+                        if (Regex.IsMatch(nextLine, @"\d")) break; // 踩刹车：下一行有数字，说明读到右边的金额了
+                        combinedName += nextLine;
+                    }
 
                     string pureChinese = Regex.Replace(combinedName, @"[^\u4e00-\u9fa5]", "");
-                    if (pureChinese.Length < 3) continue; 
+                    
+                    // 把门槛提高到 4 个字，自动过滤掉支付宝顶部的“偏股”、“偏债”、“全部”等干扰词
+                    if (pureChinese.Length < 4) continue; 
 
                     string normalizedOcr = NormalizeFundName(combinedName);
                     FundInfoCache bestMatch = null;
