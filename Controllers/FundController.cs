@@ -19,15 +19,6 @@ namespace 估值助手.Controllers
         public class OcrWordInfo
         {
             public string Words { get; set; }
-            public int Top { get; set; }  // Y轴坐标
-            public int Left { get; set; } // X轴坐标
-            public int Width { get; set; }
-        }
-
-        // 🏆 OCR 坐标雷达辅助类 (放在 Controller 内部)
-        public class OcrWordInfo
-        {
-            public string Words { get; set; }
             public int Top { get; set; }
             public int Left { get; set; }
             public int Width { get; set; }
@@ -130,7 +121,16 @@ namespace 估值助手.Controllers
                         }
                     }
                     await _context.SaveChangesAsync();
-                    return Ok
+                    return Ok($"雷达锁定成功！精准导入了 {ocrFoundFunds.Count} 只基金。");
+                }
+                return BadRequest("未能匹配出正确的基金。");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"连接异常: {ex.Message}");
+            }
+        }
+
         // 👉 添加基金 (绑定用户)
         [HttpPost("add")]
         public async Task<IActionResult> AddFund([FromForm] string username, [FromForm] string code, [FromForm] double amount)
