@@ -151,7 +151,7 @@ namespace 估值助手.Controllers
                 {
                     using (Image image = Image.Load(inputStream))
                     {
-                        int targetMaxWidth = 1080;
+                        int targetMaxWidth = 800;
                         if (image.Width > targetMaxWidth)
                         {
                             int newHeight = (int)((double)image.Height / image.Width * targetMaxWidth);
@@ -160,7 +160,7 @@ namespace 估值助手.Controllers
                         image.Mutate(x => x.BackgroundColor(Color.White));
                         using (var outputStream = new MemoryStream())
                         {
-                            image.SaveAsJpeg(outputStream, new JpegEncoder { Quality = 60 });
+                            image.SaveAsJpeg(outputStream, new JpegEncoder { Quality = 40 });
                             finalProcessedBytes = outputStream.ToArray();
                         }
                     }
@@ -198,6 +198,23 @@ debugLog.Add($"[🔍 百度OCR原文前10行]\n{string.Join("\n", texts.Take(10)
                 for (int i = 0; i < texts.Count; i++)
                 {
                     string combinedName = texts[i];
+// 🚀 智能跨栏：往下找 5 行
+for (int step = 1; step <= 5 && (i + step) < texts.Count; step++)
+{
+    string nextLine = texts[i + step].Trim();
+    
+    // 💡 关键修复：遇到金额或收益的数字，跳过当前行继续往下找，不要 break！
+    if (Regex.IsMatch(nextLine, @"^[-+一_]?\s*[\d,\.]+\s*%?$")) continue;
+    
+    string cleanNext = Regex.Replace(nextLine, @"(金选|指数基金|市场解读)", "").Trim();
+    if (string.IsNullOrEmpty(cleanNext)) continue;
+
+    // 如果下一行是全新的基金名字（汉字>=4），才真正刹车
+    if (Regex.Replace(cleanNext, @"[^\u4e00-\u9fa5]", "").Length >= 4) break;
+
+    combinedName += cleanNext; // 把 "接(QDII)C" 拼上去！
+}
+
                     string pureChinese = Regex.Replace(combinedName, @"[^\u4e00-\u9fa5]", "");
                     
                     // 起始行必须有足够的汉字才配叫基金名字
