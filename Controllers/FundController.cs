@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json.Linq;
 using StackExchange.Redis;
-using System.Data.Entity;
+//using System.Data.Entity;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using 估值助手.Models;
@@ -474,7 +474,9 @@ namespace 估值助手.Controllers
                 }
                 catch { /* 忽略已存在的报错 */ }
 
-                var myFunds = await _context.MyFunds.Where(f => f.Username == username).ToListAsync();
+                var myFunds = await _context.MyFunds
+      .Where(f => f.Username == username)
+      .ToListAsync();   // 保持不变，但确保上方 using 正确
                 var myFundCodes = myFunds.Select(f => f.FundCode).ToList();
 
                 var localTime = DateTime.UtcNow.AddHours(8);
