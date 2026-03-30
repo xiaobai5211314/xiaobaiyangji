@@ -250,7 +250,8 @@ debugLog.Add($"[🔍 百度OCR原文前10行]\n{string.Join("\n", texts.Take(10)
                             // 🛡️ 绝对隔离：OCR提取到了C，就绝不允许匹配A！
                             if (!string.IsNullOrEmpty(ocrClass) && !string.IsNullOrEmpty(dbClass) && ocrClass != dbClass) continue;
 
-                            double similarity = CalculateSimilarity(normalizedOcr, f.NormalizedName);
+                            double similarity = CalculateWeightedScore(normalizedOcr, f.NormalizedName);
+
                             double currentScore = similarity * 100;
 
                             if (currentScore > bestScore)
@@ -352,28 +353,91 @@ debugLog.Add($"[🔍 百度OCR原文前10行]\n{string.Join("\n", texts.Take(10)
                        .Replace("混合", "").Replace("指数", "").Replace("C类", "C").Replace("A类", "A").Trim();
         }
 
-        private double CalculateSimilarity(string s, string t)
+                /// <summary>
+        /// 🚀 升级版：带权重的智能相似度打分算法 (借鉴搜索引擎 BM25 思想)
+        /// </summary>
+        /// <param name="ocr">OCR 识别出来的文字 (短)</param>
+        /// <param name="dbName">数据库里的标准名称 (长)</param>
+        /// <returns>返回 0.0 到 1.0 的加权得分</returns>
+        private double CalculateWeightedScore(string ocr, string dbName)
         {
-            if (s == t) return 1.0;
-            int n = s.Length, m = t.Length;
-            if (n == 0 || m == 0) return 0.0;
+            if (string.IsNullOrEmpty(ocr) || string.IsNullOrEmpty(dbName)) return 0.0;
+            if (ocr == dbName) return 1.0;
 
-            int[] v0 = new int[m + 1];
-            int[] v1 = new int[m + 1];
-            for (int i = 0; i <= m; i++) v0[i] = i;
+            double totalScore = 0.0;
+            double maxPossibleScore = 0.0;
 
-            for (int i = 0; i < n; i++)
+            // 🌟 权重 1：前缀极高权重 (通常是基金公司名称，如"天弘"、"华富")
+            // 如果前两个字完全一样，给予巨大的基础加分
+            double prefixWeight = 30.0;
+            maxPossibleScore += prefixWeight;
+            if (ocr.Length >= 2 && dbName.Length >= 2 && ocr.Substring(0, 2) == dbName.Substring(0, 2))
             {
-                v1[0] = i + 1;
-                for (int j = 0; j < m; j++)
+                totalScore += prefixWeight;
+                // 如果前四个字都一样（公司+核心主题），再加奖励分
+                if (ocr.Length >= 4 && dbName.Length >= 4 && ocr.Substring(0, 4) == dbName.Substring(0, 4))
                 {
-                    int cost = (s[i] == t[j]) ? 0 : 1;
-                    v1[j + 1] = Math.Min(v1[j] + 1, Math.Min(v0[j + 1] + 1, v0[j] + cost));
+                    totalScore += 10.0; 
                 }
-                Array.Copy(v1, v0, m + 1);
             }
-            return 1.0 - (double)v0[m] / Math.Max(n, m);
+            maxPossibleScore += 10.0; // 封顶的分母加上这个额外奖励池
+
+            // 🌟 权重 2：最长连续公共子串 (LCS) 权重
+            // 连续匹配上的字数越长，证明核心主题越吻合 (比如 "人工智能")
+            int maxLcsLen = GetLongestCommonSubsequenceLength(ocr, dbName);
+            double lcsWeight = 50.0;
+            maxPossibleScore += lcsWeight;
+            
+            // 计算 LCS 占 OCR 原文的比例，比例越高得分越高
+            double lcsRatio = (double)maxLcsLen / Math.Min(ocr.Length, dbName.Length);
+            totalScore += lcsWeight * lcsRatio;
+
+            // 🌟 权重 3：字面覆盖率权重 (散落的字命中了多少)
+            double coverageWeight = 20.0;
+            maxPossibleScore += coverageWeight;
+            int matchCount = 0;
+            foreach (char c in ocr)
+            {
+                if (dbName.Contains(c)) matchCount++;
+            }
+            totalScore += coverageWeight * ((double)matchCount / ocr.Length);
+
+            // 💥 惩罚项：长度差异过大（防止“天弘”去碰瓷“天弘中证人工智能主题混合”）
+            double lengthPenalty = 1.0;
+            int lenDiff = Math.Abs(ocr.Length - dbName.Length);
+            if (lenDiff > 5) 
+            {
+                lengthPenalty = 0.85; // 长度相差5个字以上，总分打 85 折
+            }
+
+            return (totalScore / maxPossibleScore) * lengthPenalty;
         }
+
+        // 辅助算法：求最长连续公共子串长度
+        private int GetLongestCommonSubsequenceLength(string str1, string str2)
+        {
+            if (string.IsNullOrEmpty(str1) || string.IsNullOrEmpty(str2)) return 0;
+            int[,] matrix = new int[str1.Length + 1, str2.Length + 1];
+            int maxLen = 0;
+
+            for (int i = 1; i <= str1.Length; i++)
+            {
+                for (int j = 1; j <= str2.Length; j++)
+                {
+                    if (str1[i - 1] == str2[j - 1])
+                    {
+                        matrix[i, j] = matrix[i - 1, j - 1] + 1;
+                        if (matrix[i, j] > maxLen) maxLen = matrix[i, j];
+                    }
+                    else
+                    {
+                        matrix[i, j] = 0;
+                    }
+                }
+            }
+            return maxLen;
+        }
+
 
         // ================================= 基础业务接口 =================================
 
