@@ -36,26 +36,44 @@ namespace 估值助手.Controllers
         /// <summary>
         /// 获取全量基金库，并构建 O(1) 极速匹配字典
         /// </summary>
+        /// <summary>
+        /// 获取全量基金库（修复版：隔离 Redis 异常，防止连环崩溃）
+        /// </summary>
         private async Task<List<FundInfoCache>> GetAllFundsAsync()
         {
-            if (_globalFundCache != null && _exactMatchDict != null) return _globalFundCache;
+            if (_globalFundCache != null && _exactMatchDict != null && _globalFundCache.Count > 0) return _globalFundCache;
 
+            string cachedData = null;
+
+            // 🛡️ 阶段 1：尝试秒连 Redis（限制 1.5 秒超时，防止卡死服务器导致 504）
             try
             {
-                ConnectionMultiplexer redis = ConnectionMultiplexer.Connect("localhost:6379");
-                IDatabase db = redis.GetDatabase();
-                string cacheKey = "global_fund_db_cache_v3";
-                var cachedData = await db.StringGetAsync(cacheKey);
+                var options = ConfigurationOptions.Parse("localhost:6379");
+                options.ConnectTimeout = 1500; // 强制 1.5 秒超时
+                options.SyncTimeout = 1500;
+                // options.Password = "你的密码"; // 💡 如果宝塔Redis有密码，把这行注释解开填上去
 
-                if (!cachedData.IsNull)
-                {
-                    _globalFundCache = JsonSerializer.Deserialize<List<FundInfoCache>>(cachedData);
-                    BuildExactMatchDictionary(_globalFundCache);
-                    Console.WriteLine($"[LOG] {DateTime.Now:HH:mm:ss} 从 Redis 加载并构建了字典，共 {_globalFundCache.Count} 条");
-                    return _globalFundCache;
-                }
+                using var redis = ConnectionMultiplexer.Connect(options);
+                var db = redis.GetDatabase();
+                var redisValue = await db.StringGetAsync("global_fund_db_cache_v3");
+                if (redisValue.HasValue) cachedData = redisValue.ToString();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[警告] Redis 瘫痪或未开启，准备启动后备隐藏能源(直接下载): {ex.Message}");
+            }
 
-                Console.WriteLine($"[LOG] {DateTime.Now:HH:mm:ss} Redis 无数据，开始下载...");
+            // 如果 Redis 里有数据，直接起飞
+            if (!string.IsNullOrEmpty(cachedData))
+            {
+                _globalFundCache = JsonSerializer.Deserialize<List<FundInfoCache>>(cachedData);
+                BuildExactMatchDictionary(_globalFundCache);
+                return _globalFundCache;
+            }
+
+            // 🛡️ 阶段 2：Redis 没数据或连不上，走东方财富接口下载
+            try
+            {
                 using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
                 string jsData = await client.GetStringAsync("http://fund.eastmoney.com/js/fundcode_search.js");
 
@@ -75,13 +93,22 @@ namespace 估值助手.Controllers
 
                     BuildExactMatchDictionary(_globalFundCache);
 
-                    await db.StringSetAsync(cacheKey, JsonSerializer.Serialize(_globalFundCache), TimeSpan.FromHours(24));
-                    Console.WriteLine($"[LOG] {DateTime.Now:HH:mm:ss} 下载并构建完毕");
+                    // 尝试顺手存入 Redis，存不进也无所谓，不抛异常
+                    try
+                    {
+                        var options = ConfigurationOptions.Parse("localhost:6379");
+                        options.ConnectTimeout = 1000;
+                        using var redis = ConnectionMultiplexer.Connect(options);
+                        await redis.GetDatabase().StringSetAsync("global_fund_db_cache_v3", JsonSerializer.Serialize(_globalFundCache), TimeSpan.FromHours(24));
+                    }
+                    catch { /* 忽略写入失败 */ }
+
+                    return _globalFundCache;
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ERROR] {DateTime.Now:HH:mm:ss} 加载基金库失败: {ex.Message}");
+                Console.WriteLine($"[致命] 东方财富接口也挂了: {ex.Message}");
             }
 
             return _globalFundCache ?? new List<FundInfoCache>();
@@ -239,8 +266,9 @@ namespace 估值助手.Controllers
                 }
             }
 
+            // 替换 ImportOcrFunds 方法最后一句的 return
             await _context.SaveChangesAsync();
-            return Ok($"识别完成！成功同步 {importedCount} 只基金。\n\n详细日志：\n{string.Join("\n", debugLog)}");
+            return Ok($"识别完成！成功同步 {importedCount} 只基金。\n\n[⚙️ 引擎诊断]\n- 基金库装载: {allFunds.Count} 只\n- OCR提取文本: {texts.Count} 行\n\n[📝 详细日志]\n{(debugLog.Count > 0 ? string.Join("\n", debugLog) : "无匹配日志")}");
         }
 
         // ================================= 核心辅助方法 =================================
