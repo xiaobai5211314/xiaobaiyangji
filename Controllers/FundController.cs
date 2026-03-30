@@ -187,6 +187,7 @@ namespace 估值助手.Controllers
 
                 var texts = (result["words_result"] as JArray)?.Select(x => x["words"].ToString().Trim()).ToList() ?? new List<string>();
                 if (texts.Count == 0) return BadRequest("❌ OCR未能识别出任何文字");
+debugLog.Add($"[🔍 百度OCR原文前10行]\n{string.Join("\n", texts.Take(10))}\n");
 
                 // ==========================================
                 // 3. 极速匹配引擎 (这部分保持原样，速度极快)
