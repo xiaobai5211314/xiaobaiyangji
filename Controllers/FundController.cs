@@ -73,84 +73,71 @@ namespace 估值助手.Controllers
         [HttpPost("import-ocr")]
         public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFormFile imageFile)
         {
-            if (string.IsNullOrEmpty(username)) return BadRequest("指挥官身份未确认");
-            if (imageFile == null || imageFile.Length == 0) return BadRequest("未检测到图像弹药");
+            var fundDb = await GetAllFundsAsync();
+            byte[] imageBytes;
+            using (var ms = new MemoryStream()) { await imageFile.CopyToAsync(ms); imageBytes = ms.ToArray(); }
 
-            try
+            var client = new Ocr("yjfCgtNuumSjxc34FDmXCv8e", "g3XGcMKX0Qsp4k4wDSbxYQoSdFPuDt0c") { Timeout = 60000 };
+            var result = client.AccurateBasic(imageBytes); // 必须是高精度版
+
+            List<string> texts = (result["words_result"] as JArray).Select(x => x["words"].ToString().Trim()).ToList();
+            int importedCount = 0;
+
+            // 战术正则：匹配带正负号的收益额 (如 -2,683.92)
+            string numPattern = @"^([-+]?\d{1,3}(,\d{3})*(\.\d{2}))$";
+
+            for (int i = 0; i < texts.Count; i++)
             {
-                // 1. 直接从内存读取预加载的基金库，速度飞快！
-                var fundDb = await GetAllFundsAsync();
-                byte[] imageBytes;
-                using (var ms = new MemoryStream()) { await imageFile.CopyToAsync(ms); imageBytes = ms.ToArray(); }
+                // 🧩 创新：拼接当前行和下一行 (解决“人工智能”换行漏抓)
+                string combinedName = texts[i];
+                if (i + 1 < texts.Count) combinedName += texts[i + 1];
 
-                // 🔑 修正后的 AppID
-                var APP_ID = "122647395";
-                var API_KEY = "yjfCgtNuumSjxc34FDmXCv8e";
-                var SECRET_KEY = "g3XGcMKX0Qsp4k4wDSbxYQoSdFPuDt0c";
+                // 在东财库里搜寻：单行匹配 OR 拼接匹配
+                var matchedFund = fundDb.FirstOrDefault(f =>
+                    (texts[i].Length > 4 && f.Name.Contains(texts[i])) ||
+                    (combinedName.Length > 8 && f.Name.Contains(combinedName))
+                );
 
-                var client = new Baidu.Aip.Ocr.Ocr(API_KEY, SECRET_KEY) { Timeout = 60000 };
-                var result = client.AccurateBasic(imageBytes); // 使用高精度版
-
-                JArray wordsResult = result["words_result"] as JArray;
-                List<string> texts = wordsResult.Select(x => x["words"].ToString().Trim()).ToList();
-
-                int importedCount = 0;
-                // 匹配金额或收益的正则
-                string numPattern = @"^([-+]?\d{1,3}(,\d{3})*(\.\d{2}))$";
-
-                for (int i = 0; i < texts.Count; i++)
+                if (matchedFund != null)
                 {
-                    // 1. 模糊匹配全量库名字
-                    var matchedFund = fundDb.FirstOrDefault(f => f.Name.Length > 4 && (texts[i].Contains(f.Name) || f.Name.Contains(texts[i])));
+                    double marketValue = 0; double holdingIncome = 0;
 
-                    if (matchedFund != null)
+                    // 🎯 寻找对应的数字。支付宝排版规律：名字后紧跟【市值】，再下两行是【持有收益】
+                    for (int j = 1; j <= 6 && (i + j) < texts.Count; j++)
                     {
-                        double marketValue = 0;
-                        double holdingIncome = 0;
-                        int foundNums = 0;
-
-                        // 🕵️ 关键：支付宝一行通常有 3 个数字：[市值] [昨日收益] [持有收益]
-                        for (int j = 1; j <= 5 && (i + j) < texts.Count; j++)
+                        string next = texts[i + j];
+                        if (Regex.IsMatch(next, numPattern))
                         {
-                            if (Regex.IsMatch(texts[i + j], numPattern))
+                            double val = double.Parse(next.Replace(",", ""));
+                            if (marketValue == 0) marketValue = val;
+                            else if (holdingIncome == 0 && next.Contains("+") || next.Contains("-"))
                             {
-                                foundNums++;
-                                double val = double.Parse(texts[i + j].Replace(",", ""));
-                                if (foundNums == 1) marketValue = val;
-                                if (foundNums == 3) { holdingIncome = val; break; }
+                                holdingIncome = val; break;
                             }
-                        }
-
-                        if (marketValue > 0)
-                        {
-                            // 💥 自动化推算：持仓成本 = 市值 - 持有收益
-                            double costAmount = marketValue - holdingIncome;
-
-                            var exist = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && f.FundCode == matchedFund.Code);
-                            if (exist != null)
-                            {
-                                exist.HoldAmount = marketValue;
-                                exist.CostAmount = costAmount;
-                            }
-                            else
-                            {
-                                _context.MyFunds.Add(new MyFundConfig
-                                {
-                                    Username = username,
-                                    FundCode = matchedFund.Code,
-                                    FundName = matchedFund.Name,
-                                    HoldAmount = marketValue,
-                                    CostAmount = costAmount
-                                });
-                            }
-                            importedCount++;
                         }
                     }
+
+                    if (marketValue > 0)
+                    {
+                        // 💰 核心反推：本金 = 市值 - 收益
+                        double costAmount = Math.Round(marketValue - holdingIncome, 2);
+
+                        var exist = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && f.FundCode == matchedFund.Code);
+                        if (exist != null)
+                        {
+                            exist.HoldAmount = marketValue; exist.CostAmount = costAmount;
+                        }
+                        else
+                        {
+                            _context.MyFunds.Add(new MyFundConfig { Username = username, FundCode = matchedFund.Code, FundName = matchedFund.Name, HoldAmount = marketValue, CostAmount = costAmount });
+                        }
+                        importedCount++;
+                        i += 1; // 跳过已拼接的行
+                    }
                 }
-                await _context.SaveChangesAsync();
-                return Ok($"解析完毕！已根据收益自动校准 {importedCount} 只基金的成本。");
             }
-            catch (Exception ex) { return StatusCode(500, $"战线受阻: {ex.Message}"); }
+            await _context.SaveChangesAsync();
+            return Ok($"解析引擎升级！已精准对齐并更新 {importedCount} 只基金。");
         }
 
         // 👉 添加基金 (绑定用户)

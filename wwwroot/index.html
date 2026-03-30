@@ -328,16 +328,17 @@
             <div class="fund-list-container">
                 <div v-for="fund in fundsList" :key="fund.code" class="glass-panel fund-card">
                     <div style="display: flex; justify-content: space-between; align-items: start;">
-                        <span style="font-weight: bold; color: #fff; font-size: 14px; max-width: 70%;">
-                            {{ fund.name }} <span style="font-size:10px; color:#64748b;">({{ fund.code }})</span>
+                        <span style="font-weight: bold; color: #fff; font-size: 14px; max-width: 80%; display: flex; flex-direction: column;">
+                            <span>{{ fund.name }}</span>
+                            <span style="font-size:10px; color:#64748b; font-weight: normal; margin-top: 2px;">({{ fund.code }})</span>
                         </span>
-                        <div style="display: flex; gap: 6px;">
+                        <div style="display: flex; gap: 6px; flex-shrink: 0;">
                             <button @click="openEditModal(fund)" style="background: rgba(255,255,255,0.1); border: none; color: #cbd5e1; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;" title="修改本金和代码">🔧</button>
                             <button @click="handleDeleteFund(fund.code, fund.name)" style="background: rgba(255, 77, 79, 0.2); border: none; color: #ff4d4f; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;" title="移除">✕</button>
                         </div>
                     </div>
 
-                    <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 6px;">
+                    <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 6px; margin-top: 5px;">
                         <span>估值: <span :style="{color: fund.currentRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold'}">{{ fund.currentRate > 0 ? '+' : ''}}{{ fund.currentRate }}%</span></span>
                         <span v-if="Math.abs(fund.diffRate) > 0.15">
                             <span class="radar-badge">🚨 调仓偏离: {{ fund.diffRate }}%</span>
@@ -369,9 +370,13 @@
                         </div>
                         <div class="metric-item">
                             <span class="metric-label">回本率</span>
-                            <span class="metric-value" :style="{color: fund.breakEvenRate >= 100 ? '#ff4d4f' : '#eab308'}">
+                            <span class="metric-value" :style="{color: fund.breakEvenRate > 0 ? '#eab308' : '#10b981'}">
                                 {{ fund.breakEvenRate }}%
                             </span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">状态</span>
+                            <span class="metric-value">{{ fund.breakEvenRate > 0 ? '⚓ 套牢' : '✅ 盈利' }}</span>
                         </div>
                     </div>
                 </div>
@@ -432,16 +437,9 @@
                 const fundForm = reactive({ code: '', amount: '' });
                 const chartInstance = shallowRef(null);
                 let timer = null;
-
                 const isUploading = ref(false);
 
-                // 👉 彈窗編輯數據
-                const editForm = reactive({
-                    show: false,
-                    code: '',
-                    name: '',
-                    cost: ''
-                });
+                const editForm = reactive({ show: false, code: '', name: '', cost: '', originalCode: '' });
 
                 const handleRegister = async () => {
                     if (!loginForm.username || !loginForm.password) return alert("账号密码为空！");
@@ -488,7 +486,8 @@
                         const response = await fetch(`/api/Fund/import-ocr?username=${encodeURIComponent(currentUser.value)}`, { method: 'POST', body: formData });
                         if (response.ok) {
                             const result = await response.text();
-                            alert("✅ " + result);
+                            alert("✅ 识别成功！正在同步走势曲线...\n" + result);
+                            fundsList.value = []; // 强迫 Echarts 重新渲染
                             fetchData();
                         } else {
                             const errorMsg = await response.text();
@@ -500,23 +499,16 @@
                         isUploading.value = false;
                         event.target.value = '';
                     }
-                    if (response.ok) {
-                        alert("✅ 识别成功！正在同步走势曲线...");
-                        // 💥 重点：识别成功后，先清理本地旧列表，强迫 fetchData 重新建立 Echarts 实例
-                        fundsList.value = [];
-                        await fetchData();
-                    }
                 };
 
-                // 👉 打开编辑面板
                 const openEditModal = (fund) => {
                     editForm.show = true;
                     editForm.code = (fund.code || '').startsWith('待核对') || (fund.code || '').startsWith('未定') ? '' : fund.code;
                     editForm.name = fund.name;
                     editForm.cost = fund.cost || 0;
+                    editForm.originalCode = fund.code;
                 };
 
-                // 👉 保存修改信息
                 const handleSaveDetails = async () => {
                     if (!editForm.cost || editForm.cost <= 0) return alert("请输入真实的成本金，否则收益率依然为0！");
                     if (!editForm.code || !/^\d{6}$/.test(editForm.code)) return alert("请输入东财的 6 位数字代码！");
@@ -525,9 +517,7 @@
                     fd.append('username', currentUser.value);
                     fd.append('code', editForm.code);
                     fd.append('costAmount', editForm.cost);
-
-                    const originalFund = fundsList.value.find(f => f.name === editForm.name);
-                    fd.append('originalCode', originalFund.code);
+                    fd.append('originalCode', editForm.originalCode);
 
                     try {
                         const res = await fetch('/api/Fund/update-details', { method: 'POST', body: fd });
@@ -552,22 +542,33 @@
                         const response = await fetch(`/api/fund/today?username=${encodeURIComponent(currentUser.value)}`);
                         const apiData = await response.json();
 
-                        let tPrincipal = 0; let tProfit = 0;
+                        let tPrincipal = 0; let tCost = 0;
                         apiData.forEach(fund => {
                             tPrincipal += fund.amount;
+                            tCost += (fund.cost || fund.amount); // 用于算总收益率
+
                             if (fund.data && fund.data.length > 0) {
                                 const latestRate = fund.data[fund.data.length - 1][1];
-                                tProfit += (fund.amount * latestRate / 100);
                                 fund.currentRate = latestRate;
                             } else {
                                 fund.currentRate = 0;
                             }
-                            // 💰 计算综合盈亏金额 (当前市值 - 成本)
+
+                            // 💰 综合盈亏
                             fund.estimatedProfit = (fund.cost && fund.cost > 0) ? (fund.amount - fund.cost).toFixed(2) : 0;
+
+                            // 🚀 回本需要涨多少公式 (如果成本 > 市值，说明亏了，需要算回本涨幅)
+                            fund.breakEvenRate = (fund.cost && fund.cost > fund.amount) ? ((fund.cost / fund.amount - 1) * 100).toFixed(2) : "0.00";
+
+                            // 🚀 现有收益率
+                            fund.existingReturnRate = (fund.cost && fund.cost > 0) ? (((fund.amount - fund.cost) / fund.cost) * 100).toFixed(2) : "0.00";
                         });
 
                         fundsList.value = apiData;
-                        totalPrincipal.value = tPrincipal; totalProfit.value = tProfit; totalRate.value = tPrincipal > 0 ? (tProfit / tPrincipal * 100) : 0;
+                        totalPrincipal.value = tPrincipal;
+                        totalProfit.value = tPrincipal - tCost;
+                        totalRate.value = tCost > 0 ? ((tPrincipal - tCost) / tCost * 100) : 0;
+
                         renderChart(apiData);
                         setTimeout(() => { isLoading.value = false; }, 300);
                     } catch (e) { console.error("抓取失败", e); isLoading.value = false; }
@@ -581,7 +582,6 @@
                     }
                     var holdAmounts = {};
 
-                    // 过滤掉没有真实数据的基金（防止 OCR 刚导入但没写代码的基金画断头图）
                     var validData = apiData.filter(f => f.data && f.data.length > 1);
 
                     var seriesData = validData.map(fund => {
