@@ -493,7 +493,7 @@
                             const ctx = canvas.getContext('2d');
 
                             // 锁定最大宽度为 800px，高度等比例缩放
-                            const maxWidth = 1080;
+                            const maxWidth = 800;
                             let targetWidth = img.width;
                             let targetHeight = img.height;
 
@@ -516,7 +516,7 @@
                                 const fileName = file.name.replace(/\.[^/.]+$/, "") + ".jpg"; // 确保后缀变更为 jpg
                                 const compressedFile = new File([blob], fileName, { type: 'image/jpeg' });
                                 successCallback(compressedFile); 
-                            }, 'image/jpeg', 0.7);
+                            }, 'image/jpeg', 0.5);
                         };
                     };
                 };
