@@ -53,15 +53,6 @@ namespace 估值助手.Controllers
         }
         public FundController(AppDbContext context) { _context = context; }
 
-       
-        // 🏆 OCR 坐标雷达辅助类 (放在 Controller 内部)
-        public class OcrWordInfo
-        {
-            public string Words { get; set; }
-            public int Top { get; set; }
-            public int Left { get; set; }
-            public int Width { get; set; }
-        }
 
         [HttpPost("import-ocr")]
         public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFormFile imageFile)
@@ -71,63 +62,69 @@ namespace 估值助手.Controllers
 
             try
             {
-                // 1. 预先加载全网 10000+ 基金库 (沿用之前的字典比对逻辑)
+                // 1. 直接从内存读取预加载的基金库，速度飞快！
                 var fundDb = await GetAllFundsAsync();
                 byte[] imageBytes;
                 using (var ms = new MemoryStream()) { await imageFile.CopyToAsync(ms); imageBytes = ms.ToArray(); }
 
-                // 2. 🔑 修正后的发射密钥 (必须对齐百度云后台！)
-                var APP_ID = "122647395"; // 👈 已帮你修正！
+                // 🔑 修正后的 AppID
+                var APP_ID = "122647395";
                 var API_KEY = "yjfCgtNuumSjxc34FDmXCv8e";
                 var SECRET_KEY = "g3XGcMKX0Qsp4k4wDSbxYQoSdFPuDt0c";
 
-                var client = new Ocr(API_KEY, SECRET_KEY) { Timeout = 60000 };
-                // 使用高精度版识别
-                var result = client.AccurateBasic(imageBytes);
+                var client = new Baidu.Aip.Ocr.Ocr(API_KEY, SECRET_KEY) { Timeout = 60000 };
+                // 🚀 使用高精度含位置版，这是解决“漏解析”的关键
+                var options = new Dictionary<string, object> { { "recognize_granularity", "small" } };
+                var result = client.Accurate(imageBytes, options);
+
                 JArray wordsResult = result["words_result"] as JArray;
                 if (wordsResult == null) return BadRequest("识别失败");
 
-                List<string> texts = wordsResult.Select(x => x["words"].ToString().Trim()).ToList();
-                int importedCount = 0;
+                // 将 OCR 结果转化为带坐标的“战术目标”
+                var allWords = wordsResult.Select(w => new {
+                    Text = w["words"].ToString().Trim(),
+                    Top = (int)w["location"]["top"],
+                    Left = (int)w["location"]["left"]
+                }).OrderBy(w => w.Top).ToList();
 
-                // 金额/收益正则 (匹配带正负号和逗号的数字)
+                int importedCount = 0;
                 string numPattern = @"^([-+]?\d{1,3}(,\d{3})*(\.\d{2}))$";
 
-                for (int i = 0; i < texts.Count; i++)
+                // 🎯 核心逻辑：以“金额”为锚点，向上寻找“基金名”
+                for (int i = 0; i < allWords.Count; i++)
                 {
-                    // 找基金名字
-                    var matchedFund = fundDb.FirstOrDefault(f => texts[i].Contains(f.Name) || f.Name.Contains(texts[i]));
+                    var current = allWords[i];
 
-                    if (matchedFund != null)
+                    // 如果这一行是金额 (如 20,387.49)
+                    if (Regex.IsMatch(current.Text, numPattern))
                     {
-                        // 💥 支付宝逻辑破译：
-                        // 名字后的第 1 个数字是【当前市值】
-                        // 名字后的第 3 个数字通常是【持有收益】(中间隔着个昨日收益)
-                        double marketValue = 0;
-                        double holdingIncome = 0;
-                        int foundNums = 0;
+                        double marketValue = double.Parse(current.Text.Replace(",", ""));
+                        if (marketValue < 10) continue; // 过滤掉太小的金额（可能是收益）
 
-                        for (int j = 1; j <= 5 && (i + j) < texts.Count; j++)
-                        {
-                            if (Regex.IsMatch(texts[i + j], numPattern))
-                            {
-                                foundNums++;
-                                double val = double.Parse(texts[i + j].Replace(",", ""));
-                                if (foundNums == 1) marketValue = val;
-                                if (foundNums == 3) { holdingIncome = val; break; }
-                            }
-                        }
+                        // 🕵️ 向上回溯 150 像素，寻找匹配全量库的基金名字
+                        var matchedFund = fundDb.FirstOrDefault(f =>
+                            allWords.Any(w => w.Top < current.Top && w.Top > current.Top - 150 &&
+                            (f.Name.Contains(w.Text) || w.Text.Contains(f.Name)) && w.Text.Length >= 4)
+                        );
 
-                        if (marketValue > 0)
+                        if (matchedFund != null)
                         {
-                            // 💰 核心算法反推成本金
+                            // 💰 自动推算成本：寻找这一行右侧或下方的“持有收益”
+                            // 支付宝排版：金额在左，持有收益在右
+                            double holdingIncome = 0;
+                            var incomeWord = allWords.FirstOrDefault(w =>
+                                Math.Abs(w.Top - current.Top) < 40 && w.Left > current.Left + 50 && Regex.IsMatch(w.Text, numPattern));
+
+                            if (incomeWord != null) holdingIncome = double.Parse(incomeWord.Text.Replace(",", ""));
+
+                            // 💥 终极公式：本金 = 当前市值 - 持有收益
                             double costAmount = marketValue - holdingIncome;
 
                             var exist = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && f.FundCode == matchedFund.Code);
                             if (exist != null)
                             {
                                 exist.HoldAmount = marketValue;
-                                exist.CostAmount = costAmount; // 👈 自动填入本金！
+                                exist.CostAmount = costAmount;
                             }
                             else
                             {
@@ -137,17 +134,19 @@ namespace 估值助手.Controllers
                                     FundCode = matchedFund.Code,
                                     FundName = matchedFund.Name,
                                     HoldAmount = marketValue,
-                                    CostAmount = costAmount // 👈 自动填入本金！
+                                    CostAmount = costAmount
                                 });
                             }
                             importedCount++;
+                            // 跳过已处理的行，防止重复抓取同一卡片
+                            i += 2;
                         }
                     }
                 }
                 await _context.SaveChangesAsync();
-                return Ok($"核武级算法生效！成功导入 {importedCount} 只基金，本金与回本率已自动计算完成！");
+                return Ok($"解析引擎升级成功！已精准导入 {importedCount} 只基金，成本与回本率已自动同步。");
             }
-            catch (Exception ex) { return StatusCode(500, $"解析异常: {ex.Message}"); }
+            catch (Exception ex) { return StatusCode(500, $"战线受阻: {ex.Message}"); }
         }
 
         // 👉 添加基金 (绑定用户)

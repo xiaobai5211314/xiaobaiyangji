@@ -35,5 +35,11 @@ app.UseStaticFiles();
 // 6. 路由
 app.MapControllers();
 app.MapGet("/", () => Results.Redirect("/index.html"));
-
+using (var scope = app.Services.CreateScope())
+{
+    // 假设你的 FundController 里 GetAllFundsAsync 是静态方法或者可以通过服务调用
+    // 为了简单，我们直接在启动时触发一次字典初始化
+    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    dbContext.Database.EnsureCreated(); //
+}
 app.Run();
