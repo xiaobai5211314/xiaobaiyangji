@@ -16,7 +16,7 @@ jobs:
       - name: 📥 拉取最新代码
         uses: actions/checkout@v3
 
-      - name: 🛠️ 安装又拍云官方 CLI (upx)
+      - name: 🛠️ 安装又拍云官方CLI (upx)
         run: |
           curl -sL https://github.com/upyun/upx/releases/download/v0.4.6/upx-linux-amd64 -o /usr/local/bin/upx
           chmod +x /usr/local/bin/upx
