@@ -185,6 +185,11 @@ var ocrTask = Task.Run(() => client.AccurateBasic(finalProcessedBytes));
                 }
 
                 var result = await ocrTask;
+
+// 👇 加上这两行临时调试代码，让错误弹窗直接把百度的原始文字打印出来
+string rawText = result.ToString();
+return StatusCode(500, $"[调试信息] 百度原始返回文本:\n{rawText}");
+
                 debugLog.Add($"⏱️ 百度 OCR 耗时: {watch.ElapsedMilliseconds} ms");
 
                 var texts = (result["words_result"] as JArray)?.Select(x => x["words"].ToString().Trim()).ToList() ?? new List<string>();
