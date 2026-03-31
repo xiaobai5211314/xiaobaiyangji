@@ -174,7 +174,9 @@ namespace 估值助手.Controllers
                 var client = new Baidu.Aip.Ocr.Ocr("yjfCgtNuumSjxc34FDmXCv8e", "g3XGcMKX0Qsp4k4wDSbxYQoSdFPuDt0c");
                 
                 // 🚀 将同步的百度请求放入后台任务，防止卡死 ASP.NET 线程
-                var ocrTask = Task.Run(() => client.GeneralBasic(finalProcessedBytes));
+       // 换成这行，调用高精度模型
+var ocrTask = Task.Run(() => client.AccurateBasic(finalProcessedBytes));
+
 
                 // ⚡ 熔断机制：最多等 15 秒，等不到就报警，绝对不给 Nginx 报 504 的机会！
                 if (await Task.WhenAny(ocrTask, Task.Delay(15000)) != ocrTask)
