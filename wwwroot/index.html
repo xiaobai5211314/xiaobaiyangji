@@ -317,7 +317,8 @@
                 </div>
             </div>
 
-            <div class="glass-panel total-panel" style="margin: 0 15px 15px 15px; padding: 20px 30px; display: flex; justify-content: space-around; align-items: center; background: rgba(15, 23, 42, 0.6);">
+            <div class="glass-panel total-panel" style="margin: 0 15px 15px 15px; padding: 20px 30px; display: flex; justify-content: space-around; align-items: center; background: rgba(15, 23, 42, 0.6); flex-wrap: wrap; row-gap: 15px;">
+
                 <div style="text-align: center;">
                     <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">⏱️ 系统时间雷达</div>
                     <div :style="{ fontSize: '18px', fontWeight: '900', color: isNight ? '#10b981' : '#f59e0b', margin: '5px 0' }">
@@ -325,6 +326,7 @@
                     </div>
                 </div>
                 <div class="divider"></div>
+
                 <div style="text-align: center;">
                     <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 5px;">
                         💎 阵地昨日总市值
@@ -337,6 +339,7 @@
                     </div>
                 </div>
                 <div class="divider"></div>
+
                 <div style="text-align: center;">
                     <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">🌟 今日总预估收益</div>
                     <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: showAssets ? (totalTodayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">
@@ -344,6 +347,15 @@
                     </div>
                 </div>
                 <div class="divider"></div>
+
+                <div style="text-align: center;">
+                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">🚀 今日总收益率</div>
+                    <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: totalTodayRate >= 0 ? '#ff4d4f' : '#10b981' }">
+                        {{ totalTodayRate > 0 ? '+' : '' }}{{ totalTodayRate.toFixed(2) }}%
+                    </div>
+                </div>
+                <div class="divider"></div>
+
                 <div style="text-align: center;">
                     <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">💰 累计总盈亏</div>
                     <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: showAssets ? (totalProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">
@@ -351,6 +363,7 @@
                     </div>
                 </div>
                 <div class="divider"></div>
+
                 <div style="text-align: center;">
                     <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">📈 累计总收益率</div>
                     <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: totalRate >= 0 ? '#ff4d4f' : '#10b981' }">
@@ -473,7 +486,7 @@
                 const totalProfit = ref(0);
                 const totalRate = ref(0);
                 const totalTodayProfit = ref(0);
-
+                const totalTodayRate = ref(0);
                 const loginForm = reactive({ username: '', password: '' });
                 const fundForm = reactive({ code: '', amount: '' });
                 const chartInstance = shallowRef(null);
@@ -653,6 +666,8 @@
                         totalPrincipal.value = tPrincipal;
                         totalProfit.value = tPrincipal - tCost;
                         totalTodayProfit.value = tToday;
+                        // 👇 新增下面这一行 (今日收益 / 昨日总市值 * 100) 👇
+                        totalTodayRate.value = tPrincipal > 0 ? (tToday / tPrincipal * 100) : 0;
                         totalRate.value = tCost > 0 ? ((tPrincipal - tCost) / tCost * 100) : 0;
 
                         renderChart(apiData);
@@ -749,7 +764,7 @@
                     isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, showAssets, isUploading, editForm,
                     handleRegister, handleLogin, handleLogout, handleAddFund, handleDeleteFund,
-                    triggerUpload, handleFileUpload, openEditModal, handleSaveDetails, handleSettleNightly
+                    triggerUpload, handleFileUpload, openEditModal, handleSaveDetails, handleSettleNightly, totalTodayRate, // 👈 新增这个，别忘了加逗号
                 };
             }
         }).mount('#app');
