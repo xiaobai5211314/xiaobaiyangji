@@ -1,6 +1,5 @@
 name: 🚀 自动部署前端到又拍云
 
-# 触发条件：当你推送代码到 master 分支，并且修改了 wwwroot/index.html 时才执行
 on:
   push:
     branches:
@@ -14,22 +13,20 @@ jobs:
     
     steps:
       - name: 📥 拉取最新代码
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # 升级到 v4，消除那个烦人的黄字警告
 
-      - name: 🛠️ 安装又拍云官方CLI (upx)
+      - name: 🛠️ 安装又拍云官方 CLI (upx)
         run: |
-          curl -sL https://github.com/upyun/upx/releases/download/v0.4.6/upx-linux-amd64 -o /usr/local/bin/upx
-          chmod +x /usr/local/bin/upx
+          wget https://github.com/upyun/upx/releases/download/v0.4.9/upx_0.4.9_linux_amd64.tar.gz
+          tar -zxf upx_0.4.9_linux_amd64.tar.gz
+          sudo mv upx /usr/local/bin/upx
+          sudo chmod +x /usr/local/bin/upx
 
       - name: ☁️ 登录并上传至又拍云
         run: |
-          # 1. 登录又拍云（使用 GitHub Secrets 里的变量）
           upx login ${{ secrets.UPYUN_SERVICE }} ${{ secrets.UPYUN_OPERATOR }} ${{ secrets.UPYUN_PASSWORD }}
-          
-          # 2. 将 wwwroot 里的 index.html 强行覆盖上传到又拍云的根目录
           upx put wwwroot/index.html /index.html
           
-      - name: 🧹 自动刷新 CDN 缓存 
+      - name: 🧹 自动刷新 CDN 缓存
         run: |
-          # 让又拍云立刻清除旧网页缓存，保证手机上打开永远是最新版！
           upx purge https://guzhicdn.21212121.xyz/index.html
