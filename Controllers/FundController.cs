@@ -126,7 +126,9 @@ namespace 估值助手.Controllers
 
         // =========================================================
         // OCR 极速导入引擎
-        // ==================================================        [HttpPost("import-ocr")]
+        // =========================================================
+
+                [HttpPost("import-ocr")]
         public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFormFile imageFile)
         {
             if (string.IsNullOrEmpty(username)) return Unauthorized("请提供指挥官代号");
@@ -142,12 +144,14 @@ namespace 估值助手.Controllers
 
             try
             {
-                // 1. 压缩图片阶段
+                // ==========================================
+                // 1. 监控：图片压缩阶段
+                // ==========================================
                 using (var inputStream = imageFile.OpenReadStream())
                 {
                     using (Image image = Image.Load(inputStream))
                     {
-                        int targetMaxWidth = 800; // 降低宽度进一步提速
+                        int targetMaxWidth = 1080;
                         if (image.Width > targetMaxWidth)
                         {
                             int newHeight = (int)((double)image.Height / image.Width * targetMaxWidth);
@@ -156,7 +160,7 @@ namespace 估值助手.Controllers
                         image.Mutate(x => x.BackgroundColor(Color.White));
                         using (var outputStream = new MemoryStream())
                         {
-                            image.SaveAsJpeg(outputStream, new JpegEncoder { Quality = 50 }); // 极限压缩
+                            image.SaveAsJpeg(outputStream, new JpegEncoder { Quality = 60 });
                             finalProcessedBytes = outputStream.ToArray();
                         }
                     }
@@ -164,50 +168,39 @@ namespace 估值助手.Controllers
                 debugLog.Add($"⏱️ 图片压缩耗时: {watch.ElapsedMilliseconds} ms");
                 watch.Restart();
 
-                // 2. OCR 熔断阶段
-                  // 2. 调用 OCR（高精度熔断版）
-            var client = new Baidu.Aip.Ocr.Ocr("yjfCgtNuumSjxc34FDmXCv8e", "g3XGcMKX0Qsp4k4wDSbxYQoSdFPuDt0c");
-            
-            // 🚀 【核心变更】：正式切换为 AccurateBasic 高精度版文字识别接口！
-            // 该接口能大幅提高模糊、换行字体的识别率，彻底消灭漏单。
-            var ocrTask = Task.Run(() => client.AccurateBasic(finalProcessedBytes));
+                // ==========================================
+                // 2. 监控：百度 OCR 阶段 (加装 15 秒防挂死熔断器)
+                // ==========================================
+                var client = new Baidu.Aip.Ocr.Ocr("yjfCgtNuumSjxc34FDmXCv8e", "g3XGcMKX0Qsp4k4wDSbxYQoSdFPuDt0c");
+                
+                // 🚀 将同步的百度请求放入后台任务，防止卡死 ASP.NET 线程
+                var ocrTask = Task.Run(() => client.GeneralBasic(finalProcessedBytes));
 
-            // ⚡ 熔断机制：高精度处理慢，最多给 20 秒
-            if (await Task.WhenAny(ocrTask, Task.Delay(20000)) != ocrTask)
-            {
-                return StatusCode(500, $"❌ 高精度识别超时！\n图片上传耗时 {debugLog[0]}\n但呼叫百度高精度接口超过 20 秒无响应，请稍后再试或切换回通用版！");
-            }
+                // ⚡ 熔断机制：最多等 15 秒，等不到就报警，绝对不给 Nginx 报 504 的机会！
+                if (await Task.WhenAny(ocrTask, Task.Delay(15000)) != ocrTask)
+                {
+                    return StatusCode(500, $"❌ 识别超时熔断！\n前置图片压缩成功 (耗时 {debugLog[0]})\n但呼叫百度 OCR 接口超过 15 秒无响应，请检查宝塔服务器的外网连接！");
+                }
 
-            var result = await ocrTask;
-            debugLog.Add($"⏱️ 百度高精度 OCR 耗时: {watch.ElapsedMilliseconds} ms");
+                var result = await ocrTask;
+                debugLog.Add($"⏱️ 百度 OCR 耗时: {watch.ElapsedMilliseconds} ms");
 
-            var texts = (result["words_result"] as JArray)?.Select(x => x["words"].ToString().Trim()).ToList() ?? new List<string>();
-            if (texts.Count == 0) return BadRequest("❌ OCR未能识别出任何文字");
-                // 3. 极速权重匹配引擎
+                var texts = (result["words_result"] as JArray)?.Select(x => x["words"].ToString().Trim()).ToList() ?? new List<string>();
+                if (texts.Count == 0) return BadRequest("❌ OCR未能识别出任何文字");
+
+                // ==========================================
+                // 3. 极速匹配引擎 (这部分保持原样，速度极快)
+                // ==========================================
+                int importedCount = 0;
+                string numPattern = @"^([-+]?\d{1,3}(,\d{3})*(\.\d{2}))$";
+
                 for (int i = 0; i < texts.Count; i++)
                 {
                     string combinedName = texts[i];
+                    if (i + 1 < texts.Count) combinedName += texts[i + 1];
+
                     string pureChinese = Regex.Replace(combinedName, @"[^\u4e00-\u9fa5]", "");
-                    
                     if (pureChinese.Length < 3) continue; 
-
-                    string ocrClass = ExtractFundClass(combinedName);
-
-                    // 🚀 跨行打捞被金额打断的后缀 (如 "接(QDII)C")
-                    for (int step = 1; step <= 5 && (i + step) < texts.Count; step++)
-                    {
-                        string nextLine = texts[i + step].Trim();
-                        // 遇到数字行直接跳过，不刹车
-                        if (Regex.IsMatch(nextLine, @"^[-+一_]?\s*[\d,\.]+\s*%?$")) continue;
-                        
-                        string cleanNext = Regex.Replace(nextLine, @"(金选|指数基金|市场解读)", "").Trim();
-                        if (string.IsNullOrEmpty(cleanNext)) continue;
-
-                        if (Regex.Replace(cleanNext, @"[^\u4e00-\u9fa5]", "").Length >= 4) break;
-
-                        combinedName += cleanNext;
-                        if (string.IsNullOrEmpty(ocrClass)) ocrClass = ExtractFundClass(cleanNext);
-                    }
 
                     string normalizedOcr = NormalizeFundName(combinedName);
                     FundInfoCache bestMatch = null;
@@ -221,7 +214,7 @@ namespace 估值助手.Controllers
                     }
                     else
                     {
-                        // 使用全新的降维特征库
+                        string ocrClass = ExtractFundClass(combinedName);
                         var candidates = allFunds.Where(f => f.NormalizedName.Contains(pureChinese) || 
                                                             pureChinese.Contains(f.NormalizedName.Substring(0, Math.Min(3, f.NormalizedName.Length))));
 
@@ -230,8 +223,8 @@ namespace 估值助手.Controllers
                             string dbClass = ExtractFundClass(f.Name);
                             if (!string.IsNullOrEmpty(ocrClass) && !string.IsNullOrEmpty(dbClass) && ocrClass != dbClass) continue;
 
-                            // 🚀 核心升级：调用带权重的评分算法
-                            double currentScore = CalculateWeightedScore(normalizedOcr, f.NormalizedName) * 100;
+                            double similarity = CalculateSimilarity(normalizedOcr, f.NormalizedName);
+                            double currentScore = similarity * 100;
 
                             if (currentScore > bestScore)
                             {
@@ -241,8 +234,7 @@ namespace 估值助手.Controllers
                         }
                     }
 
-                    // 🎯 门槛降为 60 分以容错，且金额门槛降低
-                    if (bestMatch != null && bestScore > 60)
+                    if (bestMatch != null && bestScore > 70)
                     {
                         double marketValue = 0, holdingIncome = 0;
                         int linesConsumed = 0;
@@ -250,18 +242,15 @@ namespace 估值助手.Controllers
                         for (int j = 1; j <= 8 && (i + j) < texts.Count; j++)
                         {
                             string next = texts[i + j].Trim();
-                            string cleanNumStr = next.Replace("一", "-").Replace("_", "-").Replace(" ", "");
-                            
-                            if (Regex.IsMatch(cleanNumStr, numPattern))
+                            if (Regex.IsMatch(next, numPattern))
                             {
-                                double val = double.Parse(cleanNumStr.Replace(",", ""));
-                                
-                                if (marketValue == 0 && val > 0 && !cleanNumStr.Contains("+") && !cleanNumStr.Contains("-"))
+                                double val = double.Parse(next.Replace(",", ""));
+                                if (marketValue == 0 && val > 10 && !next.Contains("+") && !next.Contains("-"))
                                 {
                                     marketValue = val;
                                     linesConsumed = Math.Max(linesConsumed, j);
                                 }
-                                else if (holdingIncome == 0 && (cleanNumStr.Contains("+") || cleanNumStr.Contains("-") || marketValue > 0))
+                                else if (holdingIncome == 0 && (next.Contains("+") || next.Contains("-") || marketValue > 0))
                                 {
                                     holdingIncome = val;
                                     linesConsumed = Math.Max(linesConsumed, j);
@@ -270,8 +259,7 @@ namespace 估值助手.Controllers
                             }
                         }
 
-                        // 🚀 核心修复：市场价值大于 0 就入库 (拯救你的国投瑞银)
-                        if (marketValue > 0)
+                        if (marketValue > 100)
                         {
                             double costAmount = Math.Round(marketValue - holdingIncome, 2);
 
@@ -296,7 +284,7 @@ namespace 估值助手.Controllers
                             }
                             importedCount++;
                             i += linesConsumed; 
-                            if(bestScore < 100) debugLog.Add($"✅ 权重匹配: {bestMatch.Name} ({bestScore:F1}%)");
+                            if(bestScore < 100) debugLog.Add($"✅ 模糊匹配: {bestMatch.Name} ({bestScore:F1}%)");
                         }
                     }
                 }
@@ -306,76 +294,52 @@ namespace 估值助手.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"❌ 代码执行出现异常: {ex.Message}");
+                return StatusCode(500, $"❌ 代码执行出现异常: {ex.Message}\n请检查上传的图片格式是否正确。");
             }
         }
 
-        // ===============================================
-        // 👉 新增的权重引擎算法 (必须加上这三个方法)
-        // ===============================================
 
-        private double CalculateWeightedScore(string ocr, string dbName)
+        // ================================= 核心辅助方法 =================================
+
+        private string ExtractFundClass(string name)
         {
-            if (string.IsNullOrEmpty(ocr) || string.IsNullOrEmpty(dbName)) return 0.0;
-            if (ocr == dbName) return 1.0;
-
-            double totalScore = 0.0;
-            double maxPossibleScore = 0.0;
-
-            // 1. 前缀权重 (基金公司名)
-            double prefixWeight = 30.0;
-            maxPossibleScore += prefixWeight;
-            if (ocr.Length >= 2 && dbName.Length >= 2 && ocr.Substring(0, 2) == dbName.Substring(0, 2))
-            {
-                totalScore += prefixWeight;
-                if (ocr.Length >= 4 && dbName.Length >= 4 && ocr.Substring(0, 4) == dbName.Substring(0, 4))
-                {
-                    totalScore += 10.0; 
-                }
-            }
-            maxPossibleScore += 10.0; 
-
-            // 2. 连续子串权重
-            int maxLcsLen = GetLongestCommonSubsequenceLength(ocr, dbName);
-            double lcsWeight = 50.0;
-            maxPossibleScore += lcsWeight;
-            double lcsRatio = (double)maxLcsLen / Math.Min(ocr.Length, dbName.Length);
-            totalScore += lcsWeight * lcsRatio;
-
-            // 3. 字符覆盖权重
-            double coverageWeight = 20.0;
-            maxPossibleScore += coverageWeight;
-            int matchCount = ocr.Count(c => dbName.Contains(c));
-            totalScore += coverageWeight * ((double)matchCount / ocr.Length);
-
-            // 4. 长度差异惩罚
-            double lengthPenalty = 1.0;
-            if (Math.Abs(ocr.Length - dbName.Length) > 5) lengthPenalty = 0.85;
-
-            return (totalScore / maxPossibleScore) * lengthPenalty;
+            if (Regex.IsMatch(name, @"C类?$|\(C\)$|（C）$", RegexOptions.IgnoreCase)) return "C";
+            if (Regex.IsMatch(name, @"A类?$|\(A\)$|（A）$", RegexOptions.IgnoreCase)) return "A";
+            if (name.Contains("QDII", StringComparison.OrdinalIgnoreCase)) return "QDII";
+            return "";
         }
 
-        private int GetLongestCommonSubsequenceLength(string str1, string str2)
+        private static string NormalizeFundName(string name)
         {
-            if (string.IsNullOrEmpty(str1) || string.IsNullOrEmpty(str2)) return 0;
-            int[,] matrix = new int[str1.Length + 1, str2.Length + 1];
-            int maxLen = 0;
-            for (int i = 1; i <= str1.Length; i++)
-            {
-                for (int j = 1; j <= str2.Length; j++)
-                {
-                    if (str1[i - 1] == str2[j - 1])
-                    {
-                        matrix[i, j] = matrix[i - 1, j - 1] + 1;
-                        if (matrix[i, j] > maxLen) maxLen = matrix[i, j];
-                    }
-                    else { matrix[i, j] = 0; }
-                }
-            }
-            return maxLen;
+            if (string.IsNullOrWhiteSpace(name)) return "";
+            return name.Replace(" ", "").Replace("（", "(").Replace("）", ")")
+                       .Replace("ETF联接", "ETF").Replace("证券投资基金", "")
+                       .Replace("发起式", "").Replace("主题", "").Replace("指数型", "")
+                       .Replace("混合", "").Replace("指数", "").Replace("C类", "C").Replace("A类", "A").Trim();
         }
 
+        private double CalculateSimilarity(string s, string t)
+        {
+            if (s == t) return 1.0;
+            int n = s.Length, m = t.Length;
+            if (n == 0 || m == 0) return 0.0;
 
+            int[] v0 = new int[m + 1];
+            int[] v1 = new int[m + 1];
+            for (int i = 0; i <= m; i++) v0[i] = i;
+
+            for (int i = 0; i < n; i++)
+            {
+                v1[0] = i + 1;
+                for (int j = 0; j < m; j++)
+                {
+                    int cost = (s[i] == t[j]) ? 0 : 1;
+                    v1[j + 1] = Math.Min(v1[j] + 1, Math.Min(v0[j + 1] + 1, v0[j] + cost));
+                }
+                Array.Copy(v1, v0, m + 1);
+            }
+            return 1.0 - (double)v0[m] / Math.Max(n, m);
+        }
 
         // ================================= 基础业务接口 =================================
 
