@@ -1,12 +1,12 @@
 name: 🚀 自动部署前端到又拍云
 
-# 触发条件：当你推送代码到 master 分支，并且修改了 index.html 时才执行
+# 触发条件：当你推送代码到 master 分支，并且修改了 wwwroot/index.html 时才执行
 on:
   push:
     branches:
       - master
     paths:
-      - 'index.html'
+      - 'wwwroot/index.html'
 
 jobs:
   deploy:
@@ -26,8 +26,8 @@ jobs:
           # 1. 登录又拍云（使用 GitHub Secrets 里的变量）
           upx login ${{ secrets.UPYUN_SERVICE }} ${{ secrets.UPYUN_OPERATOR }} ${{ secrets.UPYUN_PASSWORD }}
           
-          # 2. 将本地的 index.html 强行覆盖上传到又拍云的根目录
-          upx put index.html /index.html
+          # 2. 将 wwwroot 里的 index.html 强行覆盖上传到又拍云的根目录
+          upx put wwwroot/index.html /index.html
           
       - name: 🧹 自动刷新 CDN 缓存 (黑科技)
         run: |
