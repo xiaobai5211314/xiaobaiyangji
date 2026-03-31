@@ -29,7 +29,7 @@ jobs:
           # 2. 将 wwwroot 里的 index.html 强行覆盖上传到又拍云的根目录
           upx put wwwroot/index.html /index.html
           
-      - name: 🧹 自动刷新 CDN 缓存 (黑科技)
+      - name: 🧹 自动刷新 CDN 缓存 
         run: |
           # 让又拍云立刻清除旧网页缓存，保证手机上打开永远是最新版！
           upx purge https://guzhicdn.21212121.xyz/index.html
