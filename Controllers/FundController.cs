@@ -339,7 +339,11 @@ namespace 估值助手.Controllers
         private static string NormalizeFundName(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) return "";
-            return name.Replace(" ", "").Replace("（", "(").Replace("）", ")")
+
+            // 将所有字母转为大写，并无情地清洗掉 (QDII) 这个干扰项
+            return name.ToUpper()
+                       .Replace(" ", "").Replace("（", "(").Replace("）", ")")
+                       .Replace("(QDII)", "").Replace("QDII", "") // 👈 就是加了这行！洗掉毒药！
                        .Replace("ETF联接", "ETF").Replace("证券投资基金", "")
                        .Replace("发起式", "").Replace("主题", "").Replace("指数型", "")
                        .Replace("混合", "").Replace("指数", "").Replace("C类", "C").Replace("A类", "A").Trim();
