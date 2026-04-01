@@ -598,6 +598,7 @@
                     }
                 };
 
+                                // 把这个方法替换成新的：
                 const fetchSectorDetails = async (sector) => {
                     detailsTitle.value = sector.name;
                     showSectorDetails.value = true;
@@ -605,7 +606,8 @@
                     detailsList.value = []; 
 
                     try {
-                        const res = await fetch(`${API_BASE}/api/fund/sector-details?secCode=${sector.code}`);
+                        // 👇 换成了新的 sector-funds 接口，并传入板块名字
+                        const res = await fetch(`${API_BASE}/api/fund/sector-funds?sectorName=${encodeURIComponent(sector.name)}`);
                         const json = await res.json();
                         detailsList.value = json;
                     } catch (e) {
@@ -614,6 +616,7 @@
                         isDetailsLoading.value = false;
                     }
                 };
+
 
                 // 📸 前端 Canvas 极限压缩核心引擎
                 const compressImageBeforeUpload = (file, successCallback) => {
