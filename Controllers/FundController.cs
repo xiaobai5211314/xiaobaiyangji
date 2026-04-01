@@ -532,18 +532,47 @@ namespace 估值助手.Controllers
                     if (lr != null) lastRecords.Add(lr);
                 }
 
-                var result = myFunds.Select(config => {
+                                var result = myFunds.Select(config => {
                     var fundRecords = todayRecords.Where(r => r.FundCode == config.FundCode).ToList();
                     var lastRecord = lastRecords.FirstOrDefault(r => r.FundCode == config.FundCode);
 
+                    // =======================================================
+                    // 🧠 核心升级：AI 动态估值校准引擎 (滑动平均补偿算法)
+                    // =======================================================
+                    double avgDiff = 0;
+                    
+                    // 1. 去数据库里找出这只基金最近 3 天【已经清算出真实成绩】的记录
+                    var past3DaysRecords = _context.FundRecords
+                        .Where(r => r.FundCode == config.FundCode && r.ActualRate != 0) // ActualRate != 0 代表已出真实净值
+                        .OrderByDescending(r => r.FetchTime)
+                        .Take(3)
+                        .ToList();
+
+                    // 2. 算出这 3 天的平均“偷吃/砸盘”偏差率
+                    if (past3DaysRecords.Count > 0)
+                    {
+                        // 逻辑：如果连续3天真实净值都比预估高 0.2%，那今天大概率也会高 0.2%
+                        avgDiff = past3DaysRecords.Average(r => r.ActualRate - r.EstimatedRate);
+                        
+                        // 为了防止极端暴跌暴涨导致补偿过度，我们给补偿值加一个安全锁（最大不超过 ±0.5%）
+                        if (avgDiff > 0.5) avgDiff = 0.5;
+                        if (avgDiff < -0.5) avgDiff = -0.5;
+                    }
+                    // =======================================================
+
                     var dataPoints = new List<object[]>();
 
+                    // 插入昨晚的收盘基准点
                     if (lastRecord != null)
                     {
-                        dataPoints.Add(new object[] { todayStr + " 09:30:00", lastRecord.EstimatedRate });
+                        dataPoints.Add(new object[] { todayStr + " 09:30:00", Math.Round(lastRecord.EstimatedRate + avgDiff, 2) });
                     }
 
-                    dataPoints.AddRange(fundRecords.Select(r => new object[] { r.FetchTime.ToString("yyyy'/'MM'/'dd HH:mm:ss"), r.EstimatedRate }));
+                    // 3. 把算出来的偏差补偿值 (avgDiff) 动态加到今天的每一个预估数据点上！
+                    dataPoints.AddRange(fundRecords.Select(r => new object[] { 
+                        r.FetchTime.ToString("yyyy'/'MM'/'dd HH:mm:ss"), 
+                        Math.Round(r.EstimatedRate + avgDiff, 2) // 👈 就在这里！系统每天都在自我修正！
+                    }));
 
                     if (dataPoints.Count == 0)
                     {
@@ -564,9 +593,11 @@ namespace 估值助手.Controllers
                         existingReturnRate = existingReturnRate,
                         breakEvenRate = breakEvenRate,
                         diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
+                        calibrationOffset = Math.Round(avgDiff, 2), // 把今天的校准补偿值也传给前端看看
                         data = dataPoints
                     };
                 });
+
 
                 // 让结果按照 amount (持仓金额) 从大到小降序排列后再发给大屏
                 return Ok(result.OrderByDescending(x => x.amount));
