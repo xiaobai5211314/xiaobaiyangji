@@ -619,14 +619,19 @@ namespace 估值助手.Controllers
             }
         }
 
-        [HttpGet("force-settle")]
+                [HttpGet("force-settle")]
         public async Task<IActionResult> ForceSettle()
         {
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+            
+            // 👇 核心伪装升级：全面模拟谷歌浏览器，突破防爬机制！
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
             client.DefaultRequestHeaders.Add("Accept", "application/json, text/javascript, */*; q=0.01");
+            // 🚀 下面这行是最关键的“免死金牌”：告诉东财，咱们是“自己人”！
+            client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/"); 
 
             var targetFunds = await _context.MyFunds.Select(f => f.FundCode).Distinct().ToListAsync();
+        
             var localTime = DateTime.UtcNow.AddHours(8);
             string todayStr = localTime.ToString("yyyy-MM-dd");
             var todayStart = localTime.Date;
