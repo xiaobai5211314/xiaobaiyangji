@@ -728,16 +728,21 @@ namespace 估值助手.Controllers
             return Ok(resultLog);
         }
 
-        [HttpGet("sector-funds")]
+                [HttpGet("sector-funds")]
         public async Task<IActionResult> GetSectorFunds([FromQuery] string sectorName)
         {
             if (string.IsNullOrEmpty(sectorName)) return BadRequest("缺少板块名称");
 
-            // 🧠 1. 智能关键词提取：过滤掉太细分的词，只抓核心！
+            // 🧠 1. 智能分词：砍掉多余的行业后缀，只留核心词（命中率暴增！）
             string keyword = sectorName;
-            if (keyword.Length >= 4 && (keyword.Contains("制造") || keyword.Contains("外包") || keyword.Contains("服务") || keyword.Contains("设备") || keyword.Contains("商业")))
+            string[] suffixes = { "制造", "外包", "服务", "设备", "商业", "制剂", "用品", "耗材", "制品", "工程" };
+            foreach (var suffix in suffixes)
             {
-                keyword = keyword.Substring(0, 2); // 比如把 "医疗研发外包" 智能降维成 "医疗"
+                if (keyword.Length >= 4 && keyword.EndsWith(suffix))
+                {
+                    keyword = keyword.Substring(0, 2); // 例如：把"化学制剂"直接砍成"化学"
+                    break;
+                }
             }
 
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
@@ -745,31 +750,24 @@ namespace 估值助手.Controllers
 
             try
             {
-                // 🕵️‍♂️ 2. 调用东财【基金搜索】私密接口
+                // 调用东财搜索 API
                 string searchUrl = $"http://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?m=1&key={Uri.EscapeDataString(keyword)}";
                 string searchRes = await client.GetStringAsync(searchUrl);
 
                 using var doc = System.Text.Json.JsonDocument.Parse(searchRes);
                 var datas = doc.RootElement.GetProperty("Datas");
 
-                // 如果名字太偏门没搜到，强行砍掉只剩前两个字再搜一次！
-                if ((datas.ValueKind == System.Text.Json.JsonValueKind.Null || datas.GetArrayLength() == 0) && keyword.Length > 2)
-                {
-                    keyword = keyword.Substring(0, 2);
-                    searchUrl = $"http://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?m=1&key={Uri.EscapeDataString(keyword)}";
-                    searchRes = await client.GetStringAsync(searchUrl);
-                    using var docRetry = System.Text.Json.JsonDocument.Parse(searchRes);
-                    datas = docRetry.RootElement.GetProperty("Datas");
-                }
-
                 if (datas.ValueKind != System.Text.Json.JsonValueKind.Null && datas.GetArrayLength() > 0)
                 {
                     var fundCodes = new List<string>();
                     var fundDict = new Dictionary<string, string>();
 
-                    // 🎯 3. 优选策略：优先挑带有 "ETF"、"联接"、"指数" 的基金
+                    // 🛡️ 2. 第一轮海选：只要正宗的 ETF 和 指数基金！绝对不要股票！
                     foreach (var item in datas.EnumerateArray())
                     {
+                        // 核心防线：验明正身，不是"基金"直接滚蛋！
+                        if (item.TryGetProperty("CATEGORYDESC", out var cat) && cat.GetString() != "基金") continue;
+
                         string fCode = item.GetProperty("CODE").GetString();
                         string fName = item.GetProperty("NAME").GetString();
 
@@ -777,29 +775,37 @@ namespace 估值助手.Controllers
                         {
                             fundCodes.Add(fCode);
                             fundDict[fCode] = fName;
-                            if (fundCodes.Count >= 6) break; // 只取 6 只核心基金
+                            if (fundCodes.Count >= 6) break;
                         }
                     }
 
-                    // 如果没找到纯指数基金，就退而求其次随便拿 6 只名字带关键字的混合基
-                    if (fundCodes.Count == 0)
+                    // 🛡️ 3. 第二轮补录：如果指数基金凑不够 6 个，拿普通基金补齐（依然严格拒绝股票）
+                    if (fundCodes.Count < 6)
                     {
-                        foreach (var item in datas.EnumerateArray().Take(6))
+                        foreach (var item in datas.EnumerateArray())
                         {
+                            if (item.TryGetProperty("CATEGORYDESC", out var cat) && cat.GetString() != "基金") continue;
+
                             string fCode = item.GetProperty("CODE").GetString();
-                            fundCodes.Add(fCode);
-                            fundDict[fCode] = item.GetProperty("NAME").GetString();
+                            string fName = item.GetProperty("NAME").GetString();
+
+                            if (!fundDict.ContainsKey(fCode))
+                            {
+                                fundCodes.Add(fCode);
+                                fundDict[fCode] = fName;
+                                if (fundCodes.Count >= 6) break;
+                            }
                         }
                     }
 
-                    // 🚀 4. 并发轰炸：同时去查这 6 只基金的【今日盘中实时涨幅】
+                    // 🚀 4. 并发轰炸获取实时估值
                     var tasks = fundCodes.Select(async code =>
                     {
                         try
                         {
                             string gzUrl = $"http://fundgz.1234567.com.cn/js/{code}.js?rt={DateTime.Now.Ticks}";
                             string gzRes = await client.GetStringAsync(gzUrl);
-                            var match = Regex.Match(gzRes, @"\""gszzl\"":\""([^\""]+)\""");
+                            var match = System.Text.RegularExpressions.Regex.Match(gzRes, @"\""gszzl\"":\""([^\""]+)\""");
                             if (match.Success && double.TryParse(match.Groups[1].Value, out double rate))
                             {
                                 return new { code = code, name = fundDict[code], rate = rate };
@@ -813,7 +819,6 @@ namespace 估值助手.Controllers
                     foreach (var res in results) if (res != null) resultList.Add(res);
                 }
 
-                // 按涨跌幅从高到低排序返回
                 resultList = resultList.OrderByDescending(x => (double)x.GetType().GetProperty("rate").GetValue(x)).ToList();
                 return Ok(resultList);
             }
@@ -830,7 +835,9 @@ namespace 估值助手.Controllers
             try
             {
                 // pz=100：一次性把全市场近百个板块全拉过来！
-                string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3";
+                // 注意看 fs=m:90+t:3 这个参数，把原来的 t:2 改成了 t:3，直接切换到“概念板块”！
+string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:3&fields=f12,f14,f3";
+
                 string response = await client.GetStringAsync(url);
                 using var doc = System.Text.Json.JsonDocument.Parse(response);
                 var diffArray = doc.RootElement.GetProperty("data").GetProperty("diff").EnumerateArray();
