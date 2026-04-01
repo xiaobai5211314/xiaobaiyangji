@@ -191,95 +191,103 @@ namespace 估值助手.Controllers
                 // ==========================================
                 // 3. 🚀 杀招三：上下行断层缝合智能匹配算法
                 // ==========================================
+                // ==========================================
+                // 3. 🚀 终极杀招：双轨试探智能匹配算法
+                // ==========================================
                 int importedCount = 0;
-                
-                // 寻找金额“锚点”：只有数字、逗号、小数点，且没有负号（持仓市值为正）
-                string amountPattern = @"^\d[\d,]*\.\d{2}$"; 
+                string amountPattern = @"^\d[\d,]*\.\d{2}$"; // 寻找金额锚点
 
-                // 从索引 1 开始遍历，因为第一行不可能是金额，前面一定有名字
                 for (int i = 1; i < texts.Count; i++)
                 {
                     string currentLine = texts[i];
 
-                    // 🎯 发现“金额锚点”！如 19,852.53
+                    // 🎯 发现“金额锚点”！
                     if (Regex.IsMatch(currentLine, amountPattern))
                     {
-                        // 提取上一行作为名字前半段
                         string namePart1 = texts[i - 1];
-                        
-                        // 过滤掉支付宝自带的干扰标签
-                        if (namePart1.Contains("收益") || namePart1.Contains("金额") || namePart1.Contains("包含") || Regex.IsMatch(namePart1, @"^[-\d\.,%]+$")) 
+
+                        // 过滤干扰标签
+                        if (namePart1.Contains("收益") || namePart1.Contains("金额") || namePart1.Contains("包含") || Regex.IsMatch(namePart1, @"^[-\d\.,%]+$"))
                             continue;
 
-                        string namePart2 = "";
                         double holdAmount = double.Parse(currentLine.Replace(",", ""));
                         double holdingIncome = 0;
+                        string potentialFragment = "";
 
-                        // 🔍 往下找5行，寻找被截断的名字后半截和持有收益
+                        // 🔍 往下找，寻找收益和可能的半截名字
                         for (int j = 1; j <= 5 && (i + j) < texts.Count; j++)
                         {
                             string nextLine = texts[i + j];
-                            
-                            // 寻找持有收益（特征：带有正负号的金额，如 -3,218.88 或 +129.79）
                             if (holdingIncome == 0 && Regex.IsMatch(nextLine, @"^[-+]\d[\d,]*\.\d{2}$"))
                             {
                                 holdingIncome = double.Parse(nextLine.Replace(",", ""));
                             }
-                            // 寻找名字后半段（如果它不是纯数字、不是百分比，且不是干扰词，就是被支付宝挤下来的半截名字）
-                            else if (string.IsNullOrEmpty(namePart2) && !Regex.IsMatch(nextLine, @"^[-\d\.,%+]+$") && !nextLine.Contains("金选") && !nextLine.Contains("收益") && !nextLine.Contains("更新"))
+                            else if (string.IsNullOrEmpty(potentialFragment) && !Regex.IsMatch(nextLine, @"^[-\d\.,%+]+$") && !nextLine.Contains("金选") && !nextLine.Contains("收益") && !nextLine.Contains("更新"))
                             {
-                                namePart2 = nextLine;
+                                potentialFragment = nextLine;
                             }
                         }
 
-                        // 🧩 缝合长名字！
-                        string combinedName = namePart1 + namePart2;
-                        
-                        // 提取纯汉字部分用于模糊筛选
-                        string pureChinese = Regex.Replace(combinedName, @"[^\u4e00-\u9fa5]", "");
-                        if (pureChinese.Length < 2) continue; 
+                        // 💡 【核心升级】：同时准备两个候选名字参与海选打分！
+                        // 候选人1：单行名字 (应对华富这种没换行的)
+                        // 候选人2：缝合名字 (应对天弘这种换行的)
+                        string[] testNames = string.IsNullOrEmpty(potentialFragment)
+                            ? new[] { namePart1 }
+                            : new[] { namePart1, namePart1 + potentialFragment };
 
-                        // ------------------------------------
-                        // 开始打分匹配环节
-                        // ------------------------------------
-                        string normalizedOcr = NormalizeFundName(combinedName);
-                        FundInfoCache bestMatch = null;
-                        double bestScore = 0;
+                        FundInfoCache finalBestMatch = null;
+                        double finalBestScore = 0;
 
-                        if (_exactMatchDict != null && (_exactMatchDict.TryGetValue(normalizedOcr, out var exactFund) || _exactMatchDict.TryGetValue(combinedName, out exactFund)))
+                        // 让两个候选人分别去数据库比对，谁分高听谁的
+                        foreach (var testName in testNames)
                         {
-                            bestMatch = exactFund;
-                            bestScore = 100.0;
-                            debugLog.Add($"⚡ 字典秒杀: {bestMatch.Name}");
-                        }
-                        else
-                        {
-                            string ocrClass = ExtractFundClass(combinedName);
-                            var candidates = allFunds.Where(f => f.NormalizedName.Contains(pureChinese) || 
-                                                                pureChinese.Contains(f.NormalizedName.Substring(0, Math.Min(3, f.NormalizedName.Length))));
+                            string pureChinese = Regex.Replace(testName, @"[^\u4e00-\u9fa5]", "");
+                            if (pureChinese.Length < 2) continue;
 
-                            foreach (var f in candidates)
+                            string normalizedOcr = NormalizeFundName(testName);
+                            FundInfoCache bestMatch = null;
+                            double bestScore = 0;
+
+                            // 尝试精准秒杀
+                            if (_exactMatchDict != null && (_exactMatchDict.TryGetValue(normalizedOcr, out var exactFund) || _exactMatchDict.TryGetValue(testName, out exactFund)))
                             {
-                                string dbClass = ExtractFundClass(f.Name);
-                                if (!string.IsNullOrEmpty(ocrClass) && !string.IsNullOrEmpty(dbClass) && ocrClass != dbClass) continue;
+                                bestMatch = exactFund;
+                                bestScore = 100.0;
+                            }
+                            else
+                            {
+                                // 模糊海选
+                                var candidates = allFunds.Where(f => f.NormalizedName.Contains(pureChinese) ||
+                                                                    pureChinese.Contains(f.NormalizedName.Substring(0, Math.Min(3, f.NormalizedName.Length))));
 
-                                double similarity = CalculateSimilarity(normalizedOcr, f.NormalizedName);
-                                double currentScore = similarity * 100;
-
-                                if (currentScore > bestScore)
+                                foreach (var f in candidates)
                                 {
-                                    bestScore = currentScore;
-                                    bestMatch = f;
+                                    // 删除了坑爹的强行分类过滤，完全信任相似度算法
+                                    double similarity = CalculateSimilarity(normalizedOcr, f.NormalizedName);
+                                    double currentScore = similarity * 100;
+
+                                    if (currentScore > bestScore)
+                                    {
+                                        bestScore = currentScore;
+                                        bestMatch = f;
+                                    }
                                 }
                             }
+
+                            // 记录本轮最高分
+                            if (bestScore > finalBestScore)
+                            {
+                                finalBestScore = bestScore;
+                                finalBestMatch = bestMatch;
+                            }
                         }
 
-                        // 如果打分超过 65 分，且金额大于 10 元，则判定为成功提取！
-                        if (bestMatch != null && bestScore > 65 && holdAmount > 10)
+                        // 🏆 最终评判：只要最高分超过 65 分，且金额合理，提取成功！
+                        if (finalBestMatch != null && finalBestScore > 65 && holdAmount > 10)
                         {
                             double costAmount = Math.Round(holdAmount - holdingIncome, 2);
 
-                            if (userFundDict.TryGetValue(bestMatch.Code, out var exist))
+                            if (userFundDict.TryGetValue(finalBestMatch.Code, out var exist))
                             {
                                 exist.HoldAmount = holdAmount;
                                 exist.CostAmount = costAmount;
@@ -290,16 +298,20 @@ namespace 估值助手.Controllers
                                 var newFund = new MyFundConfig
                                 {
                                     Username = username,
-                                    FundCode = bestMatch.Code,
-                                    FundName = bestMatch.Name,
+                                    FundCode = finalBestMatch.Code,
+                                    FundName = finalBestMatch.Name,
                                     HoldAmount = holdAmount,
                                     CostAmount = costAmount
                                 };
                                 _context.MyFunds.Add(newFund);
-                                userFundDict[newFund.FundCode] = newFund; 
+                                userFundDict[newFund.FundCode] = newFund;
                             }
                             importedCount++;
-                            if(bestScore < 100) debugLog.Add($"✅ 模糊拼接: {bestMatch.Name} ({bestScore:F1}%)");
+
+                            if (finalBestScore >= 99.0)
+                                debugLog.Add($"⚡ 精准命中: {finalBestMatch.Name}");
+                            else
+                                debugLog.Add($"✅ 模糊修复: {finalBestMatch.Name} ({finalBestScore:F1}%)");
                         }
                     }
                 }
