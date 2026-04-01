@@ -942,10 +942,15 @@ string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&
                 return StatusCode(500, $"X光机故障: {ex.Message}");
             }
         }
-        [HttpGet("fund-holdings")]
+                [HttpGet("fund-holdings")]
         public async Task<IActionResult> GetFundHoldings([FromQuery] string fundCode)
         {
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            
+            // 🛡️ 核心防线：加上满级伪装，冒充谷歌浏览器从东财官网访问！
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+            client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
+
             try
             {
                 // 📦 1. 抓取该基金最新公布的“十大重仓股”清单
@@ -980,6 +985,8 @@ string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&
                 {
                     string secids = string.Join(",", secidList);
                     string quoteUrl = $"http://push2.eastmoney.com/api/qt/ulist.np/get?secids={secids}&fields=f12,f14,f3";
+                    
+                    // 带着伪装去请求实时股票涨跌，绝对畅通无阻
                     string quoteRes = await client.GetStringAsync(quoteUrl);
                     using var quoteDoc = System.Text.Json.JsonDocument.Parse(quoteRes);
 
@@ -1015,6 +1022,7 @@ string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&
                 return StatusCode(500, $"获取持仓失败: {ex.Message}");
             }
         }
+
 
     }
 }
