@@ -311,7 +311,7 @@
                     <button class="btn-settle" @click="handleSettleNightly" style="margin-left: 10px;" title="将今日收益计入本金">
                         🌙 结算复利
                     </button>
-                    <button @click="fetchSectors" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none; padding: 8px 15px; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; margin-left: 10px; margin-top: 10px;">
+                    <button @click="fetchSectors" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none; padding: 8px 15px; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; margin-left: 10px;">
                         📡 市场板块雷达
                     </button>
                     <button class="btn-logout" @click="handleLogout" style="margin-left: 10px;">撤退</button>
@@ -470,6 +470,7 @@
             </div>
 
         </div>
+
         <div v-if="showSectorRadar" class="modal-overlay" @click.self="showSectorRadar = false" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: flex-end; z-index: 1000;">
             <div style="background: #1e293b; width: 100%; height: 80vh; border-radius: 20px 20px 0 0; padding: 20px; display: flex; flex-direction: column;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
@@ -480,7 +481,6 @@
                 <div v-if="isSectorLoading" style="color: #94a3b8; text-align: center; margin-top: 50px;">📡 正在扫描全网板块...</div>
 
                 <div v-else style="overflow-y: auto; flex: 1; padding-right: 5px;">
-
                     <div style="margin-bottom: 20px;">
                         <h4 style="color: #ef4444; border-bottom: 1px solid #334155; padding-bottom: 5px;">🔥 今日领涨 TOP 10 (止盈区)</h4>
                         <div v-for="(item, index) in sectorTopList" :key="item.code"
@@ -500,12 +500,11 @@
                             <span style="color: #10b981; font-weight: 900;">{{ item.rate }}%</span>
                         </div>
                     </div>
-
                 </div>
             </div>
         </div>
-        <div v-if="showSectorDetails" class="modal-overlay" @click.self="showSectorDetails = false" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 2000;">
 
+        <div v-if="showSectorDetails" class="modal-overlay" @click.self="showSectorDetails = false" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 2000;">
             <div style="background: #0f172a; width: 85%; border-radius: 15px; padding: 20px; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.8);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px;">
                     <h3 style="color: #38bdf8; margin: 0;">🔬 {{ detailsTitle }} - 核心成分股</h3>
@@ -537,15 +536,15 @@
                     </div>
                 </div>
             </div>
-
         </div>
+
     </div>
 
     <script>
         const { createApp, ref, reactive, onMounted, onUnmounted, nextTick, shallowRef, watch } = Vue;
         createApp({
             setup() {
-                // 🌟 新增：全局 API 基础路径
+                // API 基础路径
                 const API_BASE = 'https://guzhi.21212121.xyz';
 
                 const isLoggedIn = ref(false);
@@ -560,8 +559,8 @@
                 const totalProfit = ref(0);
                 const totalRate = ref(0);
                 const totalTodayProfit = ref(0);
-                // 👇 新增下面这一行 👇
                 const totalTodayRate = ref(0);
+
                 const loginForm = reactive({ username: '', password: '' });
                 const fundForm = reactive({ code: '', amount: '' });
                 const chartInstance = shallowRef(null);
@@ -569,6 +568,52 @@
                 const isUploading = ref(false);
                 const showAssets = ref(false);
                 const editForm = reactive({ show: false, code: '', name: '', cost: '', originalCode: '' });
+
+                // ================== 板块雷达 & 透视系统 变量 ==================
+                const sectorTopList = ref([]);
+                const sectorBottomList = ref([]);
+                const showSectorRadar = ref(false);
+                const isSectorLoading = ref(false);
+
+                const showSectorDetails = ref(false); 
+                const detailsTitle = ref(''); 
+                const detailsList = ref([]); 
+                const isDetailsLoading = ref(false);
+
+                // ================== 板块雷达 & 透视系统 方法 ==================
+                const fetchSectors = async () => {
+                    showSectorRadar.value = true;
+                    isSectorLoading.value = true;
+                    try {
+                        const res = await fetch(`${API_BASE}/api/fund/sectors`);
+                        const json = await res.json();
+                        if (json.top && json.bottom) {
+                            sectorTopList.value = json.top;
+                            sectorBottomList.value = json.bottom;
+                        }
+                    } catch (e) {
+                        alert("雷达连接失败！");
+                    } finally {
+                        isSectorLoading.value = false;
+                    }
+                };
+
+                const fetchSectorDetails = async (sector) => {
+                    detailsTitle.value = sector.name;
+                    showSectorDetails.value = true;
+                    isDetailsLoading.value = true;
+                    detailsList.value = []; 
+
+                    try {
+                        const res = await fetch(`${API_BASE}/api/fund/sector-details?secCode=${sector.code}`);
+                        const json = await res.json();
+                        detailsList.value = json;
+                    } catch (e) {
+                        alert("透视连接失败！");
+                    } finally {
+                        isDetailsLoading.value = false;
+                    }
+                };
 
                 // 📸 前端 Canvas 极限压缩核心引擎
                 const compressImageBeforeUpload = (file, successCallback) => {
@@ -580,8 +625,6 @@
                         img.onload = function () {
                             const canvas = document.createElement('canvas');
                             const ctx = canvas.getContext('2d');
-
-                            // 锁定最大宽度为 800px，高度等比例缩放
                             const maxWidth = 800;
                             let targetWidth = img.width;
                             let targetHeight = img.height;
@@ -590,45 +633,20 @@
                                 targetHeight = Math.round(targetHeight * (maxWidth / targetWidth));
                                 targetWidth = maxWidth;
                             }
-
                             canvas.width = targetWidth;
                             canvas.height = targetHeight;
-
-                            // 填充白底，防止 PNG 等透明图片变黑底影响 OCR
                             ctx.fillStyle = "#fff";
                             ctx.fillRect(0, 0, canvas.width, canvas.height);
                             ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
 
-                            // ⚡ 输出质量为 0.5 (50%) 的 JPEG 图片
                             canvas.toBlob(function (blob) {
-                                // 重新打包成 File 对象
-                                const fileName = file.name.replace(/\.[^/.]+$/, "") + ".jpg"; // 确保后缀变更为 jpg
+                                const fileName = file.name.replace(/\.[^/.]+$/, "") + ".jpg"; 
                                 const compressedFile = new File([blob], fileName, { type: 'image/jpeg' });
                                 successCallback(compressedFile);
                             }, 'image/jpeg', 0.5);
                         };
                     };
                 };
-
-                                return {
-                    isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
-                    totalPrincipal, totalProfit, totalRate, totalTodayProfit, showAssets, isUploading, editForm,
-                    handleRegister, handleLogin, handleLogout, handleAddFund, handleDeleteFund,
-                    triggerUpload, handleFileUpload, openEditModal, handleSaveDetails, handleSettleNightly,
-                    totalTodayRate, 
-                    // 雷达系统导出
-                    showSectorRadar, sectorTopList, sectorBottomList, isSectorLoading, fetchSectors, 
-                    // 透视系统导出
-                    showSectorDetails, detailsTitle, detailsList, isDetailsLoading, fetchSectorDetails
-                };
-
-
-                // 别忘了在 setup 的 return 里面把它们导出来！
-                // return { ..., showSectorDetails, detailsTitle, detailsList, isDetailsLoading, fetchSectorDetails }
-
-
-
-               
 
                 const handleRegister = async () => {
                     if (!loginForm.username || !loginForm.password) return alert("账号密码为空！");
@@ -643,7 +661,6 @@
                         fd.append('username', loginForm.username);
                         fd.append('password', loginForm.password);
 
-                        // 加上等待提示，看看是不是卡住了
                         let btn = event.target;
                         let oldText = btn.innerText;
                         btn.innerText = "连线中...";
@@ -663,13 +680,11 @@
                             alert("❌ 账号或密码错误");
                         }
                     } catch (error) {
-                        // 如果跨域被拦截、或者宝塔后端死机，会走到这里！
                         alert("🌐 登录请求发不出去！\n原因可能是：跨域被拦截(CORS) 或 后端未启动。\n错误详情：" + error.message);
                         event.target.innerText = "进入";
                         event.target.disabled = false;
                     }
                 };
-
 
                 const handleLogout = () => { localStorage.removeItem('fund_username'); location.reload(); };
 
@@ -705,17 +720,15 @@
 
                 const triggerUpload = () => { document.getElementById('ocrInput').click(); };
 
-                // 🚀 集成了压缩的极速上传方法
                 const handleFileUpload = async (event) => {
                     const file = event.target.files[0];
                     if (!file) return;
 
                     isUploading.value = true;
 
-                    // ⚡ 先在手机端压缩图片
                     compressImageBeforeUpload(file, async (compressedFile) => {
                         const formData = new FormData();
-                        formData.append('imageFile', compressedFile); // 发送压缩后的极小图片
+                        formData.append('imageFile', compressedFile); 
 
                         try {
                             const response = await fetch(`${API_BASE}/api/Fund/import-ocr?username=${encodeURIComponent(currentUser.value)}`, { method: 'POST', body: formData });
@@ -732,7 +745,7 @@
                             alert("🌐 失去与云端智脑的连接，请检查网络！");
                         } finally {
                             isUploading.value = false;
-                            event.target.value = ''; // 清空 input 允许重复上传同名文件
+                            event.target.value = ''; 
                         }
                     });
                 };
@@ -788,7 +801,6 @@
                         totalPrincipal.value = tPrincipal;
                         totalProfit.value = tPrincipal - tCost;
                         totalTodayProfit.value = tToday;
-                        // 👇 新增下面这一行 (今日收益 / 昨日总市值 * 100) 👇
                         totalTodayRate.value = tPrincipal > 0 ? (tToday / tPrincipal * 100) : 0;
                         totalRate.value = tCost > 0 ? ((tPrincipal - tCost) / tCost * 100) : 0;
 
@@ -882,18 +894,15 @@
                 onMounted(() => { if (currentUser.value) { isLoggedIn.value = true; initDashboard(); } });
                 onUnmounted(() => { if (timer) clearInterval(timer); if (chartInstance.value) chartInstance.value.dispose(); });
 
-                                return {
+                return {
                     isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, showAssets, isUploading, editForm,
                     handleRegister, handleLogin, handleLogout, handleAddFund, handleDeleteFund,
                     triggerUpload, handleFileUpload, openEditModal, handleSaveDetails, handleSettleNightly,
                     totalTodayRate, 
-                    // 雷达系统导出
                     showSectorRadar, sectorTopList, sectorBottomList, isSectorLoading, fetchSectors, 
-                    // 透视系统导出
                     showSectorDetails, detailsTitle, detailsList, isDetailsLoading, fetchSectorDetails
                 };
-
             }
         }).mount('#app');
     </script>
