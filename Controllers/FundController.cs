@@ -727,6 +727,102 @@ namespace 估值助手.Controllers
             await _context.SaveChangesAsync();
             return Ok(resultLog);
         }
+
+        [HttpGet("sector-funds")]
+        public async Task<IActionResult> GetSectorFunds([FromQuery] string sectorName)
+        {
+            if (string.IsNullOrEmpty(sectorName)) return BadRequest("缺少板块名称");
+
+            // 🧠 1. 智能关键词提取：过滤掉太细分的词，只抓核心！
+            string keyword = sectorName;
+            if (keyword.Length >= 4 && (keyword.Contains("制造") || keyword.Contains("外包") || keyword.Contains("服务") || keyword.Contains("设备") || keyword.Contains("商业")))
+            {
+                keyword = keyword.Substring(0, 2); // 比如把 "医疗研发外包" 智能降维成 "医疗"
+            }
+
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            var resultList = new List<dynamic>();
+
+            try
+            {
+                // 🕵️‍♂️ 2. 调用东财【基金搜索】私密接口
+                string searchUrl = $"http://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?m=1&key={Uri.EscapeDataString(keyword)}";
+                string searchRes = await client.GetStringAsync(searchUrl);
+
+                using var doc = System.Text.Json.JsonDocument.Parse(searchRes);
+                var datas = doc.RootElement.GetProperty("Datas");
+
+                // 如果名字太偏门没搜到，强行砍掉只剩前两个字再搜一次！
+                if ((datas.ValueKind == System.Text.Json.JsonValueKind.Null || datas.GetArrayLength() == 0) && keyword.Length > 2)
+                {
+                    keyword = keyword.Substring(0, 2);
+                    searchUrl = $"http://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?m=1&key={Uri.EscapeDataString(keyword)}";
+                    searchRes = await client.GetStringAsync(searchUrl);
+                    using var docRetry = System.Text.Json.JsonDocument.Parse(searchRes);
+                    datas = docRetry.RootElement.GetProperty("Datas");
+                }
+
+                if (datas.ValueKind != System.Text.Json.JsonValueKind.Null && datas.GetArrayLength() > 0)
+                {
+                    var fundCodes = new List<string>();
+                    var fundDict = new Dictionary<string, string>();
+
+                    // 🎯 3. 优选策略：优先挑带有 "ETF"、"联接"、"指数" 的基金
+                    foreach (var item in datas.EnumerateArray())
+                    {
+                        string fCode = item.GetProperty("CODE").GetString();
+                        string fName = item.GetProperty("NAME").GetString();
+
+                        if ((fName.Contains("ETF") || fName.Contains("联接") || fName.Contains("指数")) && !fundDict.ContainsKey(fCode))
+                        {
+                            fundCodes.Add(fCode);
+                            fundDict[fCode] = fName;
+                            if (fundCodes.Count >= 6) break; // 只取 6 只核心基金
+                        }
+                    }
+
+                    // 如果没找到纯指数基金，就退而求其次随便拿 6 只名字带关键字的混合基
+                    if (fundCodes.Count == 0)
+                    {
+                        foreach (var item in datas.EnumerateArray().Take(6))
+                        {
+                            string fCode = item.GetProperty("CODE").GetString();
+                            fundCodes.Add(fCode);
+                            fundDict[fCode] = item.GetProperty("NAME").GetString();
+                        }
+                    }
+
+                    // 🚀 4. 并发轰炸：同时去查这 6 只基金的【今日盘中实时涨幅】
+                    var tasks = fundCodes.Select(async code =>
+                    {
+                        try
+                        {
+                            string gzUrl = $"http://fundgz.1234567.com.cn/js/{code}.js?rt={DateTime.Now.Ticks}";
+                            string gzRes = await client.GetStringAsync(gzUrl);
+                            var match = Regex.Match(gzRes, @"\""gszzl\"":\""([^\""]+)\""");
+                            if (match.Success && double.TryParse(match.Groups[1].Value, out double rate))
+                            {
+                                return new { code = code, name = fundDict[code], rate = rate };
+                            }
+                        }
+                        catch { }
+                        return null;
+                    });
+
+                    var results = await Task.WhenAll(tasks);
+                    foreach (var res in results) if (res != null) resultList.Add(res);
+                }
+
+                // 按涨跌幅从高到低排序返回
+                resultList = resultList.OrderByDescending(x => (double)x.GetType().GetProperty("rate").GetValue(x)).ToList();
+                return Ok(resultList);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"找基失败: {ex.Message}");
+            }
+        }
+
         [HttpGet("sectors")]
         public async Task<IActionResult> GetSectors()
         {
