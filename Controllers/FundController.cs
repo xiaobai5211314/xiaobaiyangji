@@ -942,5 +942,79 @@ string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&
                 return StatusCode(500, $"X光机故障: {ex.Message}");
             }
         }
+        [HttpGet("fund-holdings")]
+        public async Task<IActionResult> GetFundHoldings([FromQuery] string fundCode)
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            try
+            {
+                // 📦 1. 抓取该基金最新公布的“十大重仓股”清单
+                string positionUrl = $"https://fundmobapi.eastmoney.com/FundMNewApi/FundMNInverstPosition?FCODE={fundCode}&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0";
+                string posRes = await client.GetStringAsync(positionUrl);
+                using var posDoc = System.Text.Json.JsonDocument.Parse(posRes);
+
+                var dataElement = posDoc.RootElement.GetProperty("Data");
+                if (dataElement.ValueKind == System.Text.Json.JsonValueKind.Null) return Ok(new List<object>());
+
+                var fundPosition = dataElement.GetProperty("fundPosition");
+                if (fundPosition.ValueKind == System.Text.Json.JsonValueKind.Null) return Ok(new List<object>());
+
+                var stockList = new List<dynamic>();
+                var secidList = new List<string>(); // 用来组装查询股票实时涨幅的代码列表
+
+                foreach (var stock in fundPosition.EnumerateArray())
+                {
+                    string code = stock.GetProperty("GPDM").GetString();
+                    string name = stock.GetProperty("GPJC").GetString();
+                    string ratio = stock.GetProperty("JZBL").GetString(); // 仓位占比
+
+                    // 东方财富股票行情前缀规则：6开头是沪市(1.)，0或3开头是深市(0.)
+                    string prefix = code.StartsWith("6") ? "1." : "0.";
+                    secidList.Add(prefix + code);
+
+                    stockList.Add(new { code, name, ratio, rate = 0.0 });
+                }
+
+                // 📈 2. 拿着这10只股票代码，去查它们【今天的实时涨跌幅】！
+                if (secidList.Count > 0)
+                {
+                    string secids = string.Join(",", secidList);
+                    string quoteUrl = $"http://push2.eastmoney.com/api/qt/ulist.np/get?secids={secids}&fields=f12,f14,f3";
+                    string quoteRes = await client.GetStringAsync(quoteUrl);
+                    using var quoteDoc = System.Text.Json.JsonDocument.Parse(quoteRes);
+
+                    var qData = quoteDoc.RootElement.GetProperty("data");
+                    if (qData.ValueKind != System.Text.Json.JsonValueKind.Null)
+                    {
+                        var diffs = qData.GetProperty("diff");
+                        var rateDict = new Dictionary<string, double>();
+                        foreach (var diff in diffs.EnumerateArray())
+                        {
+                            string c = diff.GetProperty("f12").GetString();
+                            double r = diff.GetProperty("f3").ValueKind == System.Text.Json.JsonValueKind.Number ? diff.GetProperty("f3").GetDouble() : 0;
+                            rateDict[c] = r;
+                        }
+
+                        // 3. 将“持仓列表”和“实时涨跌幅”强行缝合返回
+                        var finalResult = stockList.Select(s => new
+                        {
+                            code = s.code,
+                            name = s.name,
+                            ratio = s.ratio,
+                            rate = rateDict.ContainsKey(s.code) ? rateDict[s.code] : 0.0
+                        }).ToList();
+
+                        return Ok(finalResult);
+                    }
+                }
+
+                return Ok(stockList);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"获取持仓失败: {ex.Message}");
+            }
+        }
+
     }
 }
