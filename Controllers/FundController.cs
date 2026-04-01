@@ -20,6 +20,20 @@ namespace 估值助手.Controllers
     {
         private readonly AppDbContext _context;
 
+        // 🚀 杀招一：静态初始化，破除 Linux 幽灵死锁
+        static FundController()
+        {
+            // 强制禁用全局代理寻找，防止 HttpClient 在 Linux 环境下傻等 20 秒
+            System.Net.WebRequest.DefaultWebProxy = null;
+        }
+
+        // 🚀 杀招二：全局单例百度客户端 (Singleton)
+        // 让程序和百度机房保持“热连接”，不用每次传图都重新 TCP 握手，直接白嫖省下 150ms 左右！
+        private static readonly Baidu.Aip.Ocr.Ocr _baiduOcrClient = new Baidu.Aip.Ocr.Ocr("yjfCgtNuumSjxc34FDmXCv8e", "g3XGcMKX0Qsp4k4wDSbxYQoSdFPuDt0c")
+        {
+            Timeout = 10000 // 内部缩短到 10 秒超时
+        };
+
         public class FundInfoCache
         {
             public string Code { get; set; }
@@ -27,32 +41,22 @@ namespace 估值助手.Controllers
             public string NormalizedName { get; set; }
         }
 
-        // 双引擎缓存：List 用于模糊遍历，Dictionary 用于 O(1) 极速秒杀
+        // 双引擎缓存
         private static List<FundInfoCache> _globalFundCache = null;
         private static Dictionary<string, FundInfoCache> _exactMatchDict = null;
 
         public FundController(AppDbContext context) { _context = context; }
 
-        /// <summary>
-        /// 获取全量基金库，并构建 O(1) 极速匹配字典
-        /// </summary>
-        /// <summary>
-        /// 获取全量基金库（修复版：隔离 Redis 异常，防止连环崩溃）
-        /// </summary>
         private async Task<List<FundInfoCache>> GetAllFundsAsync()
         {
             if (_globalFundCache != null && _exactMatchDict != null && _globalFundCache.Count > 0) return _globalFundCache;
 
             string cachedData = null;
-
-            // 🛡️ 阶段 1：尝试秒连 Redis（限制 1.5 秒超时，防止卡死服务器导致 504）
             try
             {
                 var options = ConfigurationOptions.Parse("localhost:6379");
-                options.ConnectTimeout = 1500; // 强制 1.5 秒超时
+                options.ConnectTimeout = 1500; 
                 options.SyncTimeout = 1500;
-                // options.Password = "你的密码"; // 💡 如果宝塔Redis有密码，把这行注释解开填上去
-
                 using var redis = ConnectionMultiplexer.Connect(options);
                 var db = redis.GetDatabase();
                 var redisValue = await db.StringGetAsync("global_fund_db_cache_v3");
@@ -60,10 +64,9 @@ namespace 估值助手.Controllers
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[警告] Redis 瘫痪或未开启，准备启动后备隐藏能源(直接下载): {ex.Message}");
+                Console.WriteLine($"[警告] Redis 异常: {ex.Message}");
             }
 
-            // 如果 Redis 里有数据，直接起飞
             if (!string.IsNullOrEmpty(cachedData))
             {
                 _globalFundCache = JsonSerializer.Deserialize<List<FundInfoCache>>(cachedData);
@@ -71,7 +74,6 @@ namespace 估值助手.Controllers
                 return _globalFundCache;
             }
 
-            // 🛡️ 阶段 2：Redis 没数据或连不上，走东方财富接口下载
             try
             {
                 using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
@@ -93,7 +95,6 @@ namespace 估值助手.Controllers
 
                     BuildExactMatchDictionary(_globalFundCache);
 
-                    // 尝试顺手存入 Redis，存不进也无所谓，不抛异常
                     try
                     {
                         var options = ConfigurationOptions.Parse("localhost:6379");
@@ -108,7 +109,7 @@ namespace 估值助手.Controllers
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[致命] 东方财富接口也挂了: {ex.Message}");
+                Console.WriteLine($"[致命] 东方财富接口异常: {ex.Message}");
             }
 
             return _globalFundCache ?? new List<FundInfoCache>();
@@ -128,7 +129,7 @@ namespace 估值助手.Controllers
         // OCR 极速导入引擎
         // =========================================================
 
-                [HttpPost("import-ocr")]
+        [HttpPost("import-ocr")]
         public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFormFile imageFile)
         {
             if (string.IsNullOrEmpty(username)) return Unauthorized("请提供指挥官代号");
@@ -169,110 +170,118 @@ namespace 估值助手.Controllers
                 watch.Restart();
 
                 // ==========================================
-                // 2. 监控：百度 OCR 阶段 (加装 15 秒防挂死熔断器)
+                // 2. 监控：百度 OCR 阶段 (异步 + 熔断 + 单例高精度)
                 // ==========================================
-                var client = new Baidu.Aip.Ocr.Ocr("yjfCgtNuumSjxc34FDmXCv8e", "g3XGcMKX0Qsp4k4wDSbxYQoSdFPuDt0c");
                 
-                // 🚀 将同步的百度请求放入后台任务，防止卡死 ASP.NET 线程
-       // 换成这行，调用高精度模型
-var ocrTask = Task.Run(() => client.AccurateBasic(finalProcessedBytes));
+                // 🚀 直接调用上面定义好的全局单例客户端，省去连接耗时。并且指定为 AccurateBasic（高精度版）
+                var ocrTask = Task.Run(() => _baiduOcrClient.AccurateBasic(finalProcessedBytes));
 
-
-                // ⚡ 熔断机制：最多等 15 秒，等不到就报警，绝对不给 Nginx 报 504 的机会！
+                // ⚡ 15秒熔断器保护
                 if (await Task.WhenAny(ocrTask, Task.Delay(15000)) != ocrTask)
                 {
-                    return StatusCode(500, $"❌ 识别超时熔断！\n前置图片压缩成功 (耗时 {debugLog[0]})\n但呼叫百度 OCR 接口超过 15 秒无响应，请检查宝塔服务器的外网连接！");
+                    return StatusCode(500, $"❌ 识别超时熔断！\n前置图片压缩成功 (耗时 {debugLog[0]})\n但呼叫百度 OCR 接口超过 15 秒无响应，请检查宝塔网络或代理配置！");
                 }
 
                 var result = await ocrTask;
-
-// 👇 加上这两行临时调试代码，让错误弹窗直接把百度的原始文字打印出来
-string rawText = result.ToString();
-return StatusCode(500, $"[调试信息] 百度原始返回文本:\n{rawText}");
-
                 debugLog.Add($"⏱️ 百度 OCR 耗时: {watch.ElapsedMilliseconds} ms");
 
                 var texts = (result["words_result"] as JArray)?.Select(x => x["words"].ToString().Trim()).ToList() ?? new List<string>();
-                if (texts.Count == 0) return BadRequest("❌ OCR未能识别出任何文字");
+                if (texts.Count == 0) return BadRequest("❌ OCR未能识别出任何文字，请确认图片清晰度");
 
                 // ==========================================
-                // 3. 极速匹配引擎 (这部分保持原样，速度极快)
+                // 3. 🚀 杀招三：上下行断层缝合智能匹配算法
                 // ==========================================
                 int importedCount = 0;
-                string numPattern = @"^([-+]?\d{1,3}(,\d{3})*(\.\d{2}))$";
+                
+                // 寻找金额“锚点”：只有数字、逗号、小数点，且没有负号（持仓市值为正）
+                string amountPattern = @"^\d[\d,]*\.\d{2}$"; 
 
-                for (int i = 0; i < texts.Count; i++)
+                // 从索引 1 开始遍历，因为第一行不可能是金额，前面一定有名字
+                for (int i = 1; i < texts.Count; i++)
                 {
-                    string combinedName = texts[i];
-                    if (i + 1 < texts.Count) combinedName += texts[i + 1];
+                    string currentLine = texts[i];
 
-                    string pureChinese = Regex.Replace(combinedName, @"[^\u4e00-\u9fa5]", "");
-                    if (pureChinese.Length < 3) continue; 
-
-                    string normalizedOcr = NormalizeFundName(combinedName);
-                    FundInfoCache bestMatch = null;
-                    double bestScore = 0;
-
-                    if (_exactMatchDict != null && (_exactMatchDict.TryGetValue(normalizedOcr, out var exactFund) || _exactMatchDict.TryGetValue(combinedName, out exactFund)))
+                    // 🎯 发现“金额锚点”！如 19,852.53
+                    if (Regex.IsMatch(currentLine, amountPattern))
                     {
-                        bestMatch = exactFund;
-                        bestScore = 100.0;
-                        debugLog.Add($"⚡ 字典秒杀: {bestMatch.Name}");
-                    }
-                    else
-                    {
-                        string ocrClass = ExtractFundClass(combinedName);
-                        var candidates = allFunds.Where(f => f.NormalizedName.Contains(pureChinese) || 
-                                                            pureChinese.Contains(f.NormalizedName.Substring(0, Math.Min(3, f.NormalizedName.Length))));
+                        // 提取上一行作为名字前半段
+                        string namePart1 = texts[i - 1];
+                        
+                        // 过滤掉支付宝自带的干扰标签
+                        if (namePart1.Contains("收益") || namePart1.Contains("金额") || namePart1.Contains("包含") || Regex.IsMatch(namePart1, @"^[-\d\.,%]+$")) 
+                            continue;
 
-                        foreach (var f in candidates)
+                        string namePart2 = "";
+                        double holdAmount = double.Parse(currentLine.Replace(",", ""));
+                        double holdingIncome = 0;
+
+                        // 🔍 往下找5行，寻找被截断的名字后半截和持有收益
+                        for (int j = 1; j <= 5 && (i + j) < texts.Count; j++)
                         {
-                            string dbClass = ExtractFundClass(f.Name);
-                            if (!string.IsNullOrEmpty(ocrClass) && !string.IsNullOrEmpty(dbClass) && ocrClass != dbClass) continue;
-
-                            double similarity = CalculateSimilarity(normalizedOcr, f.NormalizedName);
-                            double currentScore = similarity * 100;
-
-                            if (currentScore > bestScore)
+                            string nextLine = texts[i + j];
+                            
+                            // 寻找持有收益（特征：带有正负号的金额，如 -3,218.88 或 +129.79）
+                            if (holdingIncome == 0 && Regex.IsMatch(nextLine, @"^[-+]\d[\d,]*\.\d{2}$"))
                             {
-                                bestScore = currentScore;
-                                bestMatch = f;
+                                holdingIncome = double.Parse(nextLine.Replace(",", ""));
                             }
-                        }
-                    }
-
-                    if (bestMatch != null && bestScore > 70)
-                    {
-                        double marketValue = 0, holdingIncome = 0;
-                        int linesConsumed = 0;
-
-                        for (int j = 1; j <= 8 && (i + j) < texts.Count; j++)
-                        {
-                            string next = texts[i + j].Trim();
-                            if (Regex.IsMatch(next, numPattern))
+                            // 寻找名字后半段（如果它不是纯数字、不是百分比，且不是干扰词，就是被支付宝挤下来的半截名字）
+                            else if (string.IsNullOrEmpty(namePart2) && !Regex.IsMatch(nextLine, @"^[-\d\.,%+]+$") && !nextLine.Contains("金选") && !nextLine.Contains("收益") && !nextLine.Contains("更新"))
                             {
-                                double val = double.Parse(next.Replace(",", ""));
-                                if (marketValue == 0 && val > 10 && !next.Contains("+") && !next.Contains("-"))
-                                {
-                                    marketValue = val;
-                                    linesConsumed = Math.Max(linesConsumed, j);
-                                }
-                                else if (holdingIncome == 0 && (next.Contains("+") || next.Contains("-") || marketValue > 0))
-                                {
-                                    holdingIncome = val;
-                                    linesConsumed = Math.Max(linesConsumed, j);
-                                    break; 
-                                }
+                                namePart2 = nextLine;
                             }
                         }
 
-                        if (marketValue > 100)
+                        // 🧩 缝合长名字！
+                        string combinedName = namePart1 + namePart2;
+                        
+                        // 提取纯汉字部分用于模糊筛选
+                        string pureChinese = Regex.Replace(combinedName, @"[^\u4e00-\u9fa5]", "");
+                        if (pureChinese.Length < 2) continue; 
+
+                        // ------------------------------------
+                        // 开始打分匹配环节
+                        // ------------------------------------
+                        string normalizedOcr = NormalizeFundName(combinedName);
+                        FundInfoCache bestMatch = null;
+                        double bestScore = 0;
+
+                        if (_exactMatchDict != null && (_exactMatchDict.TryGetValue(normalizedOcr, out var exactFund) || _exactMatchDict.TryGetValue(combinedName, out exactFund)))
                         {
-                            double costAmount = Math.Round(marketValue - holdingIncome, 2);
+                            bestMatch = exactFund;
+                            bestScore = 100.0;
+                            debugLog.Add($"⚡ 字典秒杀: {bestMatch.Name}");
+                        }
+                        else
+                        {
+                            string ocrClass = ExtractFundClass(combinedName);
+                            var candidates = allFunds.Where(f => f.NormalizedName.Contains(pureChinese) || 
+                                                                pureChinese.Contains(f.NormalizedName.Substring(0, Math.Min(3, f.NormalizedName.Length))));
+
+                            foreach (var f in candidates)
+                            {
+                                string dbClass = ExtractFundClass(f.Name);
+                                if (!string.IsNullOrEmpty(ocrClass) && !string.IsNullOrEmpty(dbClass) && ocrClass != dbClass) continue;
+
+                                double similarity = CalculateSimilarity(normalizedOcr, f.NormalizedName);
+                                double currentScore = similarity * 100;
+
+                                if (currentScore > bestScore)
+                                {
+                                    bestScore = currentScore;
+                                    bestMatch = f;
+                                }
+                            }
+                        }
+
+                        // 如果打分超过 65 分，且金额大于 10 元，则判定为成功提取！
+                        if (bestMatch != null && bestScore > 65 && holdAmount > 10)
+                        {
+                            double costAmount = Math.Round(holdAmount - holdingIncome, 2);
 
                             if (userFundDict.TryGetValue(bestMatch.Code, out var exist))
                             {
-                                exist.HoldAmount = marketValue;
+                                exist.HoldAmount = holdAmount;
                                 exist.CostAmount = costAmount;
                                 _context.MyFunds.Update(exist);
                             }
@@ -283,15 +292,14 @@ return StatusCode(500, $"[调试信息] 百度原始返回文本:\n{rawText}");
                                     Username = username,
                                     FundCode = bestMatch.Code,
                                     FundName = bestMatch.Name,
-                                    HoldAmount = marketValue,
+                                    HoldAmount = holdAmount,
                                     CostAmount = costAmount
                                 };
                                 _context.MyFunds.Add(newFund);
                                 userFundDict[newFund.FundCode] = newFund; 
                             }
                             importedCount++;
-                            i += linesConsumed; 
-                            if(bestScore < 100) debugLog.Add($"✅ 模糊匹配: {bestMatch.Name} ({bestScore:F1}%)");
+                            if(bestScore < 100) debugLog.Add($"✅ 模糊拼接: {bestMatch.Name} ({bestScore:F1}%)");
                         }
                     }
                 }
@@ -301,7 +309,7 @@ return StatusCode(500, $"[调试信息] 百度原始返回文本:\n{rawText}");
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"❌ 代码执行出现异常: {ex.Message}\n请检查上传的图片格式是否正确。");
+                return StatusCode(500, $"❌ 代码执行出现异常: {ex.Message}");
             }
         }
 
@@ -462,21 +470,23 @@ return StatusCode(500, $"[调试信息] 百度原始返回文本:\n{rawText}");
                 return StatusCode(500, $"自动清算引擎异常: {ex.Message}");
             }
         }
-[HttpGet("test-load")]
-public async Task<IActionResult> TestLoad()
-{
-    var watch = System.Diagnostics.Stopwatch.StartNew();
-    try
-    {
-        var funds = await GetAllFundsAsync(); // 只测试下载基金库，不搞OCR
-        watch.Stop();
-        return Ok($"✅ 基金库装载成功！共 {funds.Count} 只。总耗时: {watch.ElapsedMilliseconds} 毫秒。");
-    }
-    catch (Exception ex)
-    {
-        return StatusCode(500, $"❌ 装载彻底失败: {ex.Message}");
-    }
-}
+
+        [HttpGet("test-load")]
+        public async Task<IActionResult> TestLoad()
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                var funds = await GetAllFundsAsync(); 
+                watch.Stop();
+                return Ok($"✅ 基金库装载成功！共 {funds.Count} 只。总耗时: {watch.ElapsedMilliseconds} 毫秒。");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"❌ 装载彻底失败: {ex.Message}");
+            }
+        }
+
         [HttpGet("today")]
         public async Task<IActionResult> GetTodayData([FromQuery] string username)
         {
@@ -484,15 +494,6 @@ public async Task<IActionResult> TestLoad()
 
             try
             {
-                try
-                {
-                    await _context.Database.ExecuteSqlRawAsync("ALTER TABLE MyFunds ADD COLUMN LastSettledDate VARCHAR(20);");
-                    await _context.Database.ExecuteSqlRawAsync("ALTER TABLE FundRecords ADD COLUMN ActualRate DOUBLE NOT NULL DEFAULT 0;");
-                    await _context.Database.ExecuteSqlRawAsync("ALTER TABLE FundRecords ADD COLUMN DiffRate DOUBLE NOT NULL DEFAULT 0;");
-                    await _context.Database.ExecuteSqlRawAsync("ALTER TABLE MyFunds ADD COLUMN CostAmount DOUBLE NOT NULL DEFAULT 0;");
-                }
-                catch { /* 忽略已存在的报错 */ }
-
                 var myFunds = await _context.MyFunds.Where(f => f.Username == username).ToListAsync();
                 var myFundCodes = myFunds.Select(f => f.FundCode).ToList();
 
