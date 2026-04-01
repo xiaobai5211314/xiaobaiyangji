@@ -1139,7 +1139,7 @@ string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&
                 return StatusCode(500, $"获取持仓失败: {ex.Message}");
             }
         }
-        [HttpGet("fund-holdings")]
+                [HttpGet("fund-holdings")]
         public async Task<IActionResult> GetFundHoldings([FromQuery] string fundCode)
         {
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
