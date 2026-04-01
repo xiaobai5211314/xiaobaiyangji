@@ -311,7 +311,9 @@
                     <button class="btn-settle" @click="handleSettleNightly" style="margin-left: 10px;" title="将今日收益计入本金">
                         🌙 结算复利
                     </button>
-
+                    <button @click="fetchSectors" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none; padding: 8px 15px; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; margin-left: 10px; margin-top: 10px;">
+                        📡 市场板块雷达
+                    </button>
                     <button class="btn-logout" @click="handleLogout" style="margin-left: 10px;">撤退</button>
                 </div>
             </div>
@@ -324,6 +326,7 @@
                         {{ isNight ? '🌙 夜间清算模式' : '☀️ 盘中盯盘模式' }}
                     </div>
                 </div>
+
                 <div class="divider"></div>
 
                 <div style="text-align: center;">
@@ -467,6 +470,32 @@
             </div>
 
         </div>
+        <div v-if="showSectorRadar" class="modal-overlay" @click.self="showSectorRadar = false" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: flex-end; z-index: 1000;">
+            <div style="background: #1e293b; width: 100%; height: 70vh; border-radius: 20px 20px 0 0; padding: 20px; display: flex; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="color: white; margin: 0;">🔥 市场热点板块 TOP 20</h3>
+                    <span @click="showSectorRadar = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
+                </div>
+
+                <div v-if="isSectorLoading" style="color: #94a3b8; text-align: center; margin-top: 50px;">📡 雷达扫描中...</div>
+
+                <div v-else style="overflow-y: auto; flex: 1;">
+                    <div style="display: flex; justify-content: space-between; color: #94a3b8; font-size: 13px; padding-bottom: 10px; border-bottom: 1px solid #334155;">
+                        <span style="flex: 1;">板块名称</span>
+                        <span style="width: 80px; text-align: right;">今日涨幅</span>
+                    </div>
+                    <div v-for="(item, index) in sectorList" :key="item.f12" style="display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid #334155; align-items: center;">
+                        <div style="flex: 1; display: flex; align-items: center; gap: 10px;">
+                            <span :style="{ background: index < 3 ? '#ef4444' : '#475569', color: 'white', fontSize: '12px', padding: '2px 6px', borderRadius: '4px' }">{{ index + 1 }}</span>
+                            <span style="color: #f8fafc; font-weight: bold;">{{ item.f14 }}</span>
+                        </div>
+                        <div style="width: 80px; text-align: right; font-weight: 900; font-family: 'Courier New', monospace;" :style="{ color: item.f3 >= 0 ? '#ff4d4f' : '#10b981' }">
+                            {{ item.f3 > 0 ? '+' : '' }}{{ item.f3 }}%
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -536,6 +565,30 @@
                             }, 'image/jpeg', 0.5);
                         };
                     };
+                };
+
+                // 找个地方定义这些变量
+                const showSectorRadar = ref(false); // 控制弹窗显示
+                const sectorList = ref([]); // 存放板块数据
+                const isSectorLoading = ref(false);
+
+                // 加一个获取板块数据的函数
+                const fetchSectors = async () => {
+                    showSectorRadar.value = true;
+                    isSectorLoading.value = true;
+                    try {
+                        // 注意：这里的域名换成你自己的宝塔 API 域名！
+                        const res = await fetch('http://21212121.xyz/api/fund/sectors');
+                        const json = await res.json();
+                        // 解析东方财富的格式
+                        if (json && json.data && json.data.diff) {
+                            sectorList.value = json.data.diff;
+                        }
+                    } catch (e) {
+                        alert("雷达连接失败！");
+                    } finally {
+                        isSectorLoading.value = false;
+                    }
                 };
 
                 const handleRegister = async () => {
@@ -795,7 +848,7 @@
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, showAssets, isUploading, editForm,
                     handleRegister, handleLogin, handleLogout, handleAddFund, handleDeleteFund,
                     triggerUpload, handleFileUpload, openEditModal, handleSaveDetails, handleSettleNightly,
-                    totalTodayRate, // 👈 新增这个，别忘了加逗号
+                    totalTodayRate, showSectorRadar, sectorList, isSectorLoading, fetchSectors, // 👈 新增这个，别忘了加逗号
                 };
             }
         }).mount('#app');

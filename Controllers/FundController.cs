@@ -691,5 +691,29 @@ namespace 估值助手.Controllers
             await _context.SaveChangesAsync();
             return Ok(resultLog);
         }
+        [HttpGet("sectors")]
+        public async Task<IActionResult> GetSectors()
+        {
+            // 使用 HttpClient 去东方财富拉取“行业板块”的实时排行
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            try
+            {
+                // 东方财富的隐藏 API：
+                // m:90+t:2 代表行业板块
+                // po=1 是降序排列 (涨幅最高的在最前面)
+                // pz=20 是只取前 20 名
+                // fields=f12,f14,f3 分别代表：代码、名字、涨跌幅
+                string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=20&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3";
+
+                string response = await client.GetStringAsync(url);
+
+                // 直接把东方财富的数据原封不动地转发给咱们的手机前端
+                return Content(response, "application/json");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"获取板块雷达失败: {ex.Message}");
+            }
+        }
     }
 }
