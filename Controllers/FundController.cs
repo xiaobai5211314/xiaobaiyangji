@@ -734,13 +734,17 @@ namespace 估值助手.Controllers
             if (string.IsNullOrEmpty(sectorName)) return BadRequest("缺少板块名称");
 
             // 🧠 1. 智能分词：砍掉多余的行业后缀，只留核心词（命中率暴增！）
-            string keyword = sectorName;
-            string[] suffixes = { "制造", "外包", "服务", "设备", "商业", "制剂", "用品", "耗材", "制品", "工程" };
+                        // 🧠 1. 智能分词：剥离“概念”等干扰词汇，提纯核心词
+            string keyword = sectorName.Replace("概念", "").Replace("板块", "");
+            
+            // 砍掉多余的行业后缀，提取核心词 (升级为精准截断)
+            string[] suffixes = { "制造", "外包", "服务", "设备", "商业", "制剂", "用品", "耗材", "制品", "工程", "产业" };
             foreach (var suffix in suffixes)
             {
-                if (keyword.Length >= 4 && keyword.EndsWith(suffix))
+                if (keyword.EndsWith(suffix) && keyword.Length > suffix.Length)
                 {
-                    keyword = keyword.Substring(0, 2); // 例如：把"化学制剂"直接砍成"化学"
+                    // 精准剥离后缀，比如把"医疗耗材"剥离成"医疗"
+                    keyword = keyword.Substring(0, keyword.Length - suffix.Length); 
                     break;
                 }
             }
