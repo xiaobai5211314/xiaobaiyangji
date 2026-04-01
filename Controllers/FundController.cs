@@ -942,79 +942,85 @@ string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&
                 return StatusCode(500, $"X光机故障: {ex.Message}");
             }
         }
-                [HttpGet("fund-holdings")]
+                        [HttpGet("fund-holdings")]
         public async Task<IActionResult> GetFundHoldings([FromQuery] string fundCode)
         {
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
             
-            // 🛡️ 核心防线：加上满级伪装，冒充谷歌浏览器从东财官网访问！
+            // 🛡️ 伪装头必须保留
             client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
             client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
 
             try
             {
-                // 📦 1. 抓取该基金最新公布的“十大重仓股”清单
                 string positionUrl = $"https://fundmobapi.eastmoney.com/FundMNewApi/FundMNInverstPosition?FCODE={fundCode}&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0";
                 string posRes = await client.GetStringAsync(positionUrl);
                 using var posDoc = System.Text.Json.JsonDocument.Parse(posRes);
 
-                var dataElement = posDoc.RootElement.GetProperty("Data");
-                if (dataElement.ValueKind == System.Text.Json.JsonValueKind.Null) return Ok(new List<object>());
+                // 🛡️ 防弹升级：用 TryGetProperty 温柔试探，没有就不解析，绝不报错！
+                if (!posDoc.RootElement.TryGetProperty("Data", out var dataElement) || dataElement.ValueKind == System.Text.Json.JsonValueKind.Null)
+                    return Ok(new List<object>());
 
-                var fundPosition = dataElement.GetProperty("fundPosition");
-                if (fundPosition.ValueKind == System.Text.Json.JsonValueKind.Null) return Ok(new List<object>());
+                if (!dataElement.TryGetProperty("fundPosition", out var fundPosition) || fundPosition.ValueKind == System.Text.Json.JsonValueKind.Null)
+                    return Ok(new List<object>());
 
                 var stockList = new List<dynamic>();
-                var secidList = new List<string>(); // 用来组装查询股票实时涨幅的代码列表
+                var secidList = new List<string>();
 
                 foreach (var stock in fundPosition.EnumerateArray())
                 {
-                    string code = stock.GetProperty("GPDM").GetString();
-                    string name = stock.GetProperty("GPJC").GetString();
-                    string ratio = stock.GetProperty("JZBL").GetString(); // 仓位占比
+                    string code = stock.TryGetProperty("GPDM", out var cProp) ? cProp.GetString() : "";
+                    string name = stock.TryGetProperty("GPJC", out var nProp) ? nProp.GetString() : "";
+                    string ratio = stock.TryGetProperty("JZBL", out var rProp) ? rProp.GetString() : "0";
 
-                    // 东方财富股票行情前缀规则：6开头是沪市(1.)，0或3开头是深市(0.)
-                    string prefix = code.StartsWith("6") ? "1." : "0.";
-                    secidList.Add(prefix + code);
+                    if (!string.IsNullOrEmpty(code))
+                    {
+                        // 🧠 智能兼容港股和A股的请求前缀
+                        string prefix = "0.";
+                        if (code.StartsWith("6")) prefix = "1."; 
+                        else if (code.Length == 5) prefix = "116."; // 港股代码通常是5位，东财前缀是116
 
-                    stockList.Add(new { code, name, ratio, rate = 0.0 });
+                        secidList.Add(prefix + code);
+                        stockList.Add(new { code, name, ratio, rate = 0.0 });
+                    }
                 }
 
-                // 📈 2. 拿着这10只股票代码，去查它们【今天的实时涨跌幅】！
                 if (secidList.Count > 0)
                 {
                     string secids = string.Join(",", secidList);
                     string quoteUrl = $"http://push2.eastmoney.com/api/qt/ulist.np/get?secids={secids}&fields=f12,f14,f3";
-                    
-                    // 带着伪装去请求实时股票涨跌，绝对畅通无阻
                     string quoteRes = await client.GetStringAsync(quoteUrl);
                     using var quoteDoc = System.Text.Json.JsonDocument.Parse(quoteRes);
 
-                    var qData = quoteDoc.RootElement.GetProperty("data");
-                    if (qData.ValueKind != System.Text.Json.JsonValueKind.Null)
+                    // 🛡️ 防弹升级：层层试探 json 结构
+                    if (quoteDoc.RootElement.TryGetProperty("data", out var qData) && qData.ValueKind != System.Text.Json.JsonValueKind.Null)
                     {
-                        var diffs = qData.GetProperty("diff");
-                        var rateDict = new Dictionary<string, double>();
-                        foreach (var diff in diffs.EnumerateArray())
+                        if (qData.TryGetProperty("diff", out var diffs) && diffs.ValueKind == System.Text.Json.JsonValueKind.Array)
                         {
-                            string c = diff.GetProperty("f12").GetString();
-                            double r = diff.GetProperty("f3").ValueKind == System.Text.Json.JsonValueKind.Number ? diff.GetProperty("f3").GetDouble() : 0;
-                            rateDict[c] = r;
+                            var rateDict = new Dictionary<string, double>();
+                            foreach (var diff in diffs.EnumerateArray())
+                            {
+                                string c = diff.TryGetProperty("f12", out var f12) ? f12.GetString() : "";
+                                double r = 0;
+                                if (diff.TryGetProperty("f3", out var f3) && f3.ValueKind == System.Text.Json.JsonValueKind.Number)
+                                {
+                                    r = f3.GetDouble();
+                                }
+                                if (!string.IsNullOrEmpty(c)) rateDict[c] = r;
+                            }
+
+                            var finalResult = stockList.Select(s => new
+                            {
+                                code = s.code,
+                                name = s.name,
+                                ratio = s.ratio,
+                                rate = rateDict.ContainsKey((string)s.code) ? rateDict[(string)s.code] : 0.0
+                            }).ToList();
+
+                            return Ok(finalResult);
                         }
-
-                        // 3. 将“持仓列表”和“实时涨跌幅”强行缝合返回
-                        var finalResult = stockList.Select(s => new
-                        {
-                            code = s.code,
-                            name = s.name,
-                            ratio = s.ratio,
-                            rate = rateDict.ContainsKey(s.code) ? rateDict[s.code] : 0.0
-                        }).ToList();
-
-                        return Ok(finalResult);
                     }
                 }
-
                 return Ok(stockList);
             }
             catch (Exception ex)
@@ -1022,6 +1028,7 @@ string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&
                 return StatusCode(500, $"获取持仓失败: {ex.Message}");
             }
         }
+
 
 
     }
