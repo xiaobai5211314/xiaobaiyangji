@@ -942,12 +942,11 @@ string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&
                 return StatusCode(500, $"X光机故障: {ex.Message}");
             }
         }
-                        [HttpGet("fund-holdings")]
+                                [HttpGet("fund-holdings")]
         public async Task<IActionResult> GetFundHoldings([FromQuery] string fundCode)
         {
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
             
-            // 🛡️ 伪装头必须保留
             client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
             client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
 
@@ -957,12 +956,18 @@ string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&
                 string posRes = await client.GetStringAsync(positionUrl);
                 using var posDoc = System.Text.Json.JsonDocument.Parse(posRes);
 
-                // 🛡️ 防弹升级：用 TryGetProperty 温柔试探，没有就不解析，绝不报错！
+                // 💉 吐真剂核心：如果东财不给 Data，直接把它的底层真实回话爆出来！
                 if (!posDoc.RootElement.TryGetProperty("Data", out var dataElement) || dataElement.ValueKind == System.Text.Json.JsonValueKind.Null)
-                    return Ok(new List<object>());
+                {
+                    string debugMsg = posRes.Length > 100 ? posRes.Substring(0, 100) + "..." : posRes;
+                    debugMsg = debugMsg.Replace("\"", "'"); // 替换引号防止前端乱码
+                    return Ok(new List<object> { new { code = "拦截日志", name = debugMsg, ratio = "0", rate = 0.0 } });
+                }
 
                 if (!dataElement.TryGetProperty("fundPosition", out var fundPosition) || fundPosition.ValueKind == System.Text.Json.JsonValueKind.Null)
-                    return Ok(new List<object>());
+                {
+                    return Ok(new List<object> { new { code = "空仓日志", name = "该基金未公布十大重仓股", ratio = "0", rate = 0.0 } });
+                }
 
                 var stockList = new List<dynamic>();
                 var secidList = new List<string>();
@@ -975,10 +980,10 @@ string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&
 
                     if (!string.IsNullOrEmpty(code))
                     {
-                        // 🧠 智能兼容港股和A股的请求前缀
+                        // 兼容港股
                         string prefix = "0.";
                         if (code.StartsWith("6")) prefix = "1."; 
-                        else if (code.Length == 5) prefix = "116."; // 港股代码通常是5位，东财前缀是116
+                        else if (code.Length == 5) prefix = "116."; 
 
                         secidList.Add(prefix + code);
                         stockList.Add(new { code, name, ratio, rate = 0.0 });
@@ -992,7 +997,6 @@ string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&
                     string quoteRes = await client.GetStringAsync(quoteUrl);
                     using var quoteDoc = System.Text.Json.JsonDocument.Parse(quoteRes);
 
-                    // 🛡️ 防弹升级：层层试探 json 结构
                     if (quoteDoc.RootElement.TryGetProperty("data", out var qData) && qData.ValueKind != System.Text.Json.JsonValueKind.Null)
                     {
                         if (qData.TryGetProperty("diff", out var diffs) && diffs.ValueKind == System.Text.Json.JsonValueKind.Array)
@@ -1028,8 +1032,6 @@ string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&
                 return StatusCode(500, $"获取持仓失败: {ex.Message}");
             }
         }
-
-
 
     }
 }
