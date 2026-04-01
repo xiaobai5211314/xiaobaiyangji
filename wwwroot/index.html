@@ -578,7 +578,7 @@
                     isSectorLoading.value = true;
                     try {
                         // 注意：这里的域名换成你自己的宝塔 API 域名！
-                        const res = await fetch('http://21212121.xyz/api/fund/sectors');
+                        const res = await fetch('https://21212121.xyz/api/fund/sectors');
                         const json = await res.json();
                         // 解析东方财富的格式
                         if (json && json.data && json.data.diff) {
