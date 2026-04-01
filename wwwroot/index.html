@@ -610,36 +610,18 @@
                     };
                 };
 
-                // 准备两个空投箱，分别装红榜和绿榜
-                const sectorTopList = ref([]);
-                const sectorBottomList = ref([]);
-                const showSectorRadar = ref(false);
-                const isSectorLoading = ref(false);
-
-                // 刚才的板块变量下面，加这几个“成分股透视”变量
-                const showSectorDetails = ref(false); // 控制次级弹窗
-                const detailsTitle = ref(''); // 记录你点了哪个板块
-                const detailsList = ref([]); // 存放抓回来的 6 只股票
-                const isDetailsLoading = ref(false);
-
-                // 点击板块触发透视的方法
-                const fetchSectorDetails = async (sector) => {
-                    detailsTitle.value = sector.name;
-                    showSectorDetails.value = true;
-                    isDetailsLoading.value = true;
-                    detailsList.value = []; // 清空上次的数据
-
-                    try {
-                        // ⚠️ 记得换成你真实的 API 域名！
-                        const res = await fetch('https://guzhi.21212121.xyz/api/fund/sectors');
-                        const json = await res.json();
-                        detailsList.value = json;
-                    } catch (e) {
-                        alert("透视连接失败！");
-                    } finally {
-                        isDetailsLoading.value = false;
-                    }
+                                return {
+                    isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
+                    totalPrincipal, totalProfit, totalRate, totalTodayProfit, showAssets, isUploading, editForm,
+                    handleRegister, handleLogin, handleLogout, handleAddFund, handleDeleteFund,
+                    triggerUpload, handleFileUpload, openEditModal, handleSaveDetails, handleSettleNightly,
+                    totalTodayRate, 
+                    // 雷达系统导出
+                    showSectorRadar, sectorTopList, sectorBottomList, isSectorLoading, fetchSectors, 
+                    // 透视系统导出
+                    showSectorDetails, detailsTitle, detailsList, isDetailsLoading, fetchSectorDetails
                 };
+
 
                 // 别忘了在 setup 的 return 里面把它们导出来！
                 // return { ..., showSectorDetails, detailsTitle, detailsList, isDetailsLoading, fetchSectorDetails }
@@ -900,13 +882,18 @@
                 onMounted(() => { if (currentUser.value) { isLoggedIn.value = true; initDashboard(); } });
                 onUnmounted(() => { if (timer) clearInterval(timer); if (chartInstance.value) chartInstance.value.dispose(); });
 
-                return {
+                                return {
                     isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, showAssets, isUploading, editForm,
                     handleRegister, handleLogin, handleLogout, handleAddFund, handleDeleteFund,
                     triggerUpload, handleFileUpload, openEditModal, handleSaveDetails, handleSettleNightly,
-                    totalTodayRate, showSectorRadar, sectorList, isSectorLoading, fetchSectors, sectorTopList, sectorBottomList, showSectorDetails, detailsTitle, detailsList, isDetailsLoading, fetchSectorDetails,// 👈 新增这个，别忘了加逗号
+                    totalTodayRate, 
+                    // 雷达系统导出
+                    showSectorRadar, sectorTopList, sectorBottomList, isSectorLoading, fetchSectors, 
+                    // 透视系统导出
+                    showSectorDetails, detailsTitle, detailsList, isDetailsLoading, fetchSectorDetails
                 };
+
             }
         }).mount('#app');
     </script>
