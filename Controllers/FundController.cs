@@ -942,13 +942,11 @@ string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&
                 return StatusCode(500, $"X光机故障: {ex.Message}");
             }
         }
-                                        [HttpGet("fund-holdings")]
+                                                [HttpGet("fund-holdings")]
         public async Task<IActionResult> GetFundHoldings([FromQuery] string fundCode)
         {
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
             
-            // 🛡️ 终极反侦察：彻底伪装成一台真实的安卓手机 (三星 Galaxy S20)
-            // 删除了画蛇添足的 PC 版 Referer，防止触发东财的跨端拦截防火墙！
             client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36");
             client.DefaultRequestHeaders.Add("Accept", "application/json, text/plain, */*");
             client.DefaultRequestHeaders.Add("Accept-Language", "zh-CN,zh;q=0.9");
@@ -959,18 +957,23 @@ string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&
                 string posRes = await client.GetStringAsync(positionUrl);
                 using var posDoc = System.Text.Json.JsonDocument.Parse(posRes);
 
-                // 💉 吐真剂继续保留，以防万一
-                if (!posDoc.RootElement.TryGetProperty("Data", out var dataElement) || dataElement.ValueKind == System.Text.Json.JsonValueKind.Null)
-                {
-                    string debugMsg = posRes.Length > 100 ? posRes.Substring(0, 100) + "..." : posRes;
-                    debugMsg = debugMsg.Replace("\"", "'");
-                    return Ok(new List<object> { new { code = "拦截日志", name = debugMsg, ratio = "0", rate = 0.0 } });
-                }
+                // 🧠 智能双核引擎：兼容东财的两套不同字段名 (Datas vs Data)
+                JsonElement dataElement;
+                if (posDoc.RootElement.TryGetProperty("Datas", out var datasObj) && datasObj.ValueKind != System.Text.Json.JsonValueKind.Null)
+                    dataElement = datasObj;
+                else if (posDoc.RootElement.TryGetProperty("Data", out var dataObj) && dataObj.ValueKind != System.Text.Json.JsonValueKind.Null)
+                    dataElement = dataObj;
+                else
+                    return Ok(new List<object>()); // 真的没数据
 
-                if (!dataElement.TryGetProperty("fundPosition", out var fundPosition) || fundPosition.ValueKind == System.Text.Json.JsonValueKind.Null)
-                {
-                    return Ok(new List<object> { new { code = "空仓日志", name = "该基金未公布十大重仓股", ratio = "0", rate = 0.0 } });
-                }
+                // 🧠 智能双核引擎：兼容东财的两套数组名 (fundStocks vs fundPosition)
+                JsonElement fundPosition;
+                if (dataElement.TryGetProperty("fundStocks", out var stocksObj) && stocksObj.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    fundPosition = stocksObj;
+                else if (dataElement.TryGetProperty("fundPosition", out var posObj) && posObj.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    fundPosition = posObj;
+                else
+                    return Ok(new List<object>()); // 没公布重仓股
 
                 var stockList = new List<dynamic>();
                 var secidList = new List<string>();
@@ -997,7 +1000,6 @@ string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&
                     string secids = string.Join(",", secidList);
                     string quoteUrl = $"http://push2.eastmoney.com/api/qt/ulist.np/get?secids={secids}&fields=f12,f14,f3";
                     
-                    // 查股票实时涨幅的时候，重新穿上电脑的伪装（因为 push2 接口是 PC 端的）
                     using var quoteClient = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
                     quoteClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
                     
