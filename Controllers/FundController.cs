@@ -694,25 +694,86 @@ namespace 估值助手.Controllers
         [HttpGet("sectors")]
         public async Task<IActionResult> GetSectors()
         {
-            // 使用 HttpClient 去东方财富拉取“行业板块”的实时排行
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
             try
             {
-                // 东方财富的隐藏 API：
-                // m:90+t:2 代表行业板块
-                // po=1 是降序排列 (涨幅最高的在最前面)
-                // pz=20 是只取前 20 名
-                // fields=f12,f14,f3 分别代表：代码、名字、涨跌幅
-                string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=20&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3";
-
+                // pz=100：一次性把全市场近百个板块全拉过来！
+                string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3";
                 string response = await client.GetStringAsync(url);
+                using var doc = System.Text.Json.JsonDocument.Parse(response);
+                var diffArray = doc.RootElement.GetProperty("data").GetProperty("diff").EnumerateArray();
 
-                // 直接把东方财富的数据原封不动地转发给咱们的手机前端
-                return Content(response, "application/json");
+                var list = new List<dynamic>();
+                foreach (var item in diffArray)
+                {
+                    // 过滤掉停牌或没有数据的异常板块
+                    if (item.TryGetProperty("f3", out var f3Element) && f3Element.ValueKind == System.Text.Json.JsonValueKind.Number)
+                    {
+                        list.Add(new
+                        {
+                            code = item.GetProperty("f12").GetString(),
+                            name = item.GetProperty("f14").GetString(),
+                            rate = f3Element.GetDouble()
+                        });
+                    }
+                }
+
+                // 按涨跌幅从高到低排序
+                var sorted = list.OrderByDescending(x => x.rate).ToList();
+
+                // 🔪 拔出排头兵（涨幅最高前 10）
+                var top10 = sorted.Take(10).ToList();
+
+                // 🔪 揪出吊车尾（跌幅最惨前 10，并且让跌得最惨的排在最前面）
+                var bottom10 = sorted.TakeLast(10).OrderBy(x => x.rate).ToList();
+
+                return Ok(new { top = top10, bottom = bottom10 });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"获取板块雷达失败: {ex.Message}");
+                return StatusCode(500, $"雷达故障: {ex.Message}");
+            }
+        }
+        [HttpGet("sector-details")]
+        public async Task<IActionResult> GetSectorDetails([FromQuery] string secCode)
+        {
+            if (string.IsNullOrEmpty(secCode)) return BadRequest("缺少板块雷达识别码");
+
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            try
+            {
+                // 🕵️‍♂️ 东方财富深层 API：fs=b:{secCode} 代表查询这个板块下的成分股
+                // pz=6 代表只取前 6 名龙头，po=1 代表按涨幅降序排列
+                string url = $"http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=6&po=1&np=1&fltt=2&invt=2&fid=f3&fs=b:{secCode}&fields=f12,f14,f3";
+
+                string response = await client.GetStringAsync(url);
+                using var doc = System.Text.Json.JsonDocument.Parse(response);
+                var dataProp = doc.RootElement.GetProperty("data");
+
+                // 防止某些冷门板块没有成分股数据
+                if (dataProp.ValueKind == System.Text.Json.JsonValueKind.Null) return Ok(new List<dynamic>());
+
+                var diffArray = dataProp.GetProperty("diff").EnumerateArray();
+                var list = new List<dynamic>();
+
+                foreach (var item in diffArray)
+                {
+                    if (item.TryGetProperty("f3", out var f3Element) && f3Element.ValueKind == System.Text.Json.JsonValueKind.Number)
+                    {
+                        list.Add(new
+                        {
+                            code = item.GetProperty("f12").GetString(),
+                            name = item.GetProperty("f14").GetString(),
+                            rate = f3Element.GetDouble()
+                        });
+                    }
+                }
+
+                return Ok(list);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"X光机故障: {ex.Message}");
             }
         }
     }

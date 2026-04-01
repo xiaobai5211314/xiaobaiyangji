@@ -471,30 +471,73 @@
 
         </div>
         <div v-if="showSectorRadar" class="modal-overlay" @click.self="showSectorRadar = false" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: flex-end; z-index: 1000;">
-            <div style="background: #1e293b; width: 100%; height: 70vh; border-radius: 20px 20px 0 0; padding: 20px; display: flex; flex-direction: column;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <h3 style="color: white; margin: 0;">🔥 市场热点板块 TOP 20</h3>
+            <div style="background: #1e293b; width: 100%; height: 80vh; border-radius: 20px 20px 0 0; padding: 20px; display: flex; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 style="color: white; margin: 0;">📡 全市场板块监控雷达</h3>
                     <span @click="showSectorRadar = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
                 </div>
 
-                <div v-if="isSectorLoading" style="color: #94a3b8; text-align: center; margin-top: 50px;">📡 雷达扫描中...</div>
+                <div v-if="isSectorLoading" style="color: #94a3b8; text-align: center; margin-top: 50px;">📡 正在扫描全网板块...</div>
 
-                <div v-else style="overflow-y: auto; flex: 1;">
-                    <div style="display: flex; justify-content: space-between; color: #94a3b8; font-size: 13px; padding-bottom: 10px; border-bottom: 1px solid #334155;">
-                        <span style="flex: 1;">板块名称</span>
-                        <span style="width: 80px; text-align: right;">今日涨幅</span>
-                    </div>
-                    <div v-for="(item, index) in sectorList" :key="item.f12" style="display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid #334155; align-items: center;">
-                        <div style="flex: 1; display: flex; align-items: center; gap: 10px;">
-                            <span :style="{ background: index < 3 ? '#ef4444' : '#475569', color: 'white', fontSize: '12px', padding: '2px 6px', borderRadius: '4px' }">{{ index + 1 }}</span>
-                            <span style="color: #f8fafc; font-weight: bold;">{{ item.f14 }}</span>
+                <div v-else style="overflow-y: auto; flex: 1; padding-right: 5px;">
+
+                    <div style="margin-bottom: 20px;">
+                        <h4 style="color: #ef4444; border-bottom: 1px solid #334155; padding-bottom: 5px;">🔥 今日领涨 TOP 10 (止盈区)</h4>
+                        <div v-for="(item, index) in sectorTopList" :key="item.code"
+                             @click="fetchSectorDetails(item)"
+                             style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px dashed #334155; cursor: pointer;">
+                            <span style="color: #f8fafc; font-weight: bold;">{{ index + 1 }}. {{ item.name }}</span>
+                            <span style="color: #ff4d4f; font-weight: 900;">+{{ item.rate }}%</span>
                         </div>
-                        <div style="width: 80px; text-align: right; font-weight: 900; font-family: 'Courier New', monospace;" :style="{ color: item.f3 >= 0 ? '#ff4d4f' : '#10b981' }">
-                            {{ item.f3 > 0 ? '+' : '' }}{{ item.f3 }}%
+                    </div>
+
+                    <div>
+                        <h4 style="color: #10b981; border-bottom: 1px solid #334155; padding-bottom: 5px;">🧊 今日领跌 TOP 10 (抄底区)</h4>
+                        <div v-for="(item, index) in sectorBottomList" :key="item.code"
+                             @click="fetchSectorDetails(item)"
+                             style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px dashed #334155; cursor: pointer;">
+                            <span style="color: #f8fafc; font-weight: bold;">{{ index + 1 }}. {{ item.name }}</span>
+                            <span style="color: #10b981; font-weight: 900;">{{ item.rate }}%</span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+        <div v-if="showSectorDetails" class="modal-overlay" @click.self="showSectorDetails = false" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 2000;">
+
+            <div style="background: #0f172a; width: 85%; border-radius: 15px; padding: 20px; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.8);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px;">
+                    <h3 style="color: #38bdf8; margin: 0;">🔬 {{ detailsTitle }} - 核心成分股</h3>
+                    <span @click="showSectorDetails = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
+                </div>
+
+                <div v-if="isDetailsLoading" style="color: #94a3b8; text-align: center; padding: 20px 0;">
+                    🔬 正在抓取核心龙头...
+                </div>
+
+                <div v-else-if="detailsList.length === 0" style="color: #94a3b8; text-align: center; padding: 20px 0;">
+                    该板块暂无成分股数据
+                </div>
+
+                <div v-else>
+                    <div style="display: flex; justify-content: space-between; color: #64748b; font-size: 12px; margin-bottom: 8px;">
+                        <span>股票名称/代码</span>
+                        <span>今日涨跌</span>
+                    </div>
+
+                    <div v-for="stock in detailsList" :key="stock.code" style="display: flex; justify-content: space-between; padding: 10px 0; align-items: center;">
+                        <div style="display: flex; flex-direction: column;">
+                            <span style="color: #f8fafc; font-weight: bold; font-size: 15px;">{{ stock.name }}</span>
+                            <span style="color: #64748b; font-size: 12px; font-family: monospace;">{{ stock.code }}</span>
+                        </div>
+                        <div :style="{ color: stock.rate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold', fontFamily: 'Courier New', fontSize: '16px' }">
+                            {{ stock.rate > 0 ? '+' : '' }}{{ stock.rate }}%
                         </div>
                     </div>
                 </div>
             </div>
+
         </div>
     </div>
 
@@ -567,29 +610,43 @@
                     };
                 };
 
-                // 找个地方定义这些变量
-                const showSectorRadar = ref(false); // 控制弹窗显示
-                const sectorList = ref([]); // 存放板块数据
+                // 准备两个空投箱，分别装红榜和绿榜
+                const sectorTopList = ref([]);
+                const sectorBottomList = ref([]);
+                const showSectorRadar = ref(false);
                 const isSectorLoading = ref(false);
 
-                // 加一个获取板块数据的函数
-                const fetchSectors = async () => {
-                    showSectorRadar.value = true;
-                    isSectorLoading.value = true;
+                // 刚才的板块变量下面，加这几个“成分股透视”变量
+                const showSectorDetails = ref(false); // 控制次级弹窗
+                const detailsTitle = ref(''); // 记录你点了哪个板块
+                const detailsList = ref([]); // 存放抓回来的 6 只股票
+                const isDetailsLoading = ref(false);
+
+                // 点击板块触发透视的方法
+                const fetchSectorDetails = async (sector) => {
+                    detailsTitle.value = sector.name;
+                    showSectorDetails.value = true;
+                    isDetailsLoading.value = true;
+                    detailsList.value = []; // 清空上次的数据
+
                     try {
-                        // 注意：这里的域名换成你自己的宝塔 API 域名！
+                        // ⚠️ 记得换成你真实的 API 域名！
                         const res = await fetch('https://guzhi.21212121.xyz/api/fund/sectors');
                         const json = await res.json();
-                        // 解析东方财富的格式
-                        if (json && json.data && json.data.diff) {
-                            sectorList.value = json.data.diff;
-                        }
+                        detailsList.value = json;
                     } catch (e) {
-                        alert("雷达连接失败！");
+                        alert("透视连接失败！");
                     } finally {
-                        isSectorLoading.value = false;
+                        isDetailsLoading.value = false;
                     }
                 };
+
+                // 别忘了在 setup 的 return 里面把它们导出来！
+                // return { ..., showSectorDetails, detailsTitle, detailsList, isDetailsLoading, fetchSectorDetails }
+
+
+
+               
 
                 const handleRegister = async () => {
                     if (!loginForm.username || !loginForm.password) return alert("账号密码为空！");
@@ -848,7 +905,7 @@
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, showAssets, isUploading, editForm,
                     handleRegister, handleLogin, handleLogout, handleAddFund, handleDeleteFund,
                     triggerUpload, handleFileUpload, openEditModal, handleSaveDetails, handleSettleNightly,
-                    totalTodayRate, showSectorRadar, sectorList, isSectorLoading, fetchSectors, // 👈 新增这个，别忘了加逗号
+                    totalTodayRate, showSectorRadar, sectorList, isSectorLoading, fetchSectors, sectorTopList, sectorBottomList, showSectorDetails, detailsTitle, detailsList, isDetailsLoading, fetchSectorDetails,// 👈 新增这个，别忘了加逗号
                 };
             }
         }).mount('#app');
