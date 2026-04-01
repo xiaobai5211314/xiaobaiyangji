@@ -733,21 +733,44 @@ namespace 估值助手.Controllers
         {
             if (string.IsNullOrEmpty(sectorName)) return BadRequest("缺少板块名称");
 
-            // 🧠 1. 智能分词：砍掉多余的行业后缀，只留核心词（命中率暴增！）
-                        // 🧠 1. 智能分词：剥离“概念”等干扰词汇，提纯核心词
+                       // 🧠 1. 终极智能降维：把极度冷门的股市概念，强行翻译成宽泛的基金主题！
             string keyword = sectorName.Replace("概念", "").Replace("板块", "");
-            
-            // 砍掉多余的行业后缀，提取核心词 (升级为精准截断)
-            string[] suffixes = { "制造", "外包", "服务", "设备", "商业", "制剂", "用品", "耗材", "制品", "工程", "产业" };
-            foreach (var suffix in suffixes)
+
+            // 🌟 核心映射字典：教系统什么是医药，什么是科技
+            if (keyword.Contains("蛋白") || keyword.Contains("CRO") || keyword.Contains("药") || keyword.Contains("单抗") || keyword.Contains("肝炎") || keyword.Contains("阿兹海默") || keyword.Contains("医疗") || keyword.Contains("医美") || keyword.Contains("生物"))
+                keyword = "医药";
+            else if (keyword.Contains("CPO") || keyword.Contains("光通信") || keyword.Contains("算力") || keyword.Contains("服务器") || keyword.Contains("宽带") || keyword.Contains("脑机"))
+                keyword = "通信";
+            else if (keyword.Contains("低空经济") || keyword.Contains("飞行") || keyword.Contains("卫星") || keyword.Contains("航天"))
+                keyword = "军工";
+            else if (keyword.Contains("电池") || keyword.Contains("锂") || keyword.Contains("钠") || keyword.Contains("储能") || keyword.Contains("光伏"))
+                keyword = "新能源";
+            else if (keyword.Contains("半导体") || keyword.Contains("光刻") || keyword.Contains("封装") || keyword.Contains("芯片"))
+                keyword = "半导体";
+            else if (keyword.Contains("苹果") || keyword.Contains("华为") || keyword.Contains("消费电子") || keyword.Contains("面板") || keyword.Contains("元器件"))
+                keyword = "电子";
+            else if (keyword.Contains("汽车") || keyword.Contains("整车"))
+                keyword = "汽车";
+            else if (keyword.Contains("游戏") || keyword.Contains("传媒") || keyword.Contains("短剧") || keyword.Contains("影视"))
+                keyword = "传媒";
+            else if (keyword.Contains("AI") || keyword.Contains("大模型") || keyword.Contains("数据") || keyword.Contains("软件"))
+                keyword = "人工智能";
+            else
             {
-                if (keyword.EndsWith(suffix) && keyword.Length > suffix.Length)
+                // 如果是没见过的生僻词，启动常规去尾法
+                string[] suffixes = { "制造", "外包", "服务", "设备", "商业", "制剂", "用品", "耗材", "制品", "工程", "产业", "概念" };
+                foreach (var suffix in suffixes)
                 {
-                    // 精准剥离后缀，比如把"医疗耗材"剥离成"医疗"
-                    keyword = keyword.Substring(0, keyword.Length - suffix.Length); 
-                    break;
+                    if (keyword.EndsWith(suffix) && keyword.Length > suffix.Length)
+                    {
+                        keyword = keyword.Substring(0, keyword.Length - suffix.Length);
+                        break;
+                    }
                 }
+                // 终极保底：如果名字还是太长，硬截取前2个字去搜
+                if (keyword.Length >= 4) keyword = keyword.Substring(0, 2);
             }
+
 
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
             var resultList = new List<dynamic>();
