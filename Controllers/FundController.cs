@@ -1016,7 +1016,7 @@ string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&
                                 double r = 0;
                                 if (diff.TryGetProperty("f3", out var f3) && f3.ValueKind == System.Text.Json.JsonValueKind.Number)
                                 {
-                                    // 🐛 核心修复：把东财放大了100倍的整数，除以 100 还原成真实百分比，并保留2位小数！
+                                    // 🐛核心修复：把东财放大了100倍的整数，除以 100 还原成真实百分比，并保留2位小数！
                                     r = Math.Round(f3.GetDouble() / 100.0, 2);
                                 }
                                 if (!string.IsNullOrEmpty(c)) rateDict[c] = r;
