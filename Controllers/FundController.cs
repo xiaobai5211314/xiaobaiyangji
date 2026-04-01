@@ -568,7 +568,8 @@ namespace 估值助手.Controllers
                     };
                 });
 
-                return Ok(result);
+                // 让结果按照 amount (持仓金额) 从大到小降序排列后再发给大屏
+                return Ok(result.OrderByDescending(x => x.amount));
             }
             catch (Exception ex)
             {
