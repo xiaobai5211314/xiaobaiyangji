@@ -4,9 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>估值助手</title>
-    <!--<script src="https://cdn.staticfile.net/vue/3.3.4/vue.global.prod.min.js"></script>
-    <script src="https://cdn.staticfile.net/echarts/5.5.0/echarts.min.js"></script>-->
+
+    <base href="/" />
+
+    <meta name="theme-color" content="#0f172a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
     <style>
+        /* 强制把 html 最底层的底板也刷黑，防止边缘漏白 */
+        html {
+            background-color: #0f172a;
+        }
+
+        [v-cloak] {
+            display: none !important;
+        }
+
         body {
             margin: 0;
             padding: 0;
@@ -223,10 +238,6 @@
             box-sizing: border-box;
         }
 
-        [v-cloak] {
-            display: none !important;
-        }
-
         .divider {
             width: 1px;
             height: 40px;
@@ -281,7 +292,10 @@
         }
     </style>
 </head>
-<body>
+
+<body style="background-color: #0f172a;">
+    <div id="blazor-app" style="display:none;"></div>
+
     <div id="app" v-cloak>
         <div v-if="!isLoggedIn" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,23,42,0.8);backdrop-filter:blur(15px);z-index:999;display:flex;align-items:center;justify-content:center;">
             <div class="glass-panel" style="padding: 40px; text-align: center; width: 300px;">
@@ -319,7 +333,6 @@
             </div>
 
             <div class="glass-panel total-panel" style="margin: 0 15px 15px 15px; padding: 20px 30px; display: flex; justify-content: space-around; align-items: center; background: rgba(15, 23, 42, 0.6); flex-wrap: wrap; row-gap: 15px;">
-
                 <div style="text-align: center;">
                     <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">⏱️ 系统时间雷达</div>
                     <div :style="{ fontSize: '18px', fontWeight: '900', color: isNight ? '#10b981' : '#f59e0b', margin: '5px 0' }">
@@ -541,11 +554,25 @@
         </div>
     </div>
 
+    <script src="https://cdn.staticfile.net/vue/3.3.4/vue.global.prod.min.js"></script>
+    <script src="https://cdn.staticfile.net/echarts/5.5.0/echarts.min.js"></script>
+    <script>
+        // 如果发现环境里有特有的原生标记，或者是从本地 file:// 协议打开的
+        if (window.hasOwnProperty('chrome') && window.chrome.webview || window.location.protocol === 'file:') {
+            // 动态修建跨海大桥
+            var script = document.createElement('script');
+            script.src = "_framework/blazor.webview.js";
+            document.body.appendChild(script);
+            console.log("⚡ 检测到原生装甲车环境，已启动引擎桥接！");
+        } else {
+            console.log("🌐 检测到普通网页浏览器环境，跳过原生桥接。");
+        }
+    </script>
+
     <script>
         const { createApp, ref, reactive, onMounted, onUnmounted, nextTick, shallowRef, watch } = Vue;
         createApp({
             setup() {
-                // 🌟 新增：全局 API 基础路径
                 const API_BASE = 'https://guzhi.21212121.xyz';
 
                 const isLoggedIn = ref(false);
@@ -555,13 +582,12 @@
                 const isLoading = ref(true);
                 const isNight = ref(false);
 
-                // 数据指标
                 const totalPrincipal = ref(0);
                 const totalProfit = ref(0);
                 const totalRate = ref(0);
                 const totalTodayProfit = ref(0);
-                // 👇 新增下面这一行 👇
                 const totalTodayRate = ref(0);
+
                 const loginForm = reactive({ username: '', password: '' });
                 const fundForm = reactive({ code: '', amount: '' });
                 const chartInstance = shallowRef(null);
@@ -570,67 +596,23 @@
                 const showAssets = ref(false);
                 const editForm = reactive({ show: false, code: '', name: '', cost: '', originalCode: '' });
 
-                // 📸 前端 Canvas 极限压缩核心引擎
-                const compressImageBeforeUpload = (file, successCallback) => {
-                    const reader = new FileReader();
-                    reader.readAsDataURL(file);
-                    reader.onload = function (e) {
-                        const img = new Image();
-                        img.src = e.target.result;
-                        img.onload = function () {
-                            const canvas = document.createElement('canvas');
-                            const ctx = canvas.getContext('2d');
-
-                            // 锁定最大宽度为 800px，高度等比例缩放
-                            const maxWidth = 800;
-                            let targetWidth = img.width;
-                            let targetHeight = img.height;
-
-                            if (targetWidth > maxWidth) {
-                                targetHeight = Math.round(targetHeight * (maxWidth / targetWidth));
-                                targetWidth = maxWidth;
-                            }
-
-                            canvas.width = targetWidth;
-                            canvas.height = targetHeight;
-
-                            // 填充白底，防止 PNG 等透明图片变黑底影响 OCR
-                            ctx.fillStyle = "#fff";
-                            ctx.fillRect(0, 0, canvas.width, canvas.height);
-                            ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
-
-                            // ⚡ 输出质量为 0.5 (50%) 的 JPEG 图片
-                            canvas.toBlob(function (blob) {
-                                // 重新打包成 File 对象
-                                const fileName = file.name.replace(/\.[^/.]+$/, "") + ".jpg"; // 确保后缀变更为 jpg
-                                const compressedFile = new File([blob], fileName, { type: 'image/jpeg' });
-                                successCallback(compressedFile);
-                            }, 'image/jpeg', 0.5);
-                        };
-                    };
-                };
-
-                // 准备两个空投箱，分别装红榜和绿榜
                 const sectorTopList = ref([]);
                 const sectorBottomList = ref([]);
                 const showSectorRadar = ref(false);
                 const isSectorLoading = ref(false);
 
-                // 刚才的板块变量下面，加这几个“成分股透视”变量
-                const showSectorDetails = ref(false); // 控制次级弹窗
-                const detailsTitle = ref(''); // 记录你点了哪个板块
-                const detailsList = ref([]); // 存放抓回来的 6 只股票
+                const showSectorDetails = ref(false);
+                const detailsTitle = ref('');
+                const detailsList = ref([]);
                 const isDetailsLoading = ref(false);
 
-                // 点击板块触发透视的方法
                 const fetchSectorDetails = async (sector) => {
                     detailsTitle.value = sector.name;
                     showSectorDetails.value = true;
                     isDetailsLoading.value = true;
-                    detailsList.value = []; // 清空上次的数据
+                    detailsList.value = [];
 
                     try {
-                        // ⚠️ 记得换成你真实的 API 域名！
                         const res = await fetch('https://guzhi.21212121.xyz/api/fund/sectors');
                         const json = await res.json();
                         detailsList.value = json;
@@ -641,12 +623,35 @@
                     }
                 };
 
-                // 别忘了在 setup 的 return 里面把它们导出来！
-                // return { ..., showSectorDetails, detailsTitle, detailsList, isDetailsLoading, fetchSectorDetails }
-
-
-
-               
+                const compressImageBeforeUpload = (file, successCallback) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = function (e) {
+                        const img = new Image();
+                        img.src = e.target.result;
+                        img.onload = function () {
+                            const canvas = document.createElement('canvas');
+                            const ctx = canvas.getContext('2d');
+                            const maxWidth = 800;
+                            let targetWidth = img.width;
+                            let targetHeight = img.height;
+                            if (targetWidth > maxWidth) {
+                                targetHeight = Math.round(targetHeight * (maxWidth / targetWidth));
+                                targetWidth = maxWidth;
+                            }
+                            canvas.width = targetWidth;
+                            canvas.height = targetHeight;
+                            ctx.fillStyle = "#fff";
+                            ctx.fillRect(0, 0, canvas.width, canvas.height);
+                            ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+                            canvas.toBlob(function (blob) {
+                                const fileName = file.name.replace(/\.[^/.]+$/, "") + ".jpg";
+                                const compressedFile = new File([blob], fileName, { type: 'image/jpeg' });
+                                successCallback(compressedFile);
+                            }, 'image/jpeg', 0.5);
+                        };
+                    };
+                };
 
                 const handleRegister = async () => {
                     if (!loginForm.username || !loginForm.password) return alert("账号密码为空！");
@@ -660,18 +665,13 @@
                         let fd = new FormData();
                         fd.append('username', loginForm.username);
                         fd.append('password', loginForm.password);
-
-                        // 加上等待提示，看看是不是卡住了
                         let btn = event.target;
                         let oldText = btn.innerText;
                         btn.innerText = "连线中...";
                         btn.disabled = true;
-
                         const res = await fetch(API_BASE + '/api/auth/login', { method: 'POST', body: fd });
-
                         btn.innerText = oldText;
                         btn.disabled = false;
-
                         if (res.ok) {
                             localStorage.setItem('fund_username', loginForm.username);
                             currentUser.value = loginForm.username;
@@ -681,13 +681,11 @@
                             alert("❌ 账号或密码错误");
                         }
                     } catch (error) {
-                        // 如果跨域被拦截、或者宝塔后端死机，会走到这里！
-                        alert("🌐 登录请求发不出去！\n原因可能是：跨域被拦截(CORS) 或 后端未启动。\n错误详情：" + error.message);
+                        alert("🌐 登录请求发不出去！\n错误详情：" + error.message);
                         event.target.innerText = "进入";
                         event.target.disabled = false;
                     }
                 };
-
 
                 const handleLogout = () => { localStorage.removeItem('fund_username'); location.reload(); };
 
@@ -723,18 +721,13 @@
 
                 const triggerUpload = () => { document.getElementById('ocrInput').click(); };
 
-                // 🚀 集成了压缩的极速上传方法
                 const handleFileUpload = async (event) => {
                     const file = event.target.files[0];
                     if (!file) return;
-
                     isUploading.value = true;
-
-                    // ⚡ 先在手机端压缩图片
                     compressImageBeforeUpload(file, async (compressedFile) => {
                         const formData = new FormData();
-                        formData.append('imageFile', compressedFile); // 发送压缩后的极小图片
-
+                        formData.append('imageFile', compressedFile);
                         try {
                             const response = await fetch(`${API_BASE}/api/Fund/import-ocr?username=${encodeURIComponent(currentUser.value)}`, { method: 'POST', body: formData });
                             if (response.ok) {
@@ -750,7 +743,7 @@
                             alert("🌐 失去与云端智脑的连接，请检查网络！");
                         } finally {
                             isUploading.value = false;
-                            event.target.value = ''; // 清空 input 允许重复上传同名文件
+                            event.target.value = '';
                         }
                     });
                 };
@@ -773,6 +766,24 @@
                         if (res.ok) { alert("✅ 弹药已补给！大屏将自动重新计算盈亏！"); editForm.show = false; fetchData(); }
                         else alert("❌ 保存失败: " + await res.text());
                     } catch (e) { alert("🌐 连线智脑阵亡"); }
+                };
+
+                // 为了防止 fetchSectors 未定义引发错误，补上这个方法
+                const fetchSectors = async () => {
+                    showSectorRadar.value = true;
+                    isSectorLoading.value = true;
+                    try {
+                        const res = await fetch(`${API_BASE}/api/fund/sectors`);
+                        const json = await res.json();
+                        if (json.top && json.bottom) {
+                            sectorTopList.value = json.top;
+                            sectorBottomList.value = json.bottom;
+                        }
+                    } catch (e) {
+                        alert("雷达连接失败！");
+                    } finally {
+                        isSectorLoading.value = false;
+                    }
                 };
 
                 const fetchData = async () => {
@@ -806,7 +817,6 @@
                         totalPrincipal.value = tPrincipal;
                         totalProfit.value = tPrincipal - tCost;
                         totalTodayProfit.value = tToday;
-                        // 👇 新增下面这一行 (今日收益 / 昨日总市值 * 100) 👇
                         totalTodayRate.value = tPrincipal > 0 ? (tToday / tPrincipal * 100) : 0;
                         totalRate.value = tCost > 0 ? ((tPrincipal - tCost) / tCost * 100) : 0;
 
@@ -900,12 +910,14 @@
                 onMounted(() => { if (currentUser.value) { isLoggedIn.value = true; initDashboard(); } });
                 onUnmounted(() => { if (timer) clearInterval(timer); if (chartInstance.value) chartInstance.value.dispose(); });
 
+                // 🚀 修复3：只导出代码里真实存在的方法和变量，删除了空气变量 sectorList！
                 return {
                     isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, showAssets, isUploading, editForm,
                     handleRegister, handleLogin, handleLogout, handleAddFund, handleDeleteFund,
                     triggerUpload, handleFileUpload, openEditModal, handleSaveDetails, handleSettleNightly,
-                    totalTodayRate, showSectorRadar, sectorList, isSectorLoading, fetchSectors, sectorTopList, sectorBottomList, showSectorDetails, detailsTitle, detailsList, isDetailsLoading, fetchSectorDetails,// 👈 新增这个，别忘了加逗号
+                    totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors, sectorTopList, sectorBottomList,
+                    showSectorDetails, detailsTitle, detailsList, isDetailsLoading, fetchSectorDetails
                 };
             }
         }).mount('#app');
