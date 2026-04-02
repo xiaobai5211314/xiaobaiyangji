@@ -12,7 +12,6 @@
     <link rel="manifest" href='data:application/manifest+json,{"name":"估值助手","display":"standalone","background_color":"#0f172a","theme_color":"#0f172a"}'>
     
     <style>
-       /* 强制把 html 最底层的底板也刷黑，防止边缘漏白 */
        html { background-color: #0f172a; } 
     </style>
 
@@ -51,12 +50,6 @@
 
 <body style="background-color: #0f172a;">
     <div id="app">
-        <div v-if="false" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:#0f172a;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;">
-            <div style="width:50px;height:50px;border:4px solid rgba(79, 172, 254, 0.2);border-top-color:#4facfe;border-radius:50%;animation:spin 1s linear infinite;"></div>
-            <div style="margin-top:20px;color:#4facfe;font-weight:bold;letter-spacing:2px;font-size:14px;">⚡ 量化引擎点火中...</div>
-            <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style>
-        </div>
-
         <div v-if="!isLoggedIn" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,23,42,0.8);backdrop-filter:blur(15px);z-index:999;display:flex;align-items:center;justify-content:center;">
             <div class="glass-panel" style="padding: 40px; text-align: center; width: 300px;">
                 <h2 style="margin-top:0;background:linear-gradient(to right,#00f2fe,#4facfe);-webkit-background-clip:text;color:transparent;">⚡ 量化指挥中心</h2>
@@ -97,6 +90,7 @@
                 <div style="text-align: center;">
                     <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">⏱️ 系统时间雷达</div>
                     <div :style="{ fontSize: '18px', fontWeight: '900', color: isNight ? '#10b981' : '#f59e0b', margin: '5px 0' }">
+                        <span v-if="isBackgroundUpdating" style="font-size:12px; color:#4facfe; margin-right:5px;">↻更新中</span>
                         {{ isNight ? '🌙 夜间清算模式' : '☀️ 盘中盯盘模式' }}
                     </div>
                 </div>
@@ -114,7 +108,7 @@
                 <div style="text-align: center;">
                     <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">🌟 今日总预估收益</div>
                     <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: showAssets ? (totalTodayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">
-                        {{ showAssets ? (totalTodayProfit >= 0 ? '+$' : '') + totalTodayProfit.toFixed(2) : '****' }}
+                        {{ showAssets ? (totalTodayProfit >= 0 ? '+' : '') + totalTodayProfit.toFixed(2) : '****' }}
                     </div>
                 </div>
                 <div class="divider"></div>
@@ -128,7 +122,7 @@
                 <div style="text-align: center;">
                     <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">💰 累计总盈亏</div>
                     <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: showAssets ? (totalProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">
-                        {{ showAssets ? (totalProfit >= 0 ? '+$' : '') + totalProfit.toFixed(2) : '****' }}
+                        {{ showAssets ? (totalProfit >= 0 ? '+' : '') + totalProfit.toFixed(2) : '****' }}
                     </div>
                 </div>
                 <div class="divider"></div>
@@ -203,24 +197,12 @@
                     </div>
                 </div>
 
-                <span v-if="fundsList.length === 0 && !isLoading" style="color:#64748b; font-size:13px; width: 100%; text-align: center; padding: 20px;">
+                <span v-if="fundsList.length === 0 && !isBackgroundUpdating" style="color:#64748b; font-size:13px; width: 100%; text-align: center; padding: 20px;">
                     暂无阵地，请手动添加代码，或点击上方「📷 智能截图导入」自动扫描支付宝截图
                 </span>
             </div>
 
-            <div v-show="isLoading" class="glass-panel" style="height: calc(100vh - 280px); margin: 15px; display: flex; flex-direction: column; padding: 20px; box-sizing: border-box; gap: 20px;">
-                <div class="skeleton-box" style="width: 30%; height: 30px;"></div>
-                <div class="skeleton-box" style="width: 100%; height: 2px;"></div>
-                <div style="display: flex; gap: 20px; height: 100%;">
-                    <div class="skeleton-box" style="width: 50px; height: 100%;"></div>
-                    <div class="skeleton-box" style="flex: 1; height: 100%;"></div>
-                </div>
-                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #4facfe; font-weight: bold; font-size: 18px; letter-spacing: 2px;">
-                    📡 正在连接总司令部同步数据...
-                </div>
-            </div>
-
-            <div v-show="!isLoading" id="chart-container" class="glass-panel" ref="chartRef"></div>
+            <div id="chart-container" class="glass-panel" ref="chartRef"></div>
 
             <div v-if="editForm.show" class="modal-mask">
                 <div class="modal-content">
@@ -239,7 +221,6 @@
                     </div>
                 </div>
             </div>
-
         </div>
 
         <div v-if="showSectorRadar" class="modal-overlay" @click.self="showSectorRadar = false" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: flex-end; z-index: 1000;">
@@ -358,18 +339,24 @@
             setup() {
                 const API_BASE = 'https://guzhi.21212121.xyz';
 
+                // 🚀 核心魔术：优先读取本地缓存里的残影！
+                const localCache = JSON.parse(localStorage.getItem('dashboard_cache') || '{}');
+
                 const isLoggedIn = ref(false);
                 const currentUser = ref(localStorage.getItem('fund_username') || '');
-                const fundsList = ref([]);
                 const chartRef = ref(null);
-                const isLoading = ref(true);
+                
+                // 🚀 取消全屏加载遮罩，只在后台显示极小字体的“更新中”
+                const isBackgroundUpdating = ref(false); 
                 const isNight = ref(false);
 
-                const totalPrincipal = ref(0);
-                const totalProfit = ref(0);
-                const totalRate = ref(0);
-                const totalTodayProfit = ref(0);
-                const totalTodayRate = ref(0);
+                // 🚀 瞬间读取记忆，填充变量，0延迟渲染！
+                const fundsList = ref(localCache.fundsList || []);
+                const totalPrincipal = ref(localCache.totalPrincipal || 0);
+                const totalProfit = ref(localCache.totalProfit || 0);
+                const totalRate = ref(localCache.totalRate || 0);
+                const totalTodayProfit = ref(localCache.totalTodayProfit || 0);
+                const totalTodayRate = ref(localCache.totalTodayRate || 0);
 
                 const loginForm = reactive({ username: '', password: '' });
                 const fundForm = reactive({ code: '', amount: '' });
@@ -491,7 +478,7 @@
                     } catch (error) { alert("🌐 登录请求发不出去！\n错误详情：" + error.message); event.target.innerText = "进入"; event.target.disabled = false; }
                 };
 
-                const handleLogout = () => { localStorage.removeItem('fund_username'); location.reload(); };
+                const handleLogout = () => { localStorage.removeItem('fund_username'); localStorage.removeItem('dashboard_cache'); location.reload(); };
 
                 const handleSettleNightly = async () => {
                     if (!confirm("⚠️ 确定执行【夜间复利清算】吗？\n\n这会将大屏上所有基金的【今日预估收益】正式计入【昨日市值】中！")) return;
@@ -502,7 +489,7 @@
                     fd.append('codes', codes); fd.append('rates', rates);
                     try {
                         const res = await fetch(API_BASE + '/api/Fund/settle-nightly', { method: 'POST', body: fd });
-                        if (res.ok) { alert(await res.text()); fundsList.value = []; fetchData(); } else alert("❌ 清算失败: " + await res.text());
+                        if (res.ok) { alert(await res.text()); fetchData(); } else alert("❌ 清算失败: " + await res.text());
                     } catch (e) { alert("🌐 清算请求失败"); }
                 };
 
@@ -529,7 +516,7 @@
                         const formData = new FormData(); formData.append('imageFile', compressedFile); 
                         try {
                             const response = await fetch(`${API_BASE}/api/Fund/import-ocr?username=${encodeURIComponent(currentUser.value)}`, { method: 'POST', body: formData });
-                            if (response.ok) { alert(await response.text()); fundsList.value = []; fetchData(); } else { alert("❌ 识别受阻: " + await response.text()); }
+                            if (response.ok) { alert(await response.text()); fetchData(); } else { alert("❌ 识别受阻: " + await response.text()); }
                         } catch (error) { alert("🌐 失去与云端智脑的连接，请检查网络！"); } finally { isUploading.value = false; event.target.value = ''; }
                     });
                 };
@@ -549,6 +536,7 @@
                 const fetchData = async () => {
                     if (!currentUser.value) return;
                     let currentHour = new Date().getHours(); isNight.value = (currentHour >= 20 || currentHour < 6);
+                    isBackgroundUpdating.value = true; // 开启后台小字刷新提示
                     try {
                         const response = await fetch(`${API_BASE}/api/fund/today?username=${encodeURIComponent(currentUser.value)}`);
                         const apiData = await response.json();
@@ -565,8 +553,20 @@
 
                         fundsList.value = apiData; totalPrincipal.value = tPrincipal; totalProfit.value = tPrincipal - tCost; totalTodayProfit.value = tToday;
                         totalTodayRate.value = tPrincipal > 0 ? (tToday / tPrincipal * 100) : 0; totalRate.value = tCost > 0 ? ((tPrincipal - tCost) / tCost * 100) : 0;
-                        renderChart(apiData); setTimeout(() => { isLoading.value = false; }, 300);
-                    } catch (e) { console.error("抓取失败", e); isLoading.value = false; }
+                        renderChart(apiData);
+
+                        // 🚀 新数据拿到了，立刻塞进本地存储，供下次秒开使用！
+                        localStorage.setItem('dashboard_cache', JSON.stringify({
+                            fundsList: fundsList.value,
+                            totalPrincipal: totalPrincipal.value,
+                            totalProfit: totalProfit.value,
+                            totalTodayProfit: totalTodayProfit.value,
+                            totalTodayRate: totalTodayRate.value,
+                            totalRate: totalRate.value
+                        }));
+
+                    } catch (e) { console.error("抓取失败", e); } 
+                    finally { isBackgroundUpdating.value = false; }
                 };
 
                 const renderChart = (apiData) => {
@@ -620,12 +620,21 @@
                 };
 
                 watch(showAssets, () => { if (fundsList.value.length > 0) renderChart(fundsList.value); });
-                const initDashboard = () => { nextTick(() => { fetchData(); timer = setInterval(fetchData, 60000); }); };
+                
+                const initDashboard = () => { 
+                    nextTick(() => { 
+                        // 如果有缓存，图表会用缓存瞬间渲染一次！
+                        if (fundsList.value.length > 0) renderChart(fundsList.value);
+                        fetchData(); 
+                        timer = setInterval(fetchData, 60000); 
+                    }); 
+                };
+                
                 onMounted(() => { if (currentUser.value) { isLoggedIn.value = true; initDashboard(); } });
                 onUnmounted(() => { if (timer) clearInterval(timer); if (chartInstance.value) chartInstance.value.dispose(); });
 
                 return {
-                    isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
+                    isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isBackgroundUpdating, isNight,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, showAssets, isUploading, editForm,
                     handleRegister, handleLogin, handleLogout, handleAddFund, handleDeleteFund,
                     triggerUpload, handleFileUpload, openEditModal, handleSaveDetails, handleSettleNightly,
