@@ -340,7 +340,7 @@ namespace 估值助手.Controllers
         {
             if (string.IsNullOrWhiteSpace(name)) return "";
 
-            // 将所有字母转为大写，并无情地清洗掉 (QDII) 这个干扰项
+           // 将所有字母转为大写，并无情地清洗掉 (QDII) 这个干扰项
             return name.ToUpper()
                        .Replace(" ", "").Replace("（", "(").Replace("）", ")")
                        .Replace("(QDII)", "").Replace("QDII", "") // 👈 就是加了这行！洗掉毒药！
