@@ -855,43 +855,73 @@ namespace 估值助手.Controllers
             }
         }
 
-        [HttpGet("sectors")]
+              [HttpGet("sectors")]
         public async Task<IActionResult> GetSectors()
         {
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
             try
             {
-                // pz=100：一次性把全市场近百个板块全拉过来！
-                // 注意看 fs=m:90+t:3 这个参数，把原来的 t:2 改成了 t:3，直接切换到“概念板块”！
-string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:3&fields=f12,f14,f3";
+                // 🚀 双核引擎启动：同时拉取【行业板块(t:2)】和【概念板块(t:3)】
+                string urlIndustry = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3";
+                string urlConcept = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=300&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:3&fields=f12,f14,f3";
 
-                string response = await client.GetStringAsync(url);
-                using var doc = System.Text.Json.JsonDocument.Parse(response);
-                var diffArray = doc.RootElement.GetProperty("data").GetProperty("diff").EnumerateArray();
+                var task1 = client.GetStringAsync(urlIndustry);
+                var task2 = client.GetStringAsync(urlConcept);
+                await Task.WhenAll(task1, task2);
 
                 var list = new List<dynamic>();
-                foreach (var item in diffArray)
+
+                // 🧠 数据缝合与净化工厂
+                void ParseAndAdd(string json)
                 {
-                    // 过滤掉停牌或没有数据的异常板块
-                    if (item.TryGetProperty("f3", out var f3Element) && f3Element.ValueKind == System.Text.Json.JsonValueKind.Number)
+                    using var doc = System.Text.Json.JsonDocument.Parse(json);
+                    if (doc.RootElement.TryGetProperty("data", out var dataObj) && dataObj.ValueKind != System.Text.Json.JsonValueKind.Null)
                     {
-                        list.Add(new
+                        if (dataObj.TryGetProperty("diff", out var diffArray) && diffArray.ValueKind == System.Text.Json.JsonValueKind.Array)
                         {
-                            code = item.GetProperty("f12").GetString(),
-                            name = item.GetProperty("f14").GetString(),
-                            rate = f3Element.GetDouble()
-                        });
+                            foreach (var item in diffArray.EnumerateArray())
+                            {
+                                if (item.TryGetProperty("f3", out var f3Element) && f3Element.ValueKind == System.Text.Json.JsonValueKind.Number)
+                                {
+                                    string name = item.GetProperty("f14").GetString() ?? "";
+                                    
+                                    // 🛡️ 垃圾词汇过滤器：剔除股市专用词，让它看起来像基金主题！
+                                    if (name.Contains("昨日") || name.Contains("ST") || name.Contains("退市") || name.EndsWith("股")) 
+                                        continue;
+
+                                    // 自动给名字做医美：把“CPO概念”直接变成“CPO”，把“肝炎概念”变成“肝炎”
+                                    name = name.Replace("概念", "");
+
+                                    // 剔除名字太长、太偏门的词汇（超过6个字的通常不是正规基金能覆盖的）
+                                    if (name.Length > 6) continue;
+
+                                    list.Add(new
+                                    {
+                                        code = item.GetProperty("f12").GetString(),
+                                        name = name,
+                                        rate = f3Element.GetDouble()
+                                    });
+                                }
+                            }
+                        }
                     }
                 }
 
+                // 执行缝合
+                ParseAndAdd(task1.Result);
+                ParseAndAdd(task2.Result);
+
+                // 🧹 去重：防止行业和概念里有同名的（比如都有“医药”）
+                var distinctList = list.GroupBy(x => x.name).Select(g => g.First()).ToList();
+
                 // 按涨跌幅从高到低排序
-                var sorted = list.OrderByDescending(x => x.rate).ToList();
+                var sorted = distinctList.OrderByDescending(x => (double)x.rate).ToList();
 
                 // 🔪 拔出排头兵（涨幅最高前 10）
                 var top10 = sorted.Take(10).ToList();
 
                 // 🔪 揪出吊车尾（跌幅最惨前 10，并且让跌得最惨的排在最前面）
-                var bottom10 = sorted.TakeLast(10).OrderBy(x => x.rate).ToList();
+                var bottom10 = sorted.TakeLast(10).OrderBy(x => (double)x.rate).ToList();
 
                 return Ok(new { top = top10, bottom = bottom10 });
             }
@@ -900,6 +930,7 @@ string url = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&
                 return StatusCode(500, $"雷达故障: {ex.Message}");
             }
         }
+
         [HttpGet("sector-details")]
         public async Task<IActionResult> GetSectorDetails([FromQuery] string secCode)
         {
