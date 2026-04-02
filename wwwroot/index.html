@@ -4,10 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>估值助手</title>
-        <meta name="theme-color" content="#0f172a">
+    
+    <meta name="theme-color" content="#0f172a">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href='data:application/manifest+json,{"name":"估值助手","display":"standalone","background_color":"#0f172a","theme_color":"#0f172a"}'>
+    
     <style>
        /* 强制把 html 最底层的底板也刷黑，防止边缘漏白 */
        html { background-color: #0f172a; } 
@@ -39,21 +42,19 @@
         .modal-content { background: #1e293b; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 20px; width: 90%; max-width: 400px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
         .modal-input { width: 100%; background: #0f172a; border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 12px; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box; }
         #chart-container { width: calc(100vw - 30px); height: calc(100vh - 280px); margin: 15px; box-sizing: border-box; }
-        [v-cloak] { display: none !important; }
         .divider { width: 1px; height: 40px; background: rgba(255,255,255,0.1); }
         .skeleton-box { background: linear-gradient(90deg, rgba(40,49,66,0.5) 25%, rgba(55,65,81,0.8) 37%, rgba(40,49,66,0.5) 63%); background-size: 400% 100%; animation: skeleton-loading 1.4s ease infinite; border-radius: 8px; }
         @keyframes skeleton-loading { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
         @media screen and (max-width: 768px) { .header { flex-direction: column; align-items: flex-start; gap: 15px; } .control-panel { width: 100%; } .control-panel input { flex: 1; min-width: 90px; } #chart-container { height: 50vh; } .total-panel { flex-wrap: wrap; gap: 20px; } .divider { display: none; } }
     </style>
 
-       <script defer src="https://cdn.staticfile.net/vue/3.3.4/vue.global.prod.min.js"></script>
+    <script defer src="https://cdn.staticfile.net/vue/3.3.4/vue.global.prod.min.js"></script>
     <script defer src="https://cdn.staticfile.net/echarts/5.5.0/echarts.min.js"></script>
-
 </head>
-<body style="background-color: #0f172a;">
 
+<body style="background-color: #0f172a;">
     <div id="app">
-        <div style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:#0f172a;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;">
+        <div v-if="false" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:#0f172a;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;">
             <div style="width:50px;height:50px;border:4px solid rgba(79, 172, 254, 0.2);border-top-color:#4facfe;border-radius:50%;animation:spin 1s linear infinite;"></div>
             <div style="margin-top:20px;color:#4facfe;font-weight:bold;letter-spacing:2px;font-size:14px;">⚡ 量化引擎点火中...</div>
             <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style>
@@ -116,7 +117,7 @@
                 <div style="text-align: center;">
                     <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">🌟 今日总预估收益</div>
                     <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: showAssets ? (totalTodayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">
-                        {{ showAssets ? (totalTodayProfit >= 0 ? '+' : '') + totalTodayProfit.toFixed(2) : '****' }}
+                        {{ showAssets ? (totalTodayProfit >= 0 ? '+$' : '') + totalTodayProfit.toFixed(2) : '****' }}
                     </div>
                 </div>
                 <div class="divider"></div>
@@ -130,7 +131,7 @@
                 <div style="text-align: center;">
                     <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">💰 累计总盈亏</div>
                     <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: showAssets ? (totalProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">
-                        {{ showAssets ? (totalProfit >= 0 ? '+' : '') + totalProfit.toFixed(2) : '****' }}
+                        {{ showAssets ? (totalProfit >= 0 ? '+$' : '') + totalProfit.toFixed(2) : '****' }}
                     </div>
                 </div>
                 <div class="divider"></div>
@@ -378,25 +379,21 @@
                 const showAssets = ref(false);
                 const editForm = reactive({ show: false, code: '', name: '', cost: '', originalCode: '' });
 
-                // ================== 一级弹窗：板块雷达 变量 ==================
                 const sectorTopList = ref([]);
                 const sectorBottomList = ref([]);
                 const showSectorRadar = ref(false);
                 const isSectorLoading = ref(false);
 
-                // ================== 二级弹窗：透视基金 变量 ==================
                 const showSectorDetails = ref(false); 
                 const detailsTitle = ref(''); 
                 const detailsList = ref([]); 
                 const isDetailsLoading = ref(false);
 
-                // ================== 三级弹窗：重仓股透视 变量 ==================
                 const showHoldingsModal = ref(false);
                 const currentFundForHoldings = ref('');
                 const fundHoldingsList = ref([]);
                 const isHoldingsLoading = ref(false);
 
-                // ================== 方法区域 ==================
                 const fetchSectors = async () => {
                     showSectorRadar.value = true;
                     isSectorLoading.value = true;
@@ -627,7 +624,6 @@
                 onMounted(() => { if (currentUser.value) { isLoggedIn.value = true; initDashboard(); } });
                 onUnmounted(() => { if (timer) clearInterval(timer); if (chartInstance.value) chartInstance.value.dispose(); });
 
-                // 在这里把你问的这几个变量和方法全导出去！
                 return {
                     isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, showAssets, isUploading, editForm,
