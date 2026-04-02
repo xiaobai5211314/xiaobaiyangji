@@ -855,7 +855,7 @@ namespace 估值助手.Controllers
             }
         }
 
-              [HttpGet("sectors")]
+                    [HttpGet("sectors")]
         public async Task<IActionResult> GetSectors()
         {
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
@@ -930,6 +930,7 @@ namespace 估值助手.Controllers
                 return StatusCode(500, $"雷达故障: {ex.Message}");
             }
         }
+
 
         [HttpGet("sector-details")]
         public async Task<IActionResult> GetSectorDetails([FromQuery] string secCode)
