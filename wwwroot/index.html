@@ -47,9 +47,6 @@
         @keyframes skeleton-loading { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
         @media screen and (max-width: 768px) { .header { flex-direction: column; align-items: flex-start; gap: 15px; } .control-panel { width: 100%; } .control-panel input { flex: 1; min-width: 90px; } #chart-container { height: 50vh; } .total-panel { flex-wrap: wrap; gap: 20px; } .divider { display: none; } }
     </style>
-
-    <script defer src="https://cdn.staticfile.net/vue/3.3.4/vue.global.prod.min.js"></script>
-    <script defer src="https://cdn.staticfile.net/echarts/5.5.0/echarts.min.js"></script>
 </head>
 
 <body style="background-color: #0f172a;">
@@ -351,6 +348,9 @@
         </div>
 
     </div>
+
+    <script src="https://cdn.staticfile.net/vue/3.3.4/vue.global.prod.min.js"></script>
+    <script src="https://cdn.staticfile.net/echarts/5.5.0/echarts.min.js"></script>
 
     <script>
         const { createApp, ref, reactive, onMounted, onUnmounted, nextTick, shallowRef, watch } = Vue;
