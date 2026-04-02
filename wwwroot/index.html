@@ -13,6 +13,8 @@
     
     <style>
        html { background-color: #0f172a; } 
+       /* 🚀 核心隐身衣：带有 v-cloak 的元素，在 Vue 启动前绝对不可见！ */
+       [v-cloak] { display: none !important; }
     </style>
 
     <style>
@@ -42,14 +44,18 @@
         .modal-input { width: 100%; background: #0f172a; border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 12px; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box; }
         #chart-container { width: calc(100vw - 30px); height: calc(100vh - 280px); margin: 15px; box-sizing: border-box; }
         .divider { width: 1px; height: 40px; background: rgba(255,255,255,0.1); }
-        .skeleton-box { background: linear-gradient(90deg, rgba(40,49,66,0.5) 25%, rgba(55,65,81,0.8) 37%, rgba(40,49,66,0.5) 63%); background-size: 400% 100%; animation: skeleton-loading 1.4s ease infinite; border-radius: 8px; }
-        @keyframes skeleton-loading { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
         @media screen and (max-width: 768px) { .header { flex-direction: column; align-items: flex-start; gap: 15px; } .control-panel { width: 100%; } .control-panel input { flex: 1; min-width: 90px; } #chart-container { height: 50vh; } .total-panel { flex-wrap: wrap; gap: 20px; } .divider { display: none; } }
     </style>
 </head>
 
 <body style="background-color: #0f172a;">
-    <div id="app">
+
+    <div id="native-splash" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:#0f172a;z-index:999999;display:flex;align-items:center;justify-content:center;color:#4facfe;font-weight:bold;letter-spacing:2px;font-size:14px;">
+        ⚡ 提取记忆中...
+    </div>
+
+    <div id="app" v-cloak>
+        
         <div v-if="!isLoggedIn" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,23,42,0.8);backdrop-filter:blur(15px);z-index:999;display:flex;align-items:center;justify-content:center;">
             <div class="glass-panel" style="padding: 40px; text-align: center; width: 300px;">
                 <h2 style="margin-top:0;background:linear-gradient(to right,#00f2fe,#4facfe);-webkit-background-clip:text;color:transparent;">⚡ 量化指挥中心</h2>
@@ -338,19 +344,14 @@
         createApp({
             setup() {
                 const API_BASE = 'https://guzhi.21212121.xyz';
-
-                // 🚀 核心魔术：优先读取本地缓存里的残影！
                 const localCache = JSON.parse(localStorage.getItem('dashboard_cache') || '{}');
 
                 const isLoggedIn = ref(false);
                 const currentUser = ref(localStorage.getItem('fund_username') || '');
                 const chartRef = ref(null);
-                
-                // 🚀 取消全屏加载遮罩，只在后台显示极小字体的“更新中”
                 const isBackgroundUpdating = ref(false); 
                 const isNight = ref(false);
 
-                // 🚀 瞬间读取记忆，填充变量，0延迟渲染！
                 const fundsList = ref(localCache.fundsList || []);
                 const totalPrincipal = ref(localCache.totalPrincipal || 0);
                 const totalProfit = ref(localCache.totalProfit || 0);
@@ -380,6 +381,17 @@
                 const currentFundForHoldings = ref('');
                 const fundHoldingsList = ref([]);
                 const isHoldingsLoading = ref(false);
+
+                // 🚀 核心战术：当 Vue 引擎启动成功的那一毫秒，撕掉原生的掩护幕布！
+                onMounted(() => {
+                    const splash = document.getElementById('native-splash');
+                    if(splash) splash.style.display = 'none';
+
+                    if (currentUser.value) { 
+                        isLoggedIn.value = true; 
+                        initDashboard(); 
+                    } 
+                });
 
                 const fetchSectors = async () => {
                     showSectorRadar.value = true;
@@ -536,7 +548,7 @@
                 const fetchData = async () => {
                     if (!currentUser.value) return;
                     let currentHour = new Date().getHours(); isNight.value = (currentHour >= 20 || currentHour < 6);
-                    isBackgroundUpdating.value = true; // 开启后台小字刷新提示
+                    isBackgroundUpdating.value = true; 
                     try {
                         const response = await fetch(`${API_BASE}/api/fund/today?username=${encodeURIComponent(currentUser.value)}`);
                         const apiData = await response.json();
@@ -555,7 +567,6 @@
                         totalTodayRate.value = tPrincipal > 0 ? (tToday / tPrincipal * 100) : 0; totalRate.value = tCost > 0 ? ((tPrincipal - tCost) / tCost * 100) : 0;
                         renderChart(apiData);
 
-                        // 🚀 新数据拿到了，立刻塞进本地存储，供下次秒开使用！
                         localStorage.setItem('dashboard_cache', JSON.stringify({
                             fundsList: fundsList.value,
                             totalPrincipal: totalPrincipal.value,
@@ -623,14 +634,12 @@
                 
                 const initDashboard = () => { 
                     nextTick(() => { 
-                        // 如果有缓存，图表会用缓存瞬间渲染一次！
                         if (fundsList.value.length > 0) renderChart(fundsList.value);
                         fetchData(); 
                         timer = setInterval(fetchData, 60000); 
                     }); 
                 };
                 
-                onMounted(() => { if (currentUser.value) { isLoggedIn.value = true; initDashboard(); } });
                 onUnmounted(() => { if (timer) clearInterval(timer); if (chartInstance.value) chartInstance.value.dispose(); });
 
                 return {
