@@ -780,34 +780,7 @@
                         isIndicesLoading.value = false;
                     }
                 };
-
-                    globalIndices.value.forEach((item, index) => {
-                        const scriptId = `jsonp_idx_${index}`;
-                        let oldScript = document.getElementById(scriptId);
-                        if (oldScript) oldScript.remove();
-
-                        const script = document.createElement('script');
-                        script.id = scriptId;
-
-                        window[`jsonp_idx_${index}`] = (res) => {
-                            if (res && res.data && res.data.klines) {
-                                tempData[index] = res.data;
-                            }
-                            checkDone();
-                            setTimeout(() => {
-                                try { delete window[`jsonp_idx_${index}`]; } catch (e) { }
-                            }, 1000);
-                        };
-
-                        script.onerror = () => {
-                            checkDone();
-                        };
-
-                        // 搭配最强公钥 fa5fd1943c7b386f172d6893dbfba10b
-                        script.src = `https://push2his.eastmoney.com/api/qt/stock/kline/get?cb=jsonp_idx_${index}&secid=${item.secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250&v=${new Date().getTime()}`;
-                        document.body.appendChild(script);
-                    });
-                };
+                  
 
                 const viewIndexHistory = (item) => {
                     if (!item.klines || item.klines.length === 0) {
