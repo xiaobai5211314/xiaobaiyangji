@@ -742,58 +742,60 @@
 
                 const historyModal = reactive({ show: false, isLoading: false, name: '', data: [] });
 
-                // 🚀 终极打脸修复 1：向 MiMo 认错！全面恢复正确的海外大盘代号
+                // 🚀 终极打脸修复 1：抛弃 MiMo 的错误前缀，全部统一为东财真实的通用海外前缀 100.
                 const globalIndices = ref([
                     { name: '上证指数', secid: '1.000001', code: '000001', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '科创50', secid: '1.000688', code: '000688', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '创业板指', secid: '0.399006', code: '399006', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '恒生指数', secid: '124.HSI', code: 'HSI', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '纳斯达克', secid: '105.IXIC', code: 'IXIC', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '标普500', secid: '109.SPX', code: 'SPX', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
+                    { name: '恒生指数', secid: '100.HSI', code: 'HSI', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
+                    { name: '纳斯达克', secid: '100.IXIC', code: 'IXIC', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
+                    { name: '标普500', secid: '100.SPX', code: 'SPX', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '道琼斯', secid: '100.DJIA', code: 'DJIA', latest: 0, todayRate: 0, yearRate: 0, klines: [] }
                 ]);
                 const showGlobalIndices = ref(false);
                 const isIndicesLoading = ref(false);
 
-                // 🚀 终极修复 2：彻底修补 Vue3 “响应式失明”黑洞，并换回最稳定的无敌公钥
-                const fetchGlobalIndices = () => {
+                // 🚀 终极打脸修复 2：彻底抛弃 JSONP！使用 Promise.all + fetch，保证数据 100% 唤醒 Vue 屏幕刷新
+                const fetchGlobalIndices = async () => {
                     showGlobalIndices.value = true;
                     isIndicesLoading.value = true;
-                    let loadedCount = 0;
 
-                    // 建立防污染数据仓：绝不让原生 JS 直接碰 Vue 的对象
-                    const tempData = [];
+                    const promises = globalIndices.value.map(async (item) => {
+                        try {
+                            const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${item.secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250`;
+                            const response = await fetch(url);
+                            const res = await response.json();
 
-                    const checkDone = () => {
-                        loadedCount++;
-                        if (loadedCount === globalIndices.value.length) {
-                            // 强行创造一个新数组替换，逼迫 Vue 重新扫描屏幕！
-                            globalIndices.value = globalIndices.value.map((item, index) => {
-                                const data = tempData[index];
-                                if (data && data.klines && data.klines.length > 0) {
-                                    const klines = data.klines;
-                                    const latestKline = klines[klines.length - 1].split(',');
-                                    const oldestKline = klines[0].split(',');
+                            if (res && res.data && res.data.klines && res.data.klines.length > 0) {
+                                const klines = res.data.klines;
+                                const latestKline = klines[klines.length - 1].split(',');
+                                const oldestKline = klines[0].split(',');
 
-                                    const latest = parseFloat(latestKline[2]);
-                                    const todayRate = parseFloat(latestKline[8]);
+                                const latest = parseFloat(latestKline[2]);
+                                const todayRate = parseFloat(latestKline[8]);
 
-                                    const oldestClose = parseFloat(oldestKline[2]);
-                                    const yearRate = oldestClose !== 0 ? ((latest - oldestClose) / oldestClose * 100).toFixed(2) : "0.00";
+                                const oldestClose = parseFloat(oldestKline[2]);
+                                const yearRate = oldestClose !== 0 ? ((latest - oldestClose) / oldestClose * 100).toFixed(2) : "0.00";
 
-                                    const historyKlines = klines.reverse().map(k => {
-                                        const p = k.split(',');
-                                        return { date: p[0], rate: parseFloat(p[8]) };
-                                    });
+                                const historyKlines = klines.reverse().map(k => {
+                                    const p = k.split(',');
+                                    return { date: p[0], rate: parseFloat(p[8]) };
+                                });
 
-                                    return { ...item, latest, todayRate, yearRate, klines: historyKlines };
-                                }
-                                return item;
-                            });
-
-                            isIndicesLoading.value = false;
+                                // 生成一个填满数据的新对象
+                                return { ...item, latest, todayRate, yearRate, klines: historyKlines };
+                            }
+                        } catch (e) {
+                            console.error(`大盘拉取失败: ${item.name}`, e);
                         }
-                    };
+                        // 如果失败，返回初始对象（0）
+                        return item;
+                    });
+
+                    // 💡 绝杀机制：等所有 7 个数据全部拉取完毕后，一次性塞进 Vue 里，屏幕绝对瞬间亮起！
+                    globalIndices.value = await Promise.all(promises);
+                    isIndicesLoading.value = false;
+                };
 
                     globalIndices.value.forEach((item, index) => {
                         const scriptId = `jsonp_idx_${index}`;
