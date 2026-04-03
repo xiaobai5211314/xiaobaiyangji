@@ -47,7 +47,6 @@
         .skeleton-box { background: linear-gradient(90deg, rgba(40,49,66,0.5) 25%, rgba(55,65,81,0.8) 37%, rgba(40,49,66,0.5) 63%); background-size: 400% 100%; animation: skeleton-loading 1.4s ease infinite; border-radius: 8px; }
         @keyframes skeleton-loading { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
 
-        /* 🚀 绝杀 MiMo：原生高级 Toast 组件样式 */
         .toast-container { position: fixed; top: 30px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
         .toast { padding: 12px 24px; border-radius: 30px; color: #fff; font-size: 14px; font-weight: bold; box-shadow: 0 10px 30px rgba(0,0,0,0.5); animation: slideDown 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; backdrop-filter: blur(10px); display: flex; align-items: center; gap: 8px; }
         .toast.success { background: rgba(16, 185, 129, 0.9); border: 1px solid #34d399; }
@@ -412,7 +411,6 @@
             setup() {
                 const API_BASE = 'https://guzhi.21212121.xyz';
 
-                // 🚀 绝杀 MiMo：原生响应式 Toast 逻辑
                 const toasts = ref([]);
                 let toastId = 0;
                 const showToast = (msg, type = 'info') => {
@@ -457,32 +455,30 @@
 
                 const historyModal = reactive({ show: false, isLoading: false, name: '', data: [] });
 
+                // 🚀 精准校对了全球 7 大核心指数在东财系统的绝密代号
                 const globalIndices = ref([
                     { name: '上证指数', secid: '1.000001', code: '000001', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '科创50', secid: '1.000688', code: '000688', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '创业板指', secid: '0.399006', code: '399006', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '恒生指数', secid: '116.HSI', code: 'HSI', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '纳斯达克', secid: '100.IXIC', code: 'IXIC', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '标普500', secid: '100.SPX', code: 'SPX', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
+                    { name: '纳斯达克', secid: '105.IXIC', code: 'IXIC', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
+                    { name: '标普500', secid: '109.SPX', code: 'SPX', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '道琼斯', secid: '100.DJIA', code: 'DJIA', latest: 0, todayRate: 0, yearRate: 0, klines: [] }
                 ]);
                 const showGlobalIndices = ref(false);
                 const isIndicesLoading = ref(false);
 
-                const fetchGlobalIndices = () => {
+                // 🚀 核心更新：使用现代 fetch 并发引擎拉取数据，绝对不再“响应式失明”
+                const fetchGlobalIndices = async () => {
                     showGlobalIndices.value = true;
                     isIndicesLoading.value = true;
-                    let loadedCount = 0;
 
-                    globalIndices.value.forEach((item, index) => {
-                        const scriptId = `jsonp_idx_${index}`;
-                        let oldScript = document.getElementById(scriptId);
-                        if (oldScript) oldScript.remove();
-
-                        const script = document.createElement('script');
-                        script.id = scriptId;
-                        
-                        window[`jsonp_idx_${index}`] = (res) => {
+                    const promises = globalIndices.value.map(async (item) => {
+                        try {
+                            const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${item.secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250`;
+                            const response = await fetch(url);
+                            const res = await response.json();
+                            
                             if (res && res.data && res.data.klines) {
                                 const klines = res.data.klines;
                                 if (klines.length > 0) {
@@ -495,29 +491,24 @@
                                     const oldestClose = parseFloat(oldestKline[2]);
                                     if (oldestClose !== 0) {
                                         item.yearRate = ((item.latest - oldestClose) / oldestClose * 100).toFixed(2);
-                                    } else {
-                                        item.yearRate = "0.00";
                                     }
                                     
                                     item.klines = klines.reverse().map(k => {
                                         const p = k.split(',');
-                                        return { date: p[0], rate: p[8] };
+                                        return { date: p[0], rate: parseFloat(p[8]) };
                                     });
                                 }
                             }
-                            loadedCount++;
-                            if (loadedCount === globalIndices.value.length) isIndicesLoading.value = false;
-                            delete window[`jsonp_idx_${index}`];
-                        };
-                        script.onerror = () => {
-                            loadedCount++;
-                            if (loadedCount === globalIndices.value.length) isIndicesLoading.value = false;
-                            delete window[`jsonp_idx_${index}`];
-                        };
-
-                        script.src = `https://push2his.eastmoney.com/api/qt/stock/kline/get?cb=jsonp_idx_${index}&secid=${item.secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250`;
-                        document.body.appendChild(script);
+                        } catch (e) {
+                            console.error(`大盘拉取失败: ${item.name}`, e);
+                        }
                     });
+
+                    // 等待所有指数拉取完毕
+                    await Promise.all(promises);
+                    // 🚀 强制触动 Vue 报警雷达，更新全大屏数据！
+                    globalIndices.value = [...globalIndices.value];
+                    isIndicesLoading.value = false;
                 };
 
                 const viewIndexHistory = (item) => {
@@ -618,7 +609,6 @@
                     };
                 };
 
-                // 🚀 绝杀 MiMo：使用 Try/Finally 进行登录防抖和状态恢复
                 const handleRegister = async () => {
                     if (!loginForm.username || !loginForm.password) return showToast("账号或密码为空！", "error");
                     let fd = new FormData(); fd.append('username', loginForm.username); fd.append('password', loginForm.password);
@@ -656,7 +646,6 @@
                     } catch (error) {
                         showToast("🌐 登录请求发不出去！", "error");
                     } finally {
-                        // 🚀 统一在此处恢复按钮状态
                         btn.innerText = oldText;
                         btn.disabled = false;
                     }
@@ -911,7 +900,6 @@
                         setTimeout(() => {
                             fetchData(); 
                             
-                            // 🚀 绝杀 MiMo：将 isNight 的更新移到 60秒定时器内部，不管拉不拉数据，时钟都会自动切换夜间状态！
                             timer = setInterval(() => {
                                 let currentHour = new Date().getHours();
                                 isNight.value = (currentHour >= 20 || currentHour < 6);
@@ -933,7 +921,7 @@
                 });
 
                 return {
-                    toasts, // 导出 Toast
+                    toasts,
                     isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, showAssets, isUploading, editForm,
                     handleRegister, handleLogin, handleLogout, handleAddFund, handleDeleteFund,
