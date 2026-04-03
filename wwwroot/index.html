@@ -371,9 +371,11 @@
                 const detailsList = ref([]);
                 const isDetailsLoading = ref(false);
 
-                // 🚀 新增：打开历史走势 H5 页面
+                                // 🚀 终极修复：放弃 _blank，直接使用移动端最稳妥的 href 当前页跳转！
                 const openHistory = (code) => {
-                    window.open(`https://fund.eastmoney.com/${code}.html`, '_blank');
+                    window.location.href = `https://fund.eastmoney.com/${code}.html`;
+                };
+
                 };
 
                 const fetchSectorDetails = async (sector) => {
