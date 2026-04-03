@@ -906,9 +906,20 @@
                     if (fundsList.value.length > 0) renderChart(fundsList.value);
                 });
 
-                const initDashboard = () => { nextTick(() => { fetchData(); timer = setInterval(fetchData, 60000); }); };
-                onMounted(() => { if (currentUser.value) { isLoggedIn.value = true; initDashboard(); } });
-                onUnmounted(() => { if (timer) clearInterval(timer); if (chartInstance.value) chartInstance.value.dispose(); });
+                                const initDashboard = () => { 
+                    nextTick(() => { 
+                        // 1. 瞬间利用本地记忆画出残影，让用户立刻看到画面
+                        if (fundsList.value.length > 0) renderChart(fundsList.value);
+                        
+                        // 2. 🚀 核心修复：加入 800 毫秒的战术缓冲期！
+                        // 让浏览器有足够的时间把残影画完、动画跑完，避开 CPU 算力高峰
+                        setTimeout(() => {
+                            fetchData(); // 缓冲结束后，再偷偷去服务器拉最新数据
+                            timer = setInterval(fetchData, 60000); // 开启一分钟轮询
+                        }, 800); 
+                    }); 
+                };
+
 
                 // 🚀 修复3：只导出代码里真实存在的方法和变量，删除了空气变量 sectorList！
                 return {
