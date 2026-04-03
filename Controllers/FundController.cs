@@ -523,40 +523,29 @@ namespace 估值助手.Controllers
                     .OrderBy(r => r.FetchTime)
                     .ToListAsync();
 
-                var lastRecords = new List<FundData>();
-                foreach (var code in myFundCodes)
-                {
-                    var lr = await _context.FundRecords
-                        .Where(r => r.FetchTime < today && r.FundCode == code)
-                        .OrderByDescending(r => r.FetchTime)
-                        .FirstOrDefaultAsync();
-                    if (lr != null) lastRecords.Add(lr);
-                }
+                // 🚀 军工级优化：先一次性把所有基金的 3 天历史数据查出来，存进内存
+                var allPastRecords = await _context.FundRecords
+                    .Where(r => myFundCodes.Contains(r.FundCode) && r.ActualRate != 0)
+                    .OrderByDescending(r => r.FetchTime)
+                    .ToListAsync(); // 一次请求搞定全军数据
 
                 var result = myFunds.Select(config =>
                 {
                     var fundRecords = todayRecords.Where(r => r.FundCode == config.FundCode).ToList();
                     var lastRecord = lastRecords.FirstOrDefault(r => r.FundCode == config.FundCode);
 
-                    // =======================================================
-                    // 🧠 核心升级：AI 动态估值校准引擎 (滑动平均补偿算法)
-                    // =======================================================
-                    double avgDiff = 0;
-
-                    // 1. 去数据库里找出这只基金最近 3 天【已经清算出真实成绩】的记录
-                    var past3DaysRecords = _context.FundRecords
-                        .Where(r => r.FundCode == config.FundCode && r.ActualRate != 0) // ActualRate != 0 代表已出真实净值
-                        .OrderByDescending(r => r.FetchTime)
+                    // 🧠 核心升级：从内存里快速提取这只基金的 3 天数据，不再查库
+                    var past3DaysRecords = allPastRecords
+                        .Where(r => r.FundCode == config.FundCode)
                         .Take(3)
                         .ToList();
 
-                    // 2. 算出这 3 天的平均“偷吃/砸盘”偏差率
+                    double avgDiff = 0;
                     if (past3DaysRecords.Count > 0)
                     {
-                        // 逻辑：如果连续3天真实净值都比预估高 0.2%，那今天大概率也会高 0.2%
                         avgDiff = past3DaysRecords.Average(r => r.ActualRate - r.EstimatedRate);
 
-                        // 为了防止极端暴跌暴涨导致补偿过度，我们给补偿值加一个安全锁（最大不超过 ±0.5%）
+                        // 安全锁（±0.5%）
                         if (avgDiff > 0.5) avgDiff = 0.5;
                         if (avgDiff < -0.5) avgDiff = -0.5;
                     }
@@ -595,7 +584,7 @@ namespace 估值助手.Controllers
                         existingReturnRate = existingReturnRate,
                         breakEvenRate = breakEvenRate,
                         diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
-                        calibrationOffset = Math.Round(avgDiff, 2), // 把今天的校准补偿值也传给前端看看
+                        calibrationOffset = Math.Round(avgDiff, 4), // 🚀 建议：先传 4 位小数到前端，调试看看是不是真的完全一样
                         data = dataPoints
                     };
                 });
