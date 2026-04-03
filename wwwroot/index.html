@@ -26,8 +26,10 @@
         .btn-ocr { background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); color: white; border: none; padding: 9px 15px; border-radius: 20px; cursor: pointer; font-weight: bold; transition: 0.3s; display: flex; align-items: center; gap: 5px; }
         .btn-ocr:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4); }
         .btn-ocr:disabled { background: #475569; cursor: not-allowed; opacity: 0.7; }
-        .btn-settle { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; border: none; padding: 9px 15px; border-radius: 20px; cursor: pointer; font-weight: bold; transition: 0.3s; }
-        .btn-settle:hover { box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4); transform: translateY(-2px); }
+        
+        .btn-global { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; padding: 9px 15px; border-radius: 20px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        .btn-global:hover { box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4); transform: translateY(-2px); }
+        
         .btn-logout { background: transparent; color: #ff4d4f; border: 1px solid #ff4d4f; padding: 8px 15px; border-radius: 20px; cursor: pointer; }
         .fund-list-container { margin: 0 15px; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; margin-bottom: 20px; }
         .fund-card { padding: 15px; border-radius: 16px; font-size: 13px; display: flex; flex-direction: column; gap: 8px; position: relative; }
@@ -44,14 +46,14 @@
         .divider { width: 1px; height: 40px; background: rgba(255,255,255,0.1); }
         .skeleton-box { background: linear-gradient(90deg, rgba(40,49,66,0.5) 25%, rgba(55,65,81,0.8) 37%, rgba(40,49,66,0.5) 63%); background-size: 400% 100%; animation: skeleton-loading 1.4s ease infinite; border-radius: 8px; }
         @keyframes skeleton-loading { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
-        
-        /* 🚀 究极强化：原生丝滑 Toast 浮窗组件样式 */
-        .toast-container { position: fixed; top: 30px; left: 50%; transform: translateX(-50%); z-index: 99999; display: flex; flex-direction: column; gap: 12px; align-items: center; pointer-events: none; }
-        .toast { background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); color: #f8fafc; padding: 12px 24px; border-radius: 50px; font-size: 14px; font-weight: bold; box-shadow: 0 10px 30px rgba(0,0,0,0.5); transform: translateY(-20px) scale(0.9); opacity: 0; transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55); display: flex; align-items: center; gap: 8px; }
-        .toast.show { transform: translateY(0) scale(1); opacity: 1; }
-        .toast.error { border-left: 4px solid #ef4444; }
-        .toast.success { border-left: 4px solid #10b981; }
-        .toast.info { border-left: 4px solid #38bdf8; }
+
+        /* 🚀 绝杀 MiMo：原生高级 Toast 组件样式 */
+        .toast-container { position: fixed; top: 30px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+        .toast { padding: 12px 24px; border-radius: 30px; color: #fff; font-size: 14px; font-weight: bold; box-shadow: 0 10px 30px rgba(0,0,0,0.5); animation: slideDown 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; backdrop-filter: blur(10px); display: flex; align-items: center; gap: 8px; }
+        .toast.success { background: rgba(16, 185, 129, 0.9); border: 1px solid #34d399; }
+        .toast.error { background: rgba(239, 68, 68, 0.9); border: 1px solid #f87171; }
+        .toast.info { background: rgba(56, 189, 248, 0.9); border: 1px solid #7dd3fc; }
+        @keyframes slideDown { 0% { transform: translateY(-50px) scale(0.9); opacity: 0; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
 
         @media screen and (max-width: 768px) { .header { flex-direction: column; align-items: flex-start; gap: 15px; } .control-panel { width: 100%; } .control-panel input { flex: 1; min-width: 90px; } #chart-container { height: 50vh; } .total-panel { flex-wrap: wrap; gap: 20px; } .divider { display: none; } }
     </style>
@@ -59,10 +61,17 @@
 
 <body style="background-color: #0f172a;">
     <div id="blazor-app" style="display:none;"></div>
-    
-    <div id="toast-container" class="toast-container"></div>
 
     <div id="app" v-cloak>
+        <div class="toast-container">
+            <div v-for="t in toasts" :key="t.id" :class="['toast', t.type]">
+                <span v-if="t.type==='success'">✅</span>
+                <span v-if="t.type==='error'">🚨</span>
+                <span v-if="t.type==='info'">💡</span>
+                {{ t.msg }}
+            </div>
+        </div>
+
         <div v-if="!isLoggedIn" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,23,42,0.8);backdrop-filter:blur(15px);z-index:999;display:flex;align-items:center;justify-content:center;">
             <div class="glass-panel" style="padding: 40px; text-align: center; width: 300px;">
                 <h2 style="margin-top:0;background:linear-gradient(to right,#00f2fe,#4facfe);-webkit-background-clip:text;color:transparent;">⚡ 量化指挥中心</h2>
@@ -88,13 +97,15 @@
                         📷 {{ isUploading ? '📡 解析中...' : '智能截图导入' }}
                     </button>
 
-                    <button class="btn-settle" @click="handleSettleNightly" style="margin-left: 10px;" title="将今日收益计入本金">
-                        🌙 结算复利
-                    </button>
                     <button @click="fetchSectors" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none; padding: 8px 15px; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; margin-left: 10px; margin-top: 10px;">
                         📡 市场板块雷达
                     </button>
-                    <button class="btn-logout" @click="handleLogout" style="margin-left: 10px;">撤退</button>
+                    
+                    <button class="btn-global" @click="fetchGlobalIndices" style="margin-left: 10px; margin-top: 10px;">
+                        🌍 全球大盘
+                    </button>
+
+                    <button class="btn-logout" @click="handleLogout" style="margin-left: 10px; margin-top: 10px;">撤退</button>
                 </div>
             </div>
 
@@ -102,7 +113,7 @@
                 <div style="text-align: center;">
                     <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">⏱️ 系统时间雷达</div>
                     <div :style="{ fontSize: '18px', fontWeight: '900', color: isNight ? '#10b981' : '#f59e0b', margin: '5px 0' }">
-                        {{ isNight ? '🌙 夜间清算模式' : '☀️ 盘中盯盘模式' }}
+                        {{ isNight ? '🌙 夜间休市模式' : '☀️ 盘中盯盘模式' }}
                     </div>
                 </div>
 
@@ -265,24 +276,18 @@
                     <h3 style="color: white; margin: 0;">📡 全市场板块监控雷达</h3>
                     <span @click="showSectorRadar = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
                 </div>
-
                 <div v-if="isSectorLoading" style="color: #94a3b8; text-align: center; margin-top: 50px;">📡 正在扫描全网板块...</div>
-
                 <div v-else style="overflow-y: auto; flex: 1; padding-right: 5px;">
                     <div style="margin-bottom: 20px;">
                         <h4 style="color: #ef4444; border-bottom: 1px solid #334155; padding-bottom: 5px;">🔥 今日领涨 TOP 10 (止盈区)</h4>
-                        <div v-for="(item, index) in sectorTopList" :key="item.code"
-                             @click="fetchSectorDetails(item)"
-                             style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px dashed #334155; cursor: pointer;">
+                        <div v-for="(item, index) in sectorTopList" :key="item.code" @click="fetchSectorDetails(item)" style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px dashed #334155; cursor: pointer;">
                             <span style="color: #f8fafc; font-weight: bold;">{{ index + 1 }}. {{ item.name }}</span>
                             <span style="color: #ff4d4f; font-weight: 900;">+{{ item.rate }}%</span>
                         </div>
                     </div>
                     <div>
                         <h4 style="color: #10b981; border-bottom: 1px solid #334155; padding-bottom: 5px;">🧊 今日领跌 TOP 10 (抄底区)</h4>
-                        <div v-for="(item, index) in sectorBottomList" :key="item.code"
-                             @click="fetchSectorDetails(item)"
-                             style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px dashed #334155; cursor: pointer;">
+                        <div v-for="(item, index) in sectorBottomList" :key="item.code" @click="fetchSectorDetails(item)" style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px dashed #334155; cursor: pointer;">
                             <span style="color: #f8fafc; font-weight: bold;">{{ index + 1 }}. {{ item.name }}</span>
                             <span style="color: #10b981; font-weight: 900;">{{ item.rate }}%</span>
                         </div>
@@ -297,21 +302,13 @@
                     <h3 style="color: #38bdf8; margin: 0;">🔬 {{ detailsTitle }} - 核心成分股</h3>
                     <span @click="showSectorDetails = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
                 </div>
-
-                <div v-if="isDetailsLoading" style="color: #94a3b8; text-align: center; padding: 20px 0;">
-                    🔬 正在抓取核心龙头...
-                </div>
-
-                <div v-else-if="detailsList.length === 0" style="color: #94a3b8; text-align: center; padding: 20px 0;">
-                    该板块暂无成分股数据
-                </div>
-
+                <div v-if="isDetailsLoading" style="color: #94a3b8; text-align: center; padding: 20px 0;">🔬 正在抓取核心龙头...</div>
+                <div v-else-if="detailsList.length === 0" style="color: #94a3b8; text-align: center; padding: 20px 0;">该板块暂无成分股数据</div>
                 <div v-else>
                     <div style="display: flex; justify-content: space-between; color: #64748b; font-size: 12px; margin-bottom: 8px;">
                         <span>股票名称/代码</span>
                         <span>今日涨跌</span>
                     </div>
-
                     <div v-for="stock in detailsList" :key="stock.code" style="display: flex; justify-content: space-between; padding: 10px 0; align-items: center;">
                         <div style="display: flex; flex-direction: column;">
                             <span style="color: #f8fafc; font-weight: bold; font-size: 15px;">{{ stock.name }}</span>
@@ -325,6 +322,37 @@
             </div>
         </div>
 
+        <div v-if="showGlobalIndices" class="modal-overlay" @click.self="showGlobalIndices = false" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: flex-end; z-index: 2500;">
+            <div style="background: #1e293b; width: 100%; height: 80vh; border-radius: 20px 20px 0 0; padding: 20px; display: flex; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 style="color: white; margin: 0;">🌍 全球大盘 (近 1 年)</h3>
+                    <span @click="showGlobalIndices = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
+                </div>
+                <div v-if="isIndicesLoading" style="color: #94a3b8; text-align: center; margin-top: 50px;">📡 正在扫描全球交易所...</div>
+                <div v-else style="overflow-y: auto; flex: 1; padding-right: 5px;">
+                    <div style="display: flex; justify-content: space-between; color: #64748b; font-size: 12px; margin-bottom: 8px;">
+                        <span>指数名称</span>
+                        <span style="text-align: right;">今日 / 近1年</span>
+                    </div>
+                    <div v-for="item in globalIndices" :key="item.code" @click="viewIndexHistory(item)" style="display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px dashed #334155; cursor: pointer;">
+                        <div style="display: flex; flex-direction: column;">
+                            <span style="color: #f8fafc; font-weight: bold; font-size: 16px;">{{ item.name }}</span>
+                            <span style="color: #94a3b8; font-size: 13px; margin-top: 4px;">点位: {{ item.latest }}</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; align-items: flex-end;">
+                            <span :style="{ color: item.todayRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold', fontSize: '16px' }">
+                                今: {{ item.todayRate > 0 ? '+' : '' }}{{ item.todayRate }}%
+                            </span>
+                            <span :style="{ color: item.yearRate >= 0 ? '#ff4d4f' : '#10b981', fontSize: '13px', marginTop: '4px' }">
+                                1年: {{ item.yearRate > 0 ? '+' : '' }}{{ item.yearRate }}%
+                            </span>
+                        </div>
+                    </div>
+                    <div style="color: #64748b; font-size: 12px; text-align: center; margin-top: 20px;">* 点击上方任意指数，可查阅近 1 年每天走势明细</div>
+                </div>
+            </div>
+        </div>
+
         <div v-if="historyModal.show" class="modal-overlay" @click.self="historyModal.show = false" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: flex-end; z-index: 3000;">
             <div style="background: #1e293b; width: 100%; height: 75vh; border-radius: 20px 20px 0 0; padding: 20px; display: flex; flex-direction: column;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
@@ -332,11 +360,7 @@
                     <span @click="historyModal.show = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
                 </div>
                 <div style="color: #94a3b8; font-size: 12px; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px;">近 1 年（约 250 个交易日）官方收益记录</div>
-
-                <div v-if="historyModal.isLoading" style="color: #4facfe; text-align: center; margin-top: 50px; font-weight: bold; letter-spacing: 1px;">
-                    📡 正在潜入官方数据库提取档案...
-                </div>
-
+                <div v-if="historyModal.isLoading" style="color: #4facfe; text-align: center; margin-top: 50px; font-weight: bold; letter-spacing: 1px;">📡 正在潜入官方数据库提取档案...</div>
                 <div v-else style="overflow-y: auto; flex: 1; padding-right: 5px;">
                     <div style="display: flex; justify-content: space-between; color: #64748b; font-size: 13px; margin-bottom: 10px;">
                         <span>日期</span>
@@ -388,6 +412,17 @@
             setup() {
                 const API_BASE = 'https://guzhi.21212121.xyz';
 
+                // 🚀 绝杀 MiMo：原生响应式 Toast 逻辑
+                const toasts = ref([]);
+                let toastId = 0;
+                const showToast = (msg, type = 'info') => {
+                    const id = toastId++;
+                    toasts.value.push({ id, msg, type });
+                    setTimeout(() => {
+                        toasts.value = toasts.value.filter(t => t.id !== id);
+                    }, 3000);
+                };
+
                 const isLoggedIn = ref(false);
                 const currentUser = ref(getSavedUser());
                 
@@ -422,27 +457,83 @@
 
                 const historyModal = reactive({ show: false, isLoading: false, name: '', data: [] });
 
-                // 🚀 终极强化 1：全局悬浮 Toast 组件（代替丑陋的 Alert）
-                const showToast = (msg, type = 'info') => {
-                    const container = document.getElementById('toast-container');
-                    if (!container) return;
-                    const toast = document.createElement('div');
-                    toast.className = `toast ${type}`;
-                    let icon = '💡';
-                    if(type === 'error') icon = '🚨';
-                    if(type === 'success') icon = '✅';
-                    toast.innerHTML = `<span>${icon}</span><span>${msg}</span>`;
-                    container.appendChild(toast);
-                    setTimeout(() => toast.classList.add('show'), 10);
-                    setTimeout(() => {
-                        toast.classList.remove('show');
-                        setTimeout(() => toast.remove(), 300);
-                    }, 3000);
+                const globalIndices = ref([
+                    { name: '上证指数', secid: '1.000001', code: '000001', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
+                    { name: '科创50', secid: '1.000688', code: '000688', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
+                    { name: '创业板指', secid: '0.399006', code: '399006', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
+                    { name: '恒生指数', secid: '116.HSI', code: 'HSI', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
+                    { name: '纳斯达克', secid: '100.IXIC', code: 'IXIC', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
+                    { name: '标普500', secid: '100.SPX', code: 'SPX', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
+                    { name: '道琼斯', secid: '100.DJIA', code: 'DJIA', latest: 0, todayRate: 0, yearRate: 0, klines: [] }
+                ]);
+                const showGlobalIndices = ref(false);
+                const isIndicesLoading = ref(false);
+
+                const fetchGlobalIndices = () => {
+                    showGlobalIndices.value = true;
+                    isIndicesLoading.value = true;
+                    let loadedCount = 0;
+
+                    globalIndices.value.forEach((item, index) => {
+                        const scriptId = `jsonp_idx_${index}`;
+                        let oldScript = document.getElementById(scriptId);
+                        if (oldScript) oldScript.remove();
+
+                        const script = document.createElement('script');
+                        script.id = scriptId;
+                        
+                        window[`jsonp_idx_${index}`] = (res) => {
+                            if (res && res.data && res.data.klines) {
+                                const klines = res.data.klines;
+                                if (klines.length > 0) {
+                                    const latestKline = klines[klines.length - 1].split(',');
+                                    const oldestKline = klines[0].split(',');
+                                    
+                                    item.latest = parseFloat(latestKline[2]);
+                                    item.todayRate = parseFloat(latestKline[8]);
+                                    
+                                    const oldestClose = parseFloat(oldestKline[2]);
+                                    if (oldestClose !== 0) {
+                                        item.yearRate = ((item.latest - oldestClose) / oldestClose * 100).toFixed(2);
+                                    } else {
+                                        item.yearRate = "0.00";
+                                    }
+                                    
+                                    item.klines = klines.reverse().map(k => {
+                                        const p = k.split(',');
+                                        return { date: p[0], rate: p[8] };
+                                    });
+                                }
+                            }
+                            loadedCount++;
+                            if (loadedCount === globalIndices.value.length) isIndicesLoading.value = false;
+                            delete window[`jsonp_idx_${index}`];
+                        };
+                        script.onerror = () => {
+                            loadedCount++;
+                            if (loadedCount === globalIndices.value.length) isIndicesLoading.value = false;
+                            delete window[`jsonp_idx_${index}`];
+                        };
+
+                        script.src = `https://push2his.eastmoney.com/api/qt/stock/kline/get?cb=jsonp_idx_${index}&secid=${item.secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250`;
+                        document.body.appendChild(script);
+                    });
+                };
+
+                const viewIndexHistory = (item) => {
+                    if (!item.klines || item.klines.length === 0) {
+                        showToast("暂无该指数的历史数据", "error");
+                        return;
+                    }
+                    historyModal.show = true;
+                    historyModal.name = item.name;
+                    historyModal.isLoading = false; 
+                    historyModal.data = item.klines;
                 };
 
                 const fetchHistory = (code, name) => {
                     if (!/^\d{6}$/.test(code)) {
-                        showToast("检测到非法基金代码格式，已拦截！", "error");
+                        showToast("🚨 警告：检测到非法基金代码，已拦截！", "error");
                         return;
                     }
 
@@ -474,7 +565,7 @@
                         historyModal.isLoading = false;
                     };
                     script.onerror = () => {
-                        showToast("历史档案抓取失败或无数据", "error");
+                        showToast("📡 历史档案抓取失败", "error");
                         historyModal.isLoading = false;
                     };
                     document.body.appendChild(script);
@@ -491,7 +582,7 @@
                         const json = await res.json();
                         detailsList.value = json;
                     } catch (e) {
-                        showToast("透视连接失败！", "error");
+                        showToast("🚨 透视连接失败！", "error");
                     } finally {
                         isDetailsLoading.value = false;
                     }
@@ -527,37 +618,45 @@
                     };
                 };
 
+                // 🚀 绝杀 MiMo：使用 Try/Finally 进行登录防抖和状态恢复
                 const handleRegister = async () => {
-                    if (!loginForm.username || !loginForm.password) return showToast("账号密码为空！", "error");
+                    if (!loginForm.username || !loginForm.password) return showToast("账号或密码为空！", "error");
                     let fd = new FormData(); fd.append('username', loginForm.username); fd.append('password', loginForm.password);
-                    const res = await fetch(API_BASE + '/api/auth/register', { method: 'POST', body: fd });
-                    if (res.ok) showToast("注册成功！请登录。", "success"); else showToast("注册失败，该代号可能已被征用", "error");
+                    try {
+                        const res = await fetch(API_BASE + '/api/auth/register', { method: 'POST', body: fd });
+                        if (res.ok) showToast("✅ 注册成功！请登录。", "success"); 
+                        else showToast("❌ 注册失败", "error");
+                    } catch (e) {
+                        showToast("🌐 网络异常", "error");
+                    }
                 };
 
-                // 🚀 终极强化 2：try/finally 重构登录状态防抖
                 const handleLogin = async () => {
                     if (!loginForm.username || !loginForm.password) return showToast("账号或密码为空！", "error");
                     let btn = event.target;
                     let oldText = btn.innerText;
                     btn.innerText = "连线中...";
                     btn.disabled = true;
+                    
                     try {
                         let fd = new FormData();
                         fd.append('username', loginForm.username);
                         fd.append('password', loginForm.password);
                         const res = await fetch(API_BASE + '/api/auth/login', { method: 'POST', body: fd });
+                        
                         if (res.ok) {
                             saveUser(loginForm.username);
                             currentUser.value = loginForm.username;
                             isLoggedIn.value = true;
+                            showToast("成功接入指挥中心！", "success");
                             initDashboard();
-                            showToast(`欢迎归来，${loginForm.username} 指挥官！`, "success");
                         } else {
-                            showToast("账号或密码错误", "error");
+                            showToast("❌ 账号或密码错误", "error");
                         }
                     } catch (error) {
-                        showToast("登录请求发不出去！请检查网络", "error");
+                        showToast("🌐 登录请求发不出去！", "error");
                     } finally {
+                        // 🚀 统一在此处恢复按钮状态
                         btn.innerText = oldText;
                         btn.disabled = false;
                     }
@@ -568,34 +667,23 @@
                     location.reload(); 
                 };
 
-                const handleSettleNightly = async () => {
-                    if (!confirm("⚠️ 确定执行【夜间复利清算】吗？\n\n这会将大屏上所有基金的【今日预估收益】正式计入【昨日市值】中！")) return;
-                    const fd = new FormData();
-                    fd.append('username', currentUser.value);
-                    const codes = fundsList.value.map(f => f.code).join(',');
-                    const rates = fundsList.value.map(f => f.currentRate).join(',');
-                    fd.append('codes', codes);
-                    fd.append('rates', rates);
-                    try {
-                        const res = await fetch(API_BASE + '/api/Fund/settle-nightly', { method: 'POST', body: fd });
-                        if (res.ok) { showToast(await res.text(), "success"); fundsList.value = []; fetchData(); }
-                        else showToast("清算失败: " + await res.text(), "error");
-                    } catch (e) { showToast("清算请求失败", "error"); }
-                };
-
                 const handleAddFund = async () => {
-                    if (!fundForm.code || !fundForm.amount) return showToast("请输入完整代码和金额！", "error");
+                    if (!fundForm.code || !fundForm.amount) return showToast("⚠️ 请输入完整的代码和金额！", "error");
                     const fd = new FormData(); fd.append('username', currentUser.value); fd.append('code', fundForm.code); fd.append('amount', fundForm.amount);
-                    const res = await fetch(API_BASE + '/api/fund/add', { method: 'POST', body: fd });
-                    if (res.ok) { fundForm.code = ''; fundForm.amount = ''; fetchData(); showToast("加仓成功", "success"); }
+                    try {
+                        const res = await fetch(API_BASE + '/api/fund/add', { method: 'POST', body: fd });
+                        if (res.ok) { fundForm.code = ''; fundForm.amount = ''; fetchData(); showToast("✅ 加仓成功", "success"); }
+                    } catch (e) { showToast("🌐 网络异常", "error"); }
                 };
 
                 const handleDeleteFund = async (code, name) => {
                     if (confirm(`⚠️ 确定移除 [${name}] 吗？`)) {
                         const fd = new FormData(); fd.append('username', currentUser.value); fd.append('code', code);
-                        await fetch(API_BASE + '/api/fund/delete', { method: 'POST', body: fd });
-                        fetchData();
-                        showToast("阵地已撤销", "success");
+                        try {
+                            await fetch(API_BASE + '/api/fund/delete', { method: 'POST', body: fd });
+                            fetchData();
+                            showToast("✅ 已移除阵地", "success");
+                        } catch (e) { showToast("🌐 网络异常", "error"); }
                     }
                 };
 
@@ -617,10 +705,10 @@
                                 fetchData();
                             } else {
                                 const errorMsg = await response.text();
-                                showToast("识别受阻: " + errorMsg, "error");
+                                showToast("❌ 识别受阻: " + errorMsg, "error");
                             }
                         } catch (error) {
-                            showToast("失去与云端智脑的连接！", "error");
+                            showToast("🌐 失去与云端智脑的连接，请检查网络！", "error");
                         } finally {
                             isUploading.value = false;
                             event.target.value = '';
@@ -637,15 +725,15 @@
                 };
 
                 const handleSaveDetails = async () => {
-                    if (!editForm.cost || editForm.cost <= 0) return showToast("请输入真实的成本金！", "error");
-                    if (!editForm.code || !/^\d{6}$/.test(editForm.code)) return showToast("请输入东财 6 位数字代码！", "error");
+                    if (!editForm.cost || editForm.cost <= 0) return showToast("⚠️ 请输入真实的成本金！", "error");
+                    if (!editForm.code || !/^\d{6}$/.test(editForm.code)) return showToast("⚠️ 请输入东财的 6 位数字代码！", "error");
                     const fd = new FormData();
                     fd.append('username', currentUser.value); fd.append('code', editForm.code); fd.append('costAmount', editForm.cost); fd.append('originalCode', editForm.originalCode);
                     try {
                         const res = await fetch(API_BASE + '/api/Fund/update-details', { method: 'POST', body: fd });
-                        if (res.ok) { showToast("弹药已补给！正在重新计算盈亏", "success"); editForm.show = false; fetchData(); }
-                        else showToast("保存失败: " + await res.text(), "error");
-                    } catch (e) { showToast("连线智脑阵亡", "error"); }
+                        if (res.ok) { showToast("✅ 弹药已补给！大屏将自动重新计算！", "success"); editForm.show = false; fetchData(); }
+                        else showToast("❌ 保存失败: " + await res.text(), "error");
+                    } catch (e) { showToast("🌐 连线智脑阵亡", "error"); }
                 };
 
                 const fetchSectors = async () => {
@@ -659,7 +747,7 @@
                             sectorBottomList.value = json.bottom;
                         }
                     } catch (e) {
-                        showToast("雷达连接失败！", "error");
+                        showToast("🚨 雷达连接失败！", "error");
                     } finally {
                         isSectorLoading.value = false;
                     }
@@ -701,8 +789,7 @@
 
                             fund.todayProfit = (fund.amount * (fund.currentRate / 100)).toFixed(2);
                             
-                            // 🚀 终极强化 3：免疫 NaN 污染总收益
-                            let profitVal = parseFloat(fund.todayProfit);
+                            const profitVal = parseFloat(fund.todayProfit);
                             if (!isNaN(profitVal)) {
                                 tToday += profitVal;
                             }
@@ -813,25 +900,22 @@
                 const checkShouldPoll = () => {
                     const now = new Date();
                     const day = now.getDay();
-                    if (day === 0 || day === 6) return false;
+                    if (day === 0 || day === 6) return false; 
                     const time = now.getHours() * 100 + now.getMinutes();
                     return time >= 925 && time <= 1605;
                 };
 
-                // 🚀 终极强化 4：系统状态时钟，独立负责更新夜间模式
-                const updateSystemStatus = () => {
-                    let currentHour = new Date().getHours();
-                    isNight.value = (currentHour >= 20 || currentHour < 6);
-                };
-
                 const initDashboard = () => { 
                     nextTick(() => { 
-                        updateSystemStatus();
                         if (fundsList.value.length > 0) renderChart(fundsList.value);
                         setTimeout(() => {
                             fetchData(); 
+                            
+                            // 🚀 绝杀 MiMo：将 isNight 的更新移到 60秒定时器内部，不管拉不拉数据，时钟都会自动切换夜间状态！
                             timer = setInterval(() => {
-                                updateSystemStatus(); // 无论是否轮询数据，夜间模式都会自动刷新判断
+                                let currentHour = new Date().getHours();
+                                isNight.value = (currentHour >= 20 || currentHour < 6);
+
                                 if (checkShouldPoll()) {
                                     fetchData();
                                 }
@@ -849,13 +933,15 @@
                 });
 
                 return {
+                    toasts, // 导出 Toast
                     isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, showAssets, isUploading, editForm,
                     handleRegister, handleLogin, handleLogout, handleAddFund, handleDeleteFund,
-                    triggerUpload, handleFileUpload, openEditModal, handleSaveDetails, handleSettleNightly,
+                    triggerUpload, handleFileUpload, openEditModal, handleSaveDetails, 
                     totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors, sectorTopList, sectorBottomList,
                     showSectorDetails, detailsTitle, detailsList, isDetailsLoading, fetchSectorDetails, 
-                    historyModal, fetchHistory
+                    historyModal, fetchHistory,
+                    showGlobalIndices, isIndicesLoading, fetchGlobalIndices, globalIndices, viewIndexHistory
                 };
             }
         }).mount('#app');
