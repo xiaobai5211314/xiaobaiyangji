@@ -514,16 +514,31 @@ namespace 估值助手.Controllers
                 var myFunds = await _context.MyFunds.Where(f => f.Username == username).ToListAsync();
                 var myFundCodes = myFunds.Select(f => f.FundCode).ToList();
 
+                // 如果没持仓，直接返回空，防止报错
+                if (!myFundCodes.Any()) return Ok(new List<object>());
+
                 var localTime = DateTime.UtcNow.AddHours(8);
                 var today = localTime.Date;
                 string todayStr = localTime.ToString("yyyy'/'MM'/'dd");
 
+                // 1. 获取今天的估值走势
                 var todayRecords = await _context.FundRecords
                     .Where(r => r.FetchTime >= today && myFundCodes.Contains(r.FundCode))
                     .OrderBy(r => r.FetchTime)
                     .ToListAsync();
 
-                // 🚀 军工级优化：先一次性把所有基金的 3 天历史数据查出来，存进内存
+                // 2. 🚨 找回丢失的底盘零件：获取昨天的收盘记录
+                var lastRecords = new List<FundData>(); // 注意这里如果是 FundData 请自行修改类名
+                foreach (var code in myFundCodes)
+                {
+                    var lr = await _context.FundRecords
+                        .Where(r => r.FetchTime < today && r.FundCode == code)
+                        .OrderByDescending(r => r.FetchTime)
+                        .FirstOrDefaultAsync();
+                    if (lr != null) lastRecords.Add(lr);
+                }
+
+                // 3. 🚀 军工级优化：先一次性把所有基金的 3 天历史数据查出来，存进内存
                 var allPastRecords = await _context.FundRecords
                     .Where(r => myFundCodes.Contains(r.FundCode) && r.ActualRate != 0)
                     .OrderByDescending(r => r.FetchTime)
@@ -584,11 +599,10 @@ namespace 估值助手.Controllers
                         existingReturnRate = existingReturnRate,
                         breakEvenRate = breakEvenRate,
                         diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
-                        calibrationOffset = Math.Round(avgDiff, 4), // 🚀 建议：先传 4 位小数到前端，调试看看是不是真的完全一样
+                        calibrationOffset = Math.Round(avgDiff, 4), // 🚀 传 4 位小数到前端，看是不是真的独立了
                         data = dataPoints
                     };
                 });
-
 
                 // 让结果按照 amount (持仓金额) 从大到小降序排列后再发给大屏
                 return Ok(result.OrderByDescending(x => x.amount));
@@ -598,7 +612,6 @@ namespace 估值助手.Controllers
                 return StatusCode(500, $"服务器当场阵亡，死因：{ex.Message}");
             }
         }
-
         [HttpPost("update-details")]
         public async Task<IActionResult> UpdateDetailsAsync([FromQuery] string username, [FromForm] string code, [FromForm] double costAmount, [FromForm] string originalCode)
         {
