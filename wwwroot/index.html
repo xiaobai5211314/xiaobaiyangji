@@ -13,48 +13,335 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
     <style>
-        html { background-color: #0f172a; }
-        [v-cloak] { display: none !important; }
+        html {
+            background-color: #0f172a;
+        }
 
-        body { margin: 0; padding: 0; background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); color: #f8fafc; font-family: -apple-system, sans-serif; overflow-x: hidden; min-height: 100vh; }
-        .glass-panel { background: rgba(30, 41, 59, 0.4); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3); }
-        .header { margin: 15px; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
-        .header h1 { margin: 0; font-size: 20px; background: linear-gradient(to right, #00f2fe 0%, #4facfe 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800; }
-        .control-panel { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-        .control-panel input { background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.15); color: #00e5ff; padding: 8px 15px; border-radius: 20px; outline: none; width: 140px; transition: 0.3s; }
-        .btn-add { background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%); color: #fff; border: none; padding: 9px 20px; border-radius: 20px; cursor: pointer; font-weight: bold; }
-        .btn-ocr { background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); color: white; border: none; padding: 9px 15px; border-radius: 20px; cursor: pointer; font-weight: bold; transition: 0.3s; display: flex; align-items: center; gap: 5px; }
-        .btn-ocr:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4); }
-        .btn-ocr:disabled { background: #475569; cursor: not-allowed; opacity: 0.7; }
-        
-        .btn-global { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; padding: 9px 15px; border-radius: 20px; cursor: pointer; font-weight: bold; transition: 0.3s; }
-        .btn-global:hover { box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4); transform: translateY(-2px); }
-        
-        .btn-logout { background: transparent; color: #ff4d4f; border: 1px solid #ff4d4f; padding: 8px 15px; border-radius: 20px; cursor: pointer; }
-        .fund-list-container { margin: 0 15px; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; margin-bottom: 20px; }
-        .fund-card { padding: 15px; border-radius: 16px; font-size: 13px; display: flex; flex-direction: column; gap: 8px; position: relative; }
-        .radar-badge { background: rgba(255, 77, 79, 0.15); color: #ff4d4f; font-size: 11px; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255, 77, 79, 0.3); animation: blink 2s infinite; }
-        @keyframes blink { 50% { opacity: 0.5; } }
-        .metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background: rgba(0, 0, 0, 0.2); padding: 10px; border-radius: 10px; text-align: center; }
-        .metric-item { display: flex; flex-direction: column; }
-        .metric-label { font-size: 11px; color: #94a3b8; margin-bottom: 3px; }
-        .metric-value { font-weight: bold; }
-        .modal-mask { position: fixed; z-index: 1000; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center; transition: 0.3s; }
-        .modal-content { background: #1e293b; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 20px; width: 90%; max-width: 400px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
-        .modal-input { width: 100%; background: #0f172a; border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 12px; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box; }
-        #chart-container { width: calc(100vw - 30px); height: calc(100vh - 280px); margin: 15px; box-sizing: border-box; }
-        .divider { width: 1px; height: 40px; background: rgba(255,255,255,0.1); }
-        .skeleton-box { background: linear-gradient(90deg, rgba(40,49,66,0.5) 25%, rgba(55,65,81,0.8) 37%, rgba(40,49,66,0.5) 63%); background-size: 400% 100%; animation: skeleton-loading 1.4s ease infinite; border-radius: 8px; }
-        @keyframes skeleton-loading { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+        [v-cloak] {
+            display: none !important;
+        }
 
-        .toast-container { position: fixed; top: 30px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
-        .toast { padding: 12px 24px; border-radius: 30px; color: #fff; font-size: 14px; font-weight: bold; box-shadow: 0 10px 30px rgba(0,0,0,0.5); animation: slideDown 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; backdrop-filter: blur(10px); display: flex; align-items: center; gap: 8px; }
-        .toast.success { background: rgba(16, 185, 129, 0.9); border: 1px solid #34d399; }
-        .toast.error { background: rgba(239, 68, 68, 0.9); border: 1px solid #f87171; }
-        .toast.info { background: rgba(56, 189, 248, 0.9); border: 1px solid #7dd3fc; }
-        @keyframes slideDown { 0% { transform: translateY(-50px) scale(0.9); opacity: 0; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            color: #f8fafc;
+            font-family: -apple-system, sans-serif;
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
 
-        @media screen and (max-width: 768px) { .header { flex-direction: column; align-items: flex-start; gap: 15px; } .control-panel { width: 100%; } .control-panel input { flex: 1; min-width: 90px; } #chart-container { height: 50vh; } .total-panel { flex-wrap: wrap; gap: 20px; } .divider { display: none; } }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        }
+
+        .header {
+            margin: 15px;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+            .header h1 {
+                margin: 0;
+                font-size: 20px;
+                background: linear-gradient(to right, #00f2fe 0%, #4facfe 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                font-weight: 800;
+            }
+
+        .control-panel {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+            .control-panel input {
+                background: rgba(15, 23, 42, 0.6);
+                border: 1px solid rgba(255,255,255,0.15);
+                color: #00e5ff;
+                padding: 8px 15px;
+                border-radius: 20px;
+                outline: none;
+                width: 140px;
+                transition: 0.3s;
+            }
+
+        .btn-add {
+            background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+            color: #fff;
+            border: none;
+            padding: 9px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .btn-ocr {
+            background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+            color: white;
+            border: none;
+            padding: 9px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+            .btn-ocr:hover:not(:disabled) {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+            }
+
+            .btn-ocr:disabled {
+                background: #475569;
+                cursor: not-allowed;
+                opacity: 0.7;
+            }
+
+        .btn-global {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            border: none;
+            padding: 9px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+
+            .btn-global:hover {
+                box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+                transform: translateY(-2px);
+            }
+
+        .btn-logout {
+            background: transparent;
+            color: #ff4d4f;
+            border: 1px solid #ff4d4f;
+            padding: 8px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+        }
+
+        .fund-list-container {
+            margin: 0 15px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .fund-card {
+            padding: 15px;
+            border-radius: 16px;
+            font-size: 13px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            position: relative;
+        }
+
+        .radar-badge {
+            background: rgba(255, 77, 79, 0.15);
+            color: #ff4d4f;
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 77, 79, 0.3);
+            animation: blink 2s infinite;
+        }
+
+        @keyframes blink {
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 10px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .metric-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .metric-label {
+            font-size: 11px;
+            color: #94a3b8;
+            margin-bottom: 3px;
+        }
+
+        .metric-value {
+            font-weight: bold;
+        }
+
+        .modal-mask {
+            position: fixed;
+            z-index: 1000;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(5px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: 0.3s;
+        }
+
+        .modal-content {
+            background: #1e293b;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 20px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        }
+
+        .modal-input {
+            width: 100%;
+            background: #0f172a;
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #fff;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            box-sizing: border-box;
+        }
+
+        #chart-container {
+            width: calc(100vw - 30px);
+            height: calc(100vh - 280px);
+            margin: 15px;
+            box-sizing: border-box;
+        }
+
+        .divider {
+            width: 1px;
+            height: 40px;
+            background: rgba(255,255,255,0.1);
+        }
+
+        .skeleton-box {
+            background: linear-gradient(90deg, rgba(40,49,66,0.5) 25%, rgba(55,65,81,0.8) 37%, rgba(40,49,66,0.5) 63%);
+            background-size: 400% 100%;
+            animation: skeleton-loading 1.4s ease infinite;
+            border-radius: 8px;
+        }
+
+        @keyframes skeleton-loading {
+            0% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0 50%;
+            }
+        }
+
+        .toast-container {
+            position: fixed;
+            top: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+
+        .toast {
+            padding: 12px 24px;
+            border-radius: 30px;
+            color: #fff;
+            font-size: 14px;
+            font-weight: bold;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            animation: slideDown 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+            .toast.success {
+                background: rgba(16, 185, 129, 0.9);
+                border: 1px solid #34d399;
+            }
+
+            .toast.error {
+                background: rgba(239, 68, 68, 0.9);
+                border: 1px solid #f87171;
+            }
+
+            .toast.info {
+                background: rgba(56, 189, 248, 0.9);
+                border: 1px solid #7dd3fc;
+            }
+
+        @keyframes slideDown {
+            0% {
+                transform: translateY(-50px) scale(0.9);
+                opacity: 0;
+            }
+
+            100% {
+                transform: translateY(0) scale(1);
+                opacity: 1;
+            }
+        }
+
+        @media screen and (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+
+            .control-panel {
+                width: 100%;
+            }
+
+                .control-panel input {
+                    flex: 1;
+                    min-width: 90px;
+                }
+
+            #chart-container {
+                height: 50vh;
+            }
+
+            .total-panel {
+                flex-wrap: wrap;
+                gap: 20px;
+            }
+
+            .divider {
+                display: none;
+            }
+        }
     </style>
 </head>
 
@@ -99,7 +386,7 @@
                     <button @click="fetchSectors" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none; padding: 8px 15px; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; margin-left: 10px; margin-top: 10px;">
                         📡 市场板块雷达
                     </button>
-                    
+
                     <button class="btn-global" @click="fetchGlobalIndices" style="margin-left: 10px; margin-top: 10px;">
                         🌍 全球大盘
                     </button>
@@ -179,10 +466,10 @@
 
                     <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 6px; margin-top: 5px;">
                         <span style="display: flex; align-items: center; gap: 5px;">
-                            估值涨跌: 
+                            估值涨跌:
                             <span v-if="fund.isHoliday" style="color: #94a3b8; font-weight: bold; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-size: 11px;">☕ 海外休市</span>
                             <span v-else :style="{color: fund.currentRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold'}">{{ fund.currentRate > 0 ? '+' : ''}}{{ fund.currentRate }}%</span>
-                            
+
                             <span v-if="fund.calibrationOffset && Math.abs(fund.calibrationOffset) > 0 && !fund.isHoliday" style="font-size: 10px; color: #8b5cf6; border: 1px solid #8b5cf6; padding: 1px 4px; border-radius: 4px;">
                                 🤖修正: {{ fund.calibrationOffset > 0 ? '+' : '' }}{{ fund.calibrationOffset }}%
                             </span>
@@ -280,14 +567,14 @@
                     <div style="margin-bottom: 20px;">
                         <h4 style="color: #ef4444; border-bottom: 1px solid #334155; padding-bottom: 5px;">🔥 今日领涨 TOP 10 (止盈区)</h4>
                         <div v-for="(item, index) in sectorTopList" :key="item.code" @click="fetchSectorDetails(item)" style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px dashed #334155; cursor: pointer;">
-                            <span style="color: #f8fafc; font-weight: bold;">{{ index + 1 }}. {{ item.name }}</span>
+                            <span style="color: #f8fafc; font-weight: bold;">{{ item.name }}</span>
                             <span style="color: #ff4d4f; font-weight: 900;">+{{ item.rate }}%</span>
                         </div>
                     </div>
                     <div>
                         <h4 style="color: #10b981; border-bottom: 1px solid #334155; padding-bottom: 5px;">🧊 今日领跌 TOP 10 (抄底区)</h4>
                         <div v-for="(item, index) in sectorBottomList" :key="item.code" @click="fetchSectorDetails(item)" style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px dashed #334155; cursor: pointer;">
-                            <span style="color: #f8fafc; font-weight: bold;">{{ index + 1 }}. {{ item.name }}</span>
+                            <span style="color: #f8fafc; font-weight: bold;">{{ item.name }}</span>
                             <span style="color: #10b981; font-weight: 900;">{{ item.rate }}%</span>
                         </div>
                     </div>
@@ -389,7 +676,7 @@
 
     <script>
         const { createApp, ref, reactive, onMounted, onUnmounted, nextTick, shallowRef, watch } = Vue;
-        
+
         const getSavedUser = () => {
             let u = localStorage.getItem('fund_username');
             if (u) return u;
@@ -399,7 +686,7 @@
         };
         const saveUser = (username) => {
             localStorage.setItem('fund_username', username);
-            let d = new Date(); d.setTime(d.getTime() + (365*24*60*60*1000));
+            let d = new Date(); d.setTime(d.getTime() + (365 * 24 * 60 * 60 * 1000));
             document.cookie = `fund_username=${encodeURIComponent(username)};expires=${d.toUTCString()};path=/`;
         };
         const clearUser = () => {
@@ -423,7 +710,7 @@
 
                 const isLoggedIn = ref(false);
                 const currentUser = ref(getSavedUser());
-                
+
                 const fundsList = ref([]);
                 const chartRef = ref(null);
                 const isLoading = ref(true);
@@ -455,31 +742,59 @@
 
                 const historyModal = reactive({ show: false, isLoading: false, name: '', data: [] });
 
-                // 🚀 精准校对了全球 7 大核心指数在东财系统的绝密代号
+                // 🚀 终极修复 1：精准校对了全球 7 大核心指数在东财系统的绝密代号
                 const globalIndices = ref([
                     { name: '上证指数', secid: '1.000001', code: '000001', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '科创50', secid: '1.000688', code: '000688', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '创业板指', secid: '0.399006', code: '399006', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '恒生指数', secid: '124.HSI', code: 'HSI', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '纳斯达克', secid: '105.IXIC', code: 'IXIC', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '标普500', secid: '109.SPX', code: 'SPX', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
+                    { name: '恒生指数', secid: '116.HSI', code: 'HSI', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
+                    { name: '纳斯达克', secid: '100.IXIC', code: 'IXIC', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
+                    { name: '标普500', secid: '100.SPX', code: 'SPX', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '道琼斯', secid: '100.DJIA', code: 'DJIA', latest: 0, todayRate: 0, yearRate: 0, klines: [] }
                 ]);
                 const showGlobalIndices = ref(false);
                 const isIndicesLoading = ref(false);
 
-                // 🚀 核心修复：完全抛弃 fetch，使用无视跨域的动态 JSONP 引擎
+                // 🚀 终极修复 2：彻底修补 Vue3 的“响应式黑洞”，改用原生 JSONP 和强制变量替换机制
                 const fetchGlobalIndices = () => {
                     showGlobalIndices.value = true;
                     isIndicesLoading.value = true;
                     let loadedCount = 0;
 
+                    // 建立一个临时对象，收集所有的请求数据，绝对不在原生回调里直接改 Vue 数据
+                    const tempData = {};
+
                     const checkDone = () => {
                         loadedCount++;
+                        // 当 7 个请求全部返回后（无论成功还是失败）
                         if (loadedCount === globalIndices.value.length) {
+
+                            // 🚀 强行创造一个全新的数组，直接覆盖给 globalIndices.value，
+                            // 逼迫 Vue 引擎重新扫描并渲染大屏！
+                            globalIndices.value = globalIndices.value.map(item => {
+                                const data = tempData[item.code];
+                                if (data && data.klines && data.klines.length > 0) {
+                                    const klines = data.klines;
+                                    const latestKline = klines[klines.length - 1].split(',');
+                                    const oldestKline = klines[0].split(',');
+
+                                    const latest = parseFloat(latestKline[2]);
+                                    const todayRate = parseFloat(latestKline[8]);
+
+                                    const oldestClose = parseFloat(oldestKline[2]);
+                                    const yearRate = oldestClose !== 0 ? ((latest - oldestClose) / oldestClose * 100).toFixed(2) : "0.00";
+
+                                    const historyKlines = klines.reverse().map(k => {
+                                        const p = k.split(',');
+                                        return { date: p[0], rate: parseFloat(p[8]) };
+                                    });
+
+                                    return { ...item, latest, todayRate, yearRate, klines: historyKlines };
+                                }
+                                return item;
+                            });
+
                             isIndicesLoading.value = false;
-                            // 🚀 强行踢醒 Vue 的响应式雷达
-                            globalIndices.value = [...globalIndices.value];
                         }
                     };
 
@@ -490,25 +805,11 @@
 
                         const script = document.createElement('script');
                         script.id = scriptId;
-                        
+
                         window[`jsonp_idx_${index}`] = (res) => {
-                            if (res && res.data && res.data.klines && res.data.klines.length > 0) {
-                                const klines = res.data.klines;
-                                const latestKline = klines[klines.length - 1].split(',');
-                                const oldestKline = klines[0].split(',');
-                                
-                                item.latest = parseFloat(latestKline[2]);
-                                item.todayRate = parseFloat(latestKline[8]);
-                                
-                                const oldestClose = parseFloat(oldestKline[2]);
-                                if (oldestClose !== 0) {
-                                    item.yearRate = ((item.latest - oldestClose) / oldestClose * 100).toFixed(2);
-                                }
-                                
-                                item.klines = klines.reverse().map(k => {
-                                    const p = k.split(',');
-                                    return { date: p[0], rate: parseFloat(p[8]) };
-                                });
+                            if (res && res.data && res.data.klines) {
+                                // 把数据存到临时仓库里，不要碰 Vue 的代理对象
+                                tempData[item.code] = res.data;
                             }
                             checkDone();
                             delete window[`jsonp_idx_${index}`];
@@ -519,7 +820,8 @@
                             delete window[`jsonp_idx_${index}`];
                         };
 
-                        script.src = `https://push2his.eastmoney.com/api/qt/stock/kline/get?cb=jsonp_idx_${index}&secid=${item.secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250`;
+                        // 加上 b288 开头的顶级公钥，并且在末尾加个时间戳，防止缓存作祟
+                        script.src = `https://push2his.eastmoney.com/api/qt/stock/kline/get?cb=jsonp_idx_${index}&secid=${item.secid}&ut=b2884a393a59ad64002292a3e90d46a5&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250&v=${new Date().getTime()}`;
                         document.body.appendChild(script);
                     });
                 };
@@ -531,7 +833,7 @@
                     }
                     historyModal.show = true;
                     historyModal.name = item.name;
-                    historyModal.isLoading = false; 
+                    historyModal.isLoading = false;
                     historyModal.data = item.klines;
                 };
 
@@ -553,7 +855,7 @@
                     const script = document.createElement('script');
                     script.id = scriptId;
                     script.src = `https://fund.eastmoney.com/pingzhongdata/${code}.js?v=${new Date().getTime()}`;
-                    
+
                     script.onload = () => {
                         if (typeof Data_netWorthTrend !== 'undefined') {
                             let trend = Data_netWorthTrend.slice(-250).reverse();
@@ -627,7 +929,7 @@
                     let fd = new FormData(); fd.append('username', loginForm.username); fd.append('password', loginForm.password);
                     try {
                         const res = await fetch(API_BASE + '/api/auth/register', { method: 'POST', body: fd });
-                        if (res.ok) showToast("✅ 注册成功！请登录。", "success"); 
+                        if (res.ok) showToast("✅ 注册成功！请登录。", "success");
                         else showToast("❌ 注册失败", "error");
                     } catch (e) {
                         showToast("🌐 网络异常", "error");
@@ -640,13 +942,13 @@
                     let oldText = btn.innerText;
                     btn.innerText = "连线中...";
                     btn.disabled = true;
-                    
+
                     try {
                         let fd = new FormData();
                         fd.append('username', loginForm.username);
                         fd.append('password', loginForm.password);
                         const res = await fetch(API_BASE + '/api/auth/login', { method: 'POST', body: fd });
-                        
+
                         if (res.ok) {
                             saveUser(loginForm.username);
                             currentUser.value = loginForm.username;
@@ -664,9 +966,9 @@
                     }
                 };
 
-                const handleLogout = () => { 
+                const handleLogout = () => {
                     clearUser();
-                    location.reload(); 
+                    location.reload();
                 };
 
                 const handleAddFund = async () => {
@@ -762,7 +1064,7 @@
                         const apiData = await response.json();
 
                         let tPrincipal = 0; let tCost = 0; let tToday = 0;
-                        
+
                         let d = new Date();
                         let todaySlash = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
                         let todayDash = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -782,15 +1084,15 @@
                                     fund.isHoliday = false;
                                 } else {
                                     fund.currentRate = 0;
-                                    fund.isHoliday = true; 
+                                    fund.isHoliday = true;
                                 }
                             } else {
                                 fund.currentRate = 0;
-                                fund.isHoliday = true; 
+                                fund.isHoliday = true;
                             }
 
                             fund.todayProfit = (fund.amount * (fund.currentRate / 100)).toFixed(2);
-                            
+
                             const profitVal = parseFloat(fund.todayProfit);
                             if (!isNaN(profitVal)) {
                                 tToday += profitVal;
@@ -824,7 +1126,7 @@
                         window.addEventListener('resize', handleResize);
                     }
                     var holdAmounts = {};
-                    
+
                     var validData = apiData.filter(f => f.data && f.data.length > 1 && !f.isHoliday);
 
                     var seriesData = validData.map(fund => {
@@ -902,17 +1204,17 @@
                 const checkShouldPoll = () => {
                     const now = new Date();
                     const day = now.getDay();
-                    if (day === 0 || day === 6) return false; 
+                    if (day === 0 || day === 6) return false;
                     const time = now.getHours() * 100 + now.getMinutes();
                     return time >= 925 && time <= 1605;
                 };
 
-                const initDashboard = () => { 
-                    nextTick(() => { 
+                const initDashboard = () => {
+                    nextTick(() => {
                         if (fundsList.value.length > 0) renderChart(fundsList.value);
                         setTimeout(() => {
-                            fetchData(); 
-                            
+                            fetchData();
+
                             timer = setInterval(() => {
                                 let currentHour = new Date().getHours();
                                 isNight.value = (currentHour >= 20 || currentHour < 6);
@@ -920,17 +1222,17 @@
                                 if (checkShouldPoll()) {
                                     fetchData();
                                 }
-                            }, 60000); 
-                        }, 800); 
-                    }); 
+                            }, 60000);
+                        }, 800);
+                    });
                 };
 
                 onMounted(() => { if (currentUser.value) { isLoggedIn.value = true; initDashboard(); } });
-                
-                onUnmounted(() => { 
-                    if (timer) clearInterval(timer); 
+
+                onUnmounted(() => {
+                    if (timer) clearInterval(timer);
                     window.removeEventListener('resize', handleResize);
-                    if (chartInstance.value) chartInstance.value.dispose(); 
+                    if (chartInstance.value) chartInstance.value.dispose();
                 });
 
                 return {
@@ -938,9 +1240,9 @@
                     isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, showAssets, isUploading, editForm,
                     handleRegister, handleLogin, handleLogout, handleAddFund, handleDeleteFund,
-                    triggerUpload, handleFileUpload, openEditModal, handleSaveDetails, 
+                    triggerUpload, handleFileUpload, openEditModal, handleSaveDetails,
                     totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors, sectorTopList, sectorBottomList,
-                    showSectorDetails, detailsTitle, detailsList, isDetailsLoading, fetchSectorDetails, 
+                    showSectorDetails, detailsTitle, detailsList, isDetailsLoading, fetchSectorDetails,
                     historyModal, fetchHistory,
                     showGlobalIndices, isIndicesLoading, fetchGlobalIndices, globalIndices, viewIndexHistory
                 };
