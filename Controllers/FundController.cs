@@ -2,13 +2,14 @@ using Baidu.Aip.Ocr;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json.Linq;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.Processing;
 using StackExchange.Redis;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using 估值助手.Models;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Processing;
-using SixLabors.ImageSharp.Formats.Jpeg;
 using Color = SixLabors.ImageSharp.Color;
 using Image = SixLabors.ImageSharp.Image;
 
@@ -55,7 +56,7 @@ namespace 估值助手.Controllers
             try
             {
                 var options = ConfigurationOptions.Parse("localhost:6379");
-                options.ConnectTimeout = 1500; 
+                options.ConnectTimeout = 1500;
                 options.SyncTimeout = 1500;
                 using var redis = ConnectionMultiplexer.Connect(options);
                 var db = redis.GetDatabase();
@@ -172,7 +173,7 @@ namespace 估值助手.Controllers
                 // ==========================================
                 // 2. 监控：百度 OCR 阶段 (异步 + 熔断 + 单例高精度)
                 // ==========================================
-                
+
                 // 🚀 直接调用上面定义好的全局单例客户端，省去连接耗时。并且指定为 AccurateBasic（高精度版）
                 var ocrTask = Task.Run(() => _baiduOcrClient.AccurateBasic(finalProcessedBytes));
 
@@ -340,7 +341,7 @@ namespace 估值助手.Controllers
         {
             if (string.IsNullOrWhiteSpace(name)) return "";
 
-           // 将所有字母转为大写，并无情地清洗掉 (QDII) 这个干扰项
+            // 将所有字母转为大写，并无情地清洗掉 (QDII) 这个干扰项
             return name.ToUpper()
                        .Replace(" ", "").Replace("（", "(").Replace("）", ")")
                        .Replace("(QDII)", "").Replace("QDII", "") // 👈 就是加了这行！洗掉毒药！
@@ -493,7 +494,7 @@ namespace 估值助手.Controllers
             var watch = System.Diagnostics.Stopwatch.StartNew();
             try
             {
-                var funds = await GetAllFundsAsync(); 
+                var funds = await GetAllFundsAsync();
                 watch.Stop();
                 return Ok($"✅ 基金库装载成功！共 {funds.Count} 只。总耗时: {watch.ElapsedMilliseconds} 毫秒。");
             }
@@ -532,7 +533,8 @@ namespace 估值助手.Controllers
                     if (lr != null) lastRecords.Add(lr);
                 }
 
-                                var result = myFunds.Select(config => {
+                var result = myFunds.Select(config =>
+                {
                     var fundRecords = todayRecords.Where(r => r.FundCode == config.FundCode).ToList();
                     var lastRecord = lastRecords.FirstOrDefault(r => r.FundCode == config.FundCode);
 
@@ -540,7 +542,7 @@ namespace 估值助手.Controllers
                     // 🧠 核心升级：AI 动态估值校准引擎 (滑动平均补偿算法)
                     // =======================================================
                     double avgDiff = 0;
-                    
+
                     // 1. 去数据库里找出这只基金最近 3 天【已经清算出真实成绩】的记录
                     var past3DaysRecords = _context.FundRecords
                         .Where(r => r.FundCode == config.FundCode && r.ActualRate != 0) // ActualRate != 0 代表已出真实净值
@@ -553,7 +555,7 @@ namespace 估值助手.Controllers
                     {
                         // 逻辑：如果连续3天真实净值都比预估高 0.2%，那今天大概率也会高 0.2%
                         avgDiff = past3DaysRecords.Average(r => r.ActualRate - r.EstimatedRate);
-                        
+
                         // 为了防止极端暴跌暴涨导致补偿过度，我们给补偿值加一个安全锁（最大不超过 ±0.5%）
                         if (avgDiff > 0.5) avgDiff = 0.5;
                         if (avgDiff < -0.5) avgDiff = -0.5;
@@ -569,8 +571,8 @@ namespace 估值助手.Controllers
                     }
 
                     // 3. 把算出来的偏差补偿值 (avgDiff) 动态加到今天的每一个预估数据点上！
-                    dataPoints.AddRange(fundRecords.Select(r => new object[] { 
-                        r.FetchTime.ToString("yyyy'/'MM'/'dd HH:mm:ss"), 
+                    dataPoints.AddRange(fundRecords.Select(r => new object[] {
+                        r.FetchTime.ToString("yyyy'/'MM'/'dd HH:mm:ss"),
                         Math.Round(r.EstimatedRate + avgDiff, 2) // 👈 就在这里！系统每天都在自我修正！
                     }));
 
@@ -650,19 +652,19 @@ namespace 估值助手.Controllers
             }
         }
 
-                [HttpGet("force-settle")]
+        [HttpGet("force-settle")]
         public async Task<IActionResult> ForceSettle()
         {
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-            
+
             // 👇 核心伪装升级：全面模拟谷歌浏览器，突破防爬机制！
             client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
             client.DefaultRequestHeaders.Add("Accept", "application/json, text/javascript, */*; q=0.01");
             // 🚀 下面这行是最关键的“免死金牌”：告诉东财，咱们是“自己人”！
-            client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/"); 
+            client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
 
             var targetFunds = await _context.MyFunds.Select(f => f.FundCode).Distinct().ToListAsync();
-        
+
             var localTime = DateTime.UtcNow.AddHours(8);
             string todayStr = localTime.ToString("yyyy-MM-dd");
             var todayStart = localTime.Date;
@@ -735,10 +737,11 @@ namespace 估值助手.Controllers
         new { name="上证指数", secid="1.000001" },
         new { name="科创50",   secid="1.000688" },
         new { name="创业板指", secid="0.399006" },
-        new { name="恒生指数", secid="124.HSI"  },
-        new { name="纳斯达克", secid="105.IXIC" },
-        new { name="标普500",  secid="109.SPX"  },
-        new { name="道琼斯",   secid="100.DJIA" },
+       // 后端 C# 代码里改 secid
+new { name="恒生指数", secid="128.HSI"   },  // 原来是 124.HSI
+new { name="纳斯达克", secid="105.NDX"   },  // 原来是 105.IXIC（纳斯达克100，更稳定）
+new { name="标普500",  secid="109.INX"   },  // 原来是 109.SPX
+new { name="道琼斯",   secid="100.DJIA"  },  // 这个没问题
     };
 
             using var http = new HttpClient();
@@ -764,7 +767,7 @@ namespace 估值助手.Controllers
         {
             if (string.IsNullOrEmpty(sectorName)) return BadRequest("缺少板块名称");
 
-                       // 🧠 1. 终极智能降维：把极度冷门的股市概念，强行翻译成宽泛的基金主题！
+            // 🧠 1. 终极智能降维：把极度冷门的股市概念，强行翻译成宽泛的基金主题！
             string keyword = sectorName.Replace("概念", "").Replace("板块", "");
 
             // 🌟 核心映射字典：教系统什么是医药，什么是科技
@@ -886,7 +889,7 @@ namespace 估值助手.Controllers
             }
         }
 
-                    [HttpGet("sectors")]
+        [HttpGet("sectors")]
         public async Task<IActionResult> GetSectors()
         {
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
@@ -915,9 +918,9 @@ namespace 估值助手.Controllers
                                 if (item.TryGetProperty("f3", out var f3Element) && f3Element.ValueKind == System.Text.Json.JsonValueKind.Number)
                                 {
                                     string name = item.GetProperty("f14").GetString() ?? "";
-                                    
+
                                     // 🛡️ 垃圾词汇过滤器：剔除股市专用词，让它看起来像基金主题！
-                                    if (name.Contains("昨日") || name.Contains("ST") || name.Contains("退市") || name.EndsWith("股")) 
+                                    if (name.Contains("昨日") || name.Contains("ST") || name.Contains("退市") || name.EndsWith("股"))
                                         continue;
 
                                     // 自动给名字做医美：把“CPO概念”直接变成“CPO”，把“肝炎概念”变成“肝炎”
@@ -1005,15 +1008,16 @@ namespace 估值助手.Controllers
                 return StatusCode(500, $"X光机故障: {ex.Message}");
             }
         }
-                                                        [HttpGet("fund-holdings")]
+        [HttpGet("fund-holdings")]
         public async Task<IActionResult> GetFundHoldings([FromQuery] string fundCode)
         {
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-            
+
             client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36");
             client.DefaultRequestHeaders.Add("Accept", "application/json, text/plain, */*");
             client.DefaultRequestHeaders.Add("Accept-Language", "zh-CN,zh;q=0.9");
-
+            // 关键：加上 Host
+            client.DefaultRequestHeaders.Add("Host", "push2his.eastmoney.com");
             try
             {
                 string positionUrl = $"https://fundmobapi.eastmoney.com/FundMNewApi/FundMNInverstPosition?FCODE={fundCode}&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0";
@@ -1026,7 +1030,7 @@ namespace 估值助手.Controllers
                 else if (posDoc.RootElement.TryGetProperty("Data", out var dataObj) && dataObj.ValueKind != System.Text.Json.JsonValueKind.Null)
                     dataElement = dataObj;
                 else
-                    return Ok(new List<object>()); 
+                    return Ok(new List<object>());
 
                 JsonElement fundPosition;
                 if (dataElement.TryGetProperty("fundStocks", out var stocksObj) && stocksObj.ValueKind == System.Text.Json.JsonValueKind.Array)
@@ -1048,8 +1052,8 @@ namespace 估值助手.Controllers
                     if (!string.IsNullOrEmpty(code))
                     {
                         string prefix = "0.";
-                        if (code.StartsWith("6")) prefix = "1."; 
-                        else if (code.Length == 5) prefix = "116."; 
+                        if (code.StartsWith("6")) prefix = "1.";
+                        else if (code.Length == 5) prefix = "116.";
 
                         secidList.Add(prefix + code);
                         stockList.Add(new { code, name, ratio, rate = 0.0 });
@@ -1060,10 +1064,10 @@ namespace 估值助手.Controllers
                 {
                     string secids = string.Join(",", secidList);
                     string quoteUrl = $"http://push2.eastmoney.com/api/qt/ulist.np/get?secids={secids}&fields=f12,f14,f3";
-                    
+
                     using var quoteClient = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
                     quoteClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
-                    
+
                     string quoteRes = await quoteClient.GetStringAsync(quoteUrl);
                     using var quoteDoc = System.Text.Json.JsonDocument.Parse(quoteRes);
 
