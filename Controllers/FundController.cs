@@ -727,8 +727,39 @@ namespace 估值助手.Controllers
             await _context.SaveChangesAsync();
             return Ok(resultLog);
         }
+        [HttpGet("global-indices")]
+        public async Task<IActionResult> GetGlobalIndices()
+        {
+            var indices = new[]
+            {
+        new { name="上证指数", secid="1.000001" },
+        new { name="科创50",   secid="1.000688" },
+        new { name="创业板指", secid="0.399006" },
+        new { name="恒生指数", secid="124.HSI"  },
+        new { name="纳斯达克", secid="105.IXIC" },
+        new { name="标普500",  secid="109.SPX"  },
+        new { name="道琼斯",   secid="100.DJIA" },
+    };
 
-                [HttpGet("sector-funds")]
+            using var http = new HttpClient();
+            http.DefaultRequestHeaders.Add("Referer", "https://www.eastmoney.com/");
+            http.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
+
+            var tasks = indices.Select(async idx =>
+            {
+                var url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={idx.secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250";
+                try
+                {
+                    var json = await http.GetStringAsync(url);
+                    return new { idx.name, data = json };
+                }
+                catch { return new { idx.name, data = "{}" }; }
+            });
+
+            var results = await Task.WhenAll(tasks);
+            return Ok(results);
+        }
+        [HttpGet("sector-funds")]
         public async Task<IActionResult> GetSectorFunds([FromQuery] string sectorName)
         {
             if (string.IsNullOrEmpty(sectorName)) return BadRequest("缺少板块名称");

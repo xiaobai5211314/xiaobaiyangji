@@ -742,57 +742,44 @@
 
                 const historyModal = reactive({ show: false, isLoading: false, name: '', data: [] });
 
-                // 🚀 终极修复 1：精准的 100. 全球前缀
-                // 🚀 终极修复：向 MiMo 的绝密数据字典低头！输入绝对正确的海外专属 secid！
-                const globalIndices = ref([
-                    { name: '上证指数', secid: '1.000001', code: '000001', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '科创50', secid: '1.000688', code: '000688', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '创业板指', secid: '0.399006', code: '399006', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '恒生指数', secid: '124.HSI', code: 'HSI', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '纳斯达克', secid: '105.IXIC', code: 'IXIC', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '标普500', secid: '109.SPX', code: 'SPX', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '道琼斯', secid: '100.DJIA', code: 'DJIA', latest: 0, todayRate: 0, yearRate: 0, klines: [] }
-                ]);
-                const showGlobalIndices = ref(false);
-                const isIndicesLoading = ref(false);
-
-                // 🚀 终极修复 2：启用免跨域 JSONP + 临时对象池防响应式黑洞
-                const fetchGlobalIndices = () => {
+                const fetchGlobalIndices = async () => {
                     showGlobalIndices.value = true;
                     isIndicesLoading.value = true;
-                    let loadedCount = 0;
+                    try {
+                        const res = await fetch(`${API_BASE}/api/fund/global-indices`);
+                        const results = await res.json();
 
-                    const tempData = []; // 临时收纳箱，绝不让原生 JS 直接碰 Vue 导致失明
+                        globalIndices.value = globalIndices.value.map(item => {
+                            const found = results.find(r => r.name === item.name);
+                            if (!found) return item;
 
-                    const checkDone = () => {
-                        loadedCount++;
-                        if (loadedCount === globalIndices.value.length) {
-                            // 💡 绝杀：全部数据拉完后，瞬间替换整个数组，强迫 Vue 屏幕亮起！
-                            globalIndices.value = globalIndices.value.map((item, index) => {
-                                const data = tempData[index];
-                                if (data && data.klines && data.klines.length > 0) {
-                                    const klines = data.klines;
-                                    const latestKline = klines[klines.length - 1].split(',');
-                                    const oldestKline = klines[0].split(',');
+                            const json = JSON.parse(found.data);
+                            const klines = json?.data?.klines;
+                            if (!klines || klines.length === 0) return item;
 
-                                    const latest = parseFloat(latestKline[2]);
-                                    const todayRate = parseFloat(latestKline[8]);
+                            const latest = klines[klines.length - 1].split(',');
+                            const oldest = klines[0].split(',');
+                            const latestClose = parseFloat(latest[2]);
+                            const todayRate = parseFloat(latest[8]);
+                            const yearRate = ((latestClose - parseFloat(oldest[2])) / parseFloat(oldest[2]) * 100).toFixed(2);
 
-                                    const oldestClose = parseFloat(oldestKline[2]);
-                                    const yearRate = oldestClose !== 0 ? ((latest - oldestClose) / oldestClose * 100).toFixed(2) : "0.00";
-
-                                    const historyKlines = klines.reverse().map(k => {
-                                        const p = k.split(',');
-                                        return { date: p[0], rate: parseFloat(p[8]) };
-                                    });
-
-                                    return { ...item, latest, todayRate, yearRate, klines: historyKlines };
-                                }
-                                return item;
-                            });
-                            isIndicesLoading.value = false;
-                        }
-                    };
+                            return {
+                                ...item,
+                                latest: latestClose,
+                                todayRate,
+                                yearRate,
+                                klines: klines.reverse().map(k => {
+                                    const p = k.split(',');
+                                    return { date: p[0], rate: parseFloat(p[8]) };
+                                })
+                            };
+                        });
+                    } catch (e) {
+                        showToast("🚨 全球大盘加载失败", "error");
+                    } finally {
+                        isIndicesLoading.value = false;
+                    }
+                };
 
                     globalIndices.value.forEach((item, index) => {
                         const scriptId = `jsonp_idx_${index}`;
