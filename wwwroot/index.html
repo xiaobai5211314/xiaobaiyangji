@@ -414,8 +414,8 @@
                     
                     script.onload = () => {
                         if (typeof Data_netWorthTrend !== 'undefined') {
-                            // 取最后 60 个交易日（约等于 3 个月）的数据并倒序排列（最新的一天在最上面）
-                            let trend = Data_netWorthTrend.slice(-60).reverse();
+                            // 取最后 240 个交易日（约等于 12 个月）的数据并倒序排列（最新的一天在最上面）
+                            let trend = Data_netWorthTrend.slice(-3650).reverse();
                             historyModal.data = trend.map(item => {
                                 let d = new Date(item.x);
                                 let dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
