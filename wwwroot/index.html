@@ -395,14 +395,23 @@
                             <span style="font-size:10px; color:#64748b; font-weight: normal; margin-top: 2px;">({{ fund.code }})</span>
                         </span>
                         <div style="display: flex; gap: 6px; flex-shrink: 0;">
+                            <button @click="openHistory(fund.code)" style="background: rgba(56, 189, 248, 0.2); border: none; color: #38bdf8; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;" title="查看官方历史档案">📈</button>
                             <button @click="openEditModal(fund)" style="background: rgba(255,255,255,0.1); border: none; color: #cbd5e1; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;">🔧</button>
                             <button @click="handleDeleteFund(fund.code, fund.name)" style="background: rgba(255, 77, 79, 0.2); border: none; color: #ff4d4f; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;">✕</button>
                         </div>
                     </div>
 
                     <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 6px; margin-top: 5px;">
-                        <span>估值涨跌: <span :style="{color: fund.currentRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold'}">{{ fund.currentRate > 0 ? '+' : ''}}{{ fund.currentRate }}%</span></span>
-                        <span v-if="Math.abs(fund.diffRate) > 0.15">
+                        <span style="display: flex; align-items: center; gap: 5px;">
+                            估值涨跌: 
+                            <span v-if="fund.isHoliday" style="color: #94a3b8; font-weight: bold; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-size: 11px;">☕ 海外休市</span>
+                            <span v-else :style="{color: fund.currentRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold'}">{{ fund.currentRate > 0 ? '+' : ''}}{{ fund.currentRate }}%</span>
+                            
+                            <span v-if="fund.calibrationOffset && Math.abs(fund.calibrationOffset) > 0 && !fund.isHoliday" style="font-size: 10px; color: #8b5cf6; border: 1px solid #8b5cf6; padding: 1px 4px; border-radius: 4px;">
+                                🤖修正: {{ fund.calibrationOffset > 0 ? '+' : '' }}{{ fund.calibrationOffset }}%
+                            </span>
+                        </span>
+                        <span v-if="Math.abs(fund.diffRate) > 0.15 && !fund.isHoliday">
                             <span class="radar-badge">🚨 偏离: {{ fund.diffRate }}%</span>
                         </span>
                     </div>
@@ -606,6 +615,11 @@
                 const detailsList = ref([]);
                 const isDetailsLoading = ref(false);
 
+                // 🚀 新增：打开历史走势 H5 页面
+                const openHistory = (code) => {
+                    window.open(`https://fund.eastmoney.com/${code}.html`, '_blank');
+                };
+
                 const fetchSectorDetails = async (sector) => {
                     detailsTitle.value = sector.name;
                     showSectorDetails.value = true;
@@ -768,7 +782,6 @@
                     } catch (e) { alert("🌐 连线智脑阵亡"); }
                 };
 
-                // 为了防止 fetchSectors 未定义引发错误，补上这个方法
                 const fetchSectors = async () => {
                     showSectorRadar.value = true;
                     isSectorLoading.value = true;
@@ -795,16 +808,34 @@
                         const apiData = await response.json();
 
                         let tPrincipal = 0; let tCost = 0; let tToday = 0;
+                        
+                        // 🌟 核心防休市逻辑：获取今天日期进行比对
+                        let d = new Date();
+                        let todaySlash = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+                        let todayDash = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
                         apiData.forEach(fund => {
                             tPrincipal += fund.amount;
                             tCost += (fund.cost || fund.amount);
 
                             if (fund.data && fund.data.length > 0) {
-                                fund.currentRate = fund.data[fund.data.length - 1][1];
+                                let lastDataTime = String(fund.data[fund.data.length - 1][0]);
+                                
+                                // 🚀 如果最后的数据包含今天的时间，则正常
+                                if (lastDataTime.includes(todaySlash) || lastDataTime.includes(todayDash)) {
+                                    fund.currentRate = fund.data[fund.data.length - 1][1];
+                                    fund.isHoliday = false;
+                                } else {
+                                    // 🛑 如果时间不是今天，强制判定为休市，涨幅置0
+                                    fund.currentRate = 0;
+                                    fund.isHoliday = true; 
+                                }
                             } else {
                                 fund.currentRate = 0;
+                                fund.isHoliday = false;
                             }
 
+                            // 计算收益，休市的由于 currentRate 为 0，收益也会被算成 0，不再影响大盘
                             fund.todayProfit = (fund.amount * (fund.currentRate / 100)).toFixed(2);
                             tToday += parseFloat(fund.todayProfit);
 
@@ -832,7 +863,9 @@
                         window.addEventListener('resize', () => chartInstance.value.resize());
                     }
                     var holdAmounts = {};
-                    var validData = apiData.filter(f => f.data && f.data.length > 1);
+                    
+                    // 🚀 过滤掉被标记为休市的基金，防止在图表里画出昨天的平直线
+                    var validData = apiData.filter(f => f.data && f.data.length > 1 && !f.isHoliday);
 
                     var seriesData = validData.map(fund => {
                         holdAmounts[fund.name] = fund.amount;
@@ -906,29 +939,27 @@
                     if (fundsList.value.length > 0) renderChart(fundsList.value);
                 });
 
-                                const initDashboard = () => { 
+                const initDashboard = () => { 
                     nextTick(() => { 
                         // 1. 瞬间利用本地记忆画出残影，让用户立刻看到画面
                         if (fundsList.value.length > 0) renderChart(fundsList.value);
                         
-                        // 2. 🚀 核心修复：加入 800 毫秒的战术缓冲期！
-                        // 让浏览器有足够的时间把残影画完、动画跑完，避开 CPU 算力高峰
+                        // 2. 加入战术缓冲期！让浏览器有足够的时间避开 CPU 算力高峰
                         setTimeout(() => {
-                            fetchData(); // 缓冲结束后，再偷偷去服务器拉最新数据
+                            fetchData(); // 缓冲结束后，再去服务器拉最新数据
                             timer = setInterval(fetchData, 60000); // 开启一分钟轮询
                         }, 800); 
                     }); 
                 };
 
-
-                // 🚀 修复3：只导出代码里真实存在的方法和变量，删除了空气变量 sectorList！
+                // 导出所有使用的变量和方法，包含了新增的 openHistory
                 return {
                     isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, showAssets, isUploading, editForm,
                     handleRegister, handleLogin, handleLogout, handleAddFund, handleDeleteFund,
                     triggerUpload, handleFileUpload, openEditModal, handleSaveDetails, handleSettleNightly,
                     totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors, sectorTopList, sectorBottomList,
-                    showSectorDetails, detailsTitle, detailsList, isDetailsLoading, fetchSectorDetails
+                    showSectorDetails, detailsTitle, detailsList, isDetailsLoading, fetchSectorDetails, openHistory
                 };
             }
         }).mount('#app');
