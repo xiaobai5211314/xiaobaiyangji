@@ -13,7 +13,6 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
     <style>
-        /* 强制把 html 最底层的底板也刷黑，防止边缘漏白 */
         html { background-color: #0f172a; }
         [v-cloak] { display: none !important; }
 
@@ -351,20 +350,37 @@
             var script = document.createElement('script');
             script.src = "_framework/blazor.webview.js";
             document.body.appendChild(script);
-            console.log("⚡ 检测到原生装甲车环境，已启动引擎桥接！");
-        } else {
-            console.log("🌐 检测到普通网页浏览器环境，跳过原生桥接。");
         }
     </script>
 
     <script>
         const { createApp, ref, reactive, onMounted, onUnmounted, nextTick, shallowRef, watch } = Vue;
+        
+        // 🚀 核心更新 1：防失忆系统，加入 Cookie 固态硬盘双重备份
+        const getSavedUser = () => {
+            let u = localStorage.getItem('fund_username');
+            if (u) return u;
+            let arr = document.cookie.match(new RegExp("(^| )fund_username=([^;]*)(;|$)"));
+            if (arr != null) return decodeURIComponent(arr[2]);
+            return '';
+        };
+        const saveUser = (username) => {
+            localStorage.setItem('fund_username', username);
+            let d = new Date(); d.setTime(d.getTime() + (365*24*60*60*1000)); // 保留1年
+            document.cookie = `fund_username=${encodeURIComponent(username)};expires=${d.toUTCString()};path=/`;
+        };
+        const clearUser = () => {
+            localStorage.removeItem('fund_username');
+            document.cookie = "fund_username=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+        };
+
         createApp({
             setup() {
                 const API_BASE = 'https://guzhi.21212121.xyz';
 
                 const isLoggedIn = ref(false);
-                const currentUser = ref(localStorage.getItem('fund_username') || '');
+                const currentUser = ref(getSavedUser()); // 🚀 使用新系统读取账号
+                
                 const fundsList = ref([]);
                 const chartRef = ref(null);
                 const isLoading = ref(true);
@@ -394,7 +410,6 @@
                 const detailsList = ref([]);
                 const isDetailsLoading = ref(false);
 
-                // 🚀 新增：内置历史档案弹窗逻辑
                 const historyModal = reactive({ show: false, isLoading: false, name: '', data: [] });
 
                 const fetchHistory = (code, name) => {
@@ -403,7 +418,6 @@
                     historyModal.name = name;
                     historyModal.data = [];
 
-                    // 动态创建 script 标签窃取东方财富的隐藏免跨域接口
                     const scriptId = `jsonp_${code}`;
                     let oldScript = document.getElementById(scriptId);
                     if (oldScript) oldScript.remove();
@@ -414,8 +428,7 @@
                     
                     script.onload = () => {
                         if (typeof Data_netWorthTrend !== 'undefined') {
-                            // 取最后 240 个交易日（约等于 12 个月）的数据并倒序排列（最新的一天在最上面）
-                            let trend = Data_netWorthTrend.slice(-3650).reverse();
+                            let trend = Data_netWorthTrend.slice(-60).reverse();
                             historyModal.data = trend.map(item => {
                                 let d = new Date(item.x);
                                 let dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -501,7 +514,7 @@
                         btn.innerText = oldText;
                         btn.disabled = false;
                         if (res.ok) {
-                            localStorage.setItem('fund_username', loginForm.username);
+                            saveUser(loginForm.username); // 🚀 核心更新 2：使用双擎保存
                             currentUser.value = loginForm.username;
                             isLoggedIn.value = true;
                             initDashboard();
@@ -515,7 +528,10 @@
                     }
                 };
 
-                const handleLogout = () => { localStorage.removeItem('fund_username'); location.reload(); };
+                const handleLogout = () => { 
+                    clearUser(); // 🚀 核心更新 3：彻底清除双擎数据
+                    location.reload(); 
+                };
 
                 const handleSettleNightly = async () => {
                     if (!confirm("⚠️ 确定执行【夜间复利清算】吗？\n\n这会将大屏上所有基金的【今日预估收益】正式计入【昨日市值】中！")) return;
@@ -633,9 +649,7 @@
 
                             if (fund.data && fund.data.length > 0) {
                                 let lastDataTime = String(fund.data[fund.data.length - 1][0]);
-                                
                                 let hasTodayDate = lastDataTime.includes(todaySlash) || lastDataTime.includes(todayDash);
-                                
                                 let isPast935 = (d.getHours() > 9) || (d.getHours() === 9 && d.getMinutes() >= 35);
                                 let isSpoofedHoliday = isPast935 && (fund.data.length <= 2);
 
@@ -763,6 +777,9 @@
                     }); 
                 };
 
+                onMounted(() => { if (currentUser.value) { isLoggedIn.value = true; initDashboard(); } });
+                onUnmounted(() => { if (timer) clearInterval(timer); if (chartInstance.value) chartInstance.value.dispose(); });
+
                 return {
                     isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, showAssets, isUploading, editForm,
@@ -770,7 +787,7 @@
                     triggerUpload, handleFileUpload, openEditModal, handleSaveDetails, handleSettleNightly,
                     totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors, sectorTopList, sectorBottomList,
                     showSectorDetails, detailsTitle, detailsList, isDetailsLoading, fetchSectorDetails, 
-                    historyModal, fetchHistory // 👈 完美导出新的弹窗和函数
+                    historyModal, fetchHistory
                 };
             }
         }).mount('#app');
