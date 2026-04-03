@@ -327,7 +327,7 @@
                     <h3 style="color: white; margin: 0;">🌍 全球大盘 (近 1 年)</h3>
                     <span @click="showGlobalIndices = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
                 </div>
-                <div v-if="isIndicesLoading" style="color: #94a3b8; text-align: center; margin-top: 50px;">📡 正在扫描全球交易所...</div>
+                <div v-if="isIndicesLoading" style="color: #94a3b8; text-align: center; margin-top: 50px;">📡 正在潜入全球交易所窃取档案...</div>
                 <div v-else style="overflow-y: auto; flex: 1; padding-right: 5px;">
                     <div style="display: flex; justify-content: space-between; color: #64748b; font-size: 12px; margin-bottom: 8px;">
                         <span>指数名称</span>
@@ -460,7 +460,7 @@
                     { name: '上证指数', secid: '1.000001', code: '000001', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '科创50', secid: '1.000688', code: '000688', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '创业板指', secid: '0.399006', code: '399006', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '恒生指数', secid: '116.HSI', code: 'HSI', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
+                    { name: '恒生指数', secid: '124.HSI', code: 'HSI', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '纳斯达克', secid: '105.IXIC', code: 'IXIC', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '标普500', secid: '109.SPX', code: 'SPX', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '道琼斯', secid: '100.DJIA', code: 'DJIA', latest: 0, todayRate: 0, yearRate: 0, klines: [] }
@@ -468,47 +468,60 @@
                 const showGlobalIndices = ref(false);
                 const isIndicesLoading = ref(false);
 
-                // 🚀 核心更新：使用现代 fetch 并发引擎拉取数据，绝对不再“响应式失明”
-                const fetchGlobalIndices = async () => {
+                // 🚀 核心修复：完全抛弃 fetch，使用无视跨域的动态 JSONP 引擎
+                const fetchGlobalIndices = () => {
                     showGlobalIndices.value = true;
                     isIndicesLoading.value = true;
+                    let loadedCount = 0;
 
-                    const promises = globalIndices.value.map(async (item) => {
-                        try {
-                            const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${item.secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250`;
-                            const response = await fetch(url);
-                            const res = await response.json();
-                            
-                            if (res && res.data && res.data.klines) {
-                                const klines = res.data.klines;
-                                if (klines.length > 0) {
-                                    const latestKline = klines[klines.length - 1].split(',');
-                                    const oldestKline = klines[0].split(',');
-                                    
-                                    item.latest = parseFloat(latestKline[2]);
-                                    item.todayRate = parseFloat(latestKline[8]);
-                                    
-                                    const oldestClose = parseFloat(oldestKline[2]);
-                                    if (oldestClose !== 0) {
-                                        item.yearRate = ((item.latest - oldestClose) / oldestClose * 100).toFixed(2);
-                                    }
-                                    
-                                    item.klines = klines.reverse().map(k => {
-                                        const p = k.split(',');
-                                        return { date: p[0], rate: parseFloat(p[8]) };
-                                    });
-                                }
-                            }
-                        } catch (e) {
-                            console.error(`大盘拉取失败: ${item.name}`, e);
+                    const checkDone = () => {
+                        loadedCount++;
+                        if (loadedCount === globalIndices.value.length) {
+                            isIndicesLoading.value = false;
+                            // 🚀 强行踢醒 Vue 的响应式雷达
+                            globalIndices.value = [...globalIndices.value];
                         }
-                    });
+                    };
 
-                    // 等待所有指数拉取完毕
-                    await Promise.all(promises);
-                    // 🚀 强制触动 Vue 报警雷达，更新全大屏数据！
-                    globalIndices.value = [...globalIndices.value];
-                    isIndicesLoading.value = false;
+                    globalIndices.value.forEach((item, index) => {
+                        const scriptId = `jsonp_idx_${index}`;
+                        let oldScript = document.getElementById(scriptId);
+                        if (oldScript) oldScript.remove();
+
+                        const script = document.createElement('script');
+                        script.id = scriptId;
+                        
+                        window[`jsonp_idx_${index}`] = (res) => {
+                            if (res && res.data && res.data.klines && res.data.klines.length > 0) {
+                                const klines = res.data.klines;
+                                const latestKline = klines[klines.length - 1].split(',');
+                                const oldestKline = klines[0].split(',');
+                                
+                                item.latest = parseFloat(latestKline[2]);
+                                item.todayRate = parseFloat(latestKline[8]);
+                                
+                                const oldestClose = parseFloat(oldestKline[2]);
+                                if (oldestClose !== 0) {
+                                    item.yearRate = ((item.latest - oldestClose) / oldestClose * 100).toFixed(2);
+                                }
+                                
+                                item.klines = klines.reverse().map(k => {
+                                    const p = k.split(',');
+                                    return { date: p[0], rate: parseFloat(p[8]) };
+                                });
+                            }
+                            checkDone();
+                            delete window[`jsonp_idx_${index}`];
+                        };
+
+                        script.onerror = () => {
+                            checkDone();
+                            delete window[`jsonp_idx_${index}`];
+                        };
+
+                        script.src = `https://push2his.eastmoney.com/api/qt/stock/kline/get?cb=jsonp_idx_${index}&secid=${item.secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250`;
+                        document.body.appendChild(script);
+                    });
                 };
 
                 const viewIndexHistory = (item) => {
