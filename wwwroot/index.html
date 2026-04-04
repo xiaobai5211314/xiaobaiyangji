@@ -1036,11 +1036,22 @@
                         let todaySlash = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
                         let todayDash = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-                        apiData.forEach(fund => {
+                                                apiData.forEach(fund => {
                             tPrincipal += fund.amount;
                             tCost += (fund.cost || fund.amount);
 
-                            if (fund.data && fund.data.length > 0) {
+                            // 🔥 终极防线：获取当前日期和分钟数
+                            let isWeekend = (d.getDay() === 0 || d.getDay() === 6);
+                            let currentMinutes = d.getHours() * 60 + d.getMinutes();
+                            
+                            // 战术拦截：如果是周末，或者今天是工作日但还没到早上 9:25 (565分钟)
+                            // 绝对无视后端返回的任何数据，强制清零并挂起“休市”牌！
+                            if (isWeekend || currentMinutes < 565) {
+                                fund.currentRate = 0;
+                                fund.isHoliday = true;
+                            } 
+                            // 防线过后，才执行您原本的盘中解析逻辑
+                            else if (fund.data && fund.data.length > 0) {
                                 let lastDataTime = String(fund.data[fund.data.length - 1][0]);
                                 let hasTodayDate = lastDataTime.includes(todaySlash) || lastDataTime.includes(todayDash);
                                 let isPast935 = (d.getHours() > 9) || (d.getHours() === 9 && d.getMinutes() >= 35);
@@ -1057,6 +1068,9 @@
                                 fund.currentRate = 0;
                                 fund.isHoliday = true;
                             }
+
+                            // ... (下方原封不动保留您的 fund.todayProfit = ... 等计算公式)
+
 
                             fund.todayProfit = (fund.amount * (fund.currentRate / 100)).toFixed(2);
 
