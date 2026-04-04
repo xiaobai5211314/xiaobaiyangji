@@ -399,7 +399,7 @@
                 <div style="text-align: center;">
                     <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">⏱️ 系统时间雷达</div>
                     <div :style="{ fontSize: '18px', fontWeight: '900', color: isNight ? '#10b981' : '#f59e0b', margin: '5px 0' }">
-                        {{ isNight ? '🌙 休市模式' : '☀️ 盘中盯盘模式' }}
+                        {{ isNight ? '🌙 夜间休市模式' : '☀️ 盘中盯盘模式' }}
                     </div>
                 </div>
 
@@ -714,7 +714,7 @@
                 const fundsList = ref([]);
                 const chartRef = ref(null);
                 const isLoading = ref(true);
-                const isNight = ref(true); // 默认设为 true，靠引擎去唤醒
+                const isNight = ref(false);
 
                 const totalPrincipal = ref(0);
                 const totalProfit = ref(0);
@@ -741,7 +741,7 @@
                 const isDetailsLoading = ref(false);
 
                 const historyModal = reactive({ show: false, isLoading: false, name: '', data: [] });
-                
+                // ❌ 新版 setup() 里完全缺失这三行声明
                 const globalIndices = ref([
                     { name: '上证指数', secid: '1.000001', code: '000001', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '科创50', secid: '1.000688', code: '000688', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
@@ -753,36 +753,6 @@
                 ]);
                 const showGlobalIndices = ref(false);
                 const isIndicesLoading = ref(false);
-
-                // --- 🛡️ 核心战术植入：时间校准与唤醒引擎 ---
-                const calibrateRadarTime = () => {
-                    const now = new Date();
-                    const day = now.getDay();
-                    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-                    
-                    const startMinutes = 9 * 60 + 25; // 09:25
-                    const endMinutes = 16 * 60 + 5;   // 16:05
-
-                    // 严密判定：排除周六(6)和周日(0)，且时间必须在开市期间
-                    if (day !== 0 && day !== 6 && currentMinutes >= startMinutes && currentMinutes <= endMinutes) {
-                        isNight.value = false; // 盘中
-                    } else {
-                        isNight.value = true;  // 休市/夜间/周末
-                    }
-                };
-
-                const handleVisibilityChange = () => {
-                    if (document.visibilityState === 'visible') {
-                        console.log('👀 指挥官重返指挥所，立刻进行雷达对表！');
-                        calibrateRadarTime();
-                        // 如果从后台切回，且计算出处于盘中，立刻拉取一次补充火力
-                        if (!isNight.value) {
-                            fetchData();
-                        }
-                    }
-                };
-                // ---------------------------------------------
-
                 const fetchGlobalIndices = async () => {
                     showGlobalIndices.value = true;
                     isIndicesLoading.value = true;
@@ -1198,20 +1168,54 @@
                     if (fundsList.value.length > 0) renderChart(fundsList.value);
                 });
 
+                                // ---------------- 核心雷达优化补丁 (外科手术式替换) ----------------
+                
+                // 1. 精确的轮询火力控制
+                const checkShouldPoll = () => {
+                    const now = new Date();
+                    const day = now.getDay();
+                    if (day === 0 || day === 6) return false; // 周末绝对停火
+                    const time = now.getHours() * 100 + now.getMinutes();
+                    return time >= 925 && time <= 1605; // 仅开市期间轮询
+                };
+
+                // 2. 独立的 UI 状态校准引擎 (不干扰您的原版数据抓取)
+                const updateRadarMode = () => {
+                    const now = new Date();
+                    const day = now.getDay();
+                    const time = now.getHours() * 100 + now.getMinutes();
+                    // 如果是周末，或者不在 9:25-16:05 之间，全面进入休市模式
+                    if (day === 0 || day === 6 || time < 925 || time > 1605) {
+                        isNight.value = true;
+                    } else {
+                        isNight.value = false;
+                    }
+                };
+
+                // 3. MIUI 杀后台唤醒侦听器
+                const handleVisibilityChange = () => {
+                    if (document.visibilityState === 'visible') {
+                        console.log('👀 指挥官切回页面，雷达强制对表！');
+                        updateRadarMode();
+                        // 只有在盘中切回页面时，才补发一发侦察弹更新数据
+                        if (checkShouldPoll()) {
+                            fetchData();
+                        }
+                    }
+                };
+
                 const initDashboard = () => {
                     nextTick(() => {
-                        calibrateRadarTime(); // 首次部署立刻对表
-                        
+                        updateRadarMode(); // 初始挂载立刻对表
                         if (fundsList.value.length > 0) renderChart(fundsList.value);
+                        
                         setTimeout(() => {
-                            fetchData();
+                            fetchData(); // 保持您原版的首次加载拉取
 
                             timer = setInterval(() => {
-                                calibrateRadarTime(); // 每分钟执行校准
-                                
-                                // 依赖校准后的结果决定是否发起火力侦察
-                                if (!isNight.value) {
-                                    fetchData();
+                                updateRadarMode(); // 每分钟校准一次 UI
+                                if (checkShouldPoll()) {
+                                    fetchData(); // 仅盘中拉取数据
                                 }
                             }, 60000);
                         }, 800);
@@ -1223,18 +1227,19 @@
                         isLoggedIn.value = true; 
                         initDashboard(); 
                     } 
-                    // 挂载可见性侦听器装甲
+                    // 部署可见性装甲
                     document.addEventListener('visibilitychange', handleVisibilityChange);
                 });
 
                 onUnmounted(() => {
                     if (timer) clearInterval(timer);
                     window.removeEventListener('resize', handleResize);
-                    // 卸载侦听器
+                    // 撤装可见性装甲
                     document.removeEventListener('visibilitychange', handleVisibilityChange);
                     if (chartInstance.value) chartInstance.value.dispose();
                 });
-
+                
+                
                 return {
                     toasts,
                     isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
