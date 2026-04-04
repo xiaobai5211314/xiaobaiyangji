@@ -1192,30 +1192,33 @@
                     }
                 };
 
-                // 3. MIUI 杀后台唤醒侦听器
+                                // 3. MIUI 杀后台唤醒侦听器 (已解除误伤拦截)
                 const handleVisibilityChange = () => {
                     if (document.visibilityState === 'visible') {
                         console.log('👀 指挥官切回页面，雷达强制对表！');
                         updateRadarMode();
-                        // 只有在盘中切回页面时，才补发一发侦察弹更新数据
-                        if (checkShouldPoll()) {
-                            fetchData();
-                        }
+                        
+                        // 【核心修复】：必须无条件开火一次！
+                        // 无论是不是周末，只要切回画面，必须拉取一次数据，
+                        // 这样才能触发您原版 fetchData 里的日期比对逻辑，把周五的幽灵收益清零！
+                        fetchData(); 
                     }
                 };
 
                 const initDashboard = () => {
                     nextTick(() => {
-                        updateRadarMode(); // 初始挂载立刻对表
+                        updateRadarMode(); 
                         if (fundsList.value.length > 0) renderChart(fundsList.value);
                         
                         setTimeout(() => {
-                            fetchData(); // 保持您原版的首次加载拉取
+                            fetchData(); // 初始登录：无条件拉取一次
 
                             timer = setInterval(() => {
-                                updateRadarMode(); // 每分钟校准一次 UI
+                                updateRadarMode(); // 每分钟只更新状态文本
+                                
+                                // 只有后台静默定时轮询，才受开盘时间限制，节省服务器军费
                                 if (checkShouldPoll()) {
-                                    fetchData(); // 仅盘中拉取数据
+                                    fetchData(); 
                                 }
                             }, 60000);
                         }, 800);
