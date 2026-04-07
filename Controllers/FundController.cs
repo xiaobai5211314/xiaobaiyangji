@@ -12,6 +12,9 @@ using System.Xml.Linq;
 using 估值助手.Models;
 using Color = SixLabors.ImageSharp.Color;
 using Image = SixLabors.ImageSharp.Image;
+using Microsoft.Extensions.Caching.Memory; // 确保顶部有这个命名空间
+
+
 
 namespace 估值助手.Controllers
 {
@@ -20,6 +23,7 @@ namespace 估值助手.Controllers
     public class FundController : ControllerBase
     {
         private readonly AppDbContext _context;
+private readonly IMemoryCache _cache; // 🚀 新增缓存弹药库
 
         // 🚀 杀招一：静态初始化，破除 Linux 幽灵死锁
         static FundController()
@@ -46,7 +50,12 @@ namespace 估值助手.Controllers
         private static List<FundInfoCache> _globalFundCache = null;
         private static Dictionary<string, FundInfoCache> _exactMatchDict = null;
 
-        public FundController(AppDbContext context) { _context = context; }
+        // 改造构造函数
+public FundController(AppDbContext context, IMemoryCache cache) 
+{ 
+    _context = context; 
+    _cache = cache; 
+}
 
         private async Task<List<FundInfoCache>> GetAllFundsAsync()
         {
@@ -504,13 +513,25 @@ namespace 估值助手.Controllers
             }
         }
 
-        [HttpGet("today")]
+                [HttpGet("today")]
         public async Task<IActionResult> GetTodayData([FromQuery] string username)
         {
             if (string.IsNullOrEmpty(username)) return Unauthorized("请提供指挥官代号");
 
             try
             {
+                // 🛡️ 第一层装甲：防友军误伤的专属缓存 Key (每个人查到的都是自己的阵地)
+                string cacheKey = $"Tactical_TodayData_{username}";
+
+                // 🛡️ 第二层装甲：雷达扫描缓存！如果 15 秒内刚查过，直接从内存库里提取弹药发射，绝对不碰数据库！
+                if (_cache.TryGetValue(cacheKey, out object cachedResult))
+                {
+                    return Ok(cachedResult);
+                }
+
+                // ========================================================
+                // ⚠️ 缓存穿透，以下为真实深入数据库获取情报的核心逻辑
+                // ========================================================
                 var myFunds = await _context.MyFunds.Where(f => f.Username == username).ToListAsync();
                 var myFundCodes = myFunds.Select(f => f.FundCode).ToList();
 
@@ -527,8 +548,8 @@ namespace 估值助手.Controllers
                     .OrderBy(r => r.FetchTime)
                     .ToListAsync();
 
-                // 2. 🚨 找回丢失的底盘零件：获取昨天的收盘记录
-                var lastRecords = new List<FundData>(); // 注意这里如果是 FundData 请自行修改类名
+                // 2. 🚨 找回丢失的底盘零件：获取昨天的收盘记录 (这里已修复为您真实的 FundRecord 实体)
+                var lastRecords = new List<FundRecord>(); 
                 foreach (var code in myFundCodes)
                 {
                     var lr = await _context.FundRecords
@@ -542,7 +563,7 @@ namespace 估值助手.Controllers
                 var allPastRecords = await _context.FundRecords
                     .Where(r => myFundCodes.Contains(r.FundCode) && r.ActualRate != 0)
                     .OrderByDescending(r => r.FetchTime)
-                    .ToListAsync(); // 一次请求搞定全军数据
+                    .ToListAsync();
 
                 var result = myFunds.Select(config =>
                 {
@@ -564,7 +585,6 @@ namespace 估值助手.Controllers
                         if (avgDiff > 0.5) avgDiff = 0.5;
                         if (avgDiff < -0.5) avgDiff = -0.5;
                     }
-                    // =======================================================
 
                     var dataPoints = new List<object[]>();
 
@@ -574,10 +594,10 @@ namespace 估值助手.Controllers
                         dataPoints.Add(new object[] { todayStr + " 09:30:00", Math.Round(lastRecord.EstimatedRate + avgDiff, 2) });
                     }
 
-                    // 3. 把算出来的偏差补偿值 (avgDiff) 动态加到今天的每一个预估数据点上！
+                    // 3. 把算出来的偏差补偿值 (avgDiff) 动态加到今天的每一个预估数据点上
                     dataPoints.AddRange(fundRecords.Select(r => new object[] {
                         r.FetchTime.ToString("yyyy'/'MM'/'dd HH:mm:ss"),
-                        Math.Round(r.EstimatedRate + avgDiff, 2) // 👈 就在这里！系统每天都在自我修正！
+                        Math.Round(r.EstimatedRate + avgDiff, 2)
                     }));
 
                     if (dataPoints.Count == 0)
@@ -599,19 +619,28 @@ namespace 估值助手.Controllers
                         existingReturnRate = existingReturnRate,
                         breakEvenRate = breakEvenRate,
                         diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
-                        calibrationOffset = Math.Round(avgDiff, 4), // 🚀 传 4 位小数到前端，看是不是真的独立了
+                        calibrationOffset = Math.Round(avgDiff, 4),
                         data = dataPoints
                     };
                 });
 
-                // 让结果按照 amount (持仓金额) 从大到小降序排列后再发给大屏
-                return Ok(result.OrderByDescending(x => x.amount));
+                // 🛡️ 第三层装甲：战果装填！
+                // 把算出来的结果按照金额降序排列，然后存进缓存！
+                var finalResult = result.OrderByDescending(x => x.amount).ToList();
+                
+                // 💣 设定引信：15 秒后强制销毁旧缓存，迎接下一次数据库拉取！
+                var cacheOptions = new MemoryCacheEntryOptions()
+                    .SetAbsoluteExpiration(TimeSpan.FromSeconds(15));
+                _cache.Set(cacheKey, finalResult, cacheOptions);
+
+                return Ok(finalResult);
             }
             catch (Exception ex)
             {
                 return StatusCode(500, $"服务器当场阵亡，死因：{ex.Message}");
             }
         }
+
         [HttpPost("update-details")]
         public async Task<IActionResult> UpdateDetailsAsync([FromQuery] string username, [FromForm] string code, [FromForm] double costAmount, [FromForm] string originalCode)
         {
