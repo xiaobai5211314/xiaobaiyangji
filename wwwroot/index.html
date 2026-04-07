@@ -1027,7 +1027,8 @@
                 const fetchData = async () => {
                     if (!currentUser.value) return;
                     try {
-                        const response = await fetch(`${API_BASE}/api/fund/today?username=${encodeURIComponent(currentUser.value)}`);
+                        const response = await fetch(`${API_BASE}/api/fund/today?username=${encodeURIComponent(currentUser.value)}&_t=${new Date().getTime()}`);
+
                         const apiData = await response.json();
 
                         let tPrincipal = 0; let tCost = 0; let tToday = 0;
@@ -1227,14 +1228,14 @@
                         setTimeout(() => {
                             fetchData(); // 初始登录：无条件拉取一次
 
-                            timer = setInterval(() => {
-                                updateRadarMode(); // 每分钟只更新状态文本
+                                                        timer = setInterval(() => {
+                                updateRadarMode(); 
                                 
-                                // 只有后台静默定时轮询，才受开盘时间限制，节省服务器军费
                                 if (checkShouldPoll()) {
                                     fetchData(); 
                                 }
-                            }, 60000);
+                            }, 15000); // 🚀 引擎超频：提速至 15 秒扫频一次
+
                         }, 800);
                     });
                 };
