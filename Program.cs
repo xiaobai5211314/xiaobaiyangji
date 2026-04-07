@@ -27,6 +27,8 @@ builder.Services.AddControllers();
 // 3. 注册后台抓取服务
 builder.Services.AddHostedService<FundScraperService>();
 builder.Services.AddHostedService<NavSettlementService>();
+// 申请开启内存缓存弹药库
+builder.Services.AddMemoryCache(); 
 
 var app = builder.Build();
 
