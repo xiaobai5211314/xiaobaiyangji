@@ -491,8 +491,6 @@ namespace 估值助手.Controllers
                     }
 
                     // 💎 终极绝杀：份额计算引擎启动！
-                    // 如果录入了份额，就用【份额 × 官方最新单位净值】来算绝对精确的昨日市值。
-                    // 如果没录入（HoldShares = 0），才降级使用不准的 HoldAmount。
                     double dwjz = dwjzDict.ContainsKey(config.FundCode) ? dwjzDict[config.FundCode] : 1.0;
                     double currentAmount = config.HoldShares > 0 ? Math.Round(config.HoldShares * dwjz, 2) : config.HoldAmount;
 
@@ -506,7 +504,7 @@ namespace 估值助手.Controllers
                         name = config.FundName,
                         amount = currentAmount, // 发给前端的已经是 100% 精确的市值了！
                         cost = cost > 0 ? cost : (double?)null,
-                        shares = config.HoldShares, // 顺便把份额推给前端展示
+                        shares = config.HoldShares, // 推给前端展示
                         existingReturnRate = existingReturnRate,
                         breakEvenRate = breakEvenRate,
                         diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
@@ -587,16 +585,19 @@ namespace 估值助手.Controllers
             {
                 var date = DateTime.Parse(req.DateStr).Date;
 
+                // 1. 清理防线：如果今天已经封存过了，先撤销旧档案，防止重复记录
                 var oldRecords = await _context.DailyArchives
                     .Where(a => a.Username == req.Username && a.RecordDate == date)
                     .ToListAsync();
                 if (oldRecords.Any()) _context.DailyArchives.RemoveRange(oldRecords);
 
+                // 2. 封存总指挥部数据
                 req.Total.RecordDate = date;
                 req.Total.FundCode = "TOTAL";
                 req.Total.Username = req.Username;
                 _context.DailyArchives.Add(req.Total);
 
+                // 3. 封存各单兵连队数据
                 foreach (var f in req.Funds)
                 {
                     f.RecordDate = date;
@@ -613,6 +614,101 @@ namespace 估值助手.Controllers
             }
         }
 
+        [HttpGet("auto-archive-nightly")]
+        public async Task<IActionResult> AutoArchiveNightly()
+        {
+            try
+            {
+                var localTime = DateTime.UtcNow.AddHours(8);
+                var today = localTime.Date;
+
+                // 1. 获取所有用户的持仓阵地
+                var allFunds = await _context.MyFunds.ToListAsync();
+                if (!allFunds.Any()) return Ok("无阵地需要封存。");
+
+                // 按指挥官代号分组处理
+                var userGroups = allFunds.GroupBy(f => f.Username);
+                int savedCount = 0;
+
+                foreach (var group in userGroups)
+                {
+                    string username = group.Key;
+                    var userFunds = group.ToList();
+
+                    // 🚀 终极防重复锁定：改为覆盖模式！只要今天触发过，就用最新的覆盖之前的。
+                    var oldRecords = await _context.DailyArchives
+                        .Where(a => a.Username == username && a.RecordDate == today)
+                        .ToListAsync();
+                    if (oldRecords.Any()) 
+                    {
+                        _context.DailyArchives.RemoveRange(oldRecords);
+                    }
+
+                    double totalAssets = 0;
+                    double totalCost = 0;
+
+                    // 2. 封存各个单兵连队 (单只基金)
+                    foreach (var fund in userFunds)
+                    {
+                        totalAssets += fund.HoldAmount;
+                        totalCost += (fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount);
+
+                        var todayRecord = await _context.FundRecords
+                            .Where(r => r.FundCode == fund.FundCode && r.FetchTime >= today)
+                            .OrderByDescending(r => r.FetchTime)
+                            .FirstOrDefaultAsync();
+
+                        double dailyRate = todayRecord?.ActualRate > 0 ? todayRecord.ActualRate : (todayRecord?.EstimatedRate ?? 0);
+                        double dailyProfit = fund.HoldAmount * (dailyRate / 100.0);
+
+                        _context.DailyArchives.Add(new DailyArchive
+                        {
+                            Username = username,
+                            FundCode = fund.FundCode,
+                            FundName = fund.FundName,
+                            RecordDate = today,
+                            Assets = fund.HoldAmount,
+                            DailyProfit = Math.Round(dailyProfit, 2),
+                            DailyRate = Math.Round(dailyRate, 2),
+                            TotalProfit = Math.Round((fund.CostAmount > 0 ? fund.HoldAmount - fund.CostAmount : 0), 2),
+                            TotalRate = Math.Round((fund.CostAmount > 0 ? ((fund.HoldAmount - fund.CostAmount) / fund.CostAmount * 100) : 0), 2)
+                        });
+                    }
+
+                    // 3. 封存总指挥部 (总阵地)
+                    double totalDailyProfit = _context.DailyArchives.Local
+                        .Where(a => a.Username == username && a.FundCode != "TOTAL" && a.RecordDate == today)
+                        .Sum(a => a.DailyProfit);
+
+                    double totalDailyRate = totalCost > 0 ? (totalDailyProfit / totalCost) * 100 : 0;
+                    double totalCumulativeProfit = totalAssets - totalCost;
+                    double totalCumulativeRate = totalCost > 0 ? (totalCumulativeProfit / totalCost) * 100 : 0;
+
+                    _context.DailyArchives.Add(new DailyArchive
+                    {
+                        Username = username,
+                        FundCode = "TOTAL",
+                        FundName = "总阵地",
+                        RecordDate = today,
+                        Assets = totalAssets,
+                        DailyProfit = Math.Round(totalDailyProfit, 2),
+                        DailyRate = Math.Round(totalDailyRate, 2),
+                        TotalProfit = Math.Round(totalCumulativeProfit, 2),
+                        TotalRate = Math.Round(totalCumulativeRate, 2)
+                    });
+
+                    savedCount++;
+                }
+
+                await _context.SaveChangesAsync();
+                return Ok($"[{localTime:yyyy-MM-dd HH:mm:ss}] 🌙 夜间自动战报封存完毕！成功为 {savedCount} 位指挥官生成了历史档案。");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"自动封存引擎异常: {ex.Message}");
+            }
+        }
+
         [HttpGet("get-archives")]
         public async Task<IActionResult> GetArchives([FromQuery] string username)
         {
@@ -623,15 +719,134 @@ namespace 估值助手.Controllers
             return Ok(records);
         }
 
-        // ===================== 其余方法保持原样 (GetGlobalIndices, GetSectorFunds 等) =====================
         [HttpGet("force-settle")]
-        public async Task<IActionResult> ForceSettle() { /* 原版代码保持不变 */ return Ok(); }
+        public async Task<IActionResult> ForceSettle()
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+            client.DefaultRequestHeaders.Add("Accept", "application/json, text/javascript, */*; q=0.01");
+            client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
+
+            var targetFunds = await _context.MyFunds.Select(f => f.FundCode).Distinct().ToListAsync();
+
+            var localTime = DateTime.UtcNow.AddHours(8);
+            string todayStr = localTime.ToString("yyyy-MM-dd");
+            var todayStart = localTime.Date;
+            var tomorrowStart = todayStart.AddDays(1);
+
+            var resultLog = new List<string>
+            {
+                $"===== 科技军团 T+1 手动清算诊断战报 =====",
+                $"当前系统校验时间: {localTime:yyyy-MM-dd HH:mm:ss}"
+            };
+
+            foreach (var code in targetFunds)
+            {
+                try
+                {
+                    string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize=1";
+                    string response = await client.GetStringAsync(url);
+
+                    if (!response.Contains("LSJZList"))
+                    {
+                        resultLog.Add($"❌ [{code}] 遭防火墙拦截！");
+                        continue;
+                    }
+
+                    using var doc = JsonDocument.Parse(response);
+                    var dataArray = doc.RootElement.GetProperty("Data").GetProperty("LSJZList");
+
+                    if (dataArray.GetArrayLength() > 0)
+                    {
+                        var latestData = dataArray[0];
+                        string fsrq = latestData.GetProperty("FSRQ").GetString() ?? "";
+                        string jzzzlStr = latestData.GetProperty("JZZZL").GetString() ?? "";
+
+                        if (fsrq == todayStr && double.TryParse(jzzzlStr, out double actualRate))
+                        {
+                            var targetRecord = await _context.FundRecords
+                                .Where(r => r.FundCode == code && r.FetchTime >= todayStart && r.FetchTime < tomorrowStart)
+                                .OrderByDescending(r => r.FetchTime)
+                                .FirstOrDefaultAsync();
+
+                            if (targetRecord != null)
+                            {
+                                targetRecord.EstimatedRate = actualRate;
+                                resultLog.Add($"✅ [{code}] 清算成功！已精准覆盖为真实净值: {actualRate}%");
+                            }
+                            else
+                            {
+                                resultLog.Add($"⚠️ [{code}] 找不到今天({todayStr})的盘中估值记录，无法覆盖！");
+                            }
+                        }
+                        else
+                        {
+                            resultLog.Add($"⏳ [{code}] 今日({todayStr})真实财报还未出，其最新停留在: {fsrq}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    resultLog.Add($"🔥 [{code}] 发生致命代码报错: {ex.Message}");
+                }
+            }
+            await _context.SaveChangesAsync();
+            return Ok(resultLog);
+        }
 
         [HttpGet("auto-settle")]
-        public async Task<IActionResult> AutoSettle() { /* 原版代码保持不变 */ return Ok(); }
+        public async Task<IActionResult> AutoSettle()
+        {
+            try
+            {
+                var allFunds = await _context.MyFunds.ToListAsync();
+                if (!allFunds.Any()) return Ok("当前暂无基金需要清算。");
+
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+                int successCount = 0;
+
+                foreach (var fund in allFunds)
+                {
+                    try
+                    {
+                        string url = $"http://fundgz.1234567.com.cn/js/{fund.FundCode}.js?rt={DateTime.Now.Ticks}";
+                        string jsData = await client.GetStringAsync(url);
+                        var match = Regex.Match(jsData, @"\""gszzl\"":\""([^\""]+)\""");
+                        if (match.Success && double.TryParse(match.Groups[1].Value, out double rate))
+                        {
+                            double todayProfit = fund.HoldAmount * (rate / 100.0);
+                            fund.HoldAmount = Math.Round(fund.HoldAmount + todayProfit, 2);
+                            successCount++;
+                        }
+                    }
+                    catch { continue; }
+                }
+
+                await _context.SaveChangesAsync();
+                return Ok($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] 🌙 夜间自动清算执行完毕！共成功滚动更新了 {successCount} 只基金的市值。");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"自动清算引擎异常: {ex.Message}");
+            }
+        }
 
         [HttpGet("test-load")]
-        public async Task<IActionResult> TestLoad() { /* 原版代码保持不变 */ return Ok(); }
+        public async Task<IActionResult> TestLoad()
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                var funds = await GetAllFundsAsync();
+                watch.Stop();
+                return Ok($"✅ 基金库装载成功！共 {funds.Count} 只。总耗时: {watch.ElapsedMilliseconds} 毫秒。");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"❌ 装载彻底失败: {ex.Message}");
+            }
+        }
 
         [HttpGet("global-indices")]
         public async Task<IActionResult> GetGlobalIndices()
@@ -667,12 +882,323 @@ namespace 估值助手.Controllers
         }
 
         [HttpGet("sectors")]
-        public async Task<IActionResult> GetSectors() { /* 原版代码保持不变，为节省字数略过，请直接粘贴您的原版 GetSectors */ return Ok(); }
+        public async Task<IActionResult> GetSectors()
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            try
+            {
+                string urlIndustry = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3";
+                string urlConcept = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=300&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:3&fields=f12,f14,f3";
+
+                var task1 = client.GetStringAsync(urlIndustry);
+                var task2 = client.GetStringAsync(urlConcept);
+                await Task.WhenAll(task1, task2);
+
+                var list = new List<dynamic>();
+
+                void ParseAndAdd(string json)
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(json);
+                    if (doc.RootElement.TryGetProperty("data", out var dataObj) && dataObj.ValueKind != System.Text.Json.JsonValueKind.Null)
+                    {
+                        if (dataObj.TryGetProperty("diff", out var diffArray) && diffArray.ValueKind == System.Text.Json.JsonValueKind.Array)
+                        {
+                            foreach (var item in diffArray.EnumerateArray())
+                            {
+                                if (item.TryGetProperty("f3", out var f3Element) && f3Element.ValueKind == System.Text.Json.JsonValueKind.Number)
+                                {
+                                    string name = item.GetProperty("f14").GetString() ?? "";
+
+                                    if (name.Contains("昨日") || name.Contains("ST") || name.Contains("退市") || name.EndsWith("股"))
+                                        continue;
+
+                                    name = name.Replace("概念", "");
+
+                                    if (name.Length > 6) continue;
+
+                                    list.Add(new
+                                    {
+                                        code = item.GetProperty("f12").GetString(),
+                                        name = name,
+                                        rate = f3Element.GetDouble()
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+
+                ParseAndAdd(task1.Result);
+                ParseAndAdd(task2.Result);
+
+                var distinctList = list.GroupBy(x => x.name).Select(g => g.First()).ToList();
+
+                var sorted = distinctList.OrderByDescending(x => (double)x.rate).ToList();
+
+                var top10 = sorted.Take(10).ToList();
+                var bottom10 = sorted.TakeLast(10).OrderBy(x => (double)x.rate).ToList();
+
+                return Ok(new { top = top10, bottom = bottom10 });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"雷达故障: {ex.Message}");
+            }
+        }
+
         [HttpGet("sector-details")]
-        public async Task<IActionResult> GetSectorDetails([FromQuery] string secCode) { /* 原版代码保持不变 */ return Ok(); }
+        public async Task<IActionResult> GetSectorDetails([FromQuery] string secCode)
+        {
+            if (string.IsNullOrEmpty(secCode)) return BadRequest("缺少板块雷达识别码");
+
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            try
+            {
+                string url = $"http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=6&po=1&np=1&fltt=2&invt=2&fid=f3&fs=b:{secCode}&fields=f12,f14,f3";
+
+                string response = await client.GetStringAsync(url);
+                using var doc = System.Text.Json.JsonDocument.Parse(response);
+                var dataProp = doc.RootElement.GetProperty("data");
+
+                if (dataProp.ValueKind == System.Text.Json.JsonValueKind.Null) return Ok(new List<dynamic>());
+
+                var diffArray = dataProp.GetProperty("diff").EnumerateArray();
+                var list = new List<dynamic>();
+
+                foreach (var item in diffArray)
+                {
+                    if (item.TryGetProperty("f3", out var f3Element) && f3Element.ValueKind == System.Text.Json.JsonValueKind.Number)
+                    {
+                        list.Add(new
+                        {
+                            code = item.GetProperty("f12").GetString(),
+                            name = item.GetProperty("f14").GetString(),
+                            rate = f3Element.GetDouble()
+                        });
+                    }
+                }
+
+                return Ok(list);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"X光机故障: {ex.Message}");
+            }
+        }
+
         [HttpGet("fund-holdings")]
-        public async Task<IActionResult> GetFundHoldings([FromQuery] string fundCode) { /* 原版代码保持不变 */ return Ok(); }
+        public async Task<IActionResult> GetFundHoldings([FromQuery] string fundCode)
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36");
+            client.DefaultRequestHeaders.Add("Accept", "application/json, text/plain, */*");
+            client.DefaultRequestHeaders.Add("Accept-Language", "zh-CN,zh;q=0.9");
+            client.DefaultRequestHeaders.Add("Host", "push2his.eastmoney.com");
+            try
+            {
+                string positionUrl = $"https://fundmobapi.eastmoney.com/FundMNewApi/FundMNInverstPosition?FCODE={fundCode}&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0";
+                string posRes = await client.GetStringAsync(positionUrl);
+                using var posDoc = System.Text.Json.JsonDocument.Parse(posRes);
+
+                JsonElement dataElement;
+                if (posDoc.RootElement.TryGetProperty("Datas", out var datasObj) && datasObj.ValueKind != System.Text.Json.JsonValueKind.Null)
+                    dataElement = datasObj;
+                else if (posDoc.RootElement.TryGetProperty("Data", out var dataObj) && dataObj.ValueKind != System.Text.Json.JsonValueKind.Null)
+                    dataElement = dataObj;
+                else
+                    return Ok(new List<object>());
+
+                JsonElement fundPosition;
+                if (dataElement.TryGetProperty("fundStocks", out var stocksObj) && stocksObj.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    fundPosition = stocksObj;
+                else if (dataElement.TryGetProperty("fundPosition", out var posObj) && posObj.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    fundPosition = posObj;
+                else
+                    return Ok(new List<object>());
+
+                var stockList = new List<dynamic>();
+                var secidList = new List<string>();
+
+                foreach (var stock in fundPosition.EnumerateArray())
+                {
+                    string code = stock.TryGetProperty("GPDM", out var cProp) ? cProp.GetString() : "";
+                    string name = stock.TryGetProperty("GPJC", out var nProp) ? nProp.GetString() : "";
+                    string ratio = stock.TryGetProperty("JZBL", out var rProp) ? rProp.GetString() : "0";
+
+                    if (!string.IsNullOrEmpty(code))
+                    {
+                        string prefix = "0.";
+                        if (code.StartsWith("6")) prefix = "1.";
+                        else if (code.Length == 5) prefix = "116.";
+
+                        secidList.Add(prefix + code);
+                        stockList.Add(new { code, name, ratio, rate = 0.0 });
+                    }
+                }
+
+                if (secidList.Count > 0)
+                {
+                    string secids = string.Join(",", secidList);
+                    string quoteUrl = $"http://push2.eastmoney.com/api/qt/ulist.np/get?secids={secids}&fields=f12,f14,f3";
+
+                    using var quoteClient = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+                    quoteClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+
+                    string quoteRes = await quoteClient.GetStringAsync(quoteUrl);
+                    using var quoteDoc = System.Text.Json.JsonDocument.Parse(quoteRes);
+
+                    if (quoteDoc.RootElement.TryGetProperty("data", out var qData) && qData.ValueKind != System.Text.Json.JsonValueKind.Null)
+                    {
+                        if (qData.TryGetProperty("diff", out var diffs) && diffs.ValueKind == System.Text.Json.JsonValueKind.Array)
+                        {
+                            var rateDict = new Dictionary<string, double>();
+                            foreach (var diff in diffs.EnumerateArray())
+                            {
+                                string c = diff.TryGetProperty("f12", out var f12) ? f12.GetString() : "";
+                                double r = 0;
+                                if (diff.TryGetProperty("f3", out var f3) && f3.ValueKind == System.Text.Json.JsonValueKind.Number)
+                                {
+                                    r = Math.Round(f3.GetDouble() / 100.0, 2);
+                                }
+                                if (!string.IsNullOrEmpty(c)) rateDict[c] = r;
+                            }
+
+                            var finalResult = stockList.Select(s => new
+                            {
+                                code = s.code,
+                                name = s.name,
+                                ratio = s.ratio,
+                                rate = rateDict.ContainsKey((string)s.code) ? rateDict[(string)s.code] : 0.0
+                            }).ToList();
+
+                            return Ok(finalResult);
+                        }
+                    }
+                }
+                return Ok(stockList);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"获取持仓失败: {ex.Message}");
+            }
+        }
+
         [HttpGet("sector-funds")]
-        public async Task<IActionResult> GetSectorFunds([FromQuery] string sectorName) { /* 原版代码保持不变 */ return Ok(); }
+        public async Task<IActionResult> GetSectorFunds([FromQuery] string sectorName)
+        {
+            if (string.IsNullOrEmpty(sectorName)) return BadRequest("缺少板块名称");
+
+            string keyword = sectorName.Replace("概念", "").Replace("板块", "");
+
+            if (keyword.Contains("蛋白") || keyword.Contains("CRO") || keyword.Contains("药") || keyword.Contains("单抗") || keyword.Contains("肝炎") || keyword.Contains("阿兹海默") || keyword.Contains("医疗") || keyword.Contains("医美") || keyword.Contains("生物"))
+                keyword = "医药";
+            else if (keyword.Contains("CPO") || keyword.Contains("光通信") || keyword.Contains("算力") || keyword.Contains("服务器") || keyword.Contains("宽带") || keyword.Contains("脑机"))
+                keyword = "通信";
+            else if (keyword.Contains("低空经济") || keyword.Contains("飞行") || keyword.Contains("卫星") || keyword.Contains("航天"))
+                keyword = "军工";
+            else if (keyword.Contains("电池") || keyword.Contains("锂") || keyword.Contains("钠") || keyword.Contains("储能") || keyword.Contains("光伏"))
+                keyword = "新能源";
+            else if (keyword.Contains("半导体") || keyword.Contains("光刻") || keyword.Contains("封装") || keyword.Contains("芯片"))
+                keyword = "半导体";
+            else if (keyword.Contains("苹果") || keyword.Contains("华为") || keyword.Contains("消费电子") || keyword.Contains("面板") || keyword.Contains("元器件"))
+                keyword = "电子";
+            else if (keyword.Contains("汽车") || keyword.Contains("整车"))
+                keyword = "汽车";
+            else if (keyword.Contains("游戏") || keyword.Contains("传媒") || keyword.Contains("短剧") || keyword.Contains("影视"))
+                keyword = "传媒";
+            else if (keyword.Contains("AI") || keyword.Contains("大模型") || keyword.Contains("数据") || keyword.Contains("软件"))
+                keyword = "人工智能";
+            else
+            {
+                string[] suffixes = { "制造", "外包", "服务", "设备", "商业", "制剂", "用品", "耗材", "制品", "工程", "产业", "概念" };
+                foreach (var suffix in suffixes)
+                {
+                    if (keyword.EndsWith(suffix) && keyword.Length > suffix.Length)
+                    {
+                        keyword = keyword.Substring(0, keyword.Length - suffix.Length);
+                        break;
+                    }
+                }
+                if (keyword.Length >= 4) keyword = keyword.Substring(0, 2);
+            }
+
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            var resultList = new List<dynamic>();
+
+            try
+            {
+                string searchUrl = $"http://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?m=1&key={Uri.EscapeDataString(keyword)}";
+                string searchRes = await client.GetStringAsync(searchUrl);
+
+                using var doc = System.Text.Json.JsonDocument.Parse(searchRes);
+                var datas = doc.RootElement.GetProperty("Datas");
+
+                if (datas.ValueKind != System.Text.Json.JsonValueKind.Null && datas.GetArrayLength() > 0)
+                {
+                    var fundCodes = new List<string>();
+                    var fundDict = new Dictionary<string, string>();
+
+                    foreach (var item in datas.EnumerateArray())
+                    {
+                        if (item.TryGetProperty("CATEGORYDESC", out var cat) && cat.GetString() != "基金") continue;
+
+                        string fCode = item.GetProperty("CODE").GetString();
+                        string fName = item.GetProperty("NAME").GetString();
+
+                        if ((fName.Contains("ETF") || fName.Contains("联接") || fName.Contains("指数")) && !fundDict.ContainsKey(fCode))
+                        {
+                            fundCodes.Add(fCode);
+                            fundDict[fCode] = fName;
+                            if (fundCodes.Count >= 6) break;
+                        }
+                    }
+
+                    if (fundCodes.Count < 6)
+                    {
+                        foreach (var item in datas.EnumerateArray())
+                        {
+                            if (item.TryGetProperty("CATEGORYDESC", out var cat) && cat.GetString() != "基金") continue;
+
+                            string fCode = item.GetProperty("CODE").GetString();
+                            string fName = item.GetProperty("NAME").GetString();
+
+                            if (!fundDict.ContainsKey(fCode))
+                            {
+                                fundCodes.Add(fCode);
+                                fundDict[fCode] = fName;
+                                if (fundCodes.Count >= 6) break;
+                            }
+                        }
+                    }
+
+                    var tasks = fundCodes.Select(async code =>
+                    {
+                        try
+                        {
+                            string gzUrl = $"http://fundgz.1234567.com.cn/js/{code}.js?rt={DateTime.Now.Ticks}";
+                            string gzRes = await client.GetStringAsync(gzUrl);
+                            var match = System.Text.RegularExpressions.Regex.Match(gzRes, @"\""gszzl\"":\""([^\""]+)\""");
+                            if (match.Success && double.TryParse(match.Groups[1].Value, out double rate))
+                            {
+                                return new { code = code, name = fundDict[code], rate = rate };
+                            }
+                        }
+                        catch { }
+                        return null;
+                    });
+
+                    var results = await Task.WhenAll(tasks);
+                    foreach (var res in results) if (res != null) resultList.Add(res);
+                }
+
+                resultList = resultList.OrderByDescending(x => (double)x.GetType().GetProperty("rate").GetValue(x)).ToList();
+                return Ok(resultList);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"找基失败: {ex.Message}");
+            }
+        }
     }
 }
