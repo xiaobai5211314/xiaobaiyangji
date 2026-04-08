@@ -13,6 +13,8 @@ namespace 估值助手.Models
         public double Assets { get; set; }       // 当日总资产/市值
         public double DailyProfit { get; set; }  // 当日盈亏金额
         public double DailyRate { get; set; }    // 当日涨跌幅百分比
+        public double TotalProfit { get; set; } // 🚀 新增：累计历史盈亏
+        public double TotalRate { get; set; }   // 🚀 新增：累计历史收益率
     }
 
     // 用于接收前端传来的封存数据包
