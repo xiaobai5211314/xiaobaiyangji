@@ -644,7 +644,33 @@
                     </div>
                 </div>
             </div>
+        </div><div v-if="showSectorDetails" class="modal-overlay" @click.self="showSectorDetails = false" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 2000;">
+    <div style="background: #0f172a; width: 85%; max-width: 400px; border-radius: 15px; padding: 20px; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.8);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px;">
+            <h3 style="color: #38bdf8; margin: 0; font-size: 16px;">📦 {{ detailsTitle }} - 相关主题基金</h3>
+            <span @click="showSectorDetails = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
         </div>
+
+        <div v-if="isDetailsLoading" style="color: #94a3b8; text-align: center; padding: 20px 0;">📡 正在全网检索关联基金与实时估值...</div>
+        <div v-else-if="detailsList.length === 0" style="color: #94a3b8; text-align: center; padding: 20px 0;">暂无相关基金数据，或官方接口受限</div>
+
+        <div v-else style="max-height: 60vh; overflow-y: auto; padding-right: 5px;">
+            <div style="display: flex; justify-content: space-between; color: #64748b; font-size: 12px; margin-bottom: 8px;">
+                <span>基金名称/代码</span>
+                <span>今日盘中预估</span>
+            </div>
+            <div v-for="stock in detailsList" :key="stock.code" style="display: flex; justify-content: space-between; padding: 12px 0; align-items: center; border-bottom: 1px dashed rgba(255,255,255,0.05);">
+                <div style="display: flex; flex-direction: column;">
+                    <span style="color: #f8fafc; font-weight: bold; font-size: 13px;">{{ stock.name }}</span>
+                    <span style="color: #64748b; font-size: 11px; font-family: monospace; margin-top: 2px;">{{ stock.code }}</span>
+                </div>
+                <div :style="{ color: stock.rate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold', fontFamily: 'Courier New', fontSize: '16px' }">
+                    {{ stock.rate > 0 ? '+' : '' }}{{ stock.rate }}%
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
         <div v-if="showGlobalIndices" class="modal-overlay" @click.self="showGlobalIndices = false" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: flex-end; z-index: 2500;">
             <div style="background: #1e293b; width: 100%; height: 80vh; border-radius: 20px 20px 0 0; padding: 20px; display: flex; flex-direction: column;">
@@ -963,7 +989,8 @@
                     detailsList.value = [];
 
                     try {
-                        const res = await fetch('https://guzhi.21212121.xyz/api/fund/sectors');
+                        // 🚀 核心修复：准星从 sectors 切换到 sector-funds，直取相关基金！
+                        const res = await fetch(`${API_BASE}/api/fund/sector-funds?sectorName=${encodeURIComponent(sector.name)}`);
                         const json = await res.json();
                         detailsList.value = json;
                     } catch (e) {
