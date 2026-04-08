@@ -433,7 +433,7 @@ namespace 估值助手.Controllers
                     .ToListAsync();
 
                 // 🚀 获取全军昨日记录
-                var lastRecords = new List<FundRecord>();
+                var lastRecords = new List<FundData>();
                 foreach (var code in myFundCodes)
                 {
                     var lr = await _context.FundRecords
