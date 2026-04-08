@@ -852,13 +852,13 @@ namespace 估值助手.Controllers
         public async Task<IActionResult> GetGlobalIndices()
         {
             var indices = new[]
-            {
+             {
                 new { name="上证指数", secid="1.000001" },
                 new { name="科创50",   secid="1.000688" },
                 new { name="创业板指", secid="0.399006" },
-                new { name="恒生指数", secid="124.HSI"   },  // 🚀 东财历史K线接口唯一认证的港股大盘码
-                new { name="纳斯达克", secid="105.IXIC"  },  // 🚀 美股纳斯达克综合指数认证码
-                new { name="标普500",  secid="109.SPX"   },  // 🚀 美股标普500认证码
+              new { name="恒生指数", secid="100.HSI"   },
+                new { name="纳斯达克", secid="100.NDX"   },  // 🚀 美股真正前缀是 100 (纳斯达克100)
+                new { name="标普500",  secid="100.SPX"   },  // 🚀 美股真正前缀是 100
                 new { name="道琼斯",   secid="100.DJIA"  },
             };
 
@@ -885,50 +885,26 @@ namespace 估值助手.Controllers
         [HttpGet("sectors")]
         public async Task<IActionResult> GetSectors()
         {
-            // 1. 延长网络容错时间到 10 秒
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
             try
             {
-                // 2. 🚀 核心修复：行业 pz=100，概念 pz=500。完美覆盖油气等跌幅板块，且不触发官方防火墙！
-                string urlIndustry = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3";
-                string urlConcept = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=500&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:3&fields=f12,f14,f3";
-                var task1 = client.GetStringAsync(urlIndustry);
-                var task2 = client.GetStringAsync(urlConcept);
-                await Task.WhenAll(task1, task2);
+                // 🚀 核心战术：同时向四个方向派出侦察兵（行业领涨、行业领跌、概念领涨、概念领跌），每个方向只拿前 30 名！
+                var urls = new[]
+                {
+                    "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=30&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3",
+                    "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=30&po=0&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3",
+                    "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=30&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:3&fields=f12,f14,f3",
+                    "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=30&po=0&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:3&fields=f12,f14,f3"
+                };
+
+                var tasks = urls.Select(url => client.GetStringAsync(url)).ToArray();
+                await Task.WhenAll(tasks);
 
                 var list = new List<dynamic>();
 
-                // 🛡️ 终极扩容版：基民专属主题过滤白名单（超大词库，对标养基宝）
-                var themeMap = new Dictionary<string, string>
+                foreach (var task in tasks)
                 {
-                    // 🤖 科技 / AI / 芯片产业链
-                    {"人工智能", "人工智能"}, {"AI语料", "AI应用"}, {"AIGC概念", "AIGC"}, {"ChatGPT概念", "ChatGPT"},
-                    {"CPO概念", "CPO"}, {"云计算概念", "云计算"}, {"算力概念", "算力"}, {"数据中心", "数据中心"},
-                    {"存储芯片", "存储芯片"}, {"半导体", "半导体"}, {"电子元件", "电子元件"}, {"消费电子", "消费电子"},
-                    {"通信设备", "通信"}, {"光学光电子", "面板显示"}, {"软件开发", "软件服务"}, {"游戏", "游戏"},
-                    {"文化传媒", "传媒"}, {"互联网服务", "互联网"}, {"半导体材料设备", "半导体设备"}, {"大基金概念", "大基金"},
-
-                    // 🔋 新能源 / 汽车 / 高端制造
-                    {"光伏设备", "光伏"}, {"电池", "电池"}, {"汽车整车", "汽车整车"}, {"汽车零部件", "汽车零部件"},
-                    {"能源金属", "能源金属"}, {"风电设备", "风电"}, {"储能", "储能"}, {"电网设备", "电网设备"},
-                    {"航天航空", "军工"}, {"船舶制造", "船舶制造"}, {"机器人概念", "机器人"}, {"工业母机", "工业母机"}, {"低空经济", "低空经济"},
-
-                    // 💊 医药 / 医疗
-                    {"医疗器械", "医疗器械"}, {"中药", "中药"}, {"化学制药", "化学制药"}, {"生物制品", "生物医药"},
-                    {"医疗服务", "医疗服务"}, {"医药商业", "医药商业"}, {"创新药", "创新药"}, {"CRO", "CRO"},
-
-                    // 🍺 大消费 / 金融 / 周期
-                    {"酿酒行业", "白酒"}, {"食品饮料", "食品饮料"}, {"家电行业", "家电"}, {"旅游酒店", "旅游酒店"},
-                    {"农牧饲渔", "农业"}, {"煤炭行业", "煤炭"}, {"证券", "券商"}, {"银行", "银行"},
-                    {"保险", "保险"}, {"房地产开发", "房地产"}, {"贵金属", "黄金"}, {"小金属", "小金属"},
-                    {"钢铁行业", "钢铁"}, {"石油行业", "石油"}, {"电力行业", "电力"}, {"燃气", "燃气"},
-
-                    {"采掘行业", "油气开采"}, {"石油行业", "油气资源"}, {"燃气", "燃气"} // 加在字典的最后面即可
-                };
-
-                void ParseAndAdd(string json)
-                {
-                    using var doc = System.Text.Json.JsonDocument.Parse(json);
+                    using var doc = System.Text.Json.JsonDocument.Parse(task.Result);
                     if (doc.RootElement.TryGetProperty("data", out var dataObj) && dataObj.ValueKind != System.Text.Json.JsonValueKind.Null)
                     {
                         if (dataObj.TryGetProperty("diff", out var diffArray) && diffArray.ValueKind == System.Text.Json.JsonValueKind.Array)
@@ -937,41 +913,39 @@ namespace 估值助手.Controllers
                             {
                                 if (item.TryGetProperty("f3", out var f3Element) && f3Element.ValueKind == System.Text.Json.JsonValueKind.Number)
                                 {
-                                    string rawName = item.GetProperty("f14").GetString() ?? "";
+                                    string name = item.GetProperty("f14").GetString() ?? "";
+                                    // 无字典白名单，全市场扫描，只剔除垃圾股指
+                                    if (name.Contains("昨日") || name.Contains("ST") || name.Contains("退市") || name.EndsWith("股") || name.Length > 6) continue;
+                                    name = name.Replace("概念", "");
 
-                                    // ⚡ 拦截核验：只要命中我们的豪华词库，直接放行并重命名！
-                                    if (themeMap.ContainsKey(rawName))
+                                    list.Add(new
                                     {
-                                        list.Add(new
-                                        {
-                                            code = item.GetProperty("f12").GetString(),
-                                            name = themeMap[rawName],
-                                            rate = f3Element.GetDouble()
-                                        });
-                                    }
+                                        code = item.GetProperty("f12").GetString(),
+                                        name = name,
+                                        rate = f3Element.GetDouble()
+                                    });
                                 }
                             }
                         }
                     }
                 }
 
-                ParseAndAdd(task1.Result);
-                ParseAndAdd(task2.Result);
-
-                // 🧹 去重，并按涨跌幅全员降序排列
+                // 🧹 阵地缝合与提取：剔除同名，提取真·前20和后20
                 var distinctSorted = list.GroupBy(x => x.name)
                                          .Select(g => g.First())
                                          .OrderByDescending(x => (double)x.rate)
                                          .ToList();
 
-                return Ok(distinctSorted);
+                var top20 = distinctSorted.Take(20).ToList();
+                var bottom20 = distinctSorted.TakeLast(20).OrderBy(x => (double)x.rate).ToList();
+
+                return Ok(new { top = top20, bottom = bottom20 });
             }
             catch (Exception ex)
             {
                 return StatusCode(500, $"雷达故障: {ex.Message}");
             }
         }
-
         [HttpGet("sector-details")]
         public async Task<IActionResult> GetSectorDetails([FromQuery] string secCode)
         {
