@@ -1209,17 +1209,27 @@
                                 tToday += profitVal;
                             }
 
-                            fund.estimatedProfit = (fund.cost && fund.cost > 0) ? (fund.amount - fund.cost).toFixed(2) : 0;
-                            fund.breakEvenRate = (fund.cost && fund.cost > fund.amount) ? ((fund.cost / fund.amount - 1) * 100).toFixed(2) : "0.00";
-                            fund.existingReturnRate = (fund.cost && fund.cost > 0) ? (((fund.amount - fund.cost) / fund.cost) * 100).toFixed(2) : "0.00";
+                            // 🚀 核心优化一：算出包含今日波动（预估/真实）的“最新实时市值”
+                            let currentRealTimeAmount = fund.amount + profitVal;
+
+                            // 用“最新实时市值”重新计算所有累计战果！
+                            fund.estimatedProfit = (fund.cost && fund.cost > 0) ? (currentRealTimeAmount - fund.cost).toFixed(2) : 0;
+                            fund.breakEvenRate = (fund.cost && fund.cost > currentRealTimeAmount) ? (((fund.cost / currentRealTimeAmount) - 1) * 100).toFixed(2) : "0.00";
+                            fund.existingReturnRate = (fund.cost && fund.cost > 0) ? (((currentRealTimeAmount - fund.cost) / fund.cost) * 100).toFixed(2) : "0.00";
                         });
 
+                        // 🚀 核心优化二：总阵地数据全面联动
                         fundsList.value = apiData;
-                        totalPrincipal.value = tPrincipal;
-                        totalProfit.value = tPrincipal - tCost;
-                        totalTodayProfit.value = tToday;
-                        totalTodayRate.value = tPrincipal > 0 ? (tToday / tPrincipal * 100) : 0;
-                        totalRate.value = tCost > 0 ? ((tPrincipal - tCost) / tCost * 100) : 0;
+                        totalPrincipal.value = tPrincipal; // 昨日总市值
+                        totalTodayProfit.value = tToday;   // 今日总收益
+                        totalTodayRate.value = tPrincipal > 0 ? (tToday / tPrincipal * 100) : 0; // 今日总收益率
+
+                        // 算出总阵地的最新实时总资产！
+                        let currentTotalAssets = tPrincipal + tToday;
+
+                        // 用最新总资产减去总成本，得出真正包含今天的“总累计盈亏”和“总累计收益率”
+                        totalProfit.value = currentTotalAssets - tCost;
+                        totalRate.value = tCost > 0 ? ((currentTotalAssets - tCost) / tCost * 100) : 0;
 
                         renderChart(apiData);
                         setTimeout(() => { isLoading.value = false; }, 300);
