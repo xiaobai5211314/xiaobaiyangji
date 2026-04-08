@@ -390,15 +390,12 @@
                         🌍 全球大盘
                     </button>
 
-                    <button @click="saveDailyArchive" style="background: linear-gradient(135deg, #eab308, #d97706); border: none; padding: 9px 15px; border-radius: 20px; color: white; font-weight: bold; cursor: pointer; margin-left: 10px; margin-top: 10px;">
-                        💾 封存今日战报
-                    </button>
-
+                  
                     <button class="btn-logout" @click="handleLogout" style="margin-left: 10px; margin-top: 10px;">撤退</button>
                 </div>
             </div>
 
-            <div class="glass-panel total-panel" style="margin: 0 15px 15px 15px; padding: 20px 30px; display: flex; justify-content: space-around; align-items: center; background: rgba(15, 23, 42, 0.6); flex-wrap: wrap; row-gap: 15px;">
+                        <div class="glass-panel total-panel" style="margin: 0 15px 15px 15px; padding: 20px 30px; display: flex; justify-content: space-around; align-items: center; background: rgba(15, 23, 42, 0.6); flex-wrap: wrap; row-gap: 15px;">
                 <div style="text-align: center;">
                     <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">⏱️ 系统时间雷达</div>
                     <div :style="{ fontSize: '18px', fontWeight: '900', color: isNight ? '#10b981' : '#f59e0b', margin: '5px 0' }">
@@ -445,16 +442,20 @@
                 </div>
                 <div class="divider"></div>
 
-                <div style="text-align: center; position: relative;">
+                <div style="text-align: center;">
                     <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">📈 累计总收益率</div>
                     <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: totalRate >= 0 ? '#ff4d4f' : '#10b981' }">
                         {{ totalRate > 0 ? '+' : '' }}{{ totalRate.toFixed(2) }}%
                     </div>
-                    <button @click="fetchMyArchives('TOTAL', '总阵地')" style="background: rgba(56, 189, 248, 0.2); border: 1px solid #38bdf8; color: #38bdf8; padding: 4px 8px; border-radius: 6px; cursor: pointer; font-size: 11px; margin-top: 8px;">
-                        📂 查看总历史档案
+                </div>
+
+                <div style="width: 100%; display: flex; justify-content: center; margin-top: 10px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 20px;">
+                    <button @click="fetchMyArchives('TOTAL', '总阵地')" style="background: linear-gradient(135deg, #0ea5e9, #2563eb); border: none; color: #fff; padding: 12px 35px; border-radius: 30px; cursor: pointer; font-size: 16px; font-weight: bold; box-shadow: 0 6px 20px rgba(14, 165, 233, 0.4); transition: transform 0.2s ease; letter-spacing: 1px; display: flex; align-items: center; gap: 8px;">
+                        📂 调阅「总阵地」历史战略档案
                     </button>
                 </div>
             </div>
+
 
             <div class="fund-list-container">
                 <div v-for="fund in fundsList" :key="fund.code" class="glass-panel fund-card">
