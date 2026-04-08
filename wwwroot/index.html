@@ -354,6 +354,7 @@
                 <input v-model="loginForm.password" type="password" placeholder="安全密码" @keyup.enter="handleLogin" style="width:100%;margin-bottom:20px;padding:12px;border-radius:12px;box-sizing:border-box;">
                 <div style="display:flex;gap:10px;">
                     <button @click="handleLogin" style="flex:1;padding:12px;background:linear-gradient(135deg,#00f2fe,#4facfe);border:none;border-radius:12px;color:#fff;font-weight:bold;cursor:pointer;">进入</button>
+                    <button @click="handleRegister" style="flex:1;padding:12px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:12px;color:#4facfe;cursor:pointer;">注册</button>
                 </div>
             </div>
         </div>
@@ -435,10 +436,14 @@
                     <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 6px; margin-top: 5px;">
                         <span style="display: flex; align-items: center; gap: 5px;">
                             估值涨跌:
-                            <span v-if="fund.isSettled" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; margin-right: 5px;">✅ 已更新</span>
+                            <span v-if="fund._isSettled" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; margin-right: 5px; box-shadow: 0 0 5px rgba(16, 185, 129, 0.4);">✅ 已更新</span>
+
                             <span v-if="fund.isHoliday" style="color: #94a3b8; font-weight: bold; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-size: 11px;">☕ 海外休市</span>
                             <span v-else :style="{color: fund.currentRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold'}">{{ fund.currentRate > 0 ? '+' : ''}}{{ fund.currentRate }}%</span>
-                            <span v-if="fund.calibrationOffset !== undefined && Math.abs(fund.calibrationOffset) > 0 && !fund.isHoliday" style="font-size: 10px; color: #8b5cf6; border: 1px solid #8b5cf6; padding: 1px 4px; border-radius: 4px;">🤖修正: {{ fund.calibrationOffset > 0 ? '+' : '' }}{{ fund.calibrationOffset }}%</span>
+
+                            <span v-if="fund.calibrationOffset && Math.abs(fund.calibrationOffset) > 0 && !fund.isHoliday" style="font-size: 10px; color: #8b5cf6; border: 1px solid #8b5cf6; padding: 1px 4px; border-radius: 4px;">
+                                🤖修正: {{ fund.calibrationOffset > 0 ? '+' : '' }}{{ fund.calibrationOffset }}%
+                            </span>
                         </span>
                         <span v-if="Math.abs(fund.diffRate) > 0.15 && !fund.isHoliday"><span class="radar-badge">🚨 偏离: {{ fund.diffRate }}%</span></span>
                     </div>
@@ -1003,36 +1008,56 @@
                     }
                     var holdAmounts = {};
                     var validData = apiData.filter(f => f.data && f.data.length > 1 && !f.isHoliday);
+                    let anySettled = false; // 战术标记：是否有基金更新了
+
                     var seriesData = validData.map(fund => {
                         holdAmounts[fund.name] = fund.amount;
-                        let isSettled = fund.isSettled;
+                        let isSettled = fund.isSettled || false;
                         let diff = 0;
-                        if (isSettled && fund.data.length >= 2) {
-                            diff = (fund.actualRate - fund.data[fund.data.length - 2][1]).toFixed(2);
+                        let hasFullData = fund.data.length > 50;
+
+                        if (isNight.value && hasFullData) {
+                            let realRate = fund.data[fund.data.length - 1][1];
+                            let estRate = fund.data[fund.data.length - 2][1];
+                            if (Math.abs(realRate - estRate) > 0.001) {
+                                isSettled = true;
+                                diff = (realRate - estRate).toFixed(2);
+                            }
                         }
                         fund._isSettled = isSettled;
                         fund._diff = diff;
 
+                        if (isSettled) anySettled = true; // 只要有一只更新了，就拉响引信！
+
                         return {
-                            name: fund.name, type: 'line', smooth: true, symbol: 'none', lineStyle: { width: 3, shadowColor: 'rgba(0,0,0,0.5)', shadowBlur: 10 },
+                            name: fund.name,
+                            type: 'line', smooth: true, symbol: 'none',
+                            lineStyle: { width: 3, shadowColor: 'rgba(0,0,0,0.5)', shadowBlur: 10 },
                             endLabel: {
                                 show: true, color: 'inherit', fontSize: 13, fontWeight: 'bold', lineHeight: 20,
                                 formatter: (p) => {
                                     let profit = (fund.amount * p.value[1] / 100).toFixed(2);
-                                    let profitDisplay = showAssets.value ? `${profit >= 0 ? '+' : ''}${profit} 元` : '**** 元';
+                                    let sign = profit >= 0 ? '+' : '';
+                                    let profitDisplay = showAssets.value ? `${sign}${profit} 元` : '**** 元';
                                     if (isSettled) {
-                                        return `${profitDisplay}\n✅ 真: ${p.value[1]}%\n差: ${fund._diff > 0 ? '+' : ''}${fund._diff}%`;
-                                    }
-                                    else if (isNight.value && fund.data.length > 50) {
+                                        let diffSign = fund._diff > 0 ? '+' : '';
+                                        return `${profitDisplay}\n✅ 真: ${p.value[1]}%\n差: ${diffSign}${fund._diff}%`;
+                                    } else if (isNight.value && hasFullData) {
                                         return `${profitDisplay}\n⏳ 等待财报...`;
-                                    }
-                                    else {
+                                    } else {
                                         return `${profitDisplay}\n估: ${p.value[1]}%`;
                                     }
                                 }
-                            }, data: fund.data
+                            },
+                            data: fund.data
                         };
                     });
+
+                    // 🚀 终极自动封存引信：检测到更新，且今天当前窗口没存过，立刻静默封存！
+                    if (anySettled && !window.hasAutoSavedToday) {
+                        saveDailyArchive(true);
+                        window.hasAutoSavedToday = true; // 锁死引信，防止每 15 秒重复轰炸数据库
+                    }
 
                     var d = new Date();
                     var todayStr = d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0');
