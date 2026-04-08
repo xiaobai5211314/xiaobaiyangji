@@ -694,21 +694,34 @@
                 const showGlobalIndices = ref(false);
                 const isIndicesLoading = ref(false);
 
-                // 🚀 核心封存引信
+                // 🚀 核心封存引信 (强化了浮点数过滤)
                 const saveDailyArchive = async (silent = false) => {
                     if (!silent && !confirm("💾 确定要将大屏当前的数据作为【今日最终战报】永久封存吗？")) return;
                     let d = new Date();
                     let localDateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+
+                    // 核心修复：强制截断所有浮点数精度，防止 C# decimal 绑定崩溃
+                    const safeNumber = (val) => Number((parseFloat(val) || 0).toFixed(2));
+
                     const payload = {
-                        Username: currentUser.value, DateStr: localDateStr,
+                        Username: currentUser.value,
+                        DateStr: localDateStr,
                         Total: {
-                            FundName: "总阵地", Assets: totalPrincipal.value, DailyProfit: parseFloat(totalTodayProfit.value) || 0,
-                            DailyRate: parseFloat(totalTodayRate.value) || 0, TotalProfit: parseFloat(totalProfit.value) || 0, TotalRate: parseFloat(totalRate.value) || 0
+                            FundName: "总阵地",
+                            Assets: safeNumber(totalPrincipal.value),
+                            DailyProfit: safeNumber(totalTodayProfit.value),
+                            DailyRate: safeNumber(totalTodayRate.value),
+                            TotalProfit: safeNumber(totalProfit.value),
+                            TotalRate: safeNumber(totalRate.value)
                         },
                         Funds: fundsList.value.map(f => ({
-                            FundCode: f.code, FundName: f.name, Assets: f.amount,
-                            DailyProfit: parseFloat(f.todayProfit) || 0, DailyRate: parseFloat(f.currentRate) || 0,
-                            TotalProfit: parseFloat(f.estimatedProfit) || 0, TotalRate: parseFloat(f.existingReturnRate) || 0
+                            FundCode: f.code,
+                            FundName: f.name,
+                            Assets: safeNumber(f.amount),
+                            DailyProfit: safeNumber(f.todayProfit),
+                            DailyRate: safeNumber(f.currentRate),
+                            TotalProfit: safeNumber(f.estimatedProfit),
+                            TotalRate: safeNumber(f.existingReturnRate)
                         }))
                     };
                     try {
