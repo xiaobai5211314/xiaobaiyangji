@@ -852,13 +852,13 @@ namespace 估值助手.Controllers
         public async Task<IActionResult> GetGlobalIndices()
         {
             var indices = new[]
-             {
+            {
                 new { name="上证指数", secid="1.000001" },
                 new { name="科创50",   secid="1.000688" },
                 new { name="创业板指", secid="0.399006" },
-                new { name="恒生指数", secid="116.HSI"   },  // 🚀 港股真正前缀是 116
-                new { name="纳斯达克", secid="100.NDX"   },  // 🚀 美股真正前缀是 100 (纳斯达克100)
-                new { name="标普500",  secid="100.SPX"   },  // 🚀 美股真正前缀是 100
+                new { name="恒生指数", secid="124.HSI"   },  // 🚀 东财历史K线接口唯一认证的港股大盘码
+                new { name="纳斯达克", secid="105.IXIC"  },  // 🚀 美股纳斯达克综合指数认证码
+                new { name="标普500",  secid="109.SPX"   },  // 🚀 美股标普500认证码
                 new { name="道琼斯",   secid="100.DJIA"  },
             };
 
@@ -885,12 +885,13 @@ namespace 估值助手.Controllers
         [HttpGet("sectors")]
         public async Task<IActionResult> GetSectors()
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            // 1. 延长网络容错时间到 10 秒
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
             try
             {
-                // 🚀 核心破解：将 pz（页面大小）强行扩大到 2000，一次性把全市场所有板块吸干，绝对不漏掉任何一个绿色的跌幅板块！
-                string urlIndustry = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=2000&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3";
-                string urlConcept = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=2000&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:3&fields=f12,f14,f3";
+                // 2. 🚀 核心修复：行业 pz=100，概念 pz=500。完美覆盖油气等跌幅板块，且不触发官方防火墙！
+                string urlIndustry = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3";
+                string urlConcept = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=500&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:3&fields=f12,f14,f3";
                 var task1 = client.GetStringAsync(urlIndustry);
                 var task2 = client.GetStringAsync(urlConcept);
                 await Task.WhenAll(task1, task2);
