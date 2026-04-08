@@ -592,7 +592,33 @@
                     </div>
                 </div>
             </div>
+        </div><div v-if="showSectorRadar" class="modal-overlay" @click.self="showSectorRadar = false" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: flex-end; z-index: 1000;">
+    <div style="background: #1e293b; width: 100%; height: 85vh; border-radius: 20px 20px 0 0; padding: 20px; display: flex; flex-direction: column;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3 style="color: white; margin: 0;">📡 核心基金主题监控</h3>
+            <span @click="showSectorRadar = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
         </div>
+
+        <div style="display: flex; justify-content: space-between; color: #94a3b8; font-size: 12px; padding-bottom: 10px; border-bottom: 1px solid #334155;">
+            <span>板块名称</span>
+            <span>涨跌幅</span>
+        </div>
+
+        <div v-if="isSectorLoading" style="color: #94a3b8; text-align: center; margin-top: 50px;">📡 正在扫描全网板块...</div>
+
+        <div v-else style="overflow-y: auto; flex: 1; padding-right: 5px;">
+            <div v-for="(item, index) in sectorList" :key="item.code" @click="fetchSectorDetails(item)" style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer;">
+                <span style="color: #f8fafc; font-weight: bold; font-size: 16px;">
+                    <span style="display:inline-block; width: 20px; color: #64748b; font-size: 12px;">{{ index + 1 }}</span>
+                    {{ item.name }}
+                </span>
+                <span :style="{color: item.rate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold', fontSize: '18px', fontFamily: 'Courier New'}">
+                    {{ item.rate > 0 ? '+' : ''}}{{ item.rate }}%
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
 
         <div v-if="showSectorDetails" class="modal-overlay" @click.self="showSectorDetails = false" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 2000;">
             <div style="background: #0f172a; width: 85%; border-radius: 15px; padding: 20px; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.8);">
@@ -792,8 +818,7 @@
 
                 const editForm = reactive({ show: false, code: '', name: '', cost: '', shares: '', originalCode: '' });
 
-                const sectorTopList = ref([]);
-                const sectorBottomList = ref([]);
+                const sectorList = ref([]);
                 const showSectorRadar = ref(false);
                 const isSectorLoading = ref(false);
 
@@ -1114,10 +1139,7 @@
                     try {
                         const res = await fetch(`${API_BASE}/api/fund/sectors`);
                         const json = await res.json();
-                        if (json.top && json.bottom) {
-                            sectorTopList.value = json.top;
-                            sectorBottomList.value = json.bottom;
-                        }
+                        sectorList.value = json; // 🚀 直接接收完整数组
                     } catch (e) {
                         showToast("🚨 雷达连接失败！", "error");
                     } finally {
@@ -1336,7 +1358,7 @@
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, showAssets, isUploading, editForm,
                     handleRegister, handleLogin, handleLogout, handleAddFund, handleDeleteFund,
                     triggerUpload, handleFileUpload, openEditModal, handleSaveDetails,
-                    totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors, sectorTopList, sectorBottomList,
+                    totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors, sectorList,
                     showSectorDetails, detailsTitle, detailsList, isDetailsLoading, fetchSectorDetails,
                     historyModal, fetchHistory,
                     showGlobalIndices, isIndicesLoading, fetchGlobalIndices, globalIndices, viewIndexHistory,

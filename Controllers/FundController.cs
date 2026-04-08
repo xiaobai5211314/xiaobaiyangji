@@ -897,6 +897,21 @@ namespace 估值助手.Controllers
 
                 var list = new List<dynamic>();
 
+                // 🛡️ 核心杀招：基民专属主题过滤白名单（不在名单里的垃圾概念全部拦截！）
+                var themeMap = new Dictionary<string, string>
+                {
+                    {"人工智能", "人工智能"}, {"CPO概念", "CPO"}, {"云计算概念", "云计算"},
+                    {"算力概念", "算力"}, {"存储芯片", "存储芯片"}, {"半导体", "半导体"},
+                    {"通信设备", "通信"}, {"消费电子", "消费电子"}, {"光学光电子", "面板显示"},
+                    {"游戏", "游戏"}, {"文化传媒", "传媒"}, {"软件开发", "软件服务"},
+                    {"光伏设备", "光伏"}, {"电池", "电池"}, {"汽车整车", "新能源车"},
+                    {"酿酒行业", "白酒"}, {"食品饮料", "大消费"}, {"医疗器械", "医疗器械"},
+                    {"中药", "中药"}, {"化学制药", "创新药"}, {"生物制品", "生物医药"},
+                    {"煤炭行业", "煤炭"}, {"证券", "券商"}, {"银行", "银行"},
+                    {"保险", "保险"}, {"航天航空", "军工"}, {"房地产开发", "房地产"},
+                    {"贵金属", "黄金股"}, {"电网设备", "电网"}, {"小金属", "有色金属"}
+                };
+
                 void ParseAndAdd(string json)
                 {
                     using var doc = System.Text.Json.JsonDocument.Parse(json);
@@ -908,21 +923,18 @@ namespace 估值助手.Controllers
                             {
                                 if (item.TryGetProperty("f3", out var f3Element) && f3Element.ValueKind == System.Text.Json.JsonValueKind.Number)
                                 {
-                                    string name = item.GetProperty("f14").GetString() ?? "";
+                                    string rawName = item.GetProperty("f14").GetString() ?? "";
 
-                                    if (name.Contains("昨日") || name.Contains("ST") || name.Contains("退市") || name.EndsWith("股"))
-                                        continue;
-
-                                    name = name.Replace("概念", "");
-
-                                    if (name.Length > 6) continue;
-
-                                    list.Add(new
+                                    // ⚡ 拦截核验：只有存在于字典中的纯正基金板块，才允许放行！
+                                    if (themeMap.ContainsKey(rawName))
                                     {
-                                        code = item.GetProperty("f12").GetString(),
-                                        name = name,
-                                        rate = f3Element.GetDouble()
-                                    });
+                                        list.Add(new
+                                        {
+                                            code = item.GetProperty("f12").GetString(),
+                                            name = themeMap[rawName], // 换成基民熟悉的称呼
+                                            rate = f3Element.GetDouble()
+                                        });
+                                    }
                                 }
                             }
                         }
@@ -932,14 +944,13 @@ namespace 估值助手.Controllers
                 ParseAndAdd(task1.Result);
                 ParseAndAdd(task2.Result);
 
-                var distinctList = list.GroupBy(x => x.name).Select(g => g.First()).ToList();
+                // 🧹 去重，并直接按涨跌幅全员降序排列（像养基宝一样从上排到下）
+                var distinctSorted = list.GroupBy(x => x.name)
+                                         .Select(g => g.First())
+                                         .OrderByDescending(x => (double)x.rate)
+                                         .ToList();
 
-                var sorted = distinctList.OrderByDescending(x => (double)x.rate).ToList();
-
-                var top10 = sorted.Take(10).ToList();
-                var bottom10 = sorted.TakeLast(10).OrderBy(x => (double)x.rate).ToList();
-
-                return Ok(new { top = top10, bottom = bottom10 });
+                return Ok(distinctSorted);
             }
             catch (Exception ex)
             {
