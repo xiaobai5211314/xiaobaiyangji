@@ -928,10 +928,12 @@ namespace 估值助手.Controllers
                 new { name="上证指数", secid="1.000001" },
                 new { name="科创50",   secid="1.000688" },
                 new { name="创业板指", secid="0.399006" },
-                new { name="恒生指数", secid="124.HSI"   },  // 🚀 绝对正确的港股前缀
-                new { name="纳斯达克", secid="105.IXIC"  },  // 🚀 绝对正确的纳斯达克
-                new { name="标普500",  secid="109.SPX"   },  // 🚀 绝对正确的标普500
-                new { name="道琼斯",   secid="100.DJIA"  },
+                new { name="恒生指数", secid="116.HSI"   },  // 原来是 124.HSI
+
+                new { name="纳斯达克", secid="100.NDX"  },  // 原来是 105.IXIC
+                new { name="标普500",  secid="100.SPX"  },  // 原来是 109.SPX
+                new { name="道琼斯",   secid="10.DJIA"  },  // 原来是对的
+
             };
 
             using var http = new HttpClient();
