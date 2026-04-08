@@ -856,12 +856,13 @@ namespace 估值助手.Controllers
                 new { name="上证指数", secid="1.000001" },
                 new { name="科创50",   secid="1.000688" },
                 new { name="创业板指", secid="0.399006" },
-                new { name="恒生指数", secid="128.HSI"   },
-                new { name="纳斯达克", secid="105.NDX"   },
-                new { name="标普500",  secid="109.INX"   },
+                new { name="恒生指数", secid="124.HSI"   },  // 🚀 恢复正确坐标
+                new { name="纳斯达克", secid="105.IXIC"  },  // 🚀 恢复正确坐标
+                new { name="标普500",  secid="109.SPX"   },  // 🚀 恢复正确坐标
                 new { name="道琼斯",   secid="100.DJIA"  },
             };
 
+            // ... 下面的代码保持不变 ...
             using var http = new HttpClient();
             http.DefaultRequestHeaders.Add("Referer", "https://www.eastmoney.com/");
             http.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
