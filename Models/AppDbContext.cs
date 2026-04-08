@@ -8,6 +8,7 @@ namespace 估值助手.Models
         public DbSet<FundData> FundRecords { get; set; }
         public DbSet<MyFundConfig> MyFunds { get; set; }
         public DbSet<User> Users { get; set; } // 真实账户表
+        public DbSet<DailyArchive> DailyArchives { get; set; }
 
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
         {

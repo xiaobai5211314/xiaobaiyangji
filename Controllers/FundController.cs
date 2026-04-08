@@ -549,7 +549,7 @@ public FundController(AppDbContext context, IMemoryCache cache)
                     .ToListAsync();
 
                 // 2. 🚨 找回丢失的底盘零件：获取昨天的收盘记录 (这里已修复为您真实的 FundRecord 实体)
-                var lastRecords = new List<FundRecord>(); 
+                var lastRecords = new List<FundData>();
                 foreach (var code in myFundCodes)
                 {
                     var lr = await _context.FundRecords
@@ -1038,6 +1038,138 @@ new { name="道琼斯",   secid="100.DJIA"  },  // 这个没问题
             {
                 return StatusCode(500, $"X光机故障: {ex.Message}");
             }
+        }
+        [HttpPost("save-archive")]
+        public async Task<IActionResult> SaveArchive([FromBody] ArchiveRequest req)
+        {
+            if (string.IsNullOrEmpty(req.Username)) return Unauthorized();
+
+            try
+            {
+                var date = DateTime.Parse(req.DateStr).Date;
+
+                // 1. 清理防线：如果今天已经封存过了，先撤销旧档案，防止重复记录
+                var oldRecords = await _context.DailyArchives
+                    .Where(a => a.Username == req.Username && a.RecordDate == date)
+                    .ToListAsync();
+                if (oldRecords.Any()) _context.DailyArchives.RemoveRange(oldRecords);
+
+                // 2. 封存总指挥部数据
+                req.Total.RecordDate = date;
+                req.Total.FundCode = "TOTAL";
+                req.Total.Username = req.Username;
+                _context.DailyArchives.Add(req.Total);
+
+                // 3. 封存各单兵连队数据
+                foreach (var f in req.Funds)
+                {
+                    f.RecordDate = date;
+                    f.Username = req.Username;
+                    _context.DailyArchives.Add(f);
+                }
+
+                await _context.SaveChangesAsync();
+                return Ok("✅ 今日战报已永久封存入库！");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"封存失败: {ex.Message}");
+            }
+        }
+        [HttpGet("auto-night-archive")]
+        public async Task<IActionResult> AutoNightArchive([FromQuery] string token = "dabai521")
+        {
+            // 🛡️ 身份识别：防止敌军恶意触发快门
+            if (token != "dabai521") return Unauthorized("口令拦截：非最高指挥官指令！");
+
+            try
+            {
+                var localTime = DateTime.UtcNow.AddHours(8);
+                var today = localTime.Date;
+
+                // 1. 查出所有用户的基金配置
+                var allFunds = await _context.MyFunds.ToListAsync();
+                var users = allFunds.Select(f => f.Username).Distinct().ToList();
+
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+                int savedCount = 0;
+
+                foreach (var user in users)
+                {
+                    // 清理防线：如果今晚已经自动跑过一次了，撤销旧档案防止重复叠加
+                    var oldRecords = await _context.DailyArchives.Where(a => a.Username == user && a.RecordDate == today).ToListAsync();
+                    if (oldRecords.Any()) _context.DailyArchives.RemoveRange(oldRecords);
+
+                    var userFunds = allFunds.Where(f => f.Username == user).ToList();
+                    double totalAssets = 0;
+                    double totalTodayProfit = 0;
+
+                    foreach (var fund in userFunds)
+                    {
+                        double currentRate = 0;
+                        try
+                        {
+                            // 📡 潜入东财，获取今日最终的涨跌幅
+                            string url = $"http://fundgz.1234567.com.cn/js/{fund.FundCode}.js?rt={DateTime.Now.Ticks}";
+                            string jsData = await client.GetStringAsync(url);
+                            var match = Regex.Match(jsData, @"\""gszzl\"":\""([^\""]+)\""");
+                            if (match.Success) double.TryParse(match.Groups[1].Value, out currentRate);
+                        }
+                        catch { /* 忽略单只基金网络波动 */ }
+
+                        // 计算单只基金的今日盈亏
+                        double todayProfit = fund.HoldAmount * (currentRate / 100.0);
+
+                        _context.DailyArchives.Add(new DailyArchive
+                        {
+                            Username = user,
+                            FundCode = fund.FundCode,
+                            FundName = fund.FundName,
+                            RecordDate = today,
+                            Assets = fund.HoldAmount,
+                            DailyProfit = Math.Round(todayProfit, 2),
+                            DailyRate = currentRate
+                        });
+
+                        totalAssets += fund.HoldAmount;
+                        totalTodayProfit += todayProfit;
+                    }
+
+                    // 🧮 计算总阵地的综合涨跌幅
+                    double totalRate = totalAssets > 0 ? (totalTodayProfit / totalAssets) * 100.0 : 0;
+
+                    // 💾 封存总阵地数据
+                    _context.DailyArchives.Add(new DailyArchive
+                    {
+                        Username = user,
+                        FundCode = "TOTAL",
+                        FundName = "总阵地",
+                        RecordDate = today,
+                        Assets = Math.Round(totalAssets, 2),
+                        DailyProfit = Math.Round(totalTodayProfit, 2),
+                        DailyRate = Math.Round(totalRate, 2)
+                    });
+
+                    savedCount++;
+                }
+
+                await _context.SaveChangesAsync();
+                return Ok($"[{localTime:yyyy-MM-dd HH:mm:ss}] 🌙 夜间无人机巡航完毕！成功为 {savedCount} 位指挥官自动封存了今日最终战报！");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"自动封存引擎故障: {ex.Message}");
+            }
+        }
+        [HttpGet("get-archives")]
+        public async Task<IActionResult> GetArchives([FromQuery] string username)
+        {
+            // 按日期提取所有历史封存档案
+            var records = await _context.DailyArchives
+                .Where(a => a.Username == username)
+                .OrderBy(a => a.RecordDate)
+                .ToListAsync();
+            return Ok(records);
         }
         [HttpGet("fund-holdings")]
         public async Task<IActionResult> GetFundHoldings([FromQuery] string fundCode)
