@@ -256,7 +256,7 @@ namespace 估值助手.Controllers
                             }
                         }
 
-                        if (finalBestMatch != null && finalBestScore > 65 && holdAmount > 10)
+                        if (finalBestMatch != null && finalBestScore > 65 && holdAmount > 0)
                         {
                             double costAmount = Math.Round(holdAmount - holdingIncome, 2);
 
