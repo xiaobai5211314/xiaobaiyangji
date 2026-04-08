@@ -852,13 +852,14 @@ namespace 估值助手.Controllers
         public async Task<IActionResult> GetGlobalIndices()
         {
             var indices = new[]
-            {
+             {
                 new { name="上证指数", secid="1.000001" },
                 new { name="科创50",   secid="1.000688" },
                 new { name="创业板指", secid="0.399006" },
-              new { name="恒生指数", secid="124.HSI"   },  // ✅ 正确
-new { name="纳斯达克", secid="105.IXIC"  },  // ✅ 正确
-new { name="标普500",  secid="109.SPX"   },  // ✅ 正确
+                new { name="恒生指数", secid="116.HSI"   },  // 🚀 港股真正前缀是 116
+                new { name="纳斯达克", secid="100.NDX"   },  // 🚀 美股真正前缀是 100 (纳斯达克100)
+                new { name="标普500",  secid="100.SPX"   },  // 🚀 美股真正前缀是 100
+                new { name="道琼斯",   secid="100.DJIA"  },
             };
 
             // ... 下面的代码保持不变 ...
@@ -887,9 +888,9 @@ new { name="标普500",  secid="109.SPX"   },  // ✅ 正确
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
             try
             {
-                string urlIndustry = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3";
-                string urlConcept = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=300&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:3&fields=f12,f14,f3";
-
+                // 🚀 核心破解：将 pz（页面大小）强行扩大到 2000，一次性把全市场所有板块吸干，绝对不漏掉任何一个绿色的跌幅板块！
+                string urlIndustry = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=2000&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3";
+                string urlConcept = "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=2000&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:3&fields=f12,f14,f3";
                 var task1 = client.GetStringAsync(urlIndustry);
                 var task2 = client.GetStringAsync(urlConcept);
                 await Task.WhenAll(task1, task2);
@@ -919,7 +920,9 @@ new { name="标普500",  secid="109.SPX"   },  // ✅ 正确
                     {"酿酒行业", "白酒"}, {"食品饮料", "食品饮料"}, {"家电行业", "家电"}, {"旅游酒店", "旅游酒店"},
                     {"农牧饲渔", "农业"}, {"煤炭行业", "煤炭"}, {"证券", "券商"}, {"银行", "银行"},
                     {"保险", "保险"}, {"房地产开发", "房地产"}, {"贵金属", "黄金"}, {"小金属", "小金属"},
-                    {"钢铁行业", "钢铁"}, {"石油行业", "石油"}, {"电力行业", "电力"}, {"燃气", "燃气"}
+                    {"钢铁行业", "钢铁"}, {"石油行业", "石油"}, {"电力行业", "电力"}, {"燃气", "燃气"},
+
+                    {"采掘行业", "油气开采"}, {"石油行业", "油气资源"}, {"燃气", "燃气"} // 加在字典的最后面即可
                 };
 
                 void ParseAndAdd(string json)
