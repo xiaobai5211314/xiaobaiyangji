@@ -717,14 +717,9 @@ namespace 估值助手.Controllers
                 return StatusCode(500, $"服务器当场阵亡：{ex.Message}");
             }
         }
-``
 
-### 改动 2：`AutoArchiveNightly` 方法 — 夜间兜底（修复 TotalProfit/TotalRate）
 
-替换原来的 `AutoArchiveNightly` 方法：
-
-```csharp
-        [HttpGet("auto-archive-nightly")]
+                [HttpGet("auto-archive-nightly")]
         public async Task<IActionResult> AutoArchiveNightly()
         {
             try
@@ -743,7 +738,6 @@ namespace 估值助手.Controllers
                     string username = group.Key;
                     var userFunds = group.ToList();
 
-                    // 如果今天已经封存过，直接跳过
                     bool alreadyArchived = await _context.DailyArchives
                         .AnyAsync(a => a.Username == username && a.RecordDate == today);
                     if (alreadyArchived) continue;
@@ -764,9 +758,8 @@ namespace 估值助手.Controllers
                             .FirstOrDefaultAsync();
 
                         double dailyRate = todayRecord?.ActualRate > 0 ? todayRecord.ActualRate : (todayRecord?.EstimatedRate ?? 0);
-                        double dailyProfit = Math.Round(fund.HoldAmount * (dailyRate / 10.0), 2);
+                        double dailyProfit = Math.Round(fund.HoldAmount * (dailyRate / 100.0), 2);
 
-                        // 🚀 计算单基金累计收益和累计收益率
                         double fundRealTimeAmount = fund.HoldAmount + dailyProfit;
                         double fundTotalProfit = Math.Round(fundRealTimeAmount - fundCost, 2);
                         double fundTotalRate = fundCost > 0 ? Math.Round(((fundRealTimeAmount - fundCost) / fundCost) * 100.0, 2) : 0;
@@ -785,7 +778,6 @@ namespace 估值助手.Controllers
                         });
                     }
 
-                    // 🚀 计算总阵地累计收益和累计收益率
                     double totalDailyProfit = fundArchiveEntries.Sum(a => a.DailyProfit);
                     double totalRealTimeAssets = totalAssets + totalDailyProfit;
                     double totalCostForCalc = totalCost > 0 ? totalCost : totalAssets;
