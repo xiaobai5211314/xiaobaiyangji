@@ -422,7 +422,7 @@
                             <span>{{ fund.name }}</span>
                             <span style="font-size:10px; color:#64748b; font-weight: normal; margin-top: 2px;">
                                 ({{ fund.code }})
-                                <span v-if="fund.shares > 0" style="color:#10b981; margin-left: 5px;">✓ 已切为份额精确计算</span>
+                                <span v-if="fund.shares > 0" style="color:#10b981; margin-left: 5px;">✓ 已切为份额计算</span>
                             </span>
                         </span>
                         <div style="display: flex; gap: 6px; flex-shrink: 0;">
@@ -436,7 +436,7 @@
                     <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 6px; margin-top: 5px;">
                         <span style="display: flex; align-items: center; gap: 5px;">
                             估值涨跌:
-                            <span v-if="fund._isSettled" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; margin-right: 5px; box-shadow: 0 0 5px rgba(16, 185, 129, 0.4);">✅ 已更新</span>
+                            <span v-if="fund._isSettled" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; box-shadow: 0 0 5px rgba(16, 185, 129, 0.4);">✅ 已更新</span>
 
                             <span v-if="fund.isHoliday" style="color: #94a3b8; font-weight: bold; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-size: 11px;">☕ 海外休市</span>
                             <span v-else :style="{color: fund.currentRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold'}">{{ fund.currentRate > 0 ? '+' : ''}}{{ fund.currentRate }}%</span>
@@ -485,7 +485,7 @@
                     <div class="skeleton-box" style="width: 50px; height: 100%;"></div>
                     <div class="skeleton-box" style="flex: 1; height: 100%;"></div>
                 </div>
-                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #4facfe; font-weight: bold; font-size: 18px; letter-spacing: 2px;">📡 正在连接总司令部同步数据...</div>
+                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #4facfe; font-weight: bold; font-size: 18px; letter-spacing: 2px;">📡 正在连接总司令部...</div>
             </div>
 
             <div v-show="!isLoading" id="chart-container" class="glass-panel" ref="chartRef"></div>
@@ -495,7 +495,7 @@
                     <h3 style="margin-top: 0; color: #fff;">🔧 指挥官，请补全战术情报</h3>
                     <p style="font-size: 13px; color: #94a3b8; margin-bottom: 15px;">基金: <strong>{{ editForm.name }}</strong></p>
                     <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">持仓本金 (人民币)</div>
-                    <input v-model="editForm.cost" type="number" placeholder="必填" class="modal-input">
+                    <input v-model="editForm.cost" type="number" placeholder="必填：你当初买入的总金额" class="modal-input">
                     <div style="font-size: 12px; color: #10b981; font-weight: bold; margin-bottom: 5px;">🌟 持仓份额 (最高精度，强烈建议)</div>
                     <input v-model="editForm.shares" type="number" placeholder="持仓份额" class="modal-input" style="border-color: #10b981;">
                     <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">东财代码</div>
@@ -514,23 +514,19 @@
                     <h3 style="color: white; margin: 0;">📡 全市场监控 (TOP 20)</h3>
                     <span @click="showSectorRadar = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
                 </div>
-                <div v-if="isSectorLoading" style="color: #94a3b8; text-align: center; margin-top: 50px;">📡 正在拉取全网实时排行...</div>
+                <div v-if="isSectorLoading" style="color: #94a3b8; text-align: center; margin-top: 50px;">📡 正在拉取...</div>
                 <div v-else style="overflow-y: auto; flex: 1; padding-right: 5px;">
                     <div style="margin-bottom: 30px;">
                         <h4 style="color: #ef4444; border-bottom: 1px solid rgba(239,68,68,0.3); padding-bottom: 8px; margin-bottom: 0;">🔥 领涨 TOP 20</h4>
                         <div v-for="(item, index) in sectorTopList" :key="'top'+item.code" @click="fetchSectorDetails(item)" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer;">
-                            <span style="color: #f8fafc; font-weight: bold; font-size: 15px;">
-                                <span style="display:inline-block; width: 22px; color: #ef4444; font-size: 13px;">{{ index + 1 }}</span>{{ item.name }}
-                            </span>
+                            <span style="color: #f8fafc; font-weight: bold; font-size: 15px;"><span style="display:inline-block; width: 22px; color: #ef4444; font-size: 13px;">{{ index + 1 }}</span>{{ item.name }}</span>
                             <span style="color: #ff4d4f; font-weight: bold; font-size: 17px; font-family: 'Courier New';">+{{ item.rate }}%</span>
                         </div>
                     </div>
                     <div>
                         <h4 style="color: #10b981; border-bottom: 1px solid rgba(16,185,129,0.3); padding-bottom: 8px; margin-bottom: 0;">🧊 领跌 TOP 20</h4>
                         <div v-for="(item, index) in sectorBottomList" :key="'bot'+item.code" @click="fetchSectorDetails(item)" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer;">
-                            <span style="color: #f8fafc; font-weight: bold; font-size: 15px;">
-                                <span style="display:inline-block; width: 22px; color: #10b981; font-size: 13px;">{{ index + 1 }}</span>{{ item.name }}
-                            </span>
+                            <span style="color: #f8fafc; font-weight: bold; font-size: 15px;"><span style="display:inline-block; width: 22px; color: #10b981; font-size: 13px;">{{ index + 1 }}</span>{{ item.name }}</span>
                             <span style="color: #10b981; font-weight: bold; font-size: 17px; font-family: 'Courier New';">{{ item.rate }}%</span>
                         </div>
                     </div>
@@ -630,11 +626,8 @@
     <script src="https://cdn.staticfile.net/vue/3.3.4/vue.global.prod.min.js"></script>
     <script src="https://cdn.staticfile.net/echarts/5.5.0/echarts.min.js"></script>
     <script>
-        // Blazor 兼容
         if (window.hasOwnProperty('chrome') && window.chrome.webview || window.location.protocol === 'file:') {
-            var script = document.createElement('script');
-            script.src = "_framework/blazor.webview.js";
-            document.body.appendChild(script);
+            var script = document.createElement('script'); script.src = "_framework/blazor.webview.js"; document.body.appendChild(script);
         }
     </script>
 
@@ -646,9 +639,11 @@
                 const API_BASE = 'https://guzhi.21212121.xyz';
                 const toasts = ref([]); let toastId = 0;
 
+                // 🔒 全局单发锁：防止每 15 秒重复向服务器保存战报
+                window.hasAutoSavedToday = false;
+
                 const showToast = (msg, type = 'info') => {
-                    const id = toastId++;
-                    toasts.value.push({ id, msg, type });
+                    const id = toastId++; toasts.value.push({ id, msg, type });
                     setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id); }, 3000);
                 };
 
@@ -684,7 +679,6 @@
                 const archiveModal = reactive({ show: false, isLoading: false, targetName: '', data: [] });
                 const ocrModal = reactive({ show: false, content: '' });
 
-                // 🌍 全球大盘 - 恢复了完美坐标！
                 const globalIndices = ref([
                     { name: '上证指数', secid: '1.000001', code: '000001', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '科创50', secid: '1.000688', code: '000688', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
@@ -697,59 +691,61 @@
                 const showGlobalIndices = ref(false);
                 const isIndicesLoading = ref(false);
 
-                const fetchGlobalIndices = async () => {
-                    showGlobalIndices.value = true;
-                    isIndicesLoading.value = true;
+                // 🚀 核心方法只定义一次！
+                const saveDailyArchive = async (silent = false) => {
+                    if (!silent && !confirm("💾 确定要将大屏当前的数据作为【今日最终战报】永久封存吗？")) return;
+
+                    let d = new Date();
+                    let localDateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+
+                    const payload = {
+                        Username: currentUser.value, DateStr: localDateStr,
+                        Total: {
+                            FundName: "总阵地", Assets: totalPrincipal.value, DailyProfit: parseFloat(totalTodayProfit.value) || 0,
+                            DailyRate: parseFloat(totalTodayRate.value) || 0, TotalProfit: parseFloat(totalProfit.value) || 0, TotalRate: parseFloat(totalRate.value) || 0
+                        },
+                        Funds: fundsList.value.map(f => ({
+                            FundCode: f.code, FundName: f.name, Assets: f.amount,
+                            DailyProfit: parseFloat(f.todayProfit) || 0, DailyRate: parseFloat(f.currentRate) || 0,
+                            TotalProfit: parseFloat(f.estimatedProfit) || 0, TotalRate: parseFloat(f.existingReturnRate) || 0
+                        }))
+                    };
                     try {
-                        const res = await fetch(`${API_BASE}/api/fund/global-indices`);
-                        const results = await res.json();
+                        const response = await fetch(`${API_BASE}/api/fund/save-archive`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                        if (response.ok) { if (!silent) showToast("✅ 今日战报已安全锁入密码箱！", "success"); }
+                        else { if (!silent) showToast("❌ 封存受阻", "error"); }
+                    } catch (e) { if (!silent) showToast("🌐 指挥中心失联", "error"); }
+                };
+
+                const fetchGlobalIndices = async () => {
+                    showGlobalIndices.value = true; isIndicesLoading.value = true;
+                    try {
+                        const res = await fetch(`${API_BASE}/api/fund/global-indices`); const results = await res.json();
                         globalIndices.value = globalIndices.value.map(item => {
-                            const found = results.find(r => r.name === item.name);
-                            if (!found) return item;
-                            const json = JSON.parse(found.data);
-                            const klines = json?.data?.klines;
-                            if (!klines || klines.length === 0) return item;
-                            const latest = klines[klines.length - 1].split(',');
-                            const oldest = klines[0].split(',');
-                            const latestClose = parseFloat(latest[2]);
-                            const todayRate = parseFloat(latest[8]);
+                            const found = results.find(r => r.name === item.name); if (!found) return item;
+                            const json = JSON.parse(found.data); const klines = json?.data?.klines; if (!klines || klines.length === 0) return item;
+                            const latest = klines[klines.length - 1].split(','); const oldest = klines[0].split(',');
+                            const latestClose = parseFloat(latest[2]); const todayRate = parseFloat(latest[8]);
                             const yearRate = ((latestClose - parseFloat(oldest[2])) / parseFloat(oldest[2]) * 100).toFixed(2);
                             return { ...item, latest: latestClose, todayRate, yearRate, klines: klines.reverse().map(k => { const p = k.split(','); return { date: p[0], rate: parseFloat(p[8]) }; }) };
                         });
-                    } catch (e) {
-                        showToast("🚨 全球大盘加载失败", "error");
-                    } finally {
-                        isIndicesLoading.value = false;
-                    }
+                    } catch (e) { showToast("🚨 全球大盘加载失败", "error"); } finally { isIndicesLoading.value = false; }
                 };
 
                 const viewIndexHistory = (item) => {
-                    if (!item.klines || item.klines.length === 0) return showToast("暂无该指数的历史数据", "error");
-                    historyModal.show = true;
-                    historyModal.name = item.name;
-                    historyModal.isLoading = false;
-                    historyModal.data = item.klines;
+                    if (!item.klines || item.klines.length === 0) return showToast("暂无数据", "error");
+                    historyModal.show = true; historyModal.name = item.name; historyModal.isLoading = false; historyModal.data = item.klines;
                 };
 
                 const fetchHistory = (code, name) => {
                     if (!/^\d{6}$/.test(code)) return showToast("🚨 非法代码！", "error");
-                    historyModal.show = true;
-                    historyModal.isLoading = true;
-                    historyModal.name = name;
-                    historyModal.data = [];
-                    const scriptId = `jsonp_${code}`;
-                    let oldScript = document.getElementById(scriptId);
-                    if (oldScript) oldScript.remove();
-                    const script = document.createElement('script');
-                    script.id = scriptId;
-                    script.src = `https://fund.eastmoney.com/pingzhongdata/${code}.js?v=${new Date().getTime()}`;
+                    historyModal.show = true; historyModal.isLoading = true; historyModal.name = name; historyModal.data = [];
+                    const scriptId = `jsonp_${code}`; let oldScript = document.getElementById(scriptId); if (oldScript) oldScript.remove();
+                    const script = document.createElement('script'); script.id = scriptId; script.src = `https://fund.eastmoney.com/pingzhongdata/${code}.js?v=${new Date().getTime()}`;
                     script.onload = () => {
                         if (typeof Data_netWorthTrend !== 'undefined') {
                             let trend = Data_netWorthTrend.slice(-250).reverse();
-                            historyModal.data = trend.map(item => {
-                                let d = new Date(item.x);
-                                return { date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`, rate: item.equityReturn || 0 };
-                            });
+                            historyModal.data = trend.map(item => { let d = new Date(item.x); return { date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`, rate: item.equityReturn || 0 }; });
                         }
                         historyModal.isLoading = false;
                     };
@@ -758,88 +754,26 @@
                 };
 
                 const fetchMyArchives = async (targetCode, targetName) => {
-                    archiveModal.show = true;
-                    archiveModal.isLoading = true;
-                    archiveModal.targetName = targetName;
-                    archiveModal.data = [];
+                    archiveModal.show = true; archiveModal.isLoading = true; archiveModal.targetName = targetName; archiveModal.data = [];
                     try {
                         const res = await fetch(`${API_BASE}/api/fund/get-archives?username=${encodeURIComponent(currentUser.value)}`);
                         if (res.ok) {
                             const records = await res.json();
                             archiveModal.data = records.filter(r => r.fundCode === targetCode).sort((a, b) => new Date(b.recordDate) - new Date(a.recordDate));
                         }
-                    } catch (e) {
-                        showToast("🌐 档案馆断线", "error");
-                    } finally {
-                        archiveModal.isLoading = false;
-                    }
-                };
-
-                // 🚀 核心补齐：档案馆的静默封存引擎！
-                // 🚀 档案馆：一键封存（支持静默模式，脱离后端独立运行）
-                const saveDailyArchive = async (silent = false) => {
-                    if (!silent && !confirm("💾 确定要将大屏当前的数据作为【今日最终战报】永久封存吗？")) return;
-
-                    // 修复时区错乱，确保用的是您的本地时间，而不是英国时间
-                    let d = new Date();
-                    let localDateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-
-                    const payload = {
-                        Username: currentUser.value,
-                        DateStr: localDateStr,
-                        Total: {
-                            FundName: "总阵地",
-                            Assets: totalPrincipal.value,
-                            DailyProfit: parseFloat(totalTodayProfit.value) || 0,
-                            DailyRate: parseFloat(totalTodayRate.value) || 0,
-                            TotalProfit: parseFloat(totalProfit.value) || 0,
-                            TotalRate: parseFloat(totalRate.value) || 0
-                        },
-                        Funds: fundsList.value.map(f => ({
-                            FundCode: f.code,
-                            FundName: f.name,
-                            Assets: f.amount,
-                            DailyProfit: parseFloat(f.todayProfit) || 0,
-                            DailyRate: parseFloat(f.currentRate) || 0,
-                            TotalProfit: parseFloat(f.estimatedProfit) || 0,
-                            TotalRate: parseFloat(f.existingReturnRate) || 0
-                        }))
-                    };
-
-                    try {
-                        const response = await fetch(`${API_BASE}/api/fund/save-archive`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(payload)
-                        });
-                        if (response.ok) {
-                            if (!silent) showToast("✅ 今日战报已安全锁入密码箱！", "success");
-                        } else {
-                            if (!silent) showToast("❌ 封存受阻", "error");
-                        }
-                    } catch (e) {
-                        if (!silent) showToast("🌐 指挥中心失联", "error");
-                    }
+                    } catch (e) { showToast("🌐 档案馆断线", "error"); } finally { archiveModal.isLoading = false; }
                 };
 
                 const fetchSectorDetails = async (sector) => {
-                    detailsTitle.value = sector.name;
-                    showSectorDetails.value = true;
-                    isDetailsLoading.value = true;
-                    detailsList.value = [];
+                    detailsTitle.value = sector.name; showSectorDetails.value = true; isDetailsLoading.value = true; detailsList.value = [];
                     try {
                         const res = await fetch(`${API_BASE}/api/fund/sector-funds?sectorName=${encodeURIComponent(sector.name)}`);
                         detailsList.value = await res.json();
-                    } catch (e) {
-                        showToast("🚨 透视连接失败", "error");
-                    } finally {
-                        isDetailsLoading.value = false;
-                    }
+                    } catch (e) { showToast("🚨 连接失败", "error"); } finally { isDetailsLoading.value = false; }
                 };
 
                 const compressImageBeforeUpload = (file, successCallback) => {
-                    const reader = new FileReader();
-                    reader.readAsDataURL(file);
+                    const reader = new FileReader(); reader.readAsDataURL(file);
                     reader.onload = function (e) {
                         const img = new Image(); img.src = e.target.result;
                         img.onload = function () {
@@ -852,20 +786,25 @@
                     };
                 };
 
+                const handleRegister = async () => {
+                    if (!loginForm.username || !loginForm.password) return showToast("为空！", "error");
+                    let fd = new FormData(); fd.append('username', loginForm.username); fd.append('password', loginForm.password);
+                    try {
+                        const res = await fetch(API_BASE + '/api/auth/register', { method: 'POST', body: fd });
+                        if (res.ok) showToast("✅ 注册成功", "success"); else showToast("❌ 注册失败", "error");
+                    } catch (e) { showToast("🌐 网络异常", "error"); }
+                };
+
                 const handleLogin = async () => {
-                    if (!loginForm.username || !loginForm.password) return showToast("账号密码为空！", "error");
+                    if (!loginForm.username || !loginForm.password) return showToast("为空！", "error");
                     let fd = new FormData(); fd.append('username', loginForm.username); fd.append('password', loginForm.password);
                     try {
                         const res = await fetch(API_BASE + '/api/auth/login', { method: 'POST', body: fd });
                         if (res.ok) {
                             localStorage.setItem('fund_username', loginForm.username);
-                            currentUser.value = loginForm.username;
-                            isLoggedIn.value = true;
-                            showToast("接入成功", "success");
-                            initDashboard();
-                        } else {
-                            showToast("❌ 密码错误", "error");
-                        }
+                            currentUser.value = loginForm.username; isLoggedIn.value = true;
+                            showToast("接入成功", "success"); initDashboard();
+                        } else { showToast("❌ 密码错误", "error"); }
                     } catch (error) { showToast("🌐 登录失败", "error"); }
                 };
 
@@ -878,59 +817,38 @@
                     try {
                         const res = await fetch(API_BASE + '/api/fund/add', { method: 'POST', body: fd });
                         if (res.ok) { fundForm.code = ''; fundForm.amount = ''; fetchData(); showToast("✅ 成功", "success"); }
-                    } catch (e) { showToast("🌐 网络异常", "error"); }
+                    } catch (e) { showToast("🌐 异常", "error"); }
                 };
 
                 const handleDeleteFund = async (code, name) => {
-                    if (confirm(`确定移除 [${name}]？`)) {
+                    if (confirm(`移除 [${name}]？`)) {
                         const fd = new FormData(); fd.append('username', currentUser.value); fd.append('code', code);
-                        try { await fetch(API_BASE + '/api/fund/delete', { method: 'POST', body: fd }); fetchData(); showToast("✅ 已移除", "success"); }
-                        catch (e) { showToast("🌐 网络异常", "error"); }
+                        try { await fetch(API_BASE + '/api/fund/delete', { method: 'POST', body: fd }); fetchData(); showToast("✅ 移除", "success"); } catch (e) { }
                     }
                 };
 
                 const handleFileUpload = async (event) => {
-                    const file = event.target.files[0];
-                    if (!file) return;
+                    const file = event.target.files[0]; if (!file) return;
                     isUploading.value = true;
                     compressImageBeforeUpload(file, async (compressedFile) => {
                         const formData = new FormData(); formData.append('imageFile', compressedFile);
                         try {
                             const response = await fetch(`${API_BASE}/api/Fund/import-ocr?username=${encodeURIComponent(currentUser.value)}`, { method: 'POST', body: formData });
-                            if (response.ok) {
-                                ocrModal.content = await response.text();
-                                ocrModal.show = true;
-                                fundsList.value = [];
-                                fetchData();
-                            } else {
-                                showToast("❌ 识别失败", "error");
-                            }
-                        } catch (error) {
-                            showToast("🌐 网络异常", "error");
-                        } finally {
-                            isUploading.value = false;
-                            event.target.value = '';
-                        }
+                            if (response.ok) { ocrModal.content = await response.text(); ocrModal.show = true; fundsList.value = []; fetchData(); }
+                            else { showToast("❌ 识别失败", "error"); }
+                        } catch (error) { showToast("🌐 网络异常", "error"); } finally { isUploading.value = false; event.target.value = ''; }
                     });
                 };
 
                 const openEditModal = (fund) => {
-                    editForm.show = true;
-                    editForm.code = (fund.code || '').startsWith('待核对') ? '' : fund.code;
-                    editForm.name = fund.name;
-                    editForm.cost = fund.cost || 0;
-                    editForm.shares = fund.shares || 0;
-                    editForm.originalCode = fund.code;
+                    editForm.show = true; editForm.code = (fund.code || '').startsWith('待核对') ? '' : fund.code;
+                    editForm.name = fund.name; editForm.cost = fund.cost || 0; editForm.shares = fund.shares || 0; editForm.originalCode = fund.code;
                 };
 
                 const handleSaveDetails = async () => {
                     if (!editForm.cost || editForm.cost <= 0) return showToast("⚠️ 成本必填", "error");
-                    const fd = new FormData();
-                    fd.append('username', currentUser.value);
-                    fd.append('code', editForm.code);
-                    fd.append('costAmount', editForm.cost);
-                    fd.append('holdShares', editForm.shares || 0);
-                    fd.append('originalCode', editForm.originalCode);
+                    const fd = new FormData(); fd.append('username', currentUser.value); fd.append('code', editForm.code); fd.append('costAmount', editForm.cost);
+                    fd.append('holdShares', editForm.shares || 0); fd.append('originalCode', editForm.originalCode);
                     try {
                         const res = await fetch(API_BASE + '/api/Fund/update-details', { method: 'POST', body: fd });
                         if (res.ok) { showToast("✅ 补给完成", "success"); editForm.show = false; fetchData(); }
@@ -940,16 +858,12 @@
                 const fetchSectors = async () => {
                     showSectorRadar.value = true; isSectorLoading.value = true;
                     try {
-                        const res = await fetch(`${API_BASE}/api/fund/sectors`);
-                        const json = await res.json();
-                        if (json.top && json.bottom) {
-                            sectorTopList.value = json.top;
-                            sectorBottomList.value = json.bottom;
-                        }
-                    } catch (e) { showToast("🚨 雷达连接失败", "error"); }
-                    finally { isSectorLoading.value = false; }
+                        const res = await fetch(`${API_BASE}/api/fund/sectors`); const json = await res.json();
+                        if (json.top && json.bottom) { sectorTopList.value = json.top; sectorBottomList.value = json.bottom; }
+                    } catch (e) { showToast("🚨 雷达连接失败", "error"); } finally { isSectorLoading.value = false; }
                 };
 
+                // 🚀 获取数据的超级大脑（自带独立侦测引擎！）
                 const fetchData = async () => {
                     if (!currentUser.value) return;
                     try {
@@ -961,16 +875,26 @@
                         let todayDash = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
                         let currentMinutes = d.getHours() * 60 + d.getMinutes(); let isWeekend = (d.getDay() === 0 || d.getDay() === 6);
 
+                        let hasSettledToday = false; // 标记今天是否有出净值的基金
+
                         apiData.forEach(fund => {
-                            // 🐛 修复：防止图表末尾无限追加 15:00:00 数据点导致内存爆炸
-                            if (fund.isSettled) {
+
+                            fund._isSettled = false;
+                            // 🔥 纯前端硬核侦测：从图表的最后两个点判断官方净值出没出！
+                            if (isNight.value && fund.data && fund.data.length > 50) {
+                                let realRate = fund.data[fund.data.length - 1][1];
+                                let estRate = fund.data[fund.data.length - 2][1];
+                                if (Math.abs(realRate - estRate) > 0.001) {
+                                    fund._isSettled = true;
+                                    fund.actualRate = realRate; // 记住真正的真实值
+                                    hasSettledToday = true;     // 拉响全局更新警报
+                                }
+                            }
+
+                            // 计算最新跳动数据
+                            if (fund._isSettled) {
                                 fund.currentRate = fund.actualRate;
                                 fund.isHoliday = false;
-                                if (fund.data.length > 0 && String(fund.data[fund.data.length - 1][0]).includes("15:00:00")) {
-                                    fund.data[fund.data.length - 1][1] = fund.actualRate;
-                                } else {
-                                    fund.data.push([`${todaySlash} 15:00:00`, fund.actualRate]);
-                                }
                             } else if (isWeekend || currentMinutes < 565) {
                                 fund.currentRate = 0; fund.isHoliday = true;
                             } else if (fund.data && fund.data.length > 0) {
@@ -980,10 +904,10 @@
                                 if (hasTodayDate && !(isPast935 && fund.data.length <= 2)) {
                                     fund.currentRate = fund.data[fund.data.length - 1][1];
                                     fund.isHoliday = false;
-                                }
-                                else { fund.currentRate = 0; fund.isHoliday = true; }
+                                } else { fund.currentRate = 0; fund.isHoliday = true; }
                             } else { fund.currentRate = 0; fund.isHoliday = true; }
 
+                            // 算钱
                             fund.todayProfit = (fund.amount * (fund.currentRate / 100)).toFixed(2);
                             const profitVal = parseFloat(fund.todayProfit);
                             if (!isNaN(profitVal)) { tToday += profitVal; }
@@ -1006,10 +930,11 @@
                         totalProfit.value = currentTotalAssets - tCost;
                         totalRate.value = tCost > 0 ? ((currentTotalAssets - tCost) / tCost * 100) : 0;
 
-                        // 🚀 核心补齐：触发自动封存的引信！
-                        let hasSettled = apiData.some(f => f.isSettled);
-                        if (hasSettled) {
-                            saveDailyArchive(true); // 隐秘地在后台存入最精确的带累计收益的数据
+                        // 🚀 终极联动引信：只要有更新，并且今天这台电脑还没存过，立刻后台存入！
+                        if (hasSettledToday && !window.hasAutoSavedToday) {
+                            console.log("雷达探测到净值更新，开始静默封存！");
+                            saveDailyArchive(true);
+                            window.hasAutoSavedToday = true; // 焊死引信，防止重复刷爆数据库
                         }
 
                         renderChart(apiData);
@@ -1019,6 +944,7 @@
 
                 const handleResize = () => { if (chartInstance.value) chartInstance.value.resize(); };
 
+                // 🚀 把丢失的画图代码全部找回来了！
                 const renderChart = (apiData) => {
                     if (!chartRef.value) return;
                     if (!chartInstance.value) {
@@ -1027,53 +953,40 @@
                     }
                     var holdAmounts = {};
                     var validData = apiData.filter(f => f.data && f.data.length > 1 && !f.isHoliday);
-                    let anySettled = false; // 战术标记：是否有基金更新了
 
-                    // 🚀 档案馆：一键封存（支持静默模式，脱离后端独立运行）
-                    const saveDailyArchive = async (silent = false) => {
-                        if (!silent && !confirm("💾 确定要将大屏当前的数据作为【今日最终战报】永久封存吗？")) return;
-
-                        // 修复时区错乱，确保用的是您的本地时间，而不是英国时间
-                        let d = new Date();
-                        let localDateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-
-                        const payload = {
-                            Username: currentUser.value,
-                            DateStr: localDateStr,
-                            Total: {
-                                FundName: "总阵地",
-                                Assets: totalPrincipal.value,
-                                DailyProfit: parseFloat(totalTodayProfit.value) || 0,
-                                DailyRate: parseFloat(totalTodayRate.value) || 0,
-                                TotalProfit: parseFloat(totalProfit.value) || 0,
-                                TotalRate: parseFloat(totalRate.value) || 0
-                            },
-                            Funds: fundsList.value.map(f => ({
-                                FundCode: f.code,
-                                FundName: f.name,
-                                Assets: f.amount,
-                                DailyProfit: parseFloat(f.todayProfit) || 0,
-                                DailyRate: parseFloat(f.currentRate) || 0,
-                                TotalProfit: parseFloat(f.estimatedProfit) || 0,
-                                TotalRate: parseFloat(f.existingReturnRate) || 0
-                            }))
-                        };
-
-                        try {
-                            const response = await fetch(`${API_BASE}/api/fund/save-archive`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify(payload)
-                            });
-                            if (response.ok) {
-                                if (!silent) showToast("✅ 今日战报已安全锁入密码箱！", "success");
-                            } else {
-                                if (!silent) showToast("❌ 封存受阻", "error");
-                            }
-                        } catch (e) {
-                            if (!silent) showToast("🌐 指挥中心失联", "error");
+                    var seriesData = validData.map(fund => {
+                        holdAmounts[fund.name] = fund.amount;
+                        let diff = 0;
+                        if (fund._isSettled) {
+                            let realRate = fund.data[fund.data.length - 1][1];
+                            let estRate = fund.data[fund.data.length - 2][1];
+                            diff = (realRate - estRate).toFixed(2);
                         }
-                    };
+                        fund._diff = diff;
+
+                        return {
+                            name: fund.name,
+                            type: 'line', smooth: true, symbol: 'none',
+                            lineStyle: { width: 3, shadowColor: 'rgba(0,0,0,0.5)', shadowBlur: 10 },
+                            endLabel: {
+                                show: true, color: 'inherit', fontSize: 13, fontWeight: 'bold', lineHeight: 20,
+                                formatter: (p) => {
+                                    let profit = (fund.amount * p.value[1] / 100).toFixed(2);
+                                    let sign = profit >= 0 ? '+' : '';
+                                    let profitDisplay = showAssets.value ? `${sign}${profit} 元` : '**** 元';
+                                    if (fund._isSettled) {
+                                        let diffSign = fund._diff > 0 ? '+' : '';
+                                        return `${profitDisplay}\n✅ 真: ${p.value[1]}%\n差: ${diffSign}${fund._diff}%`;
+                                    } else if (isNight.value && fund.data.length > 50) {
+                                        return `${profitDisplay}\n⏳ 等待财报...`;
+                                    } else {
+                                        return `${profitDisplay}\n估: ${p.value[1]}%`;
+                                    }
+                                }
+                            },
+                            data: fund.data
+                        };
+                    });
 
                     var d = new Date();
                     var todayStr = d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0');
@@ -1102,7 +1015,7 @@
                         xAxis: { type: 'time', min: todayStr + ' 09:30:00', max: todayStr + ' 16:00:00', splitLine: { show: false } },
                         yAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)', type: 'dashed' } } },
                         series: seriesData
-                    });
+                    }, true); // 加个 true 防止缓存重叠
                 };
 
                 watch(showAssets, () => { if (fundsList.value.length > 0) renderChart(fundsList.value); });
@@ -1120,7 +1033,6 @@
                 const initDashboard = () => {
                     nextTick(() => {
                         updateRadarMode();
-                        if (fundsList.value.length > 0) renderChart(fundsList.value);
                         setTimeout(() => {
                             fetchData();
                             timer = setInterval(() => {
@@ -1145,11 +1057,10 @@
                     if (chartInstance.value) chartInstance.value.dispose();
                 });
 
-                // 🚀 最终底座！所有暴露变量完全补齐！
                 return {
                     toasts, isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, showAssets, isUploading, editForm,
-                    handleLogin, handleLogout, handleAddFund, handleDeleteFund, triggerUpload, handleFileUpload,
+                    handleLogin, handleRegister, handleLogout, handleAddFund, handleDeleteFund, triggerUpload, handleFileUpload,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
                     sectorTopList, sectorBottomList, showSectorDetails, detailsTitle, detailsList, isDetailsLoading,
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices,
