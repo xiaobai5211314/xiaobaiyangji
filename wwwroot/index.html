@@ -476,6 +476,7 @@
                     <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 6px; margin-top: 5px;">
                         <span style="display: flex; align-items: center; gap: 5px;">
                             估值涨跌:
+                            <span v-if="fund.isSettled" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; margin-right: 5px; box-shadow: 0 0 5px rgba(16, 185, 129, 0.4);">✅ 已更新</span>
                             <span v-if="fund.isHoliday" style="color: #94a3b8; font-weight: bold; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-size: 11px;">☕ 海外休市</span>
                             <span v-else :style="{color: fund.currentRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold'}">{{ fund.currentRate > 0 ? '+' : ''}}{{ fund.currentRate }}%</span>
 
@@ -1173,13 +1174,14 @@
                         let todayDash = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
                         apiData.forEach(fund => {
-                            tPrincipal += fund.amount;
-                            tCost += (fund.cost || fund.amount);
-
-                            let isWeekend = (d.getDay() === 0 || d.getDay() === 6);
-                            let currentMinutes = d.getHours() * 60 + d.getMinutes();
-
-                            if (isWeekend || currentMinutes < 565) {
+                            // 🔥 核心火力升级：最高优先级响应真实净值
+                            if (fund.isSettled) {
+                                fund.currentRate = fund.actualRate; // 瞬间切换为真实涨跌幅！
+                                fund.isHoliday = false;
+                                // 强行给折线图末尾追加一个点，让图表直接跳向真实值并锁定！
+                                fund.data.push([`${todaySlash} 15:00:00`, fund.actualRate]);
+                            }
+                            else if (isWeekend || currentMinutes < 565) {
                                 fund.currentRate = 0;
                                 fund.isHoliday = true;
                             }
@@ -1237,14 +1239,17 @@
                     var validData = apiData.filter(f => f.data && f.data.length > 1 && !f.isHoliday);
                     var seriesData = validData.map(fund => {
                         holdAmounts[fund.name] = fund.amount;
-                        let isSettled = false; let diff = 0; let hasFullData = fund.data.length > 50;
-                        if (isNight.value && hasFullData) {
-                            let realRate = fund.data[fund.data.length - 1][1];
+                        // ⚡ 直接拿后端铁证
+                        let isSettled = fund.isSettled;
+                        let diff = 0;
+
+                        // 如果已更新，算一下白天预估和晚上真实的差值，展示在折线图终点
+                        if (isSettled && fund.data.length >= 2) {
+                            let realRate = fund.actualRate;
                             let estRate = fund.data[fund.data.length - 2][1];
-                            if (Math.abs(realRate - estRate) > 0.001) {
-                                isSettled = true; diff = (realRate - estRate).toFixed(2);
-                            }
+                            diff = (realRate - estRate).toFixed(2);
                         }
+
                         fund._isSettled = isSettled; fund._diff = diff;
 
                         return {
@@ -1260,7 +1265,7 @@
                                     if (isSettled) {
                                         let diffSign = fund._diff > 0 ? '+' : '';
                                         return `${profitDisplay}\n✅ 真: ${p.value[1]}%\n差: ${diffSign}${fund._diff}%`;
-                                    } else if (isNight.value && hasFullData) {
+                                    } else if (isNight.value && fund.data.length > 50) {
                                         return `${profitDisplay}\n⏳ 等待财报...`;
                                     } else {
                                         return `${profitDisplay}\n估: ${p.value[1]}%`;

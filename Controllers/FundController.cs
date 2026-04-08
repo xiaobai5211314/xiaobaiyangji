@@ -403,6 +403,44 @@ namespace 估值助手.Controllers
             return 1.0; // 极端防御保底
         }
 
+        // 🚀 新增：猎隼侦察兵 —— 专职去东方财富底层接口刺探真实净值
+        private async Task<double?> GetTodayRealRateAsync(string fundCode, string todayStr)
+        {
+            string cacheKey = $"RealRate_{fundCode}_{todayStr}";
+            if (_cache.TryGetValue(cacheKey, out double cachedRate)) return cachedRate; // 如果已经查到了，直接用
+
+            string missKey = $"NoRealRate_{fundCode}_{todayStr}";
+            if (_cache.TryGetValue(missKey, out _)) return null; // 🛡️ 如果刚查过发现还没出，等1分钟再查，防封禁！
+
+            try
+            {
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+                client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
+                string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={fundCode}&pageIndex=1&pageSize=1";
+                string res = await client.GetStringAsync(url);
+                using var doc = JsonDocument.Parse(res);
+                var dataArray = doc.RootElement.GetProperty("Data").GetProperty("LSJZList");
+                if (dataArray.GetArrayLength() > 0)
+                {
+                    var latest = dataArray[0];
+                    if (latest.GetProperty("FSRQ").GetString() == todayStr)
+                    {
+                        if (double.TryParse(latest.GetProperty("JZZZL").GetString(), out double realRate))
+                        {
+                            _cache.Set(cacheKey, realRate, TimeSpan.FromHours(12)); // 🎯 刺探成功！锁定真实净值到明天！
+                            return realRate;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            // 还没公布，挂上 1 分钟免打扰牌子
+            _cache.Set(missKey, true, TimeSpan.FromMinutes(1));
+            return null;
+        }
+
+        // 🚀 替换：全新升级的今日阵地数据中心
         [HttpGet("today")]
         public async Task<IActionResult> GetTodayData([FromQuery] string username)
         {
@@ -411,59 +449,49 @@ namespace 估值助手.Controllers
             try
             {
                 string cacheKey = $"Tactical_TodayData_{username}";
-
-                if (_cache.TryGetValue(cacheKey, out object cachedResult))
-                {
-                    return Ok(cachedResult);
-                }
+                if (_cache.TryGetValue(cacheKey, out object cachedResult)) return Ok(cachedResult);
 
                 var myFunds = await _context.MyFunds.Where(f => f.Username == username).ToListAsync();
                 var myFundCodes = myFunds.Select(f => f.FundCode).ToList();
-
                 if (!myFundCodes.Any()) return Ok(new List<object>());
 
                 var localTime = DateTime.UtcNow.AddHours(8);
                 var today = localTime.Date;
                 string todayStr = localTime.ToString("yyyy'/'MM'/'dd");
+                string todayDash = localTime.ToString("yyyy-MM-dd");
 
-                // 🚀 获取全军今日估值记录
-                var todayRecords = await _context.FundRecords
-                    .Where(r => r.FetchTime >= today && myFundCodes.Contains(r.FundCode))
-                    .OrderBy(r => r.FetchTime)
-                    .ToListAsync();
+                var todayRecords = await _context.FundRecords.Where(r => r.FetchTime >= today && myFundCodes.Contains(r.FundCode)).OrderBy(r => r.FetchTime).ToListAsync();
 
-                // 🚀 获取全军昨日记录
-                var lastRecords = new List<FundData>();
+                var lastRecords = new List<FundData>(); // 确保这里是 FundData
                 foreach (var code in myFundCodes)
                 {
-                    var lr = await _context.FundRecords
-                        .Where(r => r.FetchTime < today && r.FundCode == code)
-                        .OrderByDescending(r => r.FetchTime)
-                        .FirstOrDefaultAsync();
+                    var lr = await _context.FundRecords.Where(r => r.FetchTime < today && r.FundCode == code).OrderByDescending(r => r.FetchTime).FirstOrDefaultAsync();
                     if (lr != null) lastRecords.Add(lr);
                 }
 
-                // 🚀 军工级内存优化
-                var allPastRecords = await _context.FundRecords
-                    .Where(r => myFundCodes.Contains(r.FundCode) && r.ActualRate != 0)
-                    .OrderByDescending(r => r.FetchTime)
-                    .ToListAsync();
+                var allPastRecords = await _context.FundRecords.Where(r => myFundCodes.Contains(r.FundCode) && r.ActualRate != 0).OrderByDescending(r => r.FetchTime).ToListAsync();
 
-                // 🔥 并发侦察：获取所有持有基金的官方最新净值！
-                var dwjzTasks = myFundCodes.Select(code => GetFundDwjzAsync(code)).ToList();
-                var dwjzResults = await Task.WhenAll(dwjzTasks);
-                var dwjzDict = new Dictionary<string, double>();
-                for (int i = 0; i < myFundCodes.Count; i++) dwjzDict[myFundCodes[i]] = dwjzResults[i];
+                // 🌟🌟🌟 核心联动：下午 17:00 后，全面放出“猎隼”侦察兵并行刺探所有基金！
+                var realRateDict = new Dictionary<string, double>();
+                if (localTime.Hour >= 17)
+                {
+                    var realRateTasks = myFundCodes.Select(async code =>
+                    {
+                        var rate = await GetTodayRealRateAsync(code, todayDash);
+                        return new { code, rate };
+                    });
+                    var realRateResults = await Task.WhenAll(realRateTasks);
+                    foreach (var res in realRateResults)
+                    {
+                        if (res.rate.HasValue) realRateDict[res.code] = res.rate.Value;
+                    }
+                }
 
                 var result = myFunds.Select(config =>
                 {
                     var fundRecords = todayRecords.Where(r => r.FundCode == config.FundCode).ToList();
                     var lastRecord = lastRecords.FirstOrDefault(r => r.FundCode == config.FundCode);
-
-                    var past3DaysRecords = allPastRecords
-                        .Where(r => r.FundCode == config.FundCode)
-                        .Take(3)
-                        .ToList();
+                    var past3DaysRecords = allPastRecords.Where(r => r.FundCode == config.FundCode).Take(3).ToList();
 
                     double avgDiff = 0;
                     if (past3DaysRecords.Count > 0)
@@ -474,26 +502,15 @@ namespace 估值助手.Controllers
                     }
 
                     var dataPoints = new List<object[]>();
+                    if (lastRecord != null) dataPoints.Add(new object[] { todayStr + " 09:30:00", Math.Round(lastRecord.EstimatedRate + avgDiff, 2) });
+                    dataPoints.AddRange(fundRecords.Select(r => new object[] { r.FetchTime.ToString("yyyy'/'MM'/'dd HH:mm:ss"), Math.Round(r.EstimatedRate + avgDiff, 2) }));
+                    if (dataPoints.Count == 0) dataPoints.Add(new object[] { todayStr + " 09:30:00", 0 });
 
-                    if (lastRecord != null)
-                    {
-                        dataPoints.Add(new object[] { todayStr + " 09:30:00", Math.Round(lastRecord.EstimatedRate + avgDiff, 2) });
-                    }
+                    // 🎯 判断该基金是否已经侦测到了真实净值
+                    bool isSettled = realRateDict.ContainsKey(config.FundCode);
+                    double? actualRate = isSettled ? realRateDict[config.FundCode] : null;
 
-                    dataPoints.AddRange(fundRecords.Select(r => new object[] {
-                        r.FetchTime.ToString("yyyy'/'MM'/'dd HH:mm:ss"),
-                        Math.Round(r.EstimatedRate + avgDiff, 2)
-                    }));
-
-                    if (dataPoints.Count == 0)
-                    {
-                        dataPoints.Add(new object[] { todayStr + " 09:30:00", 0 });
-                    }
-
-                    // 💎 终极绝杀：份额计算引擎启动！
-                    double dwjz = dwjzDict.ContainsKey(config.FundCode) ? dwjzDict[config.FundCode] : 1.0;
-                    double currentAmount = config.HoldShares > 0 ? Math.Round(config.HoldShares * dwjz, 2) : config.HoldAmount;
-
+                    double currentAmount = config.HoldAmount;
                     double cost = config.CostAmount;
                     double existingReturnRate = cost > 0 ? Math.Round(((currentAmount - cost) / cost) * 100.0, 2) : 0;
                     double breakEvenRate = cost > 0 ? Math.Round((currentAmount / cost) * 100.0, 2) : 0;
@@ -502,21 +519,21 @@ namespace 估值助手.Controllers
                     {
                         code = config.FundCode,
                         name = config.FundName,
-                        amount = currentAmount, // 发给前端的已经是 100% 精确的市值了！
+                        amount = currentAmount,
                         cost = cost > 0 ? cost : (double?)null,
-                        shares = config.HoldShares, // 推给前端展示
                         existingReturnRate = existingReturnRate,
                         breakEvenRate = breakEvenRate,
                         diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
                         calibrationOffset = Math.Round(avgDiff, 4),
-                        data = dataPoints
+                        data = dataPoints,
+                        // 👇 下发给前线的终极底牌
+                        isSettled = isSettled,
+                        actualRate = actualRate
                     };
                 });
 
                 var finalResult = result.OrderByDescending(x => x.amount).ToList();
-
-                var cacheOptions = new MemoryCacheEntryOptions()
-                    .SetAbsoluteExpiration(TimeSpan.FromSeconds(15));
+                var cacheOptions = new MemoryCacheEntryOptions().SetAbsoluteExpiration(TimeSpan.FromSeconds(15));
                 _cache.Set(cacheKey, finalResult, cacheOptions);
 
                 return Ok(finalResult);
