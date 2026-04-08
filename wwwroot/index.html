@@ -695,40 +695,59 @@
                 const isIndicesLoading = ref(false);
 
                 // 🚀 核心封存引信 (强化了浮点数过滤)
-                const saveDailyArchive = async (silent = false) => {
+                                const saveDailyArchive = async (silent = false) => {
                     if (!silent && !confirm("💾 确定要将大屏当前的数据作为【今日最终战报】永久封存吗？")) return;
                     let d = new Date();
                     let localDateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 
-                    // 核心修复：强制截断所有浮点数精度，防止 C# decimal 绑定崩溃
-                    const safeNumber = (val) => Number((parseFloat(val) || 0).toFixed(2));
+                    const safeNumber = (val) => {
+                        const n = parseFloat(val);
+                        return isNaN(n) ? 0 : Number(n.toFixed(2));
+                    };
 
                     const payload = {
-                        Username: currentUser.value,
-                        DateStr: localDateStr,
-                        Total: {
-                            FundName: "总阵地",
-                            Assets: safeNumber(totalPrincipal.value),
-                            DailyProfit: safeNumber(totalTodayProfit.value),
-                            DailyRate: safeNumber(totalTodayRate.value),
-                            TotalProfit: safeNumber(totalProfit.value),
-                            TotalRate: safeNumber(totalRate.value)
+                        username: currentUser.value,
+                        dateStr: localDateStr,
+                        total: {
+                            fundName: "总阵地",
+                            fundCode: "TOTAL",
+                            assets: safeNumber(totalPrincipal.value),
+                            dailyProfit: safeNumber(totalTodayProfit.value),
+                            dailyRate: safeNumber(totalTodayRate.value),
+                            totalProfit: safeNumber(totalProfit.value),
+                            totalRate: safeNumber(totalRate.value)
                         },
-                        Funds: fundsList.value.map(f => ({
-                            FundCode: f.code,
-                            FundName: f.name,
-                            Assets: safeNumber(f.amount),
-                            DailyProfit: safeNumber(f.todayProfit),
-                            DailyRate: safeNumber(f.currentRate),
-                            TotalProfit: safeNumber(f.estimatedProfit),
-                            TotalRate: safeNumber(f.existingReturnRate)
+                        funds: fundsList.value.map(f => ({
+                            fundCode: f.code,
+                            fundName: f.name,
+                            assets: safeNumber(f.amount),
+                            dailyProfit: safeNumber(f.todayProfit),
+                            dailyRate: safeNumber(f.currentRate),
+                            totalProfit: safeNumber(f.estimatedProfit),
+                            totalRate: safeNumber(f.existingReturnRate)
                         }))
                     };
+
+                    console.log("📦 封存载荷:", JSON.stringify(payload, null, 2));
+
                     try {
-                        const response = await fetch(`${API_BASE}/api/fund/save-archive`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                        if (response.ok) { if (!silent) showToast("✅ 今日战报已安全锁入密码箱！", "success"); }
-                        else { if (!silent) showToast("❌ 封存受阻", "error"); }
-                    } catch (e) { if (!silent) showToast("🌐 指挥中心失联", "error"); }
+                        const response = await fetch(`${API_BASE}/api/fund/save-archive`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                        const resultText = await response.text();
+                        if (response.ok) {
+                            if (!silent) showToast("✅ 今日战报已安全锁入密码箱！", "success");
+                            console.log("✅ 封存成功:", resultText);
+                        } else {
+                            if (!silent) showToast("❌ 封存受阻: " + resultText, "error");
+                            console.error("❌ 封存失败:", resultText);
+                        }
+                    } catch (e) {
+                        if (!silent) showToast("🌐 指挥中心失联", "error");
+                        console.error("🌐 封存网络异常:", e);
+                    }
                 };
 
                 const fetchGlobalIndices = async () => {
