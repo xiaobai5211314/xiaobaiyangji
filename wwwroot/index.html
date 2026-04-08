@@ -776,11 +776,17 @@
                 };
 
                 // 🚀 核心补齐：档案馆的静默封存引擎！
+                // 🚀 档案馆：一键封存（支持静默模式，脱离后端独立运行）
                 const saveDailyArchive = async (silent = false) => {
                     if (!silent && !confirm("💾 确定要将大屏当前的数据作为【今日最终战报】永久封存吗？")) return;
+
+                    // 修复时区错乱，确保用的是您的本地时间，而不是英国时间
+                    let d = new Date();
+                    let localDateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+
                     const payload = {
                         Username: currentUser.value,
-                        DateStr: new Date().toISOString().split('T')[0],
+                        DateStr: localDateStr,
                         Total: {
                             FundName: "总阵地",
                             Assets: totalPrincipal.value,
@@ -790,14 +796,27 @@
                             TotalRate: parseFloat(totalRate.value) || 0
                         },
                         Funds: fundsList.value.map(f => ({
-                            FundCode: f.code, FundName: f.name, Assets: f.amount,
-                            DailyProfit: parseFloat(f.todayProfit) || 0, DailyRate: parseFloat(f.currentRate) || 0,
-                            TotalProfit: parseFloat(f.estimatedProfit) || 0, TotalRate: parseFloat(f.existingReturnRate) || 0
+                            FundCode: f.code,
+                            FundName: f.name,
+                            Assets: f.amount,
+                            DailyProfit: parseFloat(f.todayProfit) || 0,
+                            DailyRate: parseFloat(f.currentRate) || 0,
+                            TotalProfit: parseFloat(f.estimatedProfit) || 0,
+                            TotalRate: parseFloat(f.existingReturnRate) || 0
                         }))
                     };
+
                     try {
-                        const response = await fetch(`${API_BASE}/api/fund/save-archive`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                        if (response.ok && !silent) showToast("✅ 今日战报已安全锁入密码箱！", "success");
+                        const response = await fetch(`${API_BASE}/api/fund/save-archive`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                        if (response.ok) {
+                            if (!silent) showToast("✅ 今日战报已安全锁入密码箱！", "success");
+                        } else {
+                            if (!silent) showToast("❌ 封存受阻", "error");
+                        }
                     } catch (e) {
                         if (!silent) showToast("🌐 指挥中心失联", "error");
                     }
@@ -1010,24 +1029,29 @@
                     var validData = apiData.filter(f => f.data && f.data.length > 1 && !f.isHoliday);
                     let anySettled = false; // 战术标记：是否有基金更新了
 
+                    let anySettled = false; // ⚡ 战术标记：记录是否有基金已更新
+
                     var seriesData = validData.map(fund => {
                         holdAmounts[fund.name] = fund.amount;
-                        let isSettled = fund.isSettled || false;
+                        let isSettled = false;
                         let diff = 0;
                         let hasFullData = fund.data.length > 50;
 
+                        // ⚡ 前端本地智能侦测（完全不依赖后端代码）
                         if (isNight.value && hasFullData) {
                             let realRate = fund.data[fund.data.length - 1][1];
                             let estRate = fund.data[fund.data.length - 2][1];
+                            // 只要最后两个点不一样，说明官方真实净值已经追加进来了！
                             if (Math.abs(realRate - estRate) > 0.001) {
                                 isSettled = true;
                                 diff = (realRate - estRate).toFixed(2);
                             }
                         }
+
                         fund._isSettled = isSettled;
                         fund._diff = diff;
 
-                        if (isSettled) anySettled = true; // 只要有一只更新了，就拉响引信！
+                        if (isSettled) anySettled = true; // 只要有一只基金更新了，就拉响警报！
 
                         return {
                             name: fund.name,
@@ -1053,10 +1077,11 @@
                         };
                     });
 
-                    // 🚀 终极自动封存引信：检测到更新，且今天当前窗口没存过，立刻静默封存！
+                    // 🚀 终极静默封存引信：完全依赖前端判断，不看后端脸色！每天只发一枪！
                     if (anySettled && !window.hasAutoSavedToday) {
+                        console.log("雷达探测到净值更新，开始静默封存！");
                         saveDailyArchive(true);
-                        window.hasAutoSavedToday = true; // 锁死引信，防止每 15 秒重复轰炸数据库
+                        window.hasAutoSavedToday = true; // 锁死引信
                     }
 
                     var d = new Date();
