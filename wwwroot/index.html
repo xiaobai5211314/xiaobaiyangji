@@ -418,13 +418,7 @@
             <div class="fund-list-container">
                 <div v-for="fund in fundsList" :key="fund.code" class="glass-panel fund-card">
                     <div style="display: flex; justify-content: space-between; align-items: start;">
-                        <span style="font-weight: bold; color: #fff; font-size: 14px; max-width: 80%; display: flex; flex-direction: column;">
-                            <span>{{ fund.name }}</span>
-                            <span style="font-size:10px; color:#64748b; font-weight: normal; margin-top: 2px;">
-                                ({{ fund.code }})
-                                <span v-if="fund.shares > 0" style="color:#10b981; margin-left: 5px;">✓ 已切为份额精确计算</span>
-                            </span>
-                        </span>
+                       
 <span style="font-weight: bold; color: #fff; font-size: 14px; max-width: 80%; display: flex; flex-direction: column;">
     <span>{{ fund.name }}</span>
     <span style="font-size:10px; color:#64748b; font-weight: normal; margin-top: 4px;">
