@@ -520,40 +520,56 @@ namespace 估值助手.Controllers
         }
 
         // 🚀 新增：猎隼侦察兵，去东方财富底层接口刺探真实净值
-        private async Task<double?> GetTodayRealRateAsync(string fundCode, string todayStr)
+        // 🚀 猎隼侦察兵升级版：双重刺探，获取单位净值计算绝对物理收益
+private async Task<(double? rate, double? exactProfit)> GetTodayRealRateAsync(string fundCode, string todayStr, double shares)
+{
+    string cacheKey = $"RealRateV2_{fundCode}_{todayStr}_{shares}";
+    if (_cache.TryGetValue(cacheKey, out (double?, double?) cached)) return cached;
+
+    string missKey = $"NoRealRate_{fundCode}_{todayStr}";
+    if (_cache.TryGetValue(missKey, out _)) return (null, null);
+
+    try
+    {
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
+        // 核心修改：请求最近两天的历史净值 pageSize=2
+        string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={fundCode}&pageIndex=1&pageSize=2";
+        string res = await client.GetStringAsync(url);
+        using var doc = JsonDocument.Parse(res);
+        var dataArray = doc.RootElement.GetProperty("Data").GetProperty("LSJZList");
+        
+        if (dataArray.GetArrayLength() > 0)
         {
-            string cacheKey = $"RealRate_{fundCode}_{todayStr}";
-            if (_cache.TryGetValue(cacheKey, out double cachedRate)) return cachedRate;
-
-            string missKey = $"NoRealRate_{fundCode}_{todayStr}";
-            if (_cache.TryGetValue(missKey, out _)) return null;
-
-            try
+            var latest = dataArray[0];
+            if (latest.GetProperty("FSRQ").GetString() == todayStr)
             {
-                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-                client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
-                string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={fundCode}&pageIndex=1&pageSize=1";
-                string res = await client.GetStringAsync(url);
-                using var doc = JsonDocument.Parse(res);
-                var dataArray = doc.RootElement.GetProperty("Data").GetProperty("LSJZList");
-                if (dataArray.GetArrayLength() > 0)
+                if (double.TryParse(latest.GetProperty("JZZZL").GetString(), out double realRate))
                 {
-                    var latest = dataArray[0];
-                    if (latest.GetProperty("FSRQ").GetString() == todayStr)
+                    double? exactProfit = null;
+                    // 如果指挥官录入了份额，且成功拿到了昨天的数据，启动绝对物理计算！
+                    if (shares > 0 && dataArray.GetArrayLength() > 1)
                     {
-                        if (double.TryParse(latest.GetProperty("JZZZL").GetString(), out double realRate))
+                        if (double.TryParse(latest.GetProperty("DWJZ").GetString(), out double todayNav) &&
+                            double.TryParse(dataArray[1].GetProperty("DWJZ").GetString(), out double yesterdayNav))
                         {
-                            _cache.Set(cacheKey, realRate, TimeSpan.FromHours(12));
-                            return realRate;
+                            // 绝对物理公式：份额 * (今日单位净值 - 昨日单位净值)
+                            exactProfit = Math.Round(shares * (todayNav - yesterdayNav), 2);
                         }
                     }
+                    var result = (realRate, exactProfit);
+                    _cache.Set(cacheKey, result, TimeSpan.FromHours(12));
+                    return result;
                 }
             }
-            catch { }
-
-            _cache.Set(missKey, true, TimeSpan.FromMinutes(1));
-            return null;
         }
+    }
+    catch { }
+
+    _cache.Set(missKey, true, TimeSpan.FromMinutes(1));
+    return (null, null);
+}
+
 
 
         [HttpGet("today")]
@@ -599,21 +615,27 @@ namespace 估值助手.Controllers
                     .OrderByDescending(r => r.FetchTime)
                     .ToListAsync();
 
-                // 🌟 猎隼侦察兵启动：下午 17:00 后刺探真实净值
-                var realRateDict = new Dictionary<string, double>();
-                if (localTime.Hour >= 17)
-                {
-                    var realRateTasks = myFundCodes.Select(async code =>
-                    {
-                        var rate = await GetTodayRealRateAsync(code, todayDash);
-                        return new { code, rate };
-                    });
-                    var realRateResults = await Task.WhenAll(realRateTasks);
-                    foreach (var res in realRateResults)
-                    {
-                        if (res.rate.HasValue) realRateDict[res.code] = res.rate.Value;
-                    }
-                }
+                
+            // 🌟 猎隼侦察兵启动：下午 17:00 后刺探真实净值
+var realRateDict = new Dictionary<string, double>();
+var exactProfitDict = new Dictionary<string, double>(); // 新增物理利润字典
+
+if (localTime.Hour >= 17)
+{
+    // 改为遍历 myFunds，带上份额参数
+    var realRateTasks = myFunds.Select(async config => 
+    {
+        var res = await GetTodayRealRateAsync(config.FundCode, todayDash, config.HoldShares);
+        return new { code = config.FundCode, rate = res.rate, exactProfit = res.exactProfit };
+    });
+    var realRateResults = await Task.WhenAll(realRateTasks);
+    foreach (var res in realRateResults)
+    {
+        if (res.rate.HasValue) realRateDict[res.code] = res.rate.Value;
+        if (res.exactProfit.HasValue) exactProfitDict[res.code] = res.exactProfit.Value; // 截获物理利润
+    }
+}
+
 
                 var result = myFunds.Select(config =>
                 {
@@ -651,29 +673,30 @@ namespace 估值助手.Controllers
                     }
 
                     // 是否已截获真实净值
-                    bool isSettled = realRateDict.ContainsKey(config.FundCode);
-                    double? actualRate = isSettled ? realRateDict[config.FundCode] : null;
+                    // 是否已截获真实净值
+bool isSettled = realRateDict.ContainsKey(config.FundCode);
+double? actualRate = isSettled ? realRateDict[config.FundCode] : null;
 
-                    double cost = config.CostAmount;
-                    double currentAmount = config.HoldAmount;
-                    double existingReturnRate = cost > 0 ? Math.Round(((currentAmount - cost) / cost) * 100.0, 2) : 0;
-                    double breakEvenRate = cost > 0 ? Math.Round((currentAmount / cost) * 100.0, 2) : 0;
+// 🚀 新增这一行：尝试提取绝对物理利润
+double? actualExactProfit = exactProfitDict.ContainsKey(config.FundCode) ? exactProfitDict[config.FundCode] : null; 
 
-                    return new
-                    {
-                        code = config.FundCode,
-                        name = config.FundName,
-                        amount = currentAmount,
-                        shares = config.HoldShares, // 修复前端需要的份额字段
-                        cost = cost > 0 ? cost : (double?)null,
-                        existingReturnRate = existingReturnRate,
-                        breakEvenRate = breakEvenRate,
-                        diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
-                        calibrationOffset = Math.Round(avgDiff, 4),
-                        data = dataPoints,
-                        isSettled = isSettled,    // 传给前端的真实引信
-                        actualRate = actualRate
-                    };
+return new
+{
+    code = config.FundCode,
+    name = config.FundName,
+    amount = currentAmount,
+    shares = config.HoldShares, 
+    cost = cost > 0 ? cost : (double?)null,
+    existingReturnRate = existingReturnRate,
+    breakEvenRate = breakEvenRate,
+    diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
+    calibrationOffset = Math.Round(avgDiff, 4),
+    data = dataPoints,
+    isSettled = isSettled,    
+    actualRate = actualRate,
+    actualExactProfit = actualExactProfit // 🚀 将这把终极武器发给前端
+};
+
                 });
 
                 var finalResult = result.OrderByDescending(x => x.amount).ToList();
