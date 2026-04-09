@@ -610,31 +610,34 @@
                         <span>封存日期</span>
                         <span style="text-align: right;">当日收益/涨幅 | 累计收益/收益率</span>
                     </div>
+                           <div v-if="archiveModal.show" class="modal-overlay" @click.self="archiveModal.show = false" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 3500;">
+            <div style="background: #0f172a; width: 90%; max-width: 500px; height: 75vh; border-radius: 15px; border: 1px solid #38bdf8; box-shadow: 0 0 30px rgba(56, 189, 248, 0.2); padding: 20px; display: flex; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px;">
+                    <h3 style="color: #38bdf8; margin: 0;">🗄️ {{ archiveModal.targetName }} - 专属战报</h3>
+                    <span @click="archiveModal.show = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
+                </div>
+                <div v-if="archiveModal.isLoading" style="color: #4facfe; text-align: center; margin-top: 50px;">📡 正在提取...</div>
+                <div v-else-if="archiveModal.data.length === 0" style="color: #64748b; text-align: center; margin-top: 50px;">暂无战报</div>
+                <div v-else style="overflow-y: auto; flex: 1; padding-right: 5px;">
+                    <div style="display: flex; justify-content: space-between; color: #64748b; font-size: 12px; margin-bottom: 10px;"><span>封存日期</span><span style="text-align: right;">当日收益 / 累计盈亏</span></div>
+                    
                     <div v-for="(item, index) in archiveModal.data" :key="index" style="background: #1e293b; border-radius: 10px; padding: 12px; margin-bottom: 10px; border-left: 4px solid #38bdf8;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <div style="display: flex; flex-direction: column;">
-                                <span style="color: #f8fafc; font-family: monospace; font-size: 14px; font-weight: bold;">{{ item.recordDate ? item.recordDate.split('T')[0] : '' }}</span>
-                                <span style="color: #94a3b8; font-size: 11px;">市值: ¥{{ (item.assets || 0).toFixed(2) }}</span>
+                                <span style="color: #f8fafc; font-family: monospace; font-size: 14px; font-weight: bold;">{{ item.recordDate.split('T')[0] }}</span>
+                                <span style="color: #94a3b8; font-size: 11px;">市值: {{ item.assets.toFixed(2) }}</span>
                             </div>
-                            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
-                                <div style="display: flex; flex-direction: column; align-items: flex-end;">
-                                    <span style="color: #64748b; font-size: 10px;">当日</span>
-                                    <span :style="{ color: (item.dailyProfit || 0) >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold', fontSize: '15px', fontFamily: 'Courier New' }">
-                                        {{ (item.dailyProfit || 0) > 0 ? '+' : '' }}{{ (item.dailyProfit || 0).toFixed(2) }}
-                                        <span style="font-size: 12px; opacity: 0.8;">({{ (item.dailyRate || 0) > 0 ? '+' : '' }}{{ (item.dailyRate || 0).toFixed(2) }}%)</span>
-                                    </span>
-                                </div>
-                                <div style="display: flex; flex-direction: column; align-items: flex-end; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 4px; margin-top: 2px;">
-                                    <span style="color: #64748b; font-size: 10px;">累计</span>
-                                    <span :style="{ color: (item.totalProfit || 0) >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold', fontSize: '14px', fontFamily: 'Courier New' }">
-                                        {{ (item.totalProfit || 0) > 0 ? '+' : '' }}{{ (item.totalProfit || 0).toFixed(2) }}
-                                        <span style="font-size: 11px; opacity: 0.8;">({{ (item.totalRate || 0) > 0 ? '+' : '' }}{{ (item.totalRate || 0).toFixed(2) }}%)</span>
-                                    </span>
-                                </div>
+                            <div style="display: flex; flex-direction: column; align-items: flex-end;">
+                                <span style="color: #64748b; font-size: 10px; margin-bottom: 2px;">今日盈亏</span>
+                                <span :style="{ color: item.dailyProfit >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold', fontSize: '15px', fontFamily: 'Courier New' }">{{ item.dailyProfit > 0 ? '+' : '' }}{{ item.dailyProfit.toFixed(2) }} ({{ item.dailyRate > 0 ? '+' : '' }}{{ item.dailyRate.toFixed(2) }}%)</span>
                             </div>
                         </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 8px;">
+                             <span style="color: #94a3b8; font-size: 11px;">历史累计总盈亏</span>
+                             <span :style="{ color: item.totalProfit >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold', fontSize: '13px' }">{{ item.totalProfit > 0 ? '+' : '' }}{{ item.totalProfit ? item.totalProfit.toFixed(2) : '0.00' }} ({{ item.totalRate > 0 ? '+' : '' }}{{ item.totalRate ? item.totalRate.toFixed(2) : '0.00' }}%)</span>
+                        </div>
                     </div>
-                </div>
+                    </div>
             </div>
         </div>
 
