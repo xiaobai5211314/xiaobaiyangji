@@ -425,6 +425,16 @@
                                 <span v-if="fund.shares > 0" style="color:#10b981; margin-left: 5px;">✓ 已切为份额精确计算</span>
                             </span>
                         </span>
+<span style="font-weight: bold; color: #fff; font-size: 14px; max-width: 80%; display: flex; flex-direction: column;">
+    <span>{{ fund.name }}</span>
+    <span style="font-size:10px; color:#64748b; font-weight: normal; margin-top: 4px;">
+        ({{ fund.code }})
+        <span v-if="fund.shares > 0" style="color:#10b981; margin-left: 5px; border: 1px solid rgba(16,185,129,0.3); padding: 1px 4px; border-radius: 4px; background: rgba(16,185,129,0.1);">
+            💠 份额: {{ fund.shares }}
+        </span>
+    </span>
+</span>
+
                         <div style="display: flex; gap: 6px; flex-shrink: 0;">
                             <button @click="fetchHistory(fund.code, fund.name)" style="background: rgba(56, 189, 248, 0.2); border: none; color: #38bdf8; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;" title="查看官方档案">📈</button>
                             <button @click="fetchMyArchives(fund.code, fund.name)" style="background: rgba(139, 92, 246, 0.2); border: none; color: #8b5cf6; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;" title="查看专属档案">📂</button>
