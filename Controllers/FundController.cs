@@ -556,7 +556,7 @@ namespace 估值助手.Controllers
         }
 
 
-                [HttpGet("today")]
+        [HttpGet("today")]
         public async Task<IActionResult> GetTodayData([FromQuery] string username)
         {
             if (string.IsNullOrEmpty(username)) return Unauthorized("请提供指挥官代号");
@@ -615,87 +615,6 @@ namespace 估值助手.Controllers
                     }
                 }
 
-                // 🚀 后端自动封存引信：检测到真实净值 → 自动保存到历史档案
-                bool hasAutoArchivedToday = false;
-                if (realRateDict.Count > 0 && realRateDict.Count == myFundCodes.Count)
-                {
-                    bool alreadyArchived = await _context.DailyArchives
-                        .AnyAsync(a => a.Username == username && a.RecordDate == today && a.FundCode == "TOTAL");
-
-                    if (!alreadyArchived)
-                    {
-                        try
-                        {
-                            double totalAssets = 0;
-                            double totalCost = 0;
-                            var fundArchiveEntries = new List<DailyArchive>();
-
-                            foreach (var fund in myFunds)
-                            {
-                                totalAssets += fund.HoldAmount;
-                                double fundCost = fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount;
-                                totalCost += fundCost;
-
-                                double realRate = realRateDict.ContainsKey(fund.FundCode) ? realRateDict[fund.FundCode] : 0;
-                                double dailyProfit = Math.Round(fund.HoldAmount * (realRate / 10.0), 2);
-                                double fundRealTimeAmount = fund.HoldAmount + dailyProfit;
-                                double fundTotalProfit = Math.Round(fundRealTimeAmount - fundCost, 2);
-                                double fundTotalRate = fundCost > 0 ? Math.Round(((fundRealTimeAmount - fundCost) / fundCost) * 10.0, 2) : 0;
-
-                                fundArchiveEntries.Add(new DailyArchive
-                                {
-                                    Username = username,
-                                    FundCode = fund.FundCode,
-                                    FundName = fund.FundName,
-                                    RecordDate = today,
-                                    Assets = fund.HoldAmount,
-                                    DailyProfit = dailyProfit,
-                                    DailyRate = Math.Round(realRate, 2),
-                                    TotalProfit = fundTotalProfit,
-                                    TotalRate = fundTotalRate
-                                });
-                            }
-
-                            double totalDailyProfit = fundArchiveEntries.Sum(a => a.DailyProfit);
-                            double totalRealTimeAssets = totalAssets + totalDailyProfit;
-                            double totalCostForCalc = totalCost > 0 ? totalCost : totalAssets;
-                            double totalTotalProfit = Math.Round(totalRealTimeAssets - totalCostForCalc, 2);
-                            double totalTotalRate = totalCostForCalc > 0 ? Math.Round(((totalRealTimeAssets - totalCostForCalc) / totalCostForCalc) * 100.0, 2) : 0;
-                            double totalDailyRate = totalCostForCalc > 0 ? Math.Round((totalDailyProfit / totalCostForCalc) * 100.0, 2) : 0;
-
-                            foreach (var entry in fundArchiveEntries)
-                            {
-                                _context.DailyArchives.Add(entry);
-                            }
-
-                            _context.DailyArchives.Add(new DailyArchive
-                            {
-                                Username = username,
-                                FundCode = "TOTAL",
-                                FundName = "总阵地",
-                                RecordDate = today,
-                                Assets = totalAssets,
-                                DailyProfit = Math.Round(totalDailyProfit, 2),
-                                DailyRate = totalDailyRate,
-                                TotalProfit = totalTotalProfit,
-                                TotalRate = totalTotalRate
-                            });
-
-                            await _context.SaveChangesAsync();
-                            hasAutoArchivedToday = true;
-                            Console.WriteLine($"[自动封存] ✅ 指挥官 {username} 的 {todayDash} 战报已自动封存！");
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine($"[自动封存] ❌ 封存异常: {ex.Message}");
-                        }
-                    }
-                    else
-                    {
-                        hasAutoArchivedToday = true;
-                    }
-                }
-
                 var result = myFunds.Select(config =>
                 {
                     var fundRecords = todayRecords.Where(r => r.FundCode == config.FundCode).ToList();
@@ -718,7 +637,7 @@ namespace 估值助手.Controllers
 
                     if (lastRecord != null)
                     {
-                        dataPoints.Add(new object[] { todayStr + " 09:30:0", Math.Round(lastRecord.EstimatedRate + avgDiff, 2) });
+                        dataPoints.Add(new object[] { todayStr + " 09:30:00", Math.Round(lastRecord.EstimatedRate + avgDiff, 2) });
                     }
 
                     dataPoints.AddRange(fundRecords.Select(r => new object[] {
@@ -731,6 +650,7 @@ namespace 估值助手.Controllers
                         dataPoints.Add(new object[] { todayStr + " 09:30:00", 0 });
                     }
 
+                    // 是否已截获真实净值
                     bool isSettled = realRateDict.ContainsKey(config.FundCode);
                     double? actualRate = isSettled ? realRateDict[config.FundCode] : null;
 
@@ -744,14 +664,14 @@ namespace 估值助手.Controllers
                         code = config.FundCode,
                         name = config.FundName,
                         amount = currentAmount,
-                        shares = config.HoldShares,
+                        shares = config.HoldShares, // 修复前端需要的份额字段
                         cost = cost > 0 ? cost : (double?)null,
                         existingReturnRate = existingReturnRate,
                         breakEvenRate = breakEvenRate,
                         diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
                         calibrationOffset = Math.Round(avgDiff, 4),
                         data = dataPoints,
-                        isSettled = isSettled,
+                        isSettled = isSettled,    // 传给前端的真实引信
                         actualRate = actualRate
                     };
                 });
@@ -767,103 +687,6 @@ namespace 估值助手.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, $"服务器当场阵亡：{ex.Message}");
-            }
-        }
-
-
-                [HttpGet("auto-archive-nightly")]
-        public async Task<IActionResult> AutoArchiveNightly()
-        {
-            try
-            {
-                var localTime = DateTime.UtcNow.AddHours(8);
-                var today = localTime.Date;
-
-                var allFunds = await _context.MyFunds.ToListAsync();
-                if (!allFunds.Any()) return Ok("无阵地需要封存。");
-
-                var userGroups = allFunds.GroupBy(f => f.Username);
-                int savedCount = 0;
-
-                foreach (var group in userGroups)
-                {
-                    string username = group.Key;
-                    var userFunds = group.ToList();
-
-                    bool alreadyArchived = await _context.DailyArchives
-                        .AnyAsync(a => a.Username == username && a.RecordDate == today);
-                    if (alreadyArchived) continue;
-
-                    double totalAssets = 0;
-                    double totalCost = 0;
-                    var fundArchiveEntries = new List<DailyArchive>();
-
-                    foreach (var fund in userFunds)
-                    {
-                        totalAssets += fund.HoldAmount;
-                        double fundCost = fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount;
-                        totalCost += fundCost;
-
-                        var todayRecord = await _context.FundRecords
-                            .Where(r => r.FundCode == fund.FundCode && r.FetchTime >= today)
-                            .OrderByDescending(r => r.FetchTime)
-                            .FirstOrDefaultAsync();
-
-                        double dailyRate = todayRecord?.ActualRate > 0 ? todayRecord.ActualRate : (todayRecord?.EstimatedRate ?? 0);
-                        double dailyProfit = Math.Round(fund.HoldAmount * (dailyRate / 100.0), 2);
-
-                        double fundRealTimeAmount = fund.HoldAmount + dailyProfit;
-                        double fundTotalProfit = Math.Round(fundRealTimeAmount - fundCost, 2);
-                        double fundTotalRate = fundCost > 0 ? Math.Round(((fundRealTimeAmount - fundCost) / fundCost) * 100.0, 2) : 0;
-
-                        fundArchiveEntries.Add(new DailyArchive
-                        {
-                            Username = username,
-                            FundCode = fund.FundCode,
-                            FundName = fund.FundName,
-                            RecordDate = today,
-                            Assets = fund.HoldAmount,
-                            DailyProfit = dailyProfit,
-                            DailyRate = Math.Round(dailyRate, 2),
-                            TotalProfit = fundTotalProfit,
-                            TotalRate = fundTotalRate
-                        });
-                    }
-
-                    double totalDailyProfit = fundArchiveEntries.Sum(a => a.DailyProfit);
-                    double totalRealTimeAssets = totalAssets + totalDailyProfit;
-                    double totalCostForCalc = totalCost > 0 ? totalCost : totalAssets;
-                    double totalTotalProfit = Math.Round(totalRealTimeAssets - totalCostForCalc, 2);
-                    double totalTotalRate = totalCostForCalc > 0 ? Math.Round(((totalRealTimeAssets - totalCostForCalc) / totalCostForCalc) * 100.0, 2) : 0;
-                    double totalDailyRate = totalCostForCalc > 0 ? Math.Round((totalDailyProfit / totalCostForCalc) * 100.0, 2) : 0;
-
-                    foreach (var entry in fundArchiveEntries)
-                    {
-                        _context.DailyArchives.Add(entry);
-                    }
-
-                    _context.DailyArchives.Add(new DailyArchive
-                    {
-                        Username = username,
-                        FundCode = "TOTAL",
-                        FundName = "总阵地",
-                        RecordDate = today,
-                        Assets = totalAssets,
-                        DailyProfit = Math.Round(totalDailyProfit, 2),
-                        DailyRate = totalDailyRate,
-                        TotalProfit = totalTotalProfit,
-                        TotalRate = totalTotalRate
-                    });
-
-                    savedCount++;
-                }
-
-                await _context.SaveChangesAsync();
-                return Ok($"[{localTime:yyyy-MM-dd HH:mm:ss}] 🌙 夜间自动战报封存完毕！成功为 {savedCount} 位指挥官生成了历史档案。");
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, $"自动封存引擎异常: {ex.Message}");
             }
         }
 
@@ -1223,63 +1046,121 @@ namespace 估值助手.Controllers
             }
         }
 
-                        // 🚀 核心封存引信 (修复浮点数 + 确保所有字段完整保存)
-                const saveDailyArchive = async (silent = false) => {
-                    if (!silent && !confirm("💾 确定要将大屏当前的数据作为【今日最终战报】永久封存吗？")) return;
-                    let d = new Date();
-                    let localDateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        [HttpPost("save-archive")]
+        public async Task<IActionResult> SaveArchive([FromBody] ArchiveRequest req)
+        {
+            if (string.IsNullOrEmpty(req.Username)) return Unauthorized();
 
-                    // 核心修复：强制截断所有浮点数精度，防止 C# decimal 绑定崩溃
-                    const safeNumber = (val) => {
-                        const n = parseFloat(val);
-                        return isNaN(n) ? 0 : Number(n.toFixed(2));
-                    };
+            try
+            {
+                var date = DateTime.Parse(req.DateStr).Date;
 
-                    const payload = {
-                        username: currentUser.value,
-                        dateStr: localDateStr,
-                        total: {
-                            fundName: "总阵地",
-                            fundCode: "TOTAL",
-                            assets: safeNumber(totalPrincipal.value),
-                            dailyProfit: safeNumber(totalTodayProfit.value),
-                            dailyRate: safeNumber(totalTodayRate.value),
-                            totalProfit: safeNumber(totalProfit.value),
-                            totalRate: safeNumber(totalRate.value)
-                        },
-                        funds: fundsList.value.map(f => ({
-                            fundCode: f.code,
-                            fundName: f.name,
-                            assets: safeNumber(f.amount),
-                            dailyProfit: safeNumber(f.todayProfit),
-                            dailyRate: safeNumber(f.currentRate),
-                            totalProfit: safeNumber(f.estimatedProfit),
-                            totalRate: safeNumber(f.existingReturnRate)
-                        }))
-                    };
+                var oldRecords = await _context.DailyArchives
+                    .Where(a => a.Username == req.Username && a.RecordDate == date)
+                    .ToListAsync();
+                if (oldRecords.Any()) _context.DailyArchives.RemoveRange(oldRecords);
 
-                    console.log("📦 封存载荷:", JSON.stringify(payload, null, 2));
+                req.Total.RecordDate = date;
+                req.Total.FundCode = "TOTAL";
+                req.Total.Username = req.Username;
+                _context.DailyArchives.Add(req.Total);
 
-                    try {
-                        const response = await fetch(`${API_BASE}/api/fund/save-archive`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(payload)
+                foreach (var f in req.Funds)
+                {
+                    f.RecordDate = date;
+                    f.Username = req.Username;
+                    _context.DailyArchives.Add(f);
+                }
+
+                await _context.SaveChangesAsync();
+                return Ok("✅ 今日战报已永久封存！");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"封存失败: {ex.Message}");
+            }
+        }
+
+        [HttpGet("auto-archive-nightly")]
+        public async Task<IActionResult> AutoArchiveNightly()
+        {
+            try
+            {
+                var localTime = DateTime.UtcNow.AddHours(8);
+                var today = localTime.Date;
+
+                var allFunds = await _context.MyFunds.ToListAsync();
+                if (!allFunds.Any()) return Ok("无阵地需要封存。");
+
+                var userGroups = allFunds.GroupBy(f => f.Username);
+                int savedCount = 0;
+
+                foreach (var group in userGroups)
+                {
+                    string username = group.Key;
+                    var userFunds = group.ToList();
+
+                    // 如果今晚已经成功封存过，直接跳过，防重复
+                    bool alreadyArchived = await _context.DailyArchives
+                        .AnyAsync(a => a.Username == username && a.RecordDate == today);
+                    if (alreadyArchived) continue;
+
+                    double totalAssets = 0;
+                    double totalCost = 0;
+
+                    foreach (var fund in userFunds)
+                    {
+                        totalAssets += fund.HoldAmount;
+                        totalCost += (fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount);
+
+                        var todayRecord = await _context.FundRecords
+                            .Where(r => r.FundCode == fund.FundCode && r.FetchTime >= today)
+                            .OrderByDescending(r => r.FetchTime)
+                            .FirstOrDefaultAsync();
+
+                        double dailyRate = todayRecord?.ActualRate > 0 ? todayRecord.ActualRate : (todayRecord?.EstimatedRate ?? 0);
+                        double dailyProfit = fund.HoldAmount * (dailyRate / 100.0);
+
+                        _context.DailyArchives.Add(new DailyArchive
+                        {
+                            Username = username,
+                            FundCode = fund.FundCode,
+                            FundName = fund.FundName,
+                            RecordDate = today,
+                            Assets = fund.HoldAmount,
+                            DailyProfit = Math.Round(dailyProfit, 2),
+                            DailyRate = Math.Round(dailyRate, 2)
                         });
-                        const resultText = await response.text();
-                        if (response.ok) {
-                            if (!silent) showToast("✅ 今日战报已安全锁入密码箱！", "success");
-                            console.log("✅ 封存成功:", resultText);
-                        } else {
-                            if (!silent) showToast("❌ 封存受阻: " + resultText, "error");
-                            console.error("❌ 封存失败:", resultText);
-                        }
-                    } catch (e) {
-                        if (!silent) showToast("🌐 指挥中心失联", "error");
-                        console.error("🌐 封存网络异常:", e);
                     }
-                };
 
+                    double totalDailyProfit = _context.DailyArchives.Local
+                        .Where(a => a.Username == username && a.FundCode != "TOTAL" && a.RecordDate == today)
+                        .Sum(a => a.DailyProfit);
+
+                    double totalDailyRate = totalCost > 0 ? (totalDailyProfit / totalCost) * 100 : 0;
+
+                    _context.DailyArchives.Add(new DailyArchive
+                    {
+                        Username = username,
+                        FundCode = "TOTAL",
+                        FundName = "总阵地",
+                        RecordDate = today,
+                        Assets = totalAssets,
+                        DailyProfit = Math.Round(totalDailyProfit, 2),
+                        DailyRate = Math.Round(totalDailyRate, 2)
+                    });
+
+                    savedCount++;
+                }
+
+                await _context.SaveChangesAsync();
+                return Ok($"[{localTime:yyyy-MM-dd HH:mm:ss}] 🌙 夜间自动战报封存完毕！成功为 {savedCount} 位指挥官生成了历史档案。");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"自动封存引擎异常: {ex.Message}");
+            }
+        }
 
         [HttpGet("get-archives")]
         public async Task<IActionResult> GetArchives([FromQuery] string username)
