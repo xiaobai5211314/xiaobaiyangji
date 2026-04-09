@@ -980,9 +980,17 @@
                             } else { fund.currentRate = 0; fund.isHoliday = true; }
 
                             // 算钱
-                            fund.todayProfit = (fund.amount * (fund.currentRate / 100)).toFixed(2);
-                            const profitVal = parseFloat(fund.todayProfit);
-                            if (!isNaN(profitVal)) { tToday += profitVal; }
+                            // 💰 核心算力替换：如果系统进入盘后，且后端送来了绝对物理利润，直接覆盖！
+if (fund.isSettled && fund.actualExactProfit !== undefined && fund.actualExactProfit !== null) {
+    fund.todayProfit = fund.actualExactProfit.toFixed(2);
+} else {
+    // 盘中或无份额时，依然使用百分比估算
+    fund.todayProfit = (fund.amount * (fund.currentRate / 100)).toFixed(2);
+}
+
+const profitVal = parseFloat(fund.todayProfit);
+if (!isNaN(profitVal)) { tToday += profitVal; }
+
 
                             // 把最新的今日收益累加进所有档案！
                             let currentRealTimeAmount = fund.amount + profitVal;
