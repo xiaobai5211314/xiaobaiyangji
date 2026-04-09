@@ -1141,37 +1141,53 @@ return new
                             .OrderByDescending(r => r.FetchTime)
                             .FirstOrDefaultAsync();
 
-                        double dailyRate = todayRecord?.ActualRate > 0 ? todayRecord.ActualRate : (todayRecord?.EstimatedRate ?? 0);
-                        double dailyProfit = fund.HoldAmount * (dailyRate / 100.0);
+                        // 算钱逻辑
+double dailyRate = todayRecord?.ActualRate > 0 ? todayRecord.ActualRate : (todayRecord?.EstimatedRate ?? 0);
+double dailyProfit = fund.HoldAmount * (dailyRate / 100.0);
 
-                        _context.DailyArchives.Add(new DailyArchive
-                        {
-                            Username = username,
-                            FundCode = fund.FundCode,
-                            FundName = fund.FundName,
-                            RecordDate = today,
-                            Assets = fund.HoldAmount,
-                            DailyProfit = Math.Round(dailyProfit, 2),
-                            DailyRate = Math.Round(dailyRate, 2)
-                        });
+// 🚀 核心补丁：加入历史总收益的剥离与计算
+double cost = fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount; 
+double currentAssets = fund.HoldAmount + dailyProfit; // 当日清算后的实际最新市值
+double totalProfit = currentAssets - cost;
+double totalRate = cost > 0 ? (totalProfit / cost * 100.0) : 0;
+
+_context.DailyArchives.Add(new DailyArchive
+{
+    Username = username,
+    FundCode = fund.FundCode,
+    FundName = fund.FundName,
+    RecordDate = today,
+    Assets = fund.HoldAmount,
+    DailyProfit = Math.Round(dailyProfit, 2),
+    DailyRate = Math.Round(dailyRate, 2),
+    TotalProfit = Math.Round(totalProfit, 2), // 🎯 补填
+    TotalRate = Math.Round(totalRate, 2)      // 🎯 补填
+});
+
                     }
 
                     double totalDailyProfit = _context.DailyArchives.Local
-                        .Where(a => a.Username == username && a.FundCode != "TOTAL" && a.RecordDate == today)
-                        .Sum(a => a.DailyProfit);
+    .Where(a => a.Username == username && a.FundCode != "TOTAL" && a.RecordDate == today)
+    .Sum(a => a.DailyProfit);
+double totalDailyRate = totalCost > 0 ? (totalDailyProfit / totalCost) * 100 : 0;
 
-                    double totalDailyRate = totalCost > 0 ? (totalDailyProfit / totalCost) * 100 : 0;
+// 🚀 核心补丁：总阵地的累计盈亏核算
+double currentTotalAssetsAfter = totalAssets + totalDailyProfit;
+double totalCampProfit = currentTotalAssetsAfter - totalCost;
+double totalCampRate = totalCost > 0 ? (totalCampProfit / totalCost * 100.0) : 0;
 
-                    _context.DailyArchives.Add(new DailyArchive
-                    {
-                        Username = username,
-                        FundCode = "TOTAL",
-                        FundName = "总阵地",
-                        RecordDate = today,
-                        Assets = totalAssets,
-                        DailyProfit = Math.Round(totalDailyProfit, 2),
-                        DailyRate = Math.Round(totalDailyRate, 2)
-                    });
+_context.DailyArchives.Add(new DailyArchive
+{
+    Username = username,
+    FundCode = "TOTAL",
+    FundName = "总阵地",
+    RecordDate = today,
+    Assets = totalAssets,
+    DailyProfit = Math.Round(totalDailyProfit, 2),
+    DailyRate = Math.Round(totalDailyRate, 2),
+    TotalProfit = Math.Round(totalCampProfit, 2), // 🎯 补填总阵地累计
+    TotalRate = Math.Round(totalCampRate, 2)      // 🎯 补填总阵地累计
+});
 
                     savedCount++;
                 }
