@@ -127,6 +127,46 @@ namespace 估值助手.Controllers
             }
         }
 
+        // 🚀 新增核心：单位净值刺探器 (逆向演算引擎组件)
+        private async Task<double> GetLatestNavAsync(string fundCode)
+        {
+            try
+            {
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                // 优先刺探高速缓存接口获取单位净值 (DWJZ)
+                string gzUrl = $"http://fundgz.1234567.com.cn/js/{fundCode}.js?rt={DateTime.Now.Ticks}";
+                string gzRes = await client.GetStringAsync(gzUrl);
+                var match = Regex.Match(gzRes, @"\""dwjz\"":\""([^\""]+)\""");
+                if (match.Success && double.TryParse(match.Groups[1].Value, out double dwjz) && dwjz > 0)
+                {
+                    return dwjz;
+                }
+            }
+            catch { }
+
+            try
+            {
+                // 备用方案：直捣东方财富 F10 底层接口
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
+                string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={fundCode}&pageIndex=1&pageSize=1";
+                string res = await client.GetStringAsync(url);
+                using var doc = JsonDocument.Parse(res);
+                var dataArray = doc.RootElement.GetProperty("Data").GetProperty("LSJZList");
+                if (dataArray.GetArrayLength() > 0)
+                {
+                    var latest = dataArray[0];
+                    if (double.TryParse(latest.GetProperty("DWJZ").GetString(), out double realNav) && realNav > 0)
+                    {
+                        return realNav;
+                    }
+                }
+            }
+            catch { }
+
+            return 0; // 无法获取净值时返回 0
+        }
+
         [HttpPost("import-ocr")]
         public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFormFile imageFile)
         {
@@ -258,10 +298,19 @@ namespace 估值助手.Controllers
                         {
                             double costAmount = Math.Round(holdAmount - holdingIncome, 2);
 
+                            // 🧠 逆向演算引擎启动：通过总金额反推物理份额
+                            double dwjz = await GetLatestNavAsync(finalBestMatch.Code);
+                            double calculatedShares = 0;
+                            if (dwjz > 0)
+                            {
+                                calculatedShares = Math.Round(holdAmount / dwjz, 2);
+                            }
+
                             if (userFundDict.TryGetValue(finalBestMatch.Code, out var exist))
                             {
                                 exist.HoldAmount = holdAmount;
                                 exist.CostAmount = costAmount;
+                                if (calculatedShares > 0) exist.HoldShares = calculatedShares; // 自动注入精确份额
                                 _context.MyFunds.Update(exist);
                             }
                             else
@@ -272,17 +321,20 @@ namespace 估值助手.Controllers
                                     FundCode = finalBestMatch.Code,
                                     FundName = finalBestMatch.Name,
                                     HoldAmount = holdAmount,
-                                    CostAmount = costAmount
+                                    CostAmount = costAmount,
+                                    HoldShares = calculatedShares // 自动注入精确份额
                                 };
                                 _context.MyFunds.Add(newFund);
                                 userFundDict[newFund.FundCode] = newFund;
                             }
                             importedCount++;
 
+                            string shareLog = calculatedShares > 0 ? $" [反推份额: {calculatedShares}]" : "";
+
                             if (finalBestScore >= 99.0)
-                                debugLog.Add($"⚡ 精准命中: {finalBestMatch.Name}");
+                                debugLog.Add($"⚡ 精准命中: {finalBestMatch.Name}{shareLog}");
                             else
-                                debugLog.Add($"✅ 模糊修复: {finalBestMatch.Name} ({finalBestScore:F1}%)");
+                                debugLog.Add($"✅ 模糊修复: {finalBestMatch.Name} ({finalBestScore:F1}%){shareLog}");
                         }
                     }
                 }
