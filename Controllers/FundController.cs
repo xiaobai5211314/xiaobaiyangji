@@ -168,185 +168,197 @@ namespace 估值助手.Controllers
         }
 
         [HttpPost("import-ocr")]
-        public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFormFile imageFile)
+public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFormFile imageFile)
+{
+    if (string.IsNullOrEmpty(username)) return Unauthorized("请提供指挥官代号");
+
+    var allFunds = await GetAllFundsAsync();
+    var userFundDict = await _context.MyFunds
+        .Where(f => f.Username == username)
+        .ToDictionaryAsync(f => f.FundCode);
+
+    byte[] finalProcessedBytes = null;
+    List<string> debugLog = new List<string>();
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+
+    try
+    {
+        using (var inputStream = imageFile.OpenReadStream())
         {
-            if (string.IsNullOrEmpty(username)) return Unauthorized("请提供指挥官代号");
-
-            var allFunds = await GetAllFundsAsync();
-            var userFundDict = await _context.MyFunds
-                .Where(f => f.Username == username)
-                .ToDictionaryAsync(f => f.FundCode);
-
-            byte[] finalProcessedBytes = null;
-            List<string> debugLog = new List<string>();
-            var watch = System.Diagnostics.Stopwatch.StartNew();
-
-            try
+            using (Image image = Image.Load(inputStream))
             {
-                using (var inputStream = imageFile.OpenReadStream())
+                int targetMaxWidth = 1080;
+                if (image.Width > targetMaxWidth)
                 {
-                    using (Image image = Image.Load(inputStream))
-                    {
-                        int targetMaxWidth = 1080;
-                        if (image.Width > targetMaxWidth)
-                        {
-                            int newHeight = (int)((double)image.Height / image.Width * targetMaxWidth);
-                            image.Mutate(x => x.Resize(targetMaxWidth, newHeight));
-                        }
-                        image.Mutate(x => x.BackgroundColor(Color.White));
-                        using (var outputStream = new MemoryStream())
-                        {
-                            image.SaveAsJpeg(outputStream, new JpegEncoder { Quality = 60 });
-                            finalProcessedBytes = outputStream.ToArray();
-                        }
-                    }
+                    int newHeight = (int)((double)image.Height / image.Width * targetMaxWidth);
+                    image.Mutate(x => x.Resize(targetMaxWidth, newHeight));
                 }
-                debugLog.Add($"⏱️ 图片压缩耗时: {watch.ElapsedMilliseconds} ms");
-                watch.Restart();
-
-                var ocrTask = Task.Run(() => _baiduOcrClient.AccurateBasic(finalProcessedBytes));
-
-                if (await Task.WhenAny(ocrTask, Task.Delay(15000)) != ocrTask)
+                image.Mutate(x => x.BackgroundColor(Color.White));
+                using (var outputStream = new MemoryStream())
                 {
-                    return StatusCode(500, $"❌ 识别超时熔断！");
+                    image.SaveAsJpeg(outputStream, new JpegEncoder { Quality = 60 });
+                    finalProcessedBytes = outputStream.ToArray();
                 }
-
-                var result = await ocrTask;
-                debugLog.Add($"⏱️ 百度 OCR 耗时: {watch.ElapsedMilliseconds} ms");
-
-                var texts = (result["words_result"] as JArray)?.Select(x => x["words"].ToString().Trim()).ToList() ?? new List<string>();
-                if (texts.Count == 0) return BadRequest("❌ OCR未能识别出任何文字");
-
-                int importedCount = 0;
-                string amountPattern = @"^\d[\d,]*\.\d{2}$";
-
-                for (int i = 1; i < texts.Count; i++)
-                {
-                    string currentLine = texts[i];
-
-                    if (Regex.IsMatch(currentLine, amountPattern))
-                    {
-                        string namePart1 = texts[i - 1];
-
-                        if (namePart1.Contains("收益") || namePart1.Contains("金额") || namePart1.Contains("包含") || Regex.IsMatch(namePart1, @"^[-\d\.,%]+$"))
-                            continue;
-
-                        double holdAmount = double.Parse(currentLine.Replace(",", ""));
-                        double holdingIncome = 0;
-                        string potentialFragment = "";
-
-                        for (int j = 1; j <= 5 && (i + j) < texts.Count; j++)
-                        {
-                            string nextLine = texts[i + j];
-                            if (holdingIncome == 0 && Regex.IsMatch(nextLine, @"^[-+]\d[\d,]*\.\d{2}$"))
-                            {
-                                holdingIncome = double.Parse(nextLine.Replace(",", ""));
-                            }
-                            else if (string.IsNullOrEmpty(potentialFragment) && !Regex.IsMatch(nextLine, @"^[-\d\.,%+]+$") && !nextLine.Contains("金选") && !nextLine.Contains("收益") && !nextLine.Contains("更新"))
-                            {
-                                potentialFragment = nextLine;
-                            }
-                        }
-
-                        string[] testNames = string.IsNullOrEmpty(potentialFragment)
-                            ? new[] { namePart1 }
-                            : new[] { namePart1, namePart1 + potentialFragment };
-
-                        FundInfoCache finalBestMatch = null;
-                        double finalBestScore = 0;
-
-                        foreach (var testName in testNames)
-                        {
-                            string pureChinese = Regex.Replace(testName, @"[^\u4e00-\u9fa5]", "");
-                            if (pureChinese.Length < 2) continue;
-
-                            string normalizedOcr = NormalizeFundName(testName);
-                            FundInfoCache bestMatch = null;
-                            double bestScore = 0;
-
-                            if (_exactMatchDict != null && (_exactMatchDict.TryGetValue(normalizedOcr, out var exactFund) || _exactMatchDict.TryGetValue(testName, out exactFund)))
-                            {
-                                bestMatch = exactFund;
-                                bestScore = 100.0;
-                            }
-                            else
-                            {
-                                var candidates = allFunds.Where(f => f.NormalizedName.Contains(pureChinese) ||
-                                                                    pureChinese.Contains(f.NormalizedName.Substring(0, Math.Min(3, f.NormalizedName.Length))));
-
-                                foreach (var f in candidates)
-                                {
-                                    double similarity = CalculateSimilarity(normalizedOcr, f.NormalizedName);
-                                    double currentScore = similarity * 100;
-
-                                    if (currentScore > bestScore)
-                                    {
-                                        bestScore = currentScore;
-                                        bestMatch = f;
-                                    }
-                                }
-                            }
-
-                            if (bestScore > finalBestScore)
-                            {
-                                finalBestScore = bestScore;
-                                finalBestMatch = bestMatch;
-                            }
-                        }
-
-                        if (finalBestMatch != null && finalBestScore > 65 && holdAmount > 0)
-                        {
-                            double costAmount = Math.Round(holdAmount - holdingIncome, 2);
-
-                            // 🧠 逆向演算引擎启动：通过总金额反推物理份额
-                            double dwjz = await GetLatestNavAsync(finalBestMatch.Code);
-                            double calculatedShares = 0;
-                            if (dwjz > 0)
-                            {
-                                calculatedShares = Math.Round(holdAmount / dwjz, 2);
-                            }
-
-                            if (userFundDict.TryGetValue(finalBestMatch.Code, out var exist))
-                            {
-                                exist.HoldAmount = holdAmount;
-                                exist.CostAmount = costAmount;
-                                if (calculatedShares > 0) exist.HoldShares = calculatedShares; // 自动注入精确份额
-                                _context.MyFunds.Update(exist);
-                            }
-                            else
-                            {
-                                var newFund = new MyFundConfig
-                                {
-                                    Username = username,
-                                    FundCode = finalBestMatch.Code,
-                                    FundName = finalBestMatch.Name,
-                                    HoldAmount = holdAmount,
-                                    CostAmount = costAmount,
-                                    HoldShares = calculatedShares // 自动注入精确份额
-                                };
-                                _context.MyFunds.Add(newFund);
-                                userFundDict[newFund.FundCode] = newFund;
-                            }
-                            importedCount++;
-
-                            string shareLog = calculatedShares > 0 ? $" [反推份额: {calculatedShares}]" : "";
-
-                            if (finalBestScore >= 99.0)
-                                debugLog.Add($"⚡ 精准命中: {finalBestMatch.Name}{shareLog}");
-                            else
-                                debugLog.Add($"✅ 模糊修复: {finalBestMatch.Name} ({finalBestScore:F1}%){shareLog}");
-                        }
-                    }
-                }
-
-                await _context.SaveChangesAsync();
-                return Ok($"识别完成！成功同步 {importedCount} 只。\n\n[诊断日志]\n{string.Join("\n", debugLog)}");
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, $"❌ 代码执行出现异常: {ex.Message}");
             }
         }
+        debugLog.Add($"⏱️ 图片压缩耗时: {watch.ElapsedMilliseconds} ms");
+        watch.Restart();
+
+        var ocrTask = Task.Run(() => _baiduOcrClient.AccurateBasic(finalProcessedBytes));
+
+        if (await Task.WhenAny(ocrTask, Task.Delay(15000)) != ocrTask)
+        {
+            return StatusCode(500, $"❌ 识别超时熔断！");
+        }
+
+        var result = await ocrTask;
+        debugLog.Add($"⏱️ 百度 OCR 耗时: {watch.ElapsedMilliseconds} ms");
+
+        var texts = (result["words_result"] as JArray)?.Select(x => x["words"].ToString().Trim()).ToList() ?? new List<string>();
+        if (texts.Count == 0) return BadRequest("❌ OCR未能识别出任何文字");
+
+        int importedCount = 0;
+        string amountPattern = @"^\d[\d,]*\.\d{2}$";
+
+        for (int i = 1; i < texts.Count; i++)
+        {
+            string currentLine = texts[i];
+
+            // 锁定第一个两位小数的纯数字作为“持有金额”
+            if (Regex.IsMatch(currentLine, amountPattern))
+            {
+                string namePart1 = texts[i - 1];
+
+                if (namePart1.Contains("收益") || namePart1.Contains("金额") || namePart1.Contains("包含") || Regex.IsMatch(namePart1, @"^[-\d\.,%]+$"))
+                    continue;
+
+                double holdAmount = double.Parse(currentLine.Replace(",", ""));
+                double holdingIncome = 0;
+                double holdShares = 0; // 🚀 新增：份额探测器
+                string potentialFragment = "";
+
+                // 🚀 雷达扫描范围扩大到接下来 6 行，进行多维特征识别
+                for (int j = 1; j <= 6 && (i + j) < texts.Count; j++)
+                {
+                    string nextLine = texts[i + j];
+                    
+                    // 特征 1: 如果是带正负号的数字 -> 锁定为“持有收益”
+                    if (holdingIncome == 0 && Regex.IsMatch(nextLine, @"^[-+]\d[\d,]*\.\d{2}$"))
+                    {
+                        holdingIncome = double.Parse(nextLine.Replace(",", ""));
+                    }
+                    // 特征 2: 如果是无正负号的两位小数，且还没找到份额 -> 锁定为“持仓份额”
+                    else if (holdShares == 0 && Regex.IsMatch(nextLine, @"^\d[\d,]*\.\d{2}$"))
+                    {
+                        holdShares = double.Parse(nextLine.Replace(",", ""));
+                    }
+                    // 特征 3: 捕获被换行截断的基金名称碎片
+                    else if (string.IsNullOrEmpty(potentialFragment) && !Regex.IsMatch(nextLine, @"^[-\d\.,%+]+$") && !nextLine.Contains("金选") && !nextLine.Contains("收益") && !nextLine.Contains("更新"))
+                    {
+                        potentialFragment = nextLine;
+                    }
+                }
+
+                string[] testNames = string.IsNullOrEmpty(potentialFragment)
+                    ? new[] { namePart1 }
+                    : new[] { namePart1, namePart1 + potentialFragment };
+
+                FundInfoCache finalBestMatch = null;
+                double finalBestScore = 0;
+
+                foreach (var testName in testNames)
+                {
+                    string pureChinese = Regex.Replace(testName, @"[^\u4e00-\u9fa5]", "");
+                    if (pureChinese.Length < 2) continue;
+
+                    string normalizedOcr = NormalizeFundName(testName);
+                    FundInfoCache bestMatch = null;
+                    double bestScore = 0;
+
+                    if (_exactMatchDict != null && (_exactMatchDict.TryGetValue(normalizedOcr, out var exactFund) || _exactMatchDict.TryGetValue(testName, out exactFund)))
+                    {
+                        bestMatch = exactFund;
+                        bestScore = 100.0;
+                    }
+                    else
+                    {
+                        var candidates = allFunds.Where(f => f.NormalizedName.Contains(pureChinese) ||
+                                                            pureChinese.Contains(f.NormalizedName.Substring(0, Math.Min(3, f.NormalizedName.Length))));
+
+                        foreach (var f in candidates)
+                        {
+                            double similarity = CalculateSimilarity(normalizedOcr, f.NormalizedName);
+                            double currentScore = similarity * 100;
+
+                            if (currentScore > bestScore)
+                            {
+                                bestScore = currentScore;
+                                bestMatch = f;
+                            }
+                        }
+                    }
+
+                    if (bestScore > finalBestScore)
+                    {
+                        finalBestScore = bestScore;
+                        finalBestMatch = bestMatch;
+                    }
+                }
+
+                // 🚀 核心保存与更新逻辑重构
+                if (finalBestMatch != null && finalBestScore > 65 && holdAmount > 0)
+                {
+                    if (userFundDict.TryGetValue(finalBestMatch.Code, out var exist))
+                    {
+                        exist.HoldAmount = holdAmount;
+                        
+                        // 🛡️ 本金保护机制：只有当截图中确实扫到了收益，才去覆盖更新本金，否则保持原样！
+                        if (holdingIncome != 0) 
+                        {
+                            exist.CostAmount = Math.Round(holdAmount - holdingIncome, 2);
+                        }
+                        
+                        // 🎯 份额注入机制：只要扫到了份额，立刻无缝注入
+                        if (holdShares > 0) 
+                        {
+                            exist.HoldShares = holdShares;
+                        }
+                        
+                        _context.MyFunds.Update(exist);
+                    }
+                    else
+                    {
+                        var newFund = new MyFundConfig
+                        {
+                            Username = username,
+                            FundCode = finalBestMatch.Code,
+                            FundName = finalBestMatch.Name,
+                            HoldAmount = holdAmount,
+                            CostAmount = holdingIncome != 0 ? Math.Round(holdAmount - holdingIncome, 2) : holdAmount,
+                            HoldShares = holdShares // 🎯 新增基金时直接注入份额
+                        };
+                        _context.MyFunds.Add(newFund);
+                        userFundDict[newFund.FundCode] = newFund;
+                    }
+                    importedCount++;
+
+                    if (finalBestScore >= 99.0)
+                        debugLog.Add($"⚡ 精准命中: {finalBestMatch.Name} [份额: {(holdShares > 0 ? holdShares.ToString() : "未扫描到")}]");
+                    else
+                        debugLog.Add($"✅ 模糊修复: {finalBestMatch.Name} ({finalBestScore:F1}%) [份额: {(holdShares > 0 ? holdShares.ToString() : "未扫描到")}]");
+                }
+            }
+        }
+
+        await _context.SaveChangesAsync();
+        return Ok($"识别完成！成功同步 {importedCount} 只。\n\n[诊断日志]\n{string.Join("\n", debugLog)}");
+    }
+    catch (Exception ex)
+    {
+        return StatusCode(500, $"❌ 代码执行出现异常: {ex.Message}");
+    }
+}
+
 
         private string ExtractFundClass(string name)
         {
