@@ -227,47 +227,54 @@ public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFo
             // 锁定第一个两位小数的纯数字作为“持有金额”
             if (Regex.IsMatch(currentLine, amountPattern))
             {
-                // 🚀 核心修复：逆向过滤雷达！向上搜索真正的基金名称，跳过中间存在的涨幅或杂音
-                string namePart1 = "";
-                for (int k = i - 1; k >= 0; k--)
-                {
-                    string prevLine = texts[k];
-                    // 跳过杂音数据（数字、百分比、"已更新"标签、"份额"等表头文字）
-                    if (prevLine.Contains("收益") || prevLine.Contains("金额") || prevLine.Contains("份额") || prevLine.Contains("天数") || prevLine.Contains("已更新") || Regex.IsMatch(prevLine, @"^[-\d\.,%+]+$"))
-                    {
-                        continue;
-                    }
-                    namePart1 = prevLine; // 成功锁定真实名称
-                    break;
-                }
+                        // 🚀 核心修复：逆向过滤雷达！向上搜索真正的基金名称，跳过中间存在的涨幅或杂音
+                        // 🚀 核心修复：逆向过滤雷达！加入对“金选”和“市场解读”等干扰标签的免疫
+                        string namePart1 = "";
+                        for (int k = i - 1; k >= 0; k--)
+                        {
+                            string prevLine = texts[k];
+                            // 跳过杂音数据（新增对“金选”、“市场解读”、“理财”等标签的屏蔽）
+                            if (prevLine.Contains("收益") || prevLine.Contains("金额") || prevLine.Contains("份额") || prevLine.Contains("天数") || prevLine.Contains("已更新") || prevLine.Contains("金选") || prevLine.Contains("市场解读") || Regex.IsMatch(prevLine, @"^[-\d\.,%+]+$"))
+                            {
+                                continue;
+                            }
+                            namePart1 = prevLine; // 成功锁定真实名称
+                            break;
+                        }
 
-                if (string.IsNullOrEmpty(namePart1)) continue;
+                        if (string.IsNullOrEmpty(namePart1)) continue;
 
                 double holdAmount = double.Parse(currentLine.Replace(",", ""));
                 double holdingIncome = 0;
                 double holdShares = 0;
                 string potentialFragment = "";
 
-                // 向下扫描寻找份额和收益
-                for (int j = 1; j <= 6 && (i + j) < texts.Count; j++)
-                {
-                    string nextLine = texts[i + j];
-                    
-                    if (holdingIncome == 0 && Regex.IsMatch(nextLine, @"^[-+]\d[\d,]*\.\d{2}$"))
-                    {
-                        holdingIncome = double.Parse(nextLine.Replace(",", ""));
-                    }
-                    else if (holdShares == 0 && Regex.IsMatch(nextLine, @"^\d[\d,]*\.\d{2}$"))
-                    {
-                        holdShares = double.Parse(nextLine.Replace(",", ""));
-                    }
-                    else if (string.IsNullOrEmpty(potentialFragment) && !Regex.IsMatch(nextLine, @"^[-\d\.,%+]+$") && !nextLine.Contains("金选") && !nextLine.Contains("收益") && !nextLine.Contains("更新"))
-                    {
-                        potentialFragment = nextLine;
-                    }
-                }
+                        // 向下扫描寻找份额和收益 (加入物理隔离，防止抢夺下一个基金的数据)
+                        for (int j = 1; j <= 4 && (i + j) < texts.Count; j++) // 将扫描深度从 6 行缩减到 4 行
+                        {
+                            string nextLine = texts[i + j];
 
-                string[] testNames = string.IsNullOrEmpty(potentialFragment)
+                            // 🛡️ 防串台引信：如果遇到了连续4个以上的汉字（下一个基金的名字），立刻停止往下找份额！
+                            if (Regex.IsMatch(nextLine, @"[\u4e00-\u9fa5]{4,}") && !nextLine.Contains("金选") && !nextLine.Contains("市场解读"))
+                            {
+                                break;
+                            }
+
+                            if (holdingIncome == 0 && Regex.IsMatch(nextLine, @"^[-+]\d[\d,]*\.\d{2}$"))
+                            {
+                                holdingIncome = double.Parse(nextLine.Replace(",", ""));
+                            }
+                            else if (holdShares == 0 && Regex.IsMatch(nextLine, @"^\d[\d,]*\.\d{2}$"))
+                            {
+                                holdShares = double.Parse(nextLine.Replace(",", ""));
+                            }
+                            else if (string.IsNullOrEmpty(potentialFragment) && !Regex.IsMatch(nextLine, @"^[-\d\.,%+]+$") && !nextLine.Contains("金选") && !nextLine.Contains("收益") && !nextLine.Contains("更新") && !nextLine.Contains("市场解读"))
+                            {
+                                potentialFragment = nextLine;
+                            }
+                        }
+
+                        string[] testNames = string.IsNullOrEmpty(potentialFragment)
                     ? new[] { namePart1 }
                     : new[] { namePart1, namePart1 + potentialFragment };
 
