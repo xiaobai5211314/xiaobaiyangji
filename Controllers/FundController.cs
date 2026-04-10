@@ -695,24 +695,24 @@ bool isSettled = realRateDict.ContainsKey(config.FundCode);
 double? actualRate = isSettled ? realRateDict[config.FundCode] : null;
 
 // 🚀 新增这一行：尝试提取绝对物理利润
-double? actualExactProfit = exactProfitDict.ContainsKey(config.FundCode) ? exactProfitDict[config.FundCode] : null; 
+double? actualExactProfit = exactProfitDict.ContainsKey(config.FundCode) ? exactProfitDict[config.FundCode] : null;
 
-return new
-{
-    code = config.FundCode,
-    name = config.FundName,
-    amount = currentAmount,
-    shares = config.HoldShares, 
-    cost = cost > 0 ? cost : (double?)null,
-    existingReturnRate = existingReturnRate,
-    breakEvenRate = breakEvenRate,
-    diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
-    calibrationOffset = Math.Round(avgDiff, 4),
-    data = dataPoints,
-    isSettled = isSettled,    
-    actualRate = actualRate,
-    actualExactProfit = actualExactProfit // 🚀 将这把终极武器发给前端
-};
+                    return new
+                    {
+                        code = config.FundCode,
+                        name = config.FundName,
+                        amount = config.HoldAmount,  // 🚀 修复点：直接读取数据库中的昨日市值
+                        shares = config.HoldShares,
+                        cost = config.CostAmount > 0 ? config.CostAmount : (double?)null, // 🚀 修复点：直接读取数据库中的持仓本金
+                        existingReturnRate = 0,      // 🚀 修复点：前端现已全权接管实时计算，这里直接传 0 卸载后端压力
+                        breakEvenRate = 0,           // 🚀 同上，交由前端物理引擎动态计算
+                        diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
+                        calibrationOffset = Math.Round(avgDiff, 4),
+                        data = dataPoints,
+                        isSettled = isSettled,
+                        actualRate = actualRate,
+                        actualExactProfit = actualExactProfit // 将这把终极武器发给前端
+                    };
 
                 });
 
