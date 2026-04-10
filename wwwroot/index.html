@@ -10,334 +10,57 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <style>
-        html {
-            background-color: #0f172a;
-        }
-
-        [v-cloak] {
-            display: none !important;
-        }
-
+        html { background-color: #0f172a; }
+        [v-cloak] { display: none !important; }
         body {
-            margin: 0;
-            padding: 0;
+            margin: 0; padding: 0;
             background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
-            color: #f8fafc;
-            font-family: -apple-system, sans-serif;
-            overflow-x: hidden;
-            min-height: 100vh;
+            color: #f8fafc; font-family: -apple-system, sans-serif;
+            overflow-x: hidden; min-height: 100vh;
         }
-
         .glass-panel {
-            background: rgba(30, 41, 59, 0.4);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 16px;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            background: rgba(30, 41, 59, 0.4); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
         }
-
-        .header {
-            margin: 15px;
-            padding: 15px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-            .header h1 {
-                margin: 0;
-                font-size: 20px;
-                background: linear-gradient(to right, #00f2fe 0%, #4facfe 100%);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                font-weight: 800;
-            }
-
-        .control-panel {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-
-            .control-panel input {
-                background: rgba(15, 23, 42, 0.6);
-                border: 1px solid rgba(255,255,255,0.15);
-                color: #00e5ff;
-                padding: 8px 15px;
-                border-radius: 20px;
-                outline: none;
-                width: 140px;
-                transition: 0.3s;
-            }
-
-        .btn-add {
-            background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
-            color: #fff;
-            border: none;
-            padding: 9px 20px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-
-        .btn-ocr {
-            background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
-            color: white;
-            border: none;
-            padding: 9px 15px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: 0.3s;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-            .btn-ocr:hover:not(:disabled) {
-                transform: translateY(-2px);
-                box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
-            }
-
-            .btn-ocr:disabled {
-                background: #475569;
-                cursor: not-allowed;
-                opacity: 0.7;
-            }
-
-        .btn-global {
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-            color: white;
-            border: none;
-            padding: 9px 15px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: 0.3s;
-        }
-
-            .btn-global:hover {
-                box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
-                transform: translateY(-2px);
-            }
-
-        .btn-logout {
-            background: transparent;
-            color: #ff4d4f;
-            border: 1px solid #ff4d4f;
-            padding: 8px 15px;
-            border-radius: 20px;
-            cursor: pointer;
-        }
-
-        .fund-list-container {
-            margin: 0 15px;
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-
-        .fund-card {
-            padding: 15px;
-            border-radius: 16px;
-            font-size: 13px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            position: relative;
-        }
-
-        .radar-badge {
-            background: rgba(255, 77, 79, 0.15);
-            color: #ff4d4f;
-            font-size: 11px;
-            padding: 2px 6px;
-            border-radius: 4px;
-            border: 1px solid rgba(255, 77, 79, 0.3);
-            animation: blink 2s infinite;
-        }
-
-        @keyframes blink {
-            50% {
-                opacity: 0.5;
-            }
-        }
-
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            background: rgba(0, 0, 0, 0.2);
-            padding: 10px;
-            border-radius: 10px;
-            text-align: center;
-        }
-
-        .metric-item {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .metric-label {
-            font-size: 11px;
-            color: #94a3b8;
-            margin-bottom: 3px;
-        }
-
-        .metric-value {
-            font-weight: bold;
-        }
-
-        .modal-mask {
-            position: fixed;
-            z-index: 1000;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.6);
-            backdrop-filter: blur(5px);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: 0.3s;
-        }
-
-        .modal-content {
-            background: #1e293b;
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 16px;
-            padding: 20px;
-            width: 90%;
-            max-width: 400px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-        }
-
-        .modal-input {
-            width: 100%;
-            background: #0f172a;
-            border: 1px solid rgba(255,255,255,0.1);
-            color: #fff;
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            box-sizing: border-box;
-        }
-
-        #chart-container {
-            width: calc(100vw - 30px);
-            height: calc(100vh - 280px);
-            margin: 15px;
-            box-sizing: border-box;
-        }
-
-        .divider {
-            width: 1px;
-            height: 40px;
-            background: rgba(255,255,255,0.1);
-        }
-
-        .skeleton-box {
-            background: linear-gradient(90deg, rgba(40,49,66,0.5) 25%, rgba(55,65,81,0.8) 37%, rgba(40,49,66,0.5) 63%);
-            background-size: 400% 100%;
-            animation: skeleton-loading 1.4s ease infinite;
-            border-radius: 8px;
-        }
-
-        @keyframes skeleton-loading {
-            0% {
-                background-position: 100% 50%;
-            }
-
-            100% {
-                background-position: 0 50%;
-            }
-        }
-
-        .toast-container {
-            position: fixed;
-            top: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            pointer-events: none;
-        }
-
-        .toast {
-            padding: 12px 24px;
-            border-radius: 30px;
-            color: #fff;
-            font-size: 14px;
-            font-weight: bold;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            animation: slideDown 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-            backdrop-filter: blur(10px);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-            .toast.success {
-                background: rgba(16, 185, 129, 0.9);
-                border: 1px solid #34d399;
-            }
-
-            .toast.error {
-                background: rgba(239, 68, 68, 0.9);
-                border: 1px solid #f87171;
-            }
-
-            .toast.info {
-                background: rgba(56, 189, 248, 0.9);
-                border: 1px solid #7dd3fc;
-            }
-
-        @keyframes slideDown {
-            0% {
-                transform: translateY(-50px) scale(0.9);
-                opacity: 0;
-            }
-
-            100% {
-                transform: translateY(0) scale(1);
-                opacity: 1;
-            }
-        }
-
+        .header { margin: 15px; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { margin: 0; font-size: 20px; background: linear-gradient(to right, #00f2fe 0%, #4facfe 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800; }
+        .control-panel { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .control-panel input { background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.15); color: #00e5ff; padding: 8px 15px; border-radius: 20px; outline: none; width: 140px; transition: 0.3s; }
+        .btn-add { background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%); color: #fff; border: none; padding: 9px 20px; border-radius: 20px; cursor: pointer; font-weight: bold; }
+        .btn-ocr { background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); color: white; border: none; padding: 9px 15px; border-radius: 20px; cursor: pointer; font-weight: bold; transition: 0.3s; display: flex; align-items: center; gap: 5px; }
+        .btn-ocr:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4); }
+        .btn-ocr:disabled { background: #475569; cursor: not-allowed; opacity: 0.7; }
+        .btn-global { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; padding: 9px 15px; border-radius: 20px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        .btn-global:hover { box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4); transform: translateY(-2px); }
+        .btn-logout { background: transparent; color: #ff4d4f; border: 1px solid #ff4d4f; padding: 8px 15px; border-radius: 20px; cursor: pointer; }
+        .fund-list-container { margin: 0 15px; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .fund-card { padding: 15px; border-radius: 16px; font-size: 13px; display: flex; flex-direction: column; gap: 8px; position: relative; }
+        .radar-badge { background: rgba(255, 77, 79, 0.15); color: #ff4d4f; font-size: 11px; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255, 77, 79, 0.3); animation: blink 2s infinite; }
+        @keyframes blink { 50% { opacity: 0.5; } }
+        .metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background: rgba(0, 0, 0, 0.2); padding: 10px; border-radius: 10px; text-align: center; }
+        .metric-item { display: flex; flex-direction: column; }
+        .metric-label { font-size: 11px; color: #94a3b8; margin-bottom: 3px; }
+        .metric-value { font-weight: bold; }
+        .modal-mask { position: fixed; z-index: 1000; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center; transition: 0.3s; }
+        .modal-content { background: #1e293b; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 20px; width: 90%; max-width: 400px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
+        .modal-input { width: 100%; background: #0f172a; border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 12px; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box; }
+        #chart-container { width: calc(100vw - 30px); height: calc(100vh - 280px); margin: 15px; box-sizing: border-box; }
+        .divider { width: 1px; height: 40px; background: rgba(255,255,255,0.1); }
+        .skeleton-box { background: linear-gradient(90deg, rgba(40,49,66,0.5) 25%, rgba(55,65,81,0.8) 37%, rgba(40,49,66,0.5) 63%); background-size: 400% 100%; animation: skeleton-loading 1.4s ease infinite; border-radius: 8px; }
+        @keyframes skeleton-loading { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+        .toast-container { position: fixed; top: 30px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+        .toast { padding: 12px 24px; border-radius: 30px; color: #fff; font-size: 14px; font-weight: bold; box-shadow: 0 10px 30px rgba(0,0,0,0.5); animation: slideDown 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; backdrop-filter: blur(10px); display: flex; align-items: center; gap: 8px; }
+        .toast.success { background: rgba(16, 185, 129, 0.9); border: 1px solid #34d399; }
+        .toast.error { background: rgba(239, 68, 68, 0.9); border: 1px solid #f87171; }
+        .toast.info { background: rgba(56, 189, 248, 0.9); border: 1px solid #7dd3fc; }
+        @keyframes slideDown { 0% { transform: translateY(-50px) scale(0.9); opacity: 0; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
         @media screen and (max-width: 768px) {
-            .header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 15px;
-            }
-
-            .control-panel {
-                width: 100%;
-            }
-
-                .control-panel input {
-                    flex: 1;
-                    min-width: 90px;
-                }
-
-            #chart-container {
-                height: 50vh;
-            }
-
-            .total-panel {
-                flex-wrap: wrap;
-                gap: 20px;
-            }
-
-            .divider {
-                display: none;
-            }
+            .header { flex-direction: column; align-items: flex-start; gap: 15px; }
+            .control-panel { width: 100%; }
+            .control-panel input { flex: 1; min-width: 90px; }
+            #chart-container { height: 50vh; }
+            .total-panel { flex-wrap: wrap; gap: 20px; }
+            .divider { display: none; }
         }
     </style>
 </head>
@@ -418,17 +141,15 @@
             <div class="fund-list-container">
                 <div v-for="fund in fundsList" :key="fund.code" class="glass-panel fund-card">
                     <div style="display: flex; justify-content: space-between; align-items: start;">
-                       
-<span style="font-weight: bold; color: #fff; font-size: 14px; max-width: 80%; display: flex; flex-direction: column;">
-    <span>{{ fund.name }}</span>
-    <span style="font-size:10px; color:#64748b; font-weight: normal; margin-top: 4px;">
-        ({{ fund.code }})
-        <span v-if="fund.shares > 0" style="color:#10b981; margin-left: 5px; border: 1px solid rgba(16,185,129,0.3); padding: 1px 4px; border-radius: 4px; background: rgba(16,185,129,0.1);">
-            💠 份额: {{ fund.shares }}
-        </span>
-    </span>
-</span>
-
+                        <span style="font-weight: bold; color: #fff; font-size: 14px; max-width: 80%; display: flex; flex-direction: column;">
+                            <span>{{ fund.name }}</span>
+                            <span style="font-size:10px; color:#64748b; font-weight: normal; margin-top: 4px;">
+                                ({{ fund.code }})
+                                <span v-if="fund.shares > 0" style="color:#10b981; margin-left: 5px; border: 1px solid rgba(16,185,129,0.3); padding: 1px 4px; border-radius: 4px; background: rgba(16,185,129,0.1);">
+                                    💠 份额: {{ fund.shares }}
+                                </span>
+                            </span>
+                        </span>
                         <div style="display: flex; gap: 6px; flex-shrink: 0;">
                             <button @click="fetchHistory(fund.code, fund.name)" style="background: rgba(56, 189, 248, 0.2); border: none; color: #38bdf8; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;" title="查看官方档案">📈</button>
                             <button @click="fetchMyArchives(fund.code, fund.name)" style="background: rgba(139, 92, 246, 0.2); border: none; color: #8b5cf6; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;" title="查看专属档案">📂</button>
@@ -512,7 +233,7 @@
             </div>
         </div>
 
-        <div v-if="showSectorRadar" class="modal-overlay" @click.self="showSectorRadar = false" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: flex-end; z-index: 1000;">
+        <div v-if="showSectorRadar" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: flex-end; z-index: 1000;">
             <div style="background: #1e293b; width: 100%; height: 85vh; border-radius: 20px 20px 0 0; padding: 20px; display: flex; flex-direction: column;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <h3 style="color: white; margin: 0;">📡 全市场监控 (TOP 20)</h3>
@@ -542,7 +263,7 @@
             </div>
         </div>
 
-        <div v-if="showSectorDetails" class="modal-overlay" @click.self="showSectorDetails = false" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 2000;">
+        <div v-if="showSectorDetails" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 2000;">
             <div style="background: #0f172a; width: 85%; max-width: 400px; border-radius: 15px; padding: 20px; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.8);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px;">
                     <h3 style="color: #38bdf8; margin: 0; font-size: 16px;">📦 {{ detailsTitle }} - 相关主题基金</h3>
@@ -560,7 +281,7 @@
             </div>
         </div>
 
-        <div v-if="showGlobalIndices" class="modal-overlay" @click.self="showGlobalIndices = false" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: flex-end; z-index: 2500;">
+        <div v-if="showGlobalIndices" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: flex-end; z-index: 2500;">
             <div style="background: #1e293b; width: 100%; height: 80vh; border-radius: 20px 20px 0 0; padding: 20px; display: flex; flex-direction: column;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                     <h3 style="color: white; margin: 0;">🌍 全球大盘 (近 1 年)</h3>
@@ -580,7 +301,7 @@
             </div>
         </div>
 
-        <div v-if="historyModal.show" class="modal-overlay" @click.self="historyModal.show = false" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: flex-end; z-index: 3000;">
+        <div v-if="historyModal.show" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: flex-end; z-index: 3000;">
             <div style="background: #1e293b; width: 100%; height: 75vh; border-radius: 20px 20px 0 0; padding: 20px; display: flex; flex-direction: column;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                     <h3 style="color: white; margin: 0; font-size: 18px;">📈 {{ historyModal.name }} (官方净值走势)</h3>
@@ -597,20 +318,7 @@
             </div>
         </div>
 
-                <div v-if="archiveModal.show" class="modal-overlay" @click.self="archiveModal.show = false" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 3500;">
-            <div style="background: #0f172a; width: 92%; max-width: 520px; height: 80vh; border-radius: 15px; border: 1px solid #38bdf8; box-shadow: 0 0 30px rgba(56, 189, 248, 0.2); padding: 20px; display: flex; flex-direction: column;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px;">
-                    <h3 style="color: #38bdf8; margin: 0;">🗄️ {{ archiveModal.targetName }} - 专属战报</h3>
-                    <span @click="archiveModal.show = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
-                </div>
-                <div v-if="archiveModal.isLoading" style="color: #4facfe; text-align: center; margin-top: 50px;">📡 正在提取...</div>
-                <div v-else-if="archiveModal.data.length === 0" style="color: #64748b; text-align: center; margin-top: 50px;">暂无战报</div>
-                <div v-else style="overflow-y: auto; flex: 1; padding-right: 5px;">
-                    <div style="display: flex; justify-content: space-between; color: #64748b; font-size: 12px; margin-bottom: 10px;">
-                        <span>封存日期</span>
-                        <span style="text-align: right;">当日收益/涨幅 | 累计收益/收益率</span>
-                    </div>
-                           <div v-if="archiveModal.show" class="modal-overlay" @click.self="archiveModal.show = false" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 3500;">
+        <div v-if="archiveModal.show" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 3500;">
             <div style="background: #0f172a; width: 90%; max-width: 500px; height: 75vh; border-radius: 15px; border: 1px solid #38bdf8; box-shadow: 0 0 30px rgba(56, 189, 248, 0.2); padding: 20px; display: flex; flex-direction: column;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px;">
                     <h3 style="color: #38bdf8; margin: 0;">🗄️ {{ archiveModal.targetName }} - 专属战报</h3>
@@ -620,7 +328,6 @@
                 <div v-else-if="archiveModal.data.length === 0" style="color: #64748b; text-align: center; margin-top: 50px;">暂无战报</div>
                 <div v-else style="overflow-y: auto; flex: 1; padding-right: 5px;">
                     <div style="display: flex; justify-content: space-between; color: #64748b; font-size: 12px; margin-bottom: 10px;"><span>封存日期</span><span style="text-align: right;">当日收益 / 累计盈亏</span></div>
-                    
                     <div v-for="(item, index) in archiveModal.data" :key="index" style="background: #1e293b; border-radius: 10px; padding: 12px; margin-bottom: 10px; border-left: 4px solid #38bdf8;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <div style="display: flex; flex-direction: column;">
@@ -637,11 +344,11 @@
                              <span :style="{ color: item.totalProfit >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold', fontSize: '13px' }">{{ item.totalProfit > 0 ? '+' : '' }}{{ item.totalProfit ? item.totalProfit.toFixed(2) : '0.00' }} ({{ item.totalRate > 0 ? '+' : '' }}{{ item.totalRate ? item.totalRate.toFixed(2) : '0.00' }}%)</span>
                         </div>
                     </div>
-                    </div>
+                </div>
             </div>
         </div>
 
-        <div v-if="ocrModal.show" class="modal-overlay" @click.self="ocrModal.show = false" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 4000;">
+        <div v-if="ocrModal.show" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 4000;">
             <div style="background: #1e293b; width: 85%; max-width: 400px; border-radius: 15px; border: 1px solid #10b981; padding: 20px; display: flex; flex-direction: column;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px;">
                     <h3 style="color: #10b981; margin: 0; font-size: 18px;">✅ 智能识别战报</h3>
@@ -669,7 +376,6 @@
                 const API_BASE = 'https://guzhi.21212121.xyz';
                 const toasts = ref([]); let toastId = 0;
 
-                // 🔒 全局单发锁：防止每天重复轰炸服务器存档案！
                 window.hasAutoSavedToday = false;
 
                 const showToast = (msg, type = 'info') => {
@@ -721,60 +427,30 @@
                 const showGlobalIndices = ref(false);
                 const isIndicesLoading = ref(false);
 
-                // 🚀 核心封存引信 (强化了浮点数过滤)
-                                const saveDailyArchive = async (silent = false) => {
+                // 🚀 高精度封存引信恢复
+                const saveDailyArchive = async (silent = false) => {
                     if (!silent && !confirm("💾 确定要将大屏当前的数据作为【今日最终战报】永久封存吗？")) return;
                     let d = new Date();
                     let localDateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-
-                    const safeNumber = (val) => {
-                        const n = parseFloat(val);
-                        return isNaN(n) ? 0 : Number(n.toFixed(2));
-                    };
+                    const safeNumber = (val) => Number((parseFloat(val) || 0).toFixed(2));
 
                     const payload = {
-                        username: currentUser.value,
-                        dateStr: localDateStr,
-                        total: {
-                            fundName: "总阵地",
-                            fundCode: "TOTAL",
-                            assets: safeNumber(totalPrincipal.value),
-                            dailyProfit: safeNumber(totalTodayProfit.value),
-                            dailyRate: safeNumber(totalTodayRate.value),
-                            totalProfit: safeNumber(totalProfit.value),
-                            totalRate: safeNumber(totalRate.value)
+                        Username: currentUser.value, DateStr: localDateStr,
+                        Total: {
+                            FundName: "总阵地", Assets: safeNumber(totalPrincipal.value), DailyProfit: safeNumber(totalTodayProfit.value),
+                            DailyRate: safeNumber(totalTodayRate.value), TotalProfit: safeNumber(totalProfit.value), TotalRate: safeNumber(totalRate.value)
                         },
-                        funds: fundsList.value.map(f => ({
-                            fundCode: f.code,
-                            fundName: f.name,
-                            assets: safeNumber(f.amount),
-                            dailyProfit: safeNumber(f.todayProfit),
-                            dailyRate: safeNumber(f.currentRate),
-                            totalProfit: safeNumber(f.estimatedProfit),
-                            totalRate: safeNumber(f.existingReturnRate)
+                        Funds: fundsList.value.map(f => ({
+                            FundCode: f.code, FundName: f.name, Assets: safeNumber(f.amount),
+                            DailyProfit: safeNumber(f.todayProfit), DailyRate: safeNumber(f.currentRate),
+                            TotalProfit: safeNumber(f.estimatedProfit), TotalRate: safeNumber(f.existingReturnRate)
                         }))
                     };
-
-                    console.log("📦 封存载荷:", JSON.stringify(payload, null, 2));
-
                     try {
-                        const response = await fetch(`${API_BASE}/api/fund/save-archive`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(payload)
-                        });
-                        const resultText = await response.text();
-                        if (response.ok) {
-                            if (!silent) showToast("✅ 今日战报已安全锁入密码箱！", "success");
-                            console.log("✅ 封存成功:", resultText);
-                        } else {
-                            if (!silent) showToast("❌ 封存受阻: " + resultText, "error");
-                            console.error("❌ 封存失败:", resultText);
-                        }
-                    } catch (e) {
-                        if (!silent) showToast("🌐 指挥中心失联", "error");
-                        console.error("🌐 封存网络异常:", e);
-                    }
+                        const response = await fetch(`${API_BASE}/api/fund/save-archive`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                        if (response.ok) { if (!silent) showToast("✅ 今日战报已安全锁入密码箱！", "success"); }
+                        else { if (!silent) showToast("❌ 封存受阻", "error"); }
+                    } catch (e) { if (!silent) showToast("🌐 指挥中心失联", "error"); }
                 };
 
                 const fetchGlobalIndices = async () => {
@@ -813,35 +489,15 @@
                     document.body.appendChild(script);
                 };
 
-                                const fetchMyArchives = async (targetCode, targetName) => {
-                    archiveModal.show = true;
-                    archiveModal.isLoading = true;
-                    archiveModal.targetName = targetName;
-                    archiveModal.data = [];
+                const fetchMyArchives = async (targetCode, targetName) => {
+                    archiveModal.show = true; archiveModal.isLoading = true; archiveModal.targetName = targetName; archiveModal.data = [];
                     try {
                         const res = await fetch(`${API_BASE}/api/fund/get-archives?username=${encodeURIComponent(currentUser.value)}`);
                         if (res.ok) {
                             const records = await res.json();
-                            const normalized = records.map(r => ({
-                                recordDate: r.recordDate || r.RecordDate,
-                                fundCode: r.fundCode || r.FundCode,
-                                fundName: r.fundName || r.FundName,
-                                assets: parseFloat(r.assets ?? r.Assets ?? 0),
-                                dailyProfit: parseFloat(r.dailyProfit ?? r.DailyProfit ?? 0),
-                                dailyRate: parseFloat(r.dailyRate ?? r.DailyRate ?? 0),
-                                totalProfit: parseFloat(r.totalProfit ?? r.TotalProfit ?? 0),
-                                totalRate: parseFloat(r.totalRate ?? r.TotalRate ?? 0)
-                            }));
-                            archiveModal.data = normalized
-                                .filter(r => r.fundCode === targetCode)
-                                .sort((a, b) => new Date(b.recordDate) - new Date(a.recordDate));
+                            archiveModal.data = records.filter(r => r.fundCode === targetCode).sort((a, b) => new Date(b.recordDate) - new Date(a.recordDate));
                         }
-                    } catch (e) {
-                        showToast("🌐 档案馆断线", "error");
-                        console.error("❌ 获取档案失败:", e);
-                    } finally {
-                        archiveModal.isLoading = false;
-                    }
+                    } catch (e) { showToast("🌐 档案馆断线", "error"); } finally { archiveModal.isLoading = false; }
                 };
 
                 const fetchSectorDetails = async (sector) => {
@@ -914,7 +570,11 @@
                         const formData = new FormData(); formData.append('imageFile', compressedFile);
                         try {
                             const response = await fetch(`${API_BASE}/api/Fund/import-ocr?username=${encodeURIComponent(currentUser.value)}`, { method: 'POST', body: formData });
-                            if (response.ok) { ocrModal.content = await response.text(); ocrModal.show = true; fundsList.value = []; fetchData(); }
+                            if (response.ok) { 
+                                ocrModal.content = await response.text(); 
+                                ocrModal.show = true; 
+                                fetchData(); 
+                            }
                             else { showToast("❌ 识别失败", "error"); }
                         } catch (error) { showToast("🌐 网络异常", "error"); } finally { isUploading.value = false; event.target.value = ''; }
                     });
@@ -955,15 +615,13 @@
                         let todayDash = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
                         let currentMinutes = d.getHours() * 60 + d.getMinutes(); let isWeekend = (d.getDay() === 0 || d.getDay() === 6);
 
-                        let hasSettledToday = false; // 战术标记：今天是否收到了后端的更新信号
+                        let hasSettledToday = false; 
 
                         apiData.forEach(fund => {
-                            // 🎯 核心修复：绝对信任 C# 后端传来的 isSettled 信号！再也不靠前端瞎猜了！
                             if (fund.isSettled) {
                                 hasSettledToday = true;
-                                fund.currentRate = fund.actualRate; // 瞬间锁定真实涨跌幅！
+                                fund.currentRate = fund.actualRate; 
                                 fund.isHoliday = false;
-                                // 追加折线图末端真实点
                                 if (fund.data.length > 0 && String(fund.data[fund.data.length - 1][0]).includes("15:00:00")) {
                                     fund.data[fund.data.length - 1][1] = fund.actualRate;
                                 } else {
@@ -982,20 +640,16 @@
                                 } else { fund.currentRate = 0; fund.isHoliday = true; }
                             } else { fund.currentRate = 0; fund.isHoliday = true; }
 
-                            // 算钱
-                            // 💰 核心算力替换：如果系统进入盘后，且后端送来了绝对物理利润，直接覆盖！
-if (fund.isSettled && fund.actualExactProfit !== undefined && fund.actualExactProfit !== null) {
-    fund.todayProfit = fund.actualExactProfit.toFixed(2);
-} else {
-    // 盘中或无份额时，依然使用百分比估算
-    fund.todayProfit = (fund.amount * (fund.currentRate / 100)).toFixed(2);
-}
+                            // 🚀 核心算力恢复：使用物理利润！
+                            if (fund.isSettled && fund.actualExactProfit !== undefined && fund.actualExactProfit !== null) {
+                                fund.todayProfit = fund.actualExactProfit.toFixed(2);
+                            } else {
+                                fund.todayProfit = (fund.amount * (fund.currentRate / 100)).toFixed(2);
+                            }
 
-const profitVal = parseFloat(fund.todayProfit);
-if (!isNaN(profitVal)) { tToday += profitVal; }
+                            const profitVal = parseFloat(fund.todayProfit);
+                            if (!isNaN(profitVal)) { tToday += profitVal; }
 
-
-                            // 把最新的今日收益累加进所有档案！
                             let currentRealTimeAmount = fund.amount + profitVal;
                             fund.estimatedProfit = (fund.cost && fund.cost > 0) ? (currentRealTimeAmount - fund.cost).toFixed(2) : 0;
                             fund.breakEvenRate = (fund.cost && fund.cost > currentRealTimeAmount) ? (((fund.cost / currentRealTimeAmount) - 1) * 100).toFixed(2) : "0.00";
@@ -1014,11 +668,9 @@ if (!isNaN(profitVal)) { tToday += profitVal; }
                         totalProfit.value = currentTotalAssets - tCost;
                         totalRate.value = tCost > 0 ? ((currentTotalAssets - tCost) / tCost * 100) : 0;
 
-                        // 🚀 终极联动引信：后端发来了信号 且 本地锁还没锁死
                         if (hasSettledToday && !window.hasAutoSavedToday) {
-                            console.log("收到后方司令部的真实净值信号！开始静默封存！");
                             saveDailyArchive(true);
-                            window.hasAutoSavedToday = true; // 拉响后死锁，防重复轰炸
+                            window.hasAutoSavedToday = true; 
                         }
 
                         renderChart(apiData);
@@ -1040,7 +692,6 @@ if (!isNaN(profitVal)) { tToday += profitVal; }
                     var seriesData = validData.map(fund => {
                         holdAmounts[fund.name] = fund.amount;
                         let diff = 0;
-                        // ⚡ 绝对信任后端的信号，算出真实差值
                         if (fund.isSettled && fund.data.length >= 2) {
                             let realRate = fund.actualRate;
                             let estRate = fund.data[fund.data.length - 2][1];
