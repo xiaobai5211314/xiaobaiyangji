@@ -167,7 +167,7 @@ namespace 估值助手.Controllers
             return 0; // 无法获取净值时返回 0
         }
 
-        [HttpPost("import-ocr")]
+       [HttpPost("import-ocr")]
 public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFormFile imageFile)
 {
     if (string.IsNullOrEmpty(username)) return Unauthorized("请提供指挥官代号");
@@ -227,32 +227,40 @@ public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFo
             // 锁定第一个两位小数的纯数字作为“持有金额”
             if (Regex.IsMatch(currentLine, amountPattern))
             {
-                string namePart1 = texts[i - 1];
+                // 🚀 核心修复：逆向过滤雷达！向上搜索真正的基金名称，跳过中间存在的涨幅或杂音
+                string namePart1 = "";
+                for (int k = i - 1; k >= 0; k--)
+                {
+                    string prevLine = texts[k];
+                    // 跳过杂音数据（数字、百分比、"已更新"标签、"份额"等表头文字）
+                    if (prevLine.Contains("收益") || prevLine.Contains("金额") || prevLine.Contains("份额") || prevLine.Contains("天数") || prevLine.Contains("已更新") || Regex.IsMatch(prevLine, @"^[-\d\.,%+]+$"))
+                    {
+                        continue;
+                    }
+                    namePart1 = prevLine; // 成功锁定真实名称
+                    break;
+                }
 
-                if (namePart1.Contains("收益") || namePart1.Contains("金额") || namePart1.Contains("包含") || Regex.IsMatch(namePart1, @"^[-\d\.,%]+$"))
-                    continue;
+                if (string.IsNullOrEmpty(namePart1)) continue;
 
                 double holdAmount = double.Parse(currentLine.Replace(",", ""));
                 double holdingIncome = 0;
-                double holdShares = 0; // 🚀 新增：份额探测器
+                double holdShares = 0;
                 string potentialFragment = "";
 
-                // 🚀 雷达扫描范围扩大到接下来 6 行，进行多维特征识别
+                // 向下扫描寻找份额和收益
                 for (int j = 1; j <= 6 && (i + j) < texts.Count; j++)
                 {
                     string nextLine = texts[i + j];
                     
-                    // 特征 1: 如果是带正负号的数字 -> 锁定为“持有收益”
                     if (holdingIncome == 0 && Regex.IsMatch(nextLine, @"^[-+]\d[\d,]*\.\d{2}$"))
                     {
                         holdingIncome = double.Parse(nextLine.Replace(",", ""));
                     }
-                    // 特征 2: 如果是无正负号的两位小数，且还没找到份额 -> 锁定为“持仓份额”
                     else if (holdShares == 0 && Regex.IsMatch(nextLine, @"^\d[\d,]*\.\d{2}$"))
                     {
                         holdShares = double.Parse(nextLine.Replace(",", ""));
                     }
-                    // 特征 3: 捕获被换行截断的基金名称碎片
                     else if (string.IsNullOrEmpty(potentialFragment) && !Regex.IsMatch(nextLine, @"^[-\d\.,%+]+$") && !nextLine.Contains("金选") && !nextLine.Contains("收益") && !nextLine.Contains("更新"))
                     {
                         potentialFragment = nextLine;
@@ -305,20 +313,18 @@ public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFo
                     }
                 }
 
-                // 🚀 核心保存与更新逻辑重构
+                // 🚀 保存更新逻辑
                 if (finalBestMatch != null && finalBestScore > 65 && holdAmount > 0)
                 {
                     if (userFundDict.TryGetValue(finalBestMatch.Code, out var exist))
                     {
                         exist.HoldAmount = holdAmount;
                         
-                        // 🛡️ 本金保护机制：只有当截图中确实扫到了收益，才去覆盖更新本金，否则保持原样！
                         if (holdingIncome != 0) 
                         {
                             exist.CostAmount = Math.Round(holdAmount - holdingIncome, 2);
                         }
                         
-                        // 🎯 份额注入机制：只要扫到了份额，立刻无缝注入
                         if (holdShares > 0) 
                         {
                             exist.HoldShares = holdShares;
@@ -335,7 +341,7 @@ public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFo
                             FundName = finalBestMatch.Name,
                             HoldAmount = holdAmount,
                             CostAmount = holdingIncome != 0 ? Math.Round(holdAmount - holdingIncome, 2) : holdAmount,
-                            HoldShares = holdShares // 🎯 新增基金时直接注入份额
+                            HoldShares = holdShares
                         };
                         _context.MyFunds.Add(newFund);
                         userFundDict[newFund.FundCode] = newFund;
@@ -358,7 +364,6 @@ public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFo
         return StatusCode(500, $"❌ 代码执行出现异常: {ex.Message}");
     }
 }
-
 
         private string ExtractFundClass(string name)
         {
