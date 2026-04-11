@@ -167,66 +167,66 @@ namespace 估值助手.Controllers
             return 0; // 无法获取净值时返回 0
         }
 
-        [HttpPost("import-ocr")]
-        public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFormFile imageFile)
+       [HttpPost("import-ocr")]
+public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFormFile imageFile)
+{
+    if (string.IsNullOrEmpty(username)) return Unauthorized("请提供指挥官代号");
+
+    var allFunds = await GetAllFundsAsync();
+    var userFundDict = await _context.MyFunds
+        .Where(f => f.Username == username)
+        .ToDictionaryAsync(f => f.FundCode);
+
+    byte[] finalProcessedBytes = null;
+    List<string> debugLog = new List<string>();
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+
+    try
+    {
+        using (var inputStream = imageFile.OpenReadStream())
         {
-            if (string.IsNullOrEmpty(username)) return Unauthorized("请提供指挥官代号");
-
-            var allFunds = await GetAllFundsAsync();
-            var userFundDict = await _context.MyFunds
-                .Where(f => f.Username == username)
-                .ToDictionaryAsync(f => f.FundCode);
-
-            byte[] finalProcessedBytes = null;
-            List<string> debugLog = new List<string>();
-            var watch = System.Diagnostics.Stopwatch.StartNew();
-
-            try
+            using (Image image = Image.Load(inputStream))
             {
-                using (var inputStream = imageFile.OpenReadStream())
+                int targetMaxWidth = 1080;
+                if (image.Width > targetMaxWidth)
                 {
-                    using (Image image = Image.Load(inputStream))
-                    {
-                        int targetMaxWidth = 1080;
-                        if (image.Width > targetMaxWidth)
-                        {
-                            int newHeight = (int)((double)image.Height / image.Width * targetMaxWidth);
-                            image.Mutate(x => x.Resize(targetMaxWidth, newHeight));
-                        }
-                        image.Mutate(x => x.BackgroundColor(Color.White));
-                        using (var outputStream = new MemoryStream())
-                        {
-                            image.SaveAsJpeg(outputStream, new JpegEncoder { Quality = 60 });
-                            finalProcessedBytes = outputStream.ToArray();
-                        }
-                    }
+                    int newHeight = (int)((double)image.Height / image.Width * targetMaxWidth);
+                    image.Mutate(x => x.Resize(targetMaxWidth, newHeight));
                 }
-                debugLog.Add($"⏱️ 图片压缩耗时: {watch.ElapsedMilliseconds} ms");
-                watch.Restart();
-
-                var ocrTask = Task.Run(() => _baiduOcrClient.AccurateBasic(finalProcessedBytes));
-
-                if (await Task.WhenAny(ocrTask, Task.Delay(15000)) != ocrTask)
+                image.Mutate(x => x.BackgroundColor(Color.White));
+                using (var outputStream = new MemoryStream())
                 {
-                    return StatusCode(500, $"❌ 识别超时熔断！");
+                    image.SaveAsJpeg(outputStream, new JpegEncoder { Quality = 60 });
+                    finalProcessedBytes = outputStream.ToArray();
                 }
+            }
+        }
+        debugLog.Add($"⏱️ 图片压缩耗时: {watch.ElapsedMilliseconds} ms");
+        watch.Restart();
 
-                var result = await ocrTask;
-                debugLog.Add($"⏱️ 百度 OCR 耗时: {watch.ElapsedMilliseconds} ms");
+        var ocrTask = Task.Run(() => _baiduOcrClient.AccurateBasic(finalProcessedBytes));
 
-                var texts = (result["words_result"] as JArray)?.Select(x => x["words"].ToString().Trim()).ToList() ?? new List<string>();
-                if (texts.Count == 0) return BadRequest("❌ OCR未能识别出任何文字");
+        if (await Task.WhenAny(ocrTask, Task.Delay(15000)) != ocrTask)
+        {
+            return StatusCode(500, $"❌ 识别超时熔断！");
+        }
 
-                int importedCount = 0;
-                string amountPattern = @"^\d[\d,]*\.\d{2}$";
+        var result = await ocrTask;
+        debugLog.Add($"⏱️ 百度 OCR 耗时: {watch.ElapsedMilliseconds} ms");
 
-                for (int i = 1; i < texts.Count; i++)
-                {
-                    string currentLine = texts[i];
+        var texts = (result["words_result"] as JArray)?.Select(x => x["words"].ToString().Trim()).ToList() ?? new List<string>();
+        if (texts.Count == 0) return BadRequest("❌ OCR未能识别出任何文字");
 
-                    // 锁定第一个两位小数的纯数字作为“持有金额”
-                    if (Regex.IsMatch(currentLine, amountPattern))
-                    {
+        int importedCount = 0;
+        string amountPattern = @"^\d[\d,]*\.\d{2}$";
+
+        for (int i = 1; i < texts.Count; i++)
+        {
+            string currentLine = texts[i];
+
+            // 锁定第一个两位小数的纯数字作为“持有金额”
+            if (Regex.IsMatch(currentLine, amountPattern))
+            {
                         // 🚀 核心修复：逆向过滤雷达！向上搜索真正的基金名称，跳过中间存在的涨幅或杂音
                         // 🚀 核心修复：逆向过滤雷达！加入对“金选”和“市场解读”等干扰标签的免疫
                         string namePart1 = "";
@@ -244,10 +244,10 @@ namespace 估值助手.Controllers
 
                         if (string.IsNullOrEmpty(namePart1)) continue;
 
-                        double holdAmount = double.Parse(currentLine.Replace(",", ""));
-                        double holdingIncome = 0;
-                        double holdShares = 0;
-                        string potentialFragment = "";
+                double holdAmount = double.Parse(currentLine.Replace(",", ""));
+                double holdingIncome = 0;
+                double holdShares = 0;
+                string potentialFragment = "";
 
                         // 向下扫描寻找份额和收益 (加入物理隔离，防止抢夺下一个基金的数据)
                         for (int j = 1; j <= 4 && (i + j) < texts.Count; j++) // 将扫描深度从 6 行缩减到 4 行
@@ -278,109 +278,99 @@ namespace 估值助手.Controllers
                     ? new[] { namePart1 }
                     : new[] { namePart1, namePart1 + potentialFragment };
 
-                        FundInfoCache finalBestMatch = null;
-                        double finalBestScore = 0;
+                FundInfoCache finalBestMatch = null;
+                double finalBestScore = 0;
 
-                        foreach (var testName in testNames)
+                foreach (var testName in testNames)
+                {
+                    string pureChinese = Regex.Replace(testName, @"[^\u4e00-\u9fa5]", "");
+                    if (pureChinese.Length < 2) continue;
+
+                    string normalizedOcr = NormalizeFundName(testName);
+                    FundInfoCache bestMatch = null;
+                    double bestScore = 0;
+
+                    if (_exactMatchDict != null && (_exactMatchDict.TryGetValue(normalizedOcr, out var exactFund) || _exactMatchDict.TryGetValue(testName, out exactFund)))
+                    {
+                        bestMatch = exactFund;
+                        bestScore = 100.0;
+                    }
+                    else
+                    {
+                        var candidates = allFunds.Where(f => f.NormalizedName.Contains(pureChinese) ||
+                                                            pureChinese.Contains(f.NormalizedName.Substring(0, Math.Min(3, f.NormalizedName.Length))));
+
+                        foreach (var f in candidates)
                         {
-                            string pureChinese = Regex.Replace(testName, @"[^\u4e00-\u9fa5]", "");
-                            if (pureChinese.Length < 2) continue;
+                            double similarity = CalculateSimilarity(normalizedOcr, f.NormalizedName);
+                            double currentScore = similarity * 100;
 
-                            string normalizedOcr = NormalizeFundName(testName);
-                            FundInfoCache bestMatch = null;
-                            double bestScore = 0;
-
-                            if (_exactMatchDict != null && (_exactMatchDict.TryGetValue(normalizedOcr, out var exactFund) || _exactMatchDict.TryGetValue(testName, out exactFund)))
+                            if (currentScore > bestScore)
                             {
-                                bestMatch = exactFund;
-                                bestScore = 100.0;
-                            }
-                            else
-                            {
-                                var candidates = allFunds.Where(f => f.NormalizedName.Contains(pureChinese) ||
-                                                                    pureChinese.Contains(f.NormalizedName.Substring(0, Math.Min(3, f.NormalizedName.Length))));
-
-                                foreach (var f in candidates)
-                                {
-                                    double similarity = CalculateSimilarity(normalizedOcr, f.NormalizedName);
-                                    double currentScore = similarity * 100;
-
-                                    if (currentScore > bestScore)
-                                    {
-                                        bestScore = currentScore;
-                                        bestMatch = f;
-                                    }
-                                }
-                            }
-
-                            if (bestScore > finalBestScore)
-                            {
-                                finalBestScore = bestScore;
-                                finalBestMatch = bestMatch;
+                                bestScore = currentScore;
+                                bestMatch = f;
                             }
                         }
+                    }
 
-                        // 🚀 保存更新逻辑
-                        if (finalBestMatch != null && finalBestScore > 65 && holdAmount > 0)
-                        { // ✅ 新增：份额未扫到时，用市值 ÷ 净值反算
-                            if (holdShares == 0)
-                            {
-                                double nav = await GetLatestNavAsync(finalBestMatch.Code);
-
-                                if (nav > 0)
-                                {
-                                    holdShares = Math.Round(holdAmount / nav, 2);
-                                    debugLog.Add($"🔢 [{finalBestMatch.Name}] 份额反算: {holdAmount} ÷ {nav} = {holdShares}");
-                                }
-                            }
-                            if (userFundDict.TryGetValue(finalBestMatch.Code, out var exist))
-                            {
-                                exist.HoldAmount = holdAmount;
-
-                                if (holdingIncome != 0)
-                                {
-                                    exist.CostAmount = Math.Round(holdAmount - holdingIncome, 2);
-                                }
-
-                                if (holdShares > 0)
-                                {
-                                    exist.HoldShares = holdShares;
-                                }
-
-                                _context.MyFunds.Update(exist);
-                            }
-                            else
-                            {
-                                var newFund = new MyFundConfig
-                                {
-                                    Username = username,
-                                    FundCode = finalBestMatch.Code,
-                                    FundName = finalBestMatch.Name,
-                                    HoldAmount = holdAmount,
-                                    CostAmount = holdingIncome != 0 ? Math.Round(holdAmount - holdingIncome, 2) : holdAmount,
-                                    HoldShares = holdShares
-                                };
-                                _context.MyFunds.Add(newFund);
-                                userFundDict[newFund.FundCode] = newFund;
-                            }
-                            importedCount++;
-
-                            if (finalBestScore >= 99.0)
-                                debugLog.Add($"⚡ 精准命中: {finalBestMatch.Name} [份额: {(holdShares > 0 ? holdShares.ToString() : "未扫描到")}]");
-                            else
-                                debugLog.Add($"✅ 模糊修复: {finalBestMatch.Name} ({finalBestScore:F1}%) [份额: {(holdShares > 0 ? holdShares.ToString() : "未扫描到")}]");
-                        }
+                    if (bestScore > finalBestScore)
+                    {
+                        finalBestScore = bestScore;
+                        finalBestMatch = bestMatch;
                     }
                 }
 
-                await _context.SaveChangesAsync();
-                return Ok($"识别完成！成功同步 {importedCount} 只。\n\n[诊断日志]\n{string.Join("\n", debugLog)}");
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, $"❌ 代码执行出现异常: {ex.Message}");
+                // 🚀 保存更新逻辑
+                if (finalBestMatch != null && finalBestScore > 65 && holdAmount > 0)
+                {
+                    if (userFundDict.TryGetValue(finalBestMatch.Code, out var exist))
+                    {
+                        exist.HoldAmount = holdAmount;
+                        
+                        if (holdingIncome != 0) 
+                        {
+                            exist.CostAmount = Math.Round(holdAmount - holdingIncome, 2);
+                        }
+                        
+                        if (holdShares > 0) 
+                        {
+                            exist.HoldShares = holdShares;
+                        }
+                        
+                        _context.MyFunds.Update(exist);
+                    }
+                    else
+                    {
+                        var newFund = new MyFundConfig
+                        {
+                            Username = username,
+                            FundCode = finalBestMatch.Code,
+                            FundName = finalBestMatch.Name,
+                            HoldAmount = holdAmount,
+                            CostAmount = holdingIncome != 0 ? Math.Round(holdAmount - holdingIncome, 2) : holdAmount,
+                            HoldShares = holdShares
+                        };
+                        _context.MyFunds.Add(newFund);
+                        userFundDict[newFund.FundCode] = newFund;
+                    }
+                    importedCount++;
+
+                    if (finalBestScore >= 99.0)
+                        debugLog.Add($"⚡ 精准命中: {finalBestMatch.Name} [份额: {(holdShares > 0 ? holdShares.ToString() : "未扫描到")}]");
+                    else
+                        debugLog.Add($"✅ 模糊修复: {finalBestMatch.Name} ({finalBestScore:F1}%) [份额: {(holdShares > 0 ? holdShares.ToString() : "未扫描到")}]");
+                }
             }
         }
+
+        await _context.SaveChangesAsync();
+        return Ok($"识别完成！成功同步 {importedCount} 只。\n\n[诊断日志]\n{string.Join("\n", debugLog)}");
+    }
+    catch (Exception ex)
+    {
+        return StatusCode(500, $"❌ 代码执行出现异常: {ex.Message}");
+    }
+}
 
         private string ExtractFundClass(string name)
         {
@@ -555,54 +545,54 @@ namespace 估值助手.Controllers
 
         // 🚀 新增：猎隼侦察兵，去东方财富底层接口刺探真实净值
         // 🚀 猎隼侦察兵升级版：双重刺探，获取单位净值计算绝对物理收益
-        private async Task<(double? rate, double? exactProfit)> GetTodayRealRateAsync(string fundCode, string todayStr, double shares)
+private async Task<(double? rate, double? exactProfit)> GetTodayRealRateAsync(string fundCode, string todayStr, double shares)
+{
+    string cacheKey = $"RealRateV2_{fundCode}_{todayStr}_{shares}";
+    if (_cache.TryGetValue(cacheKey, out (double?, double?) cached)) return cached;
+
+    string missKey = $"NoRealRate_{fundCode}_{todayStr}";
+    if (_cache.TryGetValue(missKey, out _)) return (null, null);
+
+    try
+    {
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
+        // 核心修改：请求最近两天的历史净值 pageSize=2
+        string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={fundCode}&pageIndex=1&pageSize=2";
+        string res = await client.GetStringAsync(url);
+        using var doc = JsonDocument.Parse(res);
+        var dataArray = doc.RootElement.GetProperty("Data").GetProperty("LSJZList");
+        
+        if (dataArray.GetArrayLength() > 0)
         {
-            string cacheKey = $"RealRateV2_{fundCode}_{todayStr}_{shares}";
-            if (_cache.TryGetValue(cacheKey, out (double?, double?) cached)) return cached;
-
-            string missKey = $"NoRealRate_{fundCode}_{todayStr}";
-            if (_cache.TryGetValue(missKey, out _)) return (null, null);
-
-            try
+            var latest = dataArray[0];
+            if (latest.GetProperty("FSRQ").GetString() == todayStr)
             {
-                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-                client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
-                // 核心修改：请求最近两天的历史净值 pageSize=2
-                string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={fundCode}&pageIndex=1&pageSize=2";
-                string res = await client.GetStringAsync(url);
-                using var doc = JsonDocument.Parse(res);
-                var dataArray = doc.RootElement.GetProperty("Data").GetProperty("LSJZList");
-
-                if (dataArray.GetArrayLength() > 0)
+                if (double.TryParse(latest.GetProperty("JZZZL").GetString(), out double realRate))
                 {
-                    var latest = dataArray[0];
-                    if (latest.GetProperty("FSRQ").GetString() == todayStr)
+                    double? exactProfit = null;
+                    // 如果指挥官录入了份额，且成功拿到了昨天的数据，启动绝对物理计算！
+                    if (shares > 0 && dataArray.GetArrayLength() > 1)
                     {
-                        if (double.TryParse(latest.GetProperty("JZZZL").GetString(), out double realRate))
+                        if (double.TryParse(latest.GetProperty("DWJZ").GetString(), out double todayNav) &&
+                            double.TryParse(dataArray[1].GetProperty("DWJZ").GetString(), out double yesterdayNav))
                         {
-                            double? exactProfit = null;
-                            // 如果指挥官录入了份额，且成功拿到了昨天的数据，启动绝对物理计算！
-                            if (shares > 0 && dataArray.GetArrayLength() > 1)
-                            {
-                                if (double.TryParse(latest.GetProperty("DWJZ").GetString(), out double todayNav) &&
-                                    double.TryParse(dataArray[1].GetProperty("DWJZ").GetString(), out double yesterdayNav))
-                                {
-                                    // 绝对物理公式：份额 * (今日单位净值 - 昨日单位净值)
-                                    exactProfit = Math.Round(shares * (todayNav - yesterdayNav), 2);
-                                }
-                            }
-                            var result = (realRate, exactProfit);
-                            _cache.Set(cacheKey, result, TimeSpan.FromHours(12));
-                            return result;
+                            // 绝对物理公式：份额 * (今日单位净值 - 昨日单位净值)
+                            exactProfit = Math.Round(shares * (todayNav - yesterdayNav), 2);
                         }
                     }
+                    var result = (realRate, exactProfit);
+                    _cache.Set(cacheKey, result, TimeSpan.FromHours(12));
+                    return result;
                 }
             }
-            catch { }
-
-            _cache.Set(missKey, true, TimeSpan.FromMinutes(1));
-            return (null, null);
         }
+    }
+    catch { }
+
+    _cache.Set(missKey, true, TimeSpan.FromMinutes(1));
+    return (null, null);
+}
 
 
 
@@ -649,26 +639,26 @@ namespace 估值助手.Controllers
                     .OrderByDescending(r => r.FetchTime)
                     .ToListAsync();
 
+                
+            // 🌟 猎隼侦察兵启动：下午 17:00 后刺探真实净值
+var realRateDict = new Dictionary<string, double>();
+var exactProfitDict = new Dictionary<string, double>(); // 新增物理利润字典
 
-                // 🌟 猎隼侦察兵启动：下午 17:00 后刺探真实净值
-                var realRateDict = new Dictionary<string, double>();
-                var exactProfitDict = new Dictionary<string, double>(); // 新增物理利润字典
-
-                if (localTime.Hour >= 17)
-                {
-                    // 改为遍历 myFunds，带上份额参数
-                    var realRateTasks = myFunds.Select(async config =>
-                    {
-                        var res = await GetTodayRealRateAsync(config.FundCode, todayDash, config.HoldShares);
-                        return new { code = config.FundCode, rate = res.rate, exactProfit = res.exactProfit };
-                    });
-                    var realRateResults = await Task.WhenAll(realRateTasks);
-                    foreach (var res in realRateResults)
-                    {
-                        if (res.rate.HasValue) realRateDict[res.code] = res.rate.Value;
-                        if (res.exactProfit.HasValue) exactProfitDict[res.code] = res.exactProfit.Value; // 截获物理利润
-                    }
-                }
+if (localTime.Hour >= 17)
+{
+    // 改为遍历 myFunds，带上份额参数
+    var realRateTasks = myFunds.Select(async config => 
+    {
+        var res = await GetTodayRealRateAsync(config.FundCode, todayDash, config.HoldShares);
+        return new { code = config.FundCode, rate = res.rate, exactProfit = res.exactProfit };
+    });
+    var realRateResults = await Task.WhenAll(realRateTasks);
+    foreach (var res in realRateResults)
+    {
+        if (res.rate.HasValue) realRateDict[res.code] = res.rate.Value;
+        if (res.exactProfit.HasValue) exactProfitDict[res.code] = res.exactProfit.Value; // 截获物理利润
+    }
+}
 
 
                 var result = myFunds.Select(config =>
@@ -708,11 +698,11 @@ namespace 估值助手.Controllers
 
                     // 是否已截获真实净值
                     // 是否已截获真实净值
-                    bool isSettled = realRateDict.ContainsKey(config.FundCode);
-                    double? actualRate = isSettled ? realRateDict[config.FundCode] : null;
+bool isSettled = realRateDict.ContainsKey(config.FundCode);
+double? actualRate = isSettled ? realRateDict[config.FundCode] : null;
 
-                    // 🚀 新增这一行：尝试提取绝对物理利润
-                    double? actualExactProfit = exactProfitDict.ContainsKey(config.FundCode) ? exactProfitDict[config.FundCode] : null;
+// 🚀 新增这一行：尝试提取绝对物理利润
+double? actualExactProfit = exactProfitDict.ContainsKey(config.FundCode) ? exactProfitDict[config.FundCode] : null;
 
                     return new
                     {
@@ -1179,52 +1169,52 @@ public async Task<IActionResult> GetGlobalIndices()
                             .FirstOrDefaultAsync();
 
                         // 算钱逻辑
-                        double dailyRate = todayRecord?.ActualRate > 0 ? todayRecord.ActualRate : (todayRecord?.EstimatedRate ?? 0);
-                        double dailyProfit = fund.HoldAmount * (dailyRate / 100.0);
+double dailyRate = todayRecord?.ActualRate > 0 ? todayRecord.ActualRate : (todayRecord?.EstimatedRate ?? 0);
+double dailyProfit = fund.HoldAmount * (dailyRate / 100.0);
 
-                        // 🚀 核心补丁：加入历史总收益的剥离与计算
-                        double cost = fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount;
-                        double currentAssets = fund.HoldAmount + dailyProfit; // 当日清算后的实际最新市值
-                        double totalProfit = currentAssets - cost;
-                        double totalRate = cost > 0 ? (totalProfit / cost * 100.0) : 0;
+// 🚀 核心补丁：加入历史总收益的剥离与计算
+double cost = fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount; 
+double currentAssets = fund.HoldAmount + dailyProfit; // 当日清算后的实际最新市值
+double totalProfit = currentAssets - cost;
+double totalRate = cost > 0 ? (totalProfit / cost * 100.0) : 0;
 
-                        _context.DailyArchives.Add(new DailyArchive
-                        {
-                            Username = username,
-                            FundCode = fund.FundCode,
-                            FundName = fund.FundName,
-                            RecordDate = today,
-                            Assets = fund.HoldAmount,
-                            DailyProfit = Math.Round(dailyProfit, 2),
-                            DailyRate = Math.Round(dailyRate, 2),
-                            TotalProfit = Math.Round(totalProfit, 2), // 🎯 补填
-                            TotalRate = Math.Round(totalRate, 2)      // 🎯 补填
-                        });
+_context.DailyArchives.Add(new DailyArchive
+{
+    Username = username,
+    FundCode = fund.FundCode,
+    FundName = fund.FundName,
+    RecordDate = today,
+    Assets = fund.HoldAmount,
+    DailyProfit = Math.Round(dailyProfit, 2),
+    DailyRate = Math.Round(dailyRate, 2),
+    TotalProfit = Math.Round(totalProfit, 2), // 🎯 补填
+    TotalRate = Math.Round(totalRate, 2)      // 🎯 补填
+});
 
                     }
 
                     double totalDailyProfit = _context.DailyArchives.Local
     .Where(a => a.Username == username && a.FundCode != "TOTAL" && a.RecordDate == today)
     .Sum(a => a.DailyProfit);
-                    double totalDailyRate = totalCost > 0 ? (totalDailyProfit / totalCost) * 100 : 0;
+double totalDailyRate = totalCost > 0 ? (totalDailyProfit / totalCost) * 100 : 0;
 
-                    // 🚀 核心补丁：总阵地的累计盈亏核算
-                    double currentTotalAssetsAfter = totalAssets + totalDailyProfit;
-                    double totalCampProfit = currentTotalAssetsAfter - totalCost;
-                    double totalCampRate = totalCost > 0 ? (totalCampProfit / totalCost * 100.0) : 0;
+// 🚀 核心补丁：总阵地的累计盈亏核算
+double currentTotalAssetsAfter = totalAssets + totalDailyProfit;
+double totalCampProfit = currentTotalAssetsAfter - totalCost;
+double totalCampRate = totalCost > 0 ? (totalCampProfit / totalCost * 100.0) : 0;
 
-                    _context.DailyArchives.Add(new DailyArchive
-                    {
-                        Username = username,
-                        FundCode = "TOTAL",
-                        FundName = "总阵地",
-                        RecordDate = today,
-                        Assets = totalAssets,
-                        DailyProfit = Math.Round(totalDailyProfit, 2),
-                        DailyRate = Math.Round(totalDailyRate, 2),
-                        TotalProfit = Math.Round(totalCampProfit, 2), // 🎯 补填总阵地累计
-                        TotalRate = Math.Round(totalCampRate, 2)      // 🎯 补填总阵地累计
-                    });
+_context.DailyArchives.Add(new DailyArchive
+{
+    Username = username,
+    FundCode = "TOTAL",
+    FundName = "总阵地",
+    RecordDate = today,
+    Assets = totalAssets,
+    DailyProfit = Math.Round(totalDailyProfit, 2),
+    DailyRate = Math.Round(totalDailyRate, 2),
+    TotalProfit = Math.Round(totalCampProfit, 2), // 🎯 补填总阵地累计
+    TotalRate = Math.Round(totalCampRate, 2)      // 🎯 补填总阵地累计
+});
 
                     savedCount++;
                 }
