@@ -1028,121 +1028,139 @@ double? actualExactProfit = exactProfitDict.ContainsKey(config.FundCode) ? exact
         }
 
         [HttpGet("sector-funds")]
-        public async Task<IActionResult> GetSectorFunds([FromQuery] string sectorName)
+public async Task<IActionResult> GetSectorFunds([FromQuery] string sectorName)
+{
+    if (string.IsNullOrEmpty(sectorName)) return BadRequest("缺少板块名称");
+
+    // 1. 基础清理
+    string keyword = sectorName.Replace("概念", "").Replace("板块", "");
+
+    // 2. 🚀 升级版：超级语义映射引擎 (把你截图里的冷门概念都接管了)
+    if (keyword.Contains("蛋白") || keyword.Contains("CRO") || keyword.Contains("药") || keyword.Contains("单抗") || keyword.Contains("肝炎") || keyword.Contains("阿兹海默") || keyword.Contains("医疗") || keyword.Contains("医美") || keyword.Contains("生物"))
+        keyword = "医药";
+    else if (keyword.Contains("CPO") || keyword.Contains("光通信") || keyword.Contains("算力") || keyword.Contains("服务器") || keyword.Contains("宽带") || keyword.Contains("脑机") || keyword.Contains("F5G")) // 新增 F5G
+        keyword = "通信";
+    else if (keyword.Contains("低空经济") || keyword.Contains("飞行") || keyword.Contains("卫星") || keyword.Contains("航天"))
+        keyword = "军工";
+    else if (keyword.Contains("电池") || keyword.Contains("锂") || keyword.Contains("钠") || keyword.Contains("储能") || keyword.Contains("光伏") || keyword.Contains("逆变器")) // 新增 锂电池相关
+        keyword = "新能源";
+    else if (keyword.Contains("半导体") || keyword.Contains("光刻") || keyword.Contains("封装") || keyword.Contains("芯片"))
+        keyword = "半导体";
+    else if (keyword.Contains("苹果") || keyword.Contains("华为") || keyword.Contains("消费电子") || keyword.Contains("面板") || keyword.Contains("元器件"))
+        keyword = "电子";
+    else if (keyword.Contains("汽车") || keyword.Contains("整车"))
+        keyword = "汽车";
+    else if (keyword.Contains("游戏") || keyword.Contains("传媒") || keyword.Contains("短剧") || keyword.Contains("影视") || keyword.Contains("文字") || keyword.Contains("娱乐")) // 新增 文字媒体、娱乐用品
+        keyword = "传媒";
+    else if (keyword.Contains("AI") || keyword.Contains("大模型") || keyword.Contains("数据") || keyword.Contains("软件") || keyword.Contains("大科技"))
+        keyword = "人工智能";
+    else if (keyword.Contains("双创")) 
+        keyword = "科创创业"; // 修复双创50
+    else if (keyword.Contains("券商") || keyword.Contains("证券") || keyword.Contains("保险")) 
+        keyword = "证券";
+    else
+    {
+        // 通用后缀剔除兜底
+        string[] suffixes = { "制造", "外包", "服务", "设备", "商业", "制剂", "用品", "耗材", "制品", "工程", "产业", "概念", "加工", "管材" };
+        foreach (var suffix in suffixes)
         {
-            if (string.IsNullOrEmpty(sectorName)) return BadRequest("缺少板块名称");
-
-            string keyword = sectorName.Replace("概念", "").Replace("板块", "");
-
-            if (keyword.Contains("蛋白") || keyword.Contains("CRO") || keyword.Contains("药") || keyword.Contains("单抗") || keyword.Contains("肝炎") || keyword.Contains("阿兹海默") || keyword.Contains("医疗") || keyword.Contains("医美") || keyword.Contains("生物"))
-                keyword = "医药";
-            else if (keyword.Contains("CPO") || keyword.Contains("光通信") || keyword.Contains("算力") || keyword.Contains("服务器") || keyword.Contains("宽带") || keyword.Contains("脑机"))
-                keyword = "通信";
-            else if (keyword.Contains("低空经济") || keyword.Contains("飞行") || keyword.Contains("卫星") || keyword.Contains("航天"))
-                keyword = "军工";
-            else if (keyword.Contains("电池") || keyword.Contains("锂") || keyword.Contains("钠") || keyword.Contains("储能") || keyword.Contains("光伏"))
-                keyword = "新能源";
-            else if (keyword.Contains("半导体") || keyword.Contains("光刻") || keyword.Contains("封装") || keyword.Contains("芯片"))
-                keyword = "半导体";
-            else if (keyword.Contains("苹果") || keyword.Contains("华为") || keyword.Contains("消费电子") || keyword.Contains("面板") || keyword.Contains("元器件"))
-                keyword = "电子";
-            else if (keyword.Contains("汽车") || keyword.Contains("整车"))
-                keyword = "汽车";
-            else if (keyword.Contains("游戏") || keyword.Contains("传媒") || keyword.Contains("短剧") || keyword.Contains("影视"))
-                keyword = "传媒";
-            else if (keyword.Contains("AI") || keyword.Contains("大模型") || keyword.Contains("数据") || keyword.Contains("软件"))
-                keyword = "人工智能";
-            else
+            if (keyword.EndsWith(suffix) && keyword.Length > suffix.Length)
             {
-                string[] suffixes = { "制造", "外包", "服务", "设备", "商业", "制剂", "用品", "耗材", "制品", "工程", "产业", "概念" };
-                foreach (var suffix in suffixes)
-                {
-                    if (keyword.EndsWith(suffix) && keyword.Length > suffix.Length)
-                    {
-                        keyword = keyword.Substring(0, keyword.Length - suffix.Length);
-                        break;
-                    }
-                }
-                if (keyword.Length >= 4) keyword = keyword.Substring(0, 2);
-            }
-
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-            var resultList = new List<dynamic>();
-
-            try
-            {
-                string searchUrl = $"http://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?m=1&key={Uri.EscapeDataString(keyword)}";
-                string searchRes = await client.GetStringAsync(searchUrl);
-
-                using var doc = System.Text.Json.JsonDocument.Parse(searchRes);
-                var datas = doc.RootElement.GetProperty("Datas");
-
-                if (datas.ValueKind != System.Text.Json.JsonValueKind.Null && datas.GetArrayLength() > 0)
-                {
-                    var fundCodes = new List<string>();
-                    var fundDict = new Dictionary<string, string>();
-
-                    foreach (var item in datas.EnumerateArray())
-                    {
-                        if (item.TryGetProperty("CATEGORYDESC", out var cat) && cat.GetString() != "基金") continue;
-
-                        string fCode = item.GetProperty("CODE").GetString();
-                        string fName = item.GetProperty("NAME").GetString();
-
-                        if ((fName.Contains("ETF") || fName.Contains("联接") || fName.Contains("指数")) && !fundDict.ContainsKey(fCode))
-                        {
-                            fundCodes.Add(fCode);
-                            fundDict[fCode] = fName;
-                            if (fundCodes.Count >= 6) break;
-                        }
-                    }
-
-                    if (fundCodes.Count < 6)
-                    {
-                        foreach (var item in datas.EnumerateArray())
-                        {
-                            if (item.TryGetProperty("CATEGORYDESC", out var cat) && cat.GetString() != "基金") continue;
-
-                            string fCode = item.GetProperty("CODE").GetString();
-                            string fName = item.GetProperty("NAME").GetString();
-
-                            if (!fundDict.ContainsKey(fCode))
-                            {
-                                fundCodes.Add(fCode);
-                                fundDict[fCode] = fName;
-                                if (fundCodes.Count >= 6) break;
-                            }
-                        }
-                    }
-
-                    var tasks = fundCodes.Select(async code =>
-                    {
-                        try
-                        {
-                            string gzUrl = $"http://fundgz.1234567.com.cn/js/{code}.js?rt={DateTime.Now.Ticks}";
-                            string gzRes = await client.GetStringAsync(gzUrl);
-                            var match = System.Text.RegularExpressions.Regex.Match(gzRes, @"\""gszzl\"":\""([^\""]+)\""");
-                            if (match.Success && double.TryParse(match.Groups[1].Value, out double rate))
-                            {
-                                return new { code = code, name = fundDict[code], rate = rate };
-                            }
-                        }
-                        catch { }
-                        return null;
-                    });
-
-                    var results = await Task.WhenAll(tasks);
-                    foreach (var res in results) if (res != null) resultList.Add(res);
-                }
-
-                resultList = resultList.OrderByDescending(x => (double)x.GetType().GetProperty("rate").GetValue(x)).ToList();
-                return Ok(resultList);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, $"找基失败: {ex.Message}");
+                keyword = keyword.Substring(0, keyword.Length - suffix.Length);
+                break;
             }
         }
+        if (keyword.Length >= 4) keyword = keyword.Substring(0, 2);
+    }
+
+    using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+    var resultList = new List<dynamic>();
+
+    try
+    {
+        // 去天天基金搜索
+        string searchUrl = $"http://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?m=1&key={Uri.EscapeDataString(keyword)}";
+        string searchRes = await client.GetStringAsync(searchUrl);
+
+        using var doc = System.Text.Json.JsonDocument.Parse(searchRes);
+        var datas = doc.RootElement.GetProperty("Datas");
+
+        if (datas.ValueKind != System.Text.Json.JsonValueKind.Null && datas.GetArrayLength() > 0)
+        {
+            var fundCodes = new List<string>();
+            var fundDict = new Dictionary<string, string>();
+
+            // 优先找 ETF/指数/联接基金
+            foreach (var item in datas.EnumerateArray())
+            {
+                if (item.TryGetProperty("CATEGORYDESC", out var cat) && cat.GetString() != "基金") continue;
+                string fCode = item.GetProperty("CODE").GetString();
+                string fName = item.GetProperty("NAME").GetString();
+
+                if ((fName.Contains("ETF") || fName.Contains("联接") || fName.Contains("指数")) && !fundDict.ContainsKey(fCode))
+                {
+                    fundCodes.Add(fCode);
+                    fundDict[fCode] = fName;
+                    if (fundCodes.Count >= 6) break;
+                }
+            }
+
+            // 凑不够的话拿主动基金顶上
+            if (fundCodes.Count < 6)
+            {
+                foreach (var item in datas.EnumerateArray())
+                {
+                    if (item.TryGetProperty("CATEGORYDESC", out var cat) && cat.GetString() != "基金") continue;
+                    string fCode = item.GetProperty("CODE").GetString();
+                    string fName = item.GetProperty("NAME").GetString();
+
+                    if (!fundDict.ContainsKey(fCode))
+                    {
+                        fundCodes.Add(fCode);
+                        fundDict[fCode] = fName;
+                        if (fundCodes.Count >= 6) break;
+                    }
+                }
+            }
+
+            // 🚀 核心修复：即使天天基金的估值接口挂了，也把基金返回！
+            var tasks = fundCodes.Select(async code =>
+            {
+                double finalRate = 0.0;
+                try
+                {
+                    string gzUrl = $"http://fundgz.1234567.com.cn/js/{code}.js?rt={DateTime.Now.Ticks}";
+                    string gzRes = await client.GetStringAsync(gzUrl);
+                    var match = System.Text.RegularExpressions.Regex.Match(gzRes, @"\""gszzl\"":\""([^\""]+)\""");
+                    if (match.Success && double.TryParse(match.Groups[1].Value, out double rate))
+                    {
+                        finalRate = rate;
+                    }
+                }
+                catch { 
+                    // 接口炸了不抛异常，生吞，保底 rate 为 0
+                }
+                
+                // 不管有没有查到实时净值，只要搜到了这只基金，就强行返回它！
+                return new { code = code, name = fundDict[code], rate = finalRate };
+            });
+
+            var results = await Task.WhenAll(tasks);
+            foreach (var res in results)
+            {
+                if (res != null) resultList.Add(res);
+            }
+        }
+
+        // 排序：涨的多的在前面
+        resultList = resultList.OrderByDescending(x => (double)x.GetType().GetProperty("rate").GetValue(x)).ToList();
+        return Ok(resultList);
+    }
+    catch (Exception ex)
+    {
+        return StatusCode(500, $"找基失败: {ex.Message}");
+    }
+}
 
         [HttpPost("save-archive")]
         public async Task<IActionResult> SaveArchive([FromBody] ArchiveRequest req)
