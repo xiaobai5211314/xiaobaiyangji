@@ -540,7 +540,7 @@ public async Task<IActionResult> GetGlobalIndices()
         new { name = "道琼斯",   secid = "100.DJIA" }
     };
 
-    // 🛡️ 隐形迷彩服：全套伪装成 Chrome 浏览器，支持压缩，打穿东方财富防火墙！
+    // 🛡️ 隐形迷彩服：全套伪装成 Chrome 浏览器
     using var handler = new HttpClientHandler { AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate };
     using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
     http.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36");
@@ -565,7 +565,6 @@ public async Task<IActionResult> GetGlobalIndices()
                     var latestItem = klineArray[^1].Split(',');
                     var oldestItem = klineArray[0].Split(',');
 
-                    // ⚔️ 防弹解析：即使数据是空字符串也不会崩溃
                     double latestClose = 0, todayRate = 0, oldestClose = 0;
                     if (latestItem.Length > 2) double.TryParse(latestItem[2], out latestClose);
                     if (latestItem.Length > 8) double.TryParse(latestItem[8], out todayRate);
@@ -573,21 +572,21 @@ public async Task<IActionResult> GetGlobalIndices()
 
                     double yearRate = oldestClose > 0 ? Math.Round((latestClose - oldestClose) / oldestClose * 100, 2) : 0;
 
+                    // 🚀 核心修复点 1：把里面的匿名对象强制披上 object 的外衣
                     var cleanKlines = klineArray.Reverse().Select(k => {
                         var p = k.Split(',');
                         double rate = 0;
                         if (p.Length > 8) double.TryParse(p[8], out rate);
-                        return new { date = p[0], rate = rate };
+                        return (object)new { date = p[0], rate = rate };
                     }).ToList();
 
-                    // 🎯 引擎解析成功，直接返回纯净的计算结果！不再包含 data 字段！
                     return new
                     {
                         name = idx.name,
                         latest = latestClose,
                         todayRate = todayRate,
                         yearRate = yearRate,
-                        klines = cleanKlines
+                        klines = cleanKlines // 现在它的类型是绝对标准的 List<object>
                     };
                 }
             }
@@ -597,7 +596,8 @@ public async Task<IActionResult> GetGlobalIndices()
             Console.WriteLine($"[大盘拉取故障] {idx.name} - {ex.Message}");
         }
 
-        return new { name = idx.name, latest = 0.0, todayRate = 0.0, yearRate = 0.0, klines = new object[0] };
+        // 🚀 核心修复点 2：失败时返回一模一样的 List<object>，彻底消灭类型红线！
+        return new { name = idx.name, latest = 0.0, todayRate = 0.0, yearRate = 0.0, klines = new List<object>() };
     });
 
     var results = await Task.WhenAll(tasks);
