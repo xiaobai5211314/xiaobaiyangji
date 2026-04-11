@@ -243,13 +243,11 @@
                 <div v-else style="overflow-y: auto; flex: 1; padding-right: 5px;">
                     <div style="margin-bottom: 30px;">
                         <h4 style="color: #ef4444; border-bottom: 1px solid rgba(239,68,68,0.3); padding-bottom: 8px; margin-bottom: 0;">🔥 领涨 TOP 20</h4>
-                       <div v-for="(item, index) in sectorTopList" :key="'top'+index" @click="fetchSectorDetails(item)" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer;">
-    <span style="color: #f8fafc; font-weight: bold; font-size: 15px;">
-        <span style="display:inline-block; width: 22px; color: #ef4444; font-size: 13px;">{{ index + 1 }}</span>{{ item.name }}
-    </span>
-    <span style="color: #ff4d4f; font-weight: bold; font-size: 17px; font-family: 'Courier New';">+{{ item.rate }}%</span>
-</div>
-
+                        <div v-for="(item, index) in sectorTopList" :key="'top'+index" @click="fetchSectorDetails(item)" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer;">
+                            <span style="color: #f8fafc; font-weight: bold; font-size: 15px;">
+                                <span style="display:inline-block; width: 22px; color: #ef4444; font-size: 13px;">{{ index + 1 }}</span>{{ item.name }}
+                            </span>
+                            <div :style="{ color: item.rate > 0 ? '#ff4d4f' : (item.rate < 0 ? '#10b981' : '#94a3b8'), fontWeight: 'bold', fontFamily: 'Courier New', fontSize: '16px' }">{{ item.rate > 0 ? '+' : '' }}{{ item.rate !== 0 ? item.rate + '%' : '--' }}</div>
                         </div>
                     </div>
                     <div>
@@ -421,16 +419,15 @@
                     { name: '上证指数', secid: '1.000001', code: '000001', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '科创50', secid: '1.000688', code: '000688', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '创业板指', secid: '0.399006', code: '399006', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '恒生指数', secid: '100.HSI', code: 'HSI', latest: 0, todayRate: 0, yearRate: 0, klines: [] }, // 🚀 修正为 100.HSI
-                    { name: '纳斯达克', secid: '100.NDX', code: 'NDX', latest: 0, todayRate: 0, yearRate: 0, klines: [] }, // 🚀 修正为 100.NDX (纳指100)
-                    { name: '标普500', secid: '100.SPX', code: 'SPX', latest: 0, todayRate: 0, yearRate: 0, klines: [] },  // 🚀 修正为 100.SPX
+                    { name: '恒生指数', secid: '100.HSI', code: 'HSI', latest: 0, todayRate: 0, yearRate: 0, klines: [] }, 
+                    { name: '纳斯达克', secid: '100.NDX', code: 'NDX', latest: 0, todayRate: 0, yearRate: 0, klines: [] }, 
+                    { name: '标普500', secid: '100.SPX', code: 'SPX', latest: 0, todayRate: 0, yearRate: 0, klines: [] },  
                     { name: '道琼斯', secid: '100.DJIA', code: 'DJIA', latest: 0, todayRate: 0, yearRate: 0, klines: [] }
                 ]);
 
                 const showGlobalIndices = ref(false);
                 const isIndicesLoading = ref(false);
 
-                // 🚀 高精度封存引信恢复
                 const saveDailyArchive = async (silent = false) => {
                     if (!silent && !confirm("💾 确定要将大屏当前的数据作为【今日最终战报】永久封存吗？")) return;
                     let d = new Date();
@@ -456,17 +453,17 @@
                     } catch (e) { if (!silent) showToast("🌐 指挥中心失联", "error"); }
                 };
 
-                                                                                                                const fetchGlobalIndices = async () => {
+                const fetchGlobalIndices = async () => {
                     showGlobalIndices.value = true;
                     isIndicesLoading.value = true;
 
-                                        const indices = [
+                    const indices = [
                         { name: '上证指数', secid: '1.000001' },
                         { name: '科创50',   secid: '1.000688' },
                         { name: '创业板指', secid: '0.399006' },
-                        { name: '恒生指数', secid: '100.HSI'  }, // 🚀 修正为 100.HSI
-                        { name: '纳斯达克', secid: '100.NDX' },  // 🚀 修正为 100.NDX
-                        { name: '标普500',  secid: '100.SPX'  }, // 🚀 修正为 100.SPX
+                        { name: '恒生指数', secid: '100.HSI'  }, 
+                        { name: '纳斯达克', secid: '100.NDX' },  
+                        { name: '标普500',  secid: '100.SPX'  }, 
                         { name: '道琼斯',   secid: '100.DJIA' }
                     ];
 
@@ -474,10 +471,8 @@
                     try {
                         const fetchJSONP = (secid) => {
                             return new Promise((resolve) => {
-                                // 动态生成唯一回调名
                                 const callbackName = 'jsonp_' + secid.replace(/\./g, '_');
                                 
-                                // 注册全自动接收点
                                 window[callbackName] = function(data) {
                                     resolve(data);
                                     try {
@@ -489,7 +484,6 @@
 
                                 const script = document.createElement('script');
                                 script.id = callbackName;
-                                // 🚀 终极武器：防盗链隐形披风！强制不发送您的域名，伪装成浏览器直接访问！
                                 script.referrerPolicy = "no-referrer"; 
                                 
                                 script.src = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250&cb=${callbackName}&_t=${Date.now()}`;
@@ -508,10 +502,9 @@
                             const latest = klines[klines.length - 1].split(',');
                             const oldest = klines[0].split(',');
                             
-                            // 🛡️ 绝对防弹解析：任何空数据自动化解为 0
                             const latestClose = parseFloat(latest[2]) || 0;
                             const todayRate = parseFloat(latest[8]) || 0;
-                            const oldestClose = parseFloat(oldest[2]) || 1; // 防止除以0
+                            const oldestClose = parseFloat(oldest[2]) || 1; 
                             
                             const yearRate = ((latestClose - oldestClose) / oldestClose * 100).toFixed(2);
 
@@ -532,7 +525,7 @@
                         globalIndices.value = globalIndices.value.map(item => {
                             const found = results.find(r => r && r.name === item.name);
                             if (found) {
-                                return { ...item, ...found }; // 精准合入数据
+                                return { ...item, ...found }; 
                             }
                             return item;
                         });
@@ -678,7 +671,6 @@
                     } catch (e) { showToast("🚨 雷达连接失败", "error"); } finally { isSectorLoading.value = false; }
                 };
 
-                // 🚀 获取数据的超级大脑
                 const fetchData = async () => {
                     if (!currentUser.value) return;
                     try {
@@ -715,7 +707,6 @@
                                 } else { fund.currentRate = 0; fund.isHoliday = true; }
                             } else { fund.currentRate = 0; fund.isHoliday = true; }
 
-                            // 🚀 核心算力恢复：使用物理利润！
                             if (fund.isSettled && fund.actualExactProfit !== undefined && fund.actualExactProfit !== null) {
                                 fund.todayProfit = fund.actualExactProfit.toFixed(2);
                             } else {
