@@ -453,46 +453,31 @@
                     } catch (e) { if (!silent) showToast("🌐 指挥中心失联", "error"); }
                 };
 
-                                const fetchGlobalIndices = async () => {
+                                                const fetchGlobalIndices = async () => {
                     showGlobalIndices.value = true; 
                     isIndicesLoading.value = true;
                     try {
-                        // 🚀 核心：必须向我们自己的 C# 服务器请求，并加上 _t 时间戳打穿手机缓存！
+                        // 🚀 _t=时间戳，强制炸毁手机浏览器的死缓存！
                         const res = await fetch(`${API_BASE}/api/fund/global-indices?_t=${new Date().getTime()}`); 
                         const results = await res.json();
                         
                         globalIndices.value = globalIndices.value.map(item => {
                             const found = results.find(r => r.name === item.name); 
-                            if (!found || !found.data || found.data === "{}" || typeof found.data !== 'string') return item;
-                            
-                            try {
-                                const json = JSON.parse(found.data); 
-                                const klines = json?.data?.klines; 
-                                if (!klines || klines.length === 0) return item;
-                                
-                                const latest = klines[klines.length - 1].split(','); 
-                                const oldest = klines[0].split(',');
-                                
-                                const latestClose = parseFloat(latest[2]); 
-                                const todayRate = parseFloat(latest[8]);
-                                const yearRate = ((latestClose - parseFloat(oldest[2])) / parseFloat(oldest[2]) * 100).toFixed(2);
-                                
+                            // 🚀 极简赋值：后端传来的数据已经是干净完美的，直接解构合并！
+                            if (found && found.latest > 0) {
                                 return { 
                                     ...item, 
-                                    latest: latestClose, 
-                                    todayRate: todayRate, 
-                                    yearRate: yearRate, 
-                                    klines: klines.slice().reverse().map(k => { 
-                                        const p = k.split(','); 
-                                        return { date: p[0], rate: parseFloat(p[8]) }; 
-                                    }) 
+                                    latest: found.latest, 
+                                    todayRate: found.todayRate, 
+                                    yearRate: found.yearRate, 
+                                    klines: found.klines 
                                 };
-                            } catch (parseError) {
-                                return item; 
                             }
+                            return item; 
                         });
                     } catch (e) { 
                         showToast("🚨 全球大盘加载失败", "error"); 
+                        console.error(e);
                     } finally { 
                         isIndicesLoading.value = false; 
                     }
