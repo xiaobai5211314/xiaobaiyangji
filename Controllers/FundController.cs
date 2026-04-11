@@ -540,7 +540,7 @@ public async Task<IActionResult> GetGlobalIndices()
         new { name = "道琼斯",   secid = "100.DJIA" }
     };
 
-    // 🛡️ 终极隐形迷彩服：全套伪装成 Chrome 浏览器，支持 GZip 压缩，打穿防火墙！
+    // 🛡️ 隐形迷彩服：全套伪装成 Chrome 浏览器，支持压缩，打穿东方财富防火墙！
     using var handler = new HttpClientHandler { AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate };
     using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
     http.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36");
@@ -565,7 +565,7 @@ public async Task<IActionResult> GetGlobalIndices()
                     var latestItem = klineArray[^1].Split(',');
                     var oldestItem = klineArray[0].Split(',');
 
-                    // ⚔️ 防弹解析引擎：任何空数据都不会导致系统崩溃
+                    // ⚔️ 防弹解析：即使数据是空字符串也不会崩溃
                     double latestClose = 0, todayRate = 0, oldestClose = 0;
                     if (latestItem.Length > 2) double.TryParse(latestItem[2], out latestClose);
                     if (latestItem.Length > 8) double.TryParse(latestItem[8], out todayRate);
@@ -580,7 +580,7 @@ public async Task<IActionResult> GetGlobalIndices()
                         return new { date = p[0], rate = rate };
                     }).ToList();
 
-                    // 🎯 直接返回干净的物理数据！
+                    // 🎯 引擎解析成功，直接返回纯净的计算结果！不再包含 data 字段！
                     return new
                     {
                         name = idx.name,
@@ -597,7 +597,6 @@ public async Task<IActionResult> GetGlobalIndices()
             Console.WriteLine($"[大盘拉取故障] {idx.name} - {ex.Message}");
         }
 
-        // 失败时的安全退路
         return new { name = idx.name, latest = 0.0, todayRate = 0.0, yearRate = 0.0, klines = new object[0] };
     });
 
