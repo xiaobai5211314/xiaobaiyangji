@@ -453,17 +453,16 @@
                     } catch (e) { if (!silent) showToast("🌐 指挥中心失联", "error"); }
                 };
 
-                                                const fetchGlobalIndices = async () => {
+                                                                const fetchGlobalIndices = async () => {
                     showGlobalIndices.value = true; 
                     isIndicesLoading.value = true;
                     try {
-                        // 🚀 _t=时间戳，强制炸毁手机浏览器的死缓存！
                         const res = await fetch(`${API_BASE}/api/fund/global-indices?_t=${new Date().getTime()}`); 
                         const results = await res.json();
                         
                         globalIndices.value = globalIndices.value.map(item => {
                             const found = results.find(r => r.name === item.name); 
-                            // 🚀 极简赋值：后端传来的数据已经是干净完美的，直接解构合并！
+                            // 直接接收后端算好的干净数据！
                             if (found && found.latest > 0) {
                                 return { 
                                     ...item, 
@@ -477,6 +476,11 @@
                         });
                     } catch (e) { 
                         showToast("🚨 全球大盘加载失败", "error"); 
+                    } finally { 
+                        isIndicesLoading.value = false; 
+                    }
+                };
+
                         console.error(e);
                     } finally { 
                         isIndicesLoading.value = false; 
