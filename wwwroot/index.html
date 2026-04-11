@@ -506,11 +506,6 @@
         isIndicesLoading.value = false;
     }
 };
-                        console.error(e);
-                    } finally { 
-                        isIndicesLoading.value = false; 
-                    }
-                };
 
                 const viewIndexHistory = (item) => {
                     if (!item.klines || item.klines.length === 0) return showToast("暂无数据", "error");
