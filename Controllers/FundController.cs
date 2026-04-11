@@ -860,10 +860,10 @@ public async Task<IActionResult> GetGlobalIndices()
         new { name = "上证指数", secid = "1.000001" },
         new { name = "科创50",   secid = "1.000688" },
         new { name = "创业板指", secid = "0.399006" },
-        new { name = "恒生指数", secid = "124.HSI" },      // ✅ 港股正确前缀
-        new { name = "纳斯达克", secid = "105.IXIC" },     // ✅ 美股正确前缀
-        new { name = "标普500",  secid = "109.SPX" },      // ✅ 美股正确前缀
-        new { name = "道琼斯",   secid = "100.DJIA" }      // ✅ 美股正确前缀
+        new { name = "恒生指数", secid = "124.HSI" },
+        new { name = "纳斯达克", secid = "105.IXIC" },
+        new { name = "标普500",  secid = "109.SPX" },
+        new { name = "道琼斯",   secid = "100.DJIA" }
     };
 
     using var http = new HttpClient();
@@ -876,27 +876,54 @@ public async Task<IActionResult> GetGlobalIndices()
                   $"?secid={idx.secid}" +
                   "&ut=fa5fd1943c7b386f172d6893dbfa10b" +
                   "&fields1=f1,f2,f3,f4,f5,f6,f7,f8" +
-                  "&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65" +  // ← 必须加这行
-                  "&klt=101" +      // 日K线
-                  "&fqt=1" +        // 复权
+                  "&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65" +
+                  "&klt=101&fqt=1" +
                   "&beg=0&end=20500101";
 
         try
         {
             var response = await http.GetStringAsync(url);
-            // 这里可以根据需要解析 JSON 返回今日和1年涨跌幅（当前您前端已经能处理）
-            return new { idx.name, idx.secid, data = response }; // 您当前前端逻辑已兼容
+            using var doc = JsonDocument.Parse(response);
+
+            if (doc.RootElement.TryGetProperty("data", out var data) &&
+                data.TryGetProperty("klines", out var klines) &&
+                klines.GetArrayLength() > 0)
+            {
+                var klineArray = klines.EnumerateArray().ToArray();
+                var lastKline = klineArray[^1].GetString() ?? "";           // 最新一天
+                var fields = lastKline.Split(',');
+
+                double point = fields.Length > 2 && double.TryParse(fields[2], out var p) ? p : 0;           // f53 = 收盘点位
+                double todayRate = fields.Length > 7 && double.TryParse(fields[7], out var t) ? t : 0;      // f58 = 今日涨跌幅
+
+                // 1年收益率（取大约252个交易日前的数据）
+                double yearRate = 0;
+                if (klineArray.Length > 252)
+                {
+                    var yearAgoKline = klineArray[klineArray.Length - 252].GetString() ?? "";
+                    var oldFields = yearAgoKline.Split(',');
+                    double oldClose = oldFields.Length > 2 && double.TryParse(oldFields[2], out var oc) ? oc : 0;
+                    if (oldClose > 0 && point > 0)
+                        yearRate = (point / oldClose - 1) * 100;
+                }
+
+                return new
+                {
+                    name = idx.name,
+                    point = Math.Round(point, 2),
+                    todayRate = Math.Round(todayRate, 2),
+                    yearRate = Math.Round(yearRate, 2)
+                };
+            }
         }
-        catch
-        {
-            return new { idx.name, idx.secid, data = "" };
-        }
+        catch { }
+
+        return new { idx.name, point = 0.0, todayRate = 0.0, yearRate = 0.0 };
     }).ToList();
 
     var results = await Task.WhenAll(tasks);
     return Ok(results);
 }
-
         [HttpGet("sectors")]
         public async Task<IActionResult> GetSectors()
         {
