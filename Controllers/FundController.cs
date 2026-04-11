@@ -872,11 +872,11 @@ public async Task<IActionResult> GetGlobalIndices()
 
     var tasks = indices.Select(async idx =>
     {
-        // 🚀 绝对正确的 url，包含完整的 ut 密钥、返回 250 天数据 (lmt=250)
+        // 绝对正确的 url，包含完整的 ut 密钥、返回 250 天数据 (lmt=250)
         var url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={idx.secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250";
         try
         {
-            // 🚀 C# 后端只做高速搬运工，把 JSON 原封不动传给前端，让前端的算力去提取 klines 画图！
+            // 🚀 C# 仅做高速代理，原封不动返回 JSON 字符串，让前端负责运算！
             var json = await http.GetStringAsync(url);
             return new { idx.name, data = json };
         }
@@ -886,6 +886,7 @@ public async Task<IActionResult> GetGlobalIndices()
     var results = await Task.WhenAll(tasks);
     return Ok(results);
 }
+
 
         [HttpGet("sectors")]
         public async Task<IActionResult> GetSectors()
