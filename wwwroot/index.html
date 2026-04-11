@@ -415,15 +415,16 @@
                 const archiveModal = reactive({ show: false, isLoading: false, targetName: '', data: [] });
                 const ocrModal = reactive({ show: false, content: '' });
 
-                const globalIndices = ref([
+                                const globalIndices = ref([
                     { name: '上证指数', secid: '1.000001', code: '000001', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '科创50', secid: '1.000688', code: '000688', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '创业板指', secid: '0.399006', code: '399006', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '恒生指数', secid: '124.HSI', code: 'HSI', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '纳斯达克', secid: '105.IXIC', code: 'IXIC', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '标普500', secid: '109.SPX', code: 'SPX', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
+                    { name: '恒生指数', secid: '100.HSI', code: 'HSI', latest: 0, todayRate: 0, yearRate: 0, klines: [] }, // 🚀 修正为 100.HSI
+                    { name: '纳斯达克', secid: '100.NDX', code: 'NDX', latest: 0, todayRate: 0, yearRate: 0, klines: [] }, // 🚀 修正为 100.NDX (纳指100)
+                    { name: '标普500', secid: '100.SPX', code: 'SPX', latest: 0, todayRate: 0, yearRate: 0, klines: [] },  // 🚀 修正为 100.SPX
                     { name: '道琼斯', secid: '100.DJIA', code: 'DJIA', latest: 0, todayRate: 0, yearRate: 0, klines: [] }
                 ]);
+
                 const showGlobalIndices = ref(false);
                 const isIndicesLoading = ref(false);
 
@@ -457,15 +458,16 @@
                     showGlobalIndices.value = true;
                     isIndicesLoading.value = true;
 
-                    const indices = [
+                                        const indices = [
                         { name: '上证指数', secid: '1.000001' },
                         { name: '科创50',   secid: '1.000688' },
                         { name: '创业板指', secid: '0.399006' },
-                        { name: '恒生指数', secid: '124.HSI'  },
-                        { name: '纳斯达克', secid: '105.IXIC' },
-                        { name: '标普500',  secid: '109.SPX'  },
+                        { name: '恒生指数', secid: '100.HSI'  }, // 🚀 修正为 100.HSI
+                        { name: '纳斯达克', secid: '100.NDX' },  // 🚀 修正为 100.NDX
+                        { name: '标普500',  secid: '100.SPX'  }, // 🚀 修正为 100.SPX
                         { name: '道琼斯',   secid: '100.DJIA' }
                     ];
+
 
                     try {
                         const fetchJSONP = (secid) => {
