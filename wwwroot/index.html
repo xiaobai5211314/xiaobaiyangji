@@ -454,19 +454,6 @@
                 };
 
                 const fetchGlobalIndices = async () => {
-                    showGlobalIndices.value = true; isIndicesLoading.value = true;
-                    try {
-                        const res = await fetch(`${API_BASE}/api/fund/global-indices`); const results = await res.json();
-                        globalIndices.value = globalIndices.value.map(item => {
-                            const found = results.find(r => r.name === item.name); if (!found) return item;
-                            const json = JSON.parse(found.data); const klines = json?.data?.klines; if (!klines || klines.length === 0) return item;
-                            const latest = klines[klines.length - 1].split(','); const oldest = klines[0].split(',');
-                            const latestClose = parseFloat(latest[2]); const todayRate = parseFloat(latest[8]);
-                            const yearRate = ((latestClose - parseFloat(oldest[2])) / parseFloat(oldest[2]) * 100).toFixed(2);
-                            return { ...item, latest: latestClose, todayRate, yearRate, klines: klines.reverse().map(k => { const p = k.split(','); return { date: p[0], rate: parseFloat(p[8]) }; }) };
-                        });
-                    } catch (e) { showToast("🚨 全球大盘加载失败", "error"); } finally { isIndicesLoading.value = false; }
-                };const fetchGlobalIndices = async () => {
     showGlobalIndices.value = true;
     isIndicesLoading.value = true;
 
@@ -519,7 +506,6 @@
         isIndicesLoading.value = false;
     }
 };
-
                 const viewIndexHistory = (item) => {
                     if (!item.klines || item.klines.length === 0) return showToast("暂无数据", "error");
                     historyModal.show = true; historyModal.name = item.name; historyModal.isLoading = false; historyModal.data = item.klines;
