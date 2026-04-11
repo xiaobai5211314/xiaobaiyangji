@@ -247,7 +247,8 @@
                             <span style="color: #f8fafc; font-weight: bold; font-size: 15px;">
                                 <span style="display:inline-block; width: 22px; color: #ef4444; font-size: 13px;">{{ index + 1 }}</span>{{ item.name }}
                             </span>
-                            <span style="color: #ff4d4f; font-weight: bold; font-size: 17px; font-family: 'Courier New';">+{{ item.rate }}%</span>
+                            <div :style="{ color: stock.rate > 0 ? '#ff4d4f' : (stock.rate < 0 ? '#10b981' : '#94a3b8'), fontWeight: 'bold', fontFamily: 'Courier New', fontSize: '16px' }">{{ stock.rate > 0 ? '+' : '' }}{{ stock.rate !== 0 ? stock.rate + '%' : '--' }}</div>
+
                         </div>
                     </div>
                     <div>
