@@ -872,58 +872,21 @@ public async Task<IActionResult> GetGlobalIndices()
 
     var tasks = indices.Select(async idx =>
     {
-        var url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get" +
-                  $"?secid={idx.secid}" +
-                  "&ut=fa5fd1943c7b386f172d6893dbfa10b" +
-                  "&fields1=f1,f2,f3,f4,f5,f6,f7,f8" +
-                  "&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65" +
-                  "&klt=101&fqt=1" +
-                  "&beg=0&end=20500101";
-
+        // 🚀 绝对正确的 url，包含完整的 ut 密钥、返回 250 天数据 (lmt=250)
+        var url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={idx.secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250";
         try
         {
-            var response = await http.GetStringAsync(url);
-            using var doc = JsonDocument.Parse(response);
-
-            if (doc.RootElement.TryGetProperty("data", out var data) &&
-                data.TryGetProperty("klines", out var klines) &&
-                klines.GetArrayLength() > 0)
-            {
-                var klineArray = klines.EnumerateArray().ToArray();
-                var lastKline = klineArray[^1].GetString() ?? "";           // 最新一天
-                var fields = lastKline.Split(',');
-
-                double point = fields.Length > 2 && double.TryParse(fields[2], out var p) ? p : 0;           // f53 = 收盘点位
-                double todayRate = fields.Length > 7 && double.TryParse(fields[7], out var t) ? t : 0;      // f58 = 今日涨跌幅
-
-                // 1年收益率（取大约252个交易日前的数据）
-                double yearRate = 0;
-                if (klineArray.Length > 252)
-                {
-                    var yearAgoKline = klineArray[klineArray.Length - 252].GetString() ?? "";
-                    var oldFields = yearAgoKline.Split(',');
-                    double oldClose = oldFields.Length > 2 && double.TryParse(oldFields[2], out var oc) ? oc : 0;
-                    if (oldClose > 0 && point > 0)
-                        yearRate = (point / oldClose - 1) * 100;
-                }
-
-                return new
-                {
-                    name = idx.name,
-                    point = Math.Round(point, 2),
-                    todayRate = Math.Round(todayRate, 2),
-                    yearRate = Math.Round(yearRate, 2)
-                };
-            }
+            // 🚀 C# 后端只做高速搬运工，把 JSON 原封不动传给前端，让前端的算力去提取 klines 画图！
+            var json = await http.GetStringAsync(url);
+            return new { idx.name, data = json };
         }
-        catch { }
-
-        return new { idx.name, point = 0.0, todayRate = 0.0, yearRate = 0.0 };
-    }).ToList();
+        catch { return new { idx.name, data = "{}" }; }
+    });
 
     var results = await Task.WhenAll(tasks);
     return Ok(results);
 }
+
         [HttpGet("sectors")]
         public async Task<IActionResult> GetSectors()
         {
