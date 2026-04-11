@@ -243,7 +243,7 @@
                 <div v-else style="overflow-y: auto; flex: 1; padding-right: 5px;">
                     <div style="margin-bottom: 30px;">
                         <h4 style="color: #ef4444; border-bottom: 1px solid rgba(239,68,68,0.3); padding-bottom: 8px; margin-bottom: 0;">🔥 领涨 TOP 20</h4>
-                        <div v-for="(item, index) in sectorTopList" :key="'top'+item.code" @click="fetchSectorDetails(item)" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer;">
+                        <div v-for="(item, index) in sectorTopList" :key="'top'+index" @click="fetchSectorDetails(item)" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer;">
                             <span style="color: #f8fafc; font-weight: bold; font-size: 15px;">
                                 <span style="display:inline-block; width: 22px; color: #ef4444; font-size: 13px;">{{ index + 1 }}</span>{{ item.name }}
                             </span>
@@ -253,7 +253,7 @@
                     </div>
                     <div>
                         <h4 style="color: #10b981; border-bottom: 1px solid rgba(16,185,129,0.3); padding-bottom: 8px; margin-bottom: 0;">🧊 领跌 TOP 20</h4>
-                        <div v-for="(item, index) in sectorBottomList" :key="'bot'+item.code" @click="fetchSectorDetails(item)" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer;">
+                        <div v-for="(item, index) in sectorBottomList" :key="'bot'+index" @click="fetchSectorDetails(item)" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer;">
                             <span style="color: #f8fafc; font-weight: bold; font-size: 15px;">
                                 <span style="display:inline-block; width: 22px; color: #10b981; font-size: 13px;">{{ index + 1 }}</span>{{ item.name }}
                             </span>
