@@ -466,7 +466,59 @@
                             return { ...item, latest: latestClose, todayRate, yearRate, klines: klines.reverse().map(k => { const p = k.split(','); return { date: p[0], rate: parseFloat(p[8]) }; }) };
                         });
                     } catch (e) { showToast("🚨 全球大盘加载失败", "error"); } finally { isIndicesLoading.value = false; }
+                };const fetchGlobalIndices = async () => {
+    showGlobalIndices.value = true;
+    isIndicesLoading.value = true;
+
+    const indices = [
+        { name: '上证指数', secid: '1.000001' },
+        { name: '科创50',   secid: '1.000688' },
+        { name: '创业板指', secid: '0.399006' },
+        { name: '恒生指数', secid: '124.HSI'  },
+        { name: '纳斯达克', secid: '105.IXIC' },
+        { name: '标普500',  secid: '109.SPX'  },
+        { name: '道琼斯',   secid: '100.DJIA' }
+    ];
+
+    try {
+        const tasks = indices.map(async idx => {
+            const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${idx.secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250`;
+            try {
+                const res = await fetch(url);
+                const json = await res.json();
+                const klines = json?.data?.klines;
+                if (!klines || klines.length === 0) return null;
+
+                const latest = klines[klines.length - 1].split(',');
+                const oldest = klines[0].split(',');
+                const latestClose = parseFloat(latest[2]);
+                const todayRate = parseFloat(latest[8]);
+                const yearRate = ((latestClose - parseFloat(oldest[2])) / parseFloat(oldest[2]) * 100).toFixed(2);
+
+                return {
+                    ...globalIndices.value.find(x => x.name === idx.name),
+                    latest: latestClose,
+                    todayRate,
+                    yearRate,
+                    klines: klines.slice().reverse().map(k => {
+                        const p = k.split(',');
+                        return { date: p[0], rate: parseFloat(p[8]) };
+                    })
                 };
+            } catch { return null; }
+        });
+
+        const results = await Promise.all(tasks);
+        globalIndices.value = globalIndices.value.map(item => {
+            const found = results.find(r => r && r.name === item.name);
+            return found || item;
+        });
+    } catch (e) {
+        showToast("🚨 全球大盘加载失败", "error");
+    } finally {
+        isIndicesLoading.value = false;
+    }
+};
 
                 const viewIndexHistory = (item) => {
                     if (!item.klines || item.klines.length === 0) return showToast("暂无数据", "error");
