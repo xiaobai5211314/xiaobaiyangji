@@ -853,37 +853,49 @@ namespace 估值助手.Controllers
         }
 
         [HttpGet("global-indices")]
-        public async Task<IActionResult> GetGlobalIndices()
+public async Task<IActionResult> GetGlobalIndices()
+{
+    var indices = new[]
+    {
+        new { name = "上证指数", secid = "1.000001" },
+        new { name = "科创50",   secid = "1.000688" },
+        new { name = "创业板指", secid = "0.399006" },
+        new { name = "恒生指数", secid = "124.HSI" },      // ✅ 港股正确前缀
+        new { name = "纳斯达克", secid = "105.IXIC" },     // ✅ 美股正确前缀
+        new { name = "标普500",  secid = "109.SPX" },      // ✅ 美股正确前缀
+        new { name = "道琼斯",   secid = "100.DJIA" }      // ✅ 美股正确前缀
+    };
+
+    using var http = new HttpClient();
+    http.DefaultRequestHeaders.Add("Referer", "https://www.eastmoney.com/");
+    http.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
+
+    var tasks = indices.Select(async idx =>
+    {
+        var url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get" +
+                  $"?secid={idx.secid}" +
+                  "&ut=fa5fd1943c7b386f172d6893dbfa10b" +
+                  "&fields1=f1,f2,f3,f4,f5,f6,f7,f8" +
+                  "&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65" +  // ← 必须加这行
+                  "&klt=101" +      // 日K线
+                  "&fqt=1" +        // 复权
+                  "&beg=0&end=20500101";
+
+        try
         {
-            var indices = new[]
-            {
-                new { name="上证指数", secid="1.000001" },
-                new { name="科创50",   secid="1.000688" },
-                new { name="创业板指", secid="0.399006" },
-                new { name="恒生指数", secid="124.HSI"   },  // 🚀 绝对正确的港股前缀
-                new { name="纳斯达克", secid="105.IXIC"  },  // 🚀 绝对正确的纳斯达克
-                new { name="标普500",  secid="109.SPX"   },  // 🚀 绝对正确的标普500
-                new { name="道琼斯",   secid="100.DJIA"  },
-            };
-
-            using var http = new HttpClient();
-            http.DefaultRequestHeaders.Add("Referer", "https://www.eastmoney.com/");
-            http.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
-
-            var tasks = indices.Select(async idx =>
-            {
-                var url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={idx.secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250";
-                try
-                {
-                    var json = await http.GetStringAsync(url);
-                    return new { idx.name, data = json };
-                }
-                catch { return new { idx.name, data = "{}" }; }
-            });
-
-            var results = await Task.WhenAll(tasks);
-            return Ok(results);
+            var response = await http.GetStringAsync(url);
+            // 这里可以根据需要解析 JSON 返回今日和1年涨跌幅（当前您前端已经能处理）
+            return new { idx.name, idx.secid, data = response }; // 您当前前端逻辑已兼容
         }
+        catch
+        {
+            return new { idx.name, idx.secid, data = "" };
+        }
+    }).ToList();
+
+    var results = await Task.WhenAll(tasks);
+    return Ok(results);
+}
 
         [HttpGet("sectors")]
         public async Task<IActionResult> GetSectors()
