@@ -545,54 +545,57 @@ public async Task<IActionResult> GetGlobalIndices()
     http.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
     http.DefaultRequestHeaders.Add("Referer", "https://quote.eastmoney.com/");
 
-    var tasks = indices.Select(async idx =>
-    {
-        var url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={idx.secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250";
-        try
+            var tasks = indices.Select(async idx =>
         {
-            var response = await http.GetStringAsync(url);
-            using var doc = JsonDocument.Parse(response);
-            
-            if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind != JsonValueKind.Null)
+            var url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={idx.secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250";
+            try
             {
-                if (data.TryGetProperty("klines", out var klines) && klines.GetArrayLength() > 0)
+                var response = await http.GetStringAsync(url);
+                using var doc = JsonDocument.Parse(response);
+                
+                if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind != JsonValueKind.Null)
                 {
-                    // 🚀 核心算力转移：在 C# 直接算出最新点位、涨跌幅和 1年收益率
-                    var klineArray = klines.EnumerateArray().Select(k => k.GetString()).ToArray();
-                    var latestItem = klineArray[^1].Split(',');
-                    var oldestItem = klineArray[0].Split(',');
-
-                    double latestClose = latestItem.Length > 2 ? double.Parse(latestItem[2]) : 0;
-                    double todayRate = latestItem.Length > 8 ? double.Parse(latestItem[8]) : 0;
-                    double oldestClose = oldestItem.Length > 2 ? double.Parse(oldestItem[2]) : 0;
-
-                    double yearRate = oldestClose > 0 ? Math.Round((latestClose - oldestClose) / oldestClose * 100, 2) : 0;
-
-                    // 提取前端需要的精简 K线 历史数组
-                    var cleanKlines = klineArray.Reverse().Select(k => {
-                        var p = k.Split(',');
-                        return new { date = p[0], rate = p.Length > 8 ? double.Parse(p[8]) : 0 };
-                    }).ToList();
-
-                    return new
+                    if (data.TryGetProperty("klines", out var klines) && klines.GetArrayLength() > 0)
                     {
-                        name = idx.name,
-                        latest = latestClose,
-                        todayRate = todayRate,
-                        yearRate = yearRate,
-                        klines = cleanKlines
-                    };
+                        var klineArray = klines.EnumerateArray().Select(k => k.GetString()).ToArray();
+                        var latestItem = klineArray[^1].Split(',');
+                        var oldestItem = klineArray[0].Split(',');
+
+                        // 🛡️ 绝对防弹解析：不管东方财富返回什么乱码，绝对不会崩溃
+                        double latestClose = 0, todayRate = 0, oldestClose = 0;
+                        if (latestItem.Length > 2) double.TryParse(latestItem[2], out latestClose);
+                        if (latestItem.Length > 8) double.TryParse(latestItem[8], out todayRate);
+                        if (oldestItem.Length > 2) double.TryParse(oldestItem[2], out oldestClose);
+
+                        double yearRate = oldestClose > 0 ? Math.Round((latestClose - oldestClose) / oldestClose * 100, 2) : 0;
+
+                        var cleanKlines = klineArray.Reverse().Select(k => {
+                            var p = k.Split(',');
+                            double rate = 0;
+                            if (p.Length > 8) double.TryParse(p[8], out rate);
+                            return new { date = p[0], rate = rate };
+                        }).ToList();
+
+                        return new
+                        {
+                            name = idx.name,
+                            latest = latestClose,
+                            todayRate = todayRate,
+                            yearRate = yearRate,
+                            klines = cleanKlines
+                        };
+                    }
                 }
             }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[大盘拉取故障] {idx.name} - {ex.Message}");
-        }
+            catch (Exception ex)
+            {
+                // 💡 只有在 Visual Studio 的“输出”窗口或者服务器控制台才能看到这行报错
+                Console.WriteLine($"[大盘解析异常] {idx.name}: {ex.Message}");
+            }
 
-        // 获取失败时，退回防崩 0 数据
-        return new { name = idx.name, latest = 0.0, todayRate = 0.0, yearRate = 0.0, klines = new object[0] };
-    });
+            return new { name = idx.name, latest = 0.0, todayRate = 0.0, yearRate = 0.0, klines = new object[0] };
+        });
+
 
     var results = await Task.WhenAll(tasks);
     return Ok(results);
