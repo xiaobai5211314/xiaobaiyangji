@@ -540,22 +540,23 @@ public async Task<IActionResult> GetGlobalIndices()
         new { name = "道琼斯",   secid = "100.DJIA" }
     };
 
-    // 🛡️ 终极破壁装甲：强制无视任何 SSL 证书报错，允许所有连接！
+    // 🛡️ 终极降维打击：无视证书 + 强制降级 HTTP/1.1
     using var handler = new HttpClientHandler 
     { 
-        AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate,
-        ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true // 🚀 就是这句！无视所有证书拦截！
+        ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true 
     };
-    using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) }; // 放宽超时时间
+    using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
+    
+    // 🚀 绝对核心：强制使用 HTTP/1.1！专治东方财富强行挂断电话！
+    http.DefaultRequestVersion = new Version(1, 1); 
+    
     http.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36");
-    http.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8");
-    http.DefaultRequestHeaders.Add("Accept-Language", "zh-CN,zh;q=0.9");
+    http.DefaultRequestHeaders.Add("Accept", "*/*");
     http.DefaultRequestHeaders.Add("Connection", "keep-alive");
     http.DefaultRequestHeaders.Add("Referer", "https://quote.eastmoney.com/");
 
     var tasks = indices.Select(async idx =>
     {
-        // 🚀 改回 https，配合上面的破壁装甲强行突防
         var url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={idx.secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250";
         try
         {
@@ -599,7 +600,6 @@ public async Task<IActionResult> GetGlobalIndices()
         }
         catch (Exception ex)
         {
-            // 💡 打印更深层的网络死因
             string innerMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
             return new { name = $"{idx.name} (异常: {innerMsg})", latest = 0.0, todayRate = 0.0, yearRate = 0.0, klines = new List<object>() };
         }
@@ -608,6 +608,7 @@ public async Task<IActionResult> GetGlobalIndices()
     var results = await Task.WhenAll(tasks);
     return Ok(results);
 }
+
 
         [HttpGet("test-load")]
         public async Task<IActionResult> TestLoad()
