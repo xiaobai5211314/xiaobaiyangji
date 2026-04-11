@@ -453,7 +453,7 @@
                     } catch (e) { if (!silent) showToast("🌐 指挥中心失联", "error"); }
                 };
 
-                                                                const fetchGlobalIndices = async () => {
+                                                                                const fetchGlobalIndices = async () => {
                     showGlobalIndices.value = true; 
                     isIndicesLoading.value = true;
                     try {
@@ -462,7 +462,7 @@
                         
                         globalIndices.value = globalIndices.value.map(item => {
                             const found = results.find(r => r.name === item.name); 
-                            // 直接接收后端算好的干净数据！
+                            // 接收 C# 算好的干净数据
                             if (found && found.latest > 0) {
                                 return { 
                                     ...item, 
@@ -480,6 +480,7 @@
                         isIndicesLoading.value = false; 
                     }
                 };
+
 
                         console.error(e);
                     } finally { 
