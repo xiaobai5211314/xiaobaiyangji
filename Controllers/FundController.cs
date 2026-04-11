@@ -540,18 +540,18 @@ public async Task<IActionResult> GetGlobalIndices()
         new { name = "道琼斯",   secid = "100.DJIA" }
     };
 
-    // 🛡️ 隐形迷彩服：全套伪装成 Chrome 浏览器
     using var handler = new HttpClientHandler { AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate };
     using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
     http.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36");
     http.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8");
     http.DefaultRequestHeaders.Add("Accept-Language", "zh-CN,zh;q=0.9");
     http.DefaultRequestHeaders.Add("Connection", "keep-alive");
-    http.DefaultRequestHeaders.Add("Referer", "https://quote.eastmoney.com/");
+    http.DefaultRequestHeaders.Add("Referer", "http://quote.eastmoney.com/");
 
     var tasks = indices.Select(async idx =>
     {
-        var url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={idx.secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250";
+        // 🚀 核心突防 1：把 https 改为 http，物理绕过国内服务器极其常见的 SSL 根证书不兼容拦截！
+        var url = $"http://push2his.eastmoney.com/api/qt/stock/kline/get?secid={idx.secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250";
         try
         {
             var response = await http.GetStringAsync(url);
@@ -572,7 +572,6 @@ public async Task<IActionResult> GetGlobalIndices()
 
                     double yearRate = oldestClose > 0 ? Math.Round((latestClose - oldestClose) / oldestClose * 100, 2) : 0;
 
-                    // 🚀 核心修复点 1：把里面的匿名对象强制披上 object 的外衣
                     var cleanKlines = klineArray.Reverse().Select(k => {
                         var p = k.Split(',');
                         double rate = 0;
@@ -586,18 +585,20 @@ public async Task<IActionResult> GetGlobalIndices()
                         latest = latestClose,
                         todayRate = todayRate,
                         yearRate = yearRate,
-                        klines = cleanKlines // 现在它的类型是绝对标准的 List<object>
+                        klines = cleanKlines
                     };
                 }
             }
+            
+            // 💡 核心突防 2：如果东方财富返回了空数据或报错 JSON，直接把它印在指数名字里！
+            string safeRes = response.Length > 50 ? response.Substring(0, 50) + "..." : response;
+            return new { name = $"{idx.name} (无数据: {safeRes})", latest = 0.0, todayRate = 0.0, yearRate = 0.0, klines = new List<object>() };
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[大盘拉取故障] {idx.name} - {ex.Message}");
+            // 💡 核心突防 3：如果是网络或代码崩溃，直接把 C# 的异常抛在网页上！
+            return new { name = $"{idx.name} (异常: {ex.Message})", latest = 0.0, todayRate = 0.0, yearRate = 0.0, klines = new List<object>() };
         }
-
-        // 🚀 核心修复点 2：失败时返回一模一样的 List<object>，彻底消灭类型红线！
-        return new { name = idx.name, latest = 0.0, todayRate = 0.0, yearRate = 0.0, klines = new List<object>() };
     });
 
     var results = await Task.WhenAll(tasks);
