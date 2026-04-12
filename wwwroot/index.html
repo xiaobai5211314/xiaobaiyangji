@@ -379,10 +379,9 @@
                 window.hasAutoSavedToday = false;
 
                 const showToast = (msg, type = 'info') => {
-                    const id = toastId++; toasts.value.push({ id, msg, type });
-                    isLoading.value = false; // 去掉 setTimeout 包裹
-
-                const isLoggedIn = ref(localStorage.getItem('fund_username') ? true : false);
+    const id = toastId++; toasts.value.push({ id, msg, type });
+    setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id); }, 3000);
+};
                 const currentUser = ref(localStorage.getItem('fund_username') || '');
                 const fundsList = ref([]);
                 const chartRef = ref(null);
@@ -754,7 +753,7 @@ if (!window.hasAutoSavedToday && !isNight.value && fundsList.value.length > 0) {
     } catch(e) { /* 查不到就等下次15秒轮询 */ }
 }
                         renderChart(apiData);
-                        setTimeout(() => { isLoading.value = false; }, 300);
+                        isLoading.value = false;
                     } catch (e) { isLoading.value = false; }
                 };
 
