@@ -734,11 +734,25 @@
                         totalProfit.value = currentTotalAssets - tCost;
                         totalRate.value = tCost > 0 ? ((currentTotalAssets - tCost) / tCost * 100) : 0;
 
-                        if (hasSettledToday && !window.hasAutoSavedToday) {
-                            saveDailyArchive(true);
-                            window.hasAutoSavedToday = true; 
-                        }
-
+                        // 检查真实净值是否已出来（前端直接查，绕过被封的服务器）
+if (!window.hasAutoSavedToday && !isNight.value && fundsList.value.length > 0) {
+    const firstFund = fundsList.value[0];
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    
+    try {
+        const navRes = await fetch(`http://api.fund.eastmoney.com/f10/lsjz?fundCode=${firstFund.code}&pageIndex=1&pageSize=1`);
+        const navJson = await navRes.json();
+        const latest = navJson?.Data?.LSJZList?.[0];
+        
+        if (latest && latest.FSRQ === todayStr) {
+            // 今日真实净值已出来！立刻封存
+            console.log(`✅ 检测到真实净值已更新(${latest.DWJZ})，开始自动封存！`);
+            saveDailyArchive(true);
+            window.hasAutoSavedToday = true;
+        }
+    } catch(e) { /* 查不到就等下次轮询 */ }
+}
                         renderChart(apiData);
                         setTimeout(() => { isLoading.value = false; }, 300);
                     } catch (e) { isLoading.value = false; }
