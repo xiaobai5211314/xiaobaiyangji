@@ -1204,7 +1204,9 @@ public async Task<IActionResult> GetSectorFunds([FromQuery] string sectorName)
             {
                 var localTime = DateTime.UtcNow.AddHours(8);
                 var today = localTime.Date;
-
+// ✅ 加在这里
+        if (localTime.DayOfWeek == DayOfWeek.Saturday || 
+            localTime.DayOfWeek
                 var allFunds = await _context.MyFunds.ToListAsync();
                 if (!allFunds.Any()) return Ok("无阵地需要封存。");
 
