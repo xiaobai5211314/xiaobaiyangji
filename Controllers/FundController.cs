@@ -638,7 +638,7 @@ private async Task<(double? rate, double? exactProfit)> GetTodayRealRateAsync(st
 
     try
     {
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(1) };
         client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
         // 核心修改：请求最近两天的历史净值 pageSize=2
         string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={fundCode}&pageIndex=1&pageSize=2";
