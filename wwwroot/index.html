@@ -384,7 +384,7 @@
     setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id); }, 3000);
 };
 const isLoggedIn = ref(localStorage.getItem('fund_username') ? true : false);
-const currentUser = ref(localStorage.getItem('fund_username') || '');
+
                 const currentUser = ref(localStorage.getItem('fund_username') || '');
                 const fundsList = ref([]);
                 const chartRef = ref(null);
