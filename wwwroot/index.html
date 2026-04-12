@@ -359,9 +359,9 @@
             </div>
         </div>
     </div>
-
-    <script src="https://cdn.staticfile.net/vue/3.3.4/vue.global.prod.min.js"></script>
-    <script src="https://cdn.staticfile.net/echarts/5.5.0/echarts.min.js"></script>
+<!-- 换成 -->
+<script src="https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/vue/3.3.4/vue.global.prod.min.js"></script>
+<script src="https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/echarts/5.5.0/echarts.min.js"></script>
     <script>
         if (window.hasOwnProperty('chrome') && window.chrome.webview || window.location.protocol === 'file:') {
             var script = document.createElement('script'); script.src = "_framework/blazor.webview.js"; document.body.appendChild(script);
@@ -380,8 +380,7 @@
 
                 const showToast = (msg, type = 'info') => {
                     const id = toastId++; toasts.value.push({ id, msg, type });
-                    setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id); }, 3000);
-                };
+                    isLoading.value = false; // 去掉 setTimeout 包裹
 
                 const isLoggedIn = ref(localStorage.getItem('fund_username') ? true : false);
                 const currentUser = ref(localStorage.getItem('fund_username') || '');
@@ -857,7 +856,7 @@ if (!window.hasAutoSavedToday && !isNight.value && fundsList.value.length > 0) {
                                 let time = d.getHours() * 100 + d.getMinutes();
                                 if (!(d.getDay() === 0 || d.getDay() === 6) && time >= 925 && time <= 1605) fetchData();
                             }, 15000);
-                        }, 800);
+                        }, 300);
                     });
                 };
 
