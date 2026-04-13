@@ -707,12 +707,8 @@ private async Task<(double? rate, double? exactProfit)> GetTodayRealRateAsync(st
                     .OrderBy(r => r.FetchTime)
                     .ToListAsync();
 
-                
-                var lastRecords = await _context.FundRecords
-    .Where(r => r.FetchTime < today && myFundCodes.Contains(r.FundCode))
-    .GroupBy(r => r.FundCode)
-    .Select(g => g.OrderByDescending(r => r.FetchTime).First())
-    .ToListAsync();
+
+                var lastRecords = await _context.FundRecords.Where(r => r.FetchTime < today && myFundCodes.Contains(r.FundCode)).OrderByDescending(r => r.FetchTime).ToListAsync();
                 var allPastRecords = await _context.FundRecords
                     .Where(r => myFundCodes.Contains(r.FundCode) && r.ActualRate != 0)
                     .OrderByDescending(r => r.FetchTime)
