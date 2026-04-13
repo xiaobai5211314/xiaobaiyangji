@@ -243,7 +243,7 @@
                     <div style="margin-bottom:25px;">
                         <h4 style="color:#ef4444;border-bottom:1px solid rgba(239,68,68,0.3);padding-bottom:8px;margin-bottom:0;">🔥 领涨板块 TOP 30</h4>
                         <div v-for="(item,index) in sectorTopList" :key="'top'+index">
-                            @click="toggleSector('top_' + index)" style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;">
+                            <div @click="toggleSector('top_' + index)" style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;">
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <span style="display:inline-block;width:24px;color:#ef4444;font-size:12px;font-weight:bold;">{{index+1}}</span>
                                     <div style="display:flex;flex-direction:column;">
@@ -270,7 +270,7 @@
                     <div>
                         <h4 style="color:#10b981;border-bottom:1px solid rgba(16,185,129,0.3);padding-bottom:8px;margin-bottom:0;">🧊 领跌板块 TOP 30</h4>
                         <div v-for="(item,index) in sectorBottomList" :key="'bot'+index">
-                          @click="toggleSector('bot_' + index)" style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;">
+                            <div @click="toggleSector('bot_' + index)" style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;">
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <span style="display:inline-block;width:24px;color:#10b981;font-size:12px;font-weight:bold;">{{index+1}}</span>
                                     <div style="display:flex;flex-direction:column;">
@@ -294,72 +294,9 @@
                             </div>
                         </div>
                     </div>
-                </div><div v-if="showSectorRadar" class="modal-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:flex;justify-content:center;align-items:flex-end;z-index:1000;">
-    <div style="background:#1e293b;width:100%;height:88vh;border-radius:20px 20px 0 0;padding:20px;display:flex;flex-direction:column;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
-            <h3 style="color:white;margin:0;">📡 主题板块监控</h3>
-            <span @click="showSectorRadar=false" style="font-size:24px;color:#94a3b8;cursor:pointer;">&times;</span>
-        </div>
-        <div v-if="isSectorLoading" style="color:#94a3b8;text-align:center;margin-top:50px;">📡 正在拉取全市场数据...</div>
-        <div v-else style="overflow-y:auto;flex:1;padding-right:5px;">
-            <div style="margin-bottom:25px;">
-                <h4 style="color:#ef4444;border-bottom:1px solid rgba(239,68,68,0.3);padding-bottom:8px;margin-bottom:0;">🔥 领涨板块 TOP 30</h4>
-                <div v-for="(item,index) in sectorTopList" :key="'top'+index">
-                    <div @click="toggleSector('top_' + index)" style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;">
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span style="display:inline-block;width:24px;color:#ef4444;font-size:12px;font-weight:bold;">{{index+1}}</span>
-                            <div style="display:flex;flex-direction:column;">
-                                <span style="color:#f8fafc;font-weight:bold;font-size:15px;">{{item.name}}</span>
-                                <span v-if="item.subSectors&&item.subSectors.length>1" style="font-size:11px;color:#64748b;">{{item.subSectors.length}}个细分板块 · 点击展开</span>
-                            </div>
-                        </div>
-                        <div style="display:flex;align-items:center;gap:6px;">
-                            <span :style="{color:item.rate>0?'#ff4d4f':(item.rate<0?'#10b981':'#94a3b8'),fontWeight:'bold',fontFamily:'Courier New',fontSize:'16px'}">{{item.rate>0?'+':''}}{{item.rate}}%</span>
-                            <span style="color:#64748b;font-size:11px;">{{expandedSectors.has('top_'+index)?'▲':'▼'}}</span>
-                        </div>
-                    </div>
-                    <div v-if="expandedSectors.has('top_'+index)&&item.subSectors" style="background:rgba(0,0,0,0.25);border-radius:8px;margin:4px 0 8px 0;padding:6px 12px;">
-                        <div v-for="sub in item.subSectors" :key="sub.code" @click="fetchSectorDetails(sub)" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed rgba(255,255,255,0.06);cursor:pointer;">
-                            <span style="color:#cbd5e1;font-size:13px;">{{sub.name}}</span>
-                            <div style="display:flex;align-items:center;gap:8px;">
-                                <span :style="{color:sub.rate>0?'#ff4d4f':'#10b981',fontSize:'13px',fontFamily:'Courier New'}">{{sub.rate>0?'+':''}}{{sub.rate}}%</span>
-                                <span style="color:#4facfe;font-size:11px;">查基金›</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div>
-                <h4 style="color:#10b981;border-bottom:1px solid rgba(16,185,129,0.3);padding-bottom:8px;margin-bottom:0;">🧊 领跌板块 TOP 30</h4>
-                <div v-for="(item,index) in sectorBottomList" :key="'bot'+index">
-                    <div @click="toggleSector('bot_' + index)" style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;">
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span style="display:inline-block;width:24px;color:#10b981;font-size:12px;font-weight:bold;">{{index+1}}</span>
-                            <div style="display:flex;flex-direction:column;">
-                                <span style="color:#f8fafc;font-weight:bold;font-size:15px;">{{item.name}}</span>
-                                <span v-if="item.subSectors&&item.subSectors.length>1" style="font-size:11px;color:#64748b;">{{item.subSectors.length}}个细分板块 · 点击展开</span>
-                            </div>
-                        </div>
-                        <div style="display:flex;align-items:center;gap:6px;">
-                            <span :style="{color:item.rate>0?'#ff4d4f':'#10b981',fontWeight:'bold',fontFamily:'Courier New',fontSize:'16px'}">{{item.rate>0?'+':''}}{{item.rate}}%</span>
-                            <span style="color:#64748b;font-size:11px;">{{expandedSectors.has('bot_'+index)?'▲':'▼'}}</span>
-                        </div>
-                    </div>
-                    <div v-if="expandedSectors.has('bot_'+index)&&item.subSectors" style="background:rgba(0,0,0,0.25);border-radius:8px;margin:4px 0 8px 0;padding:6px 12px;">
-                        <div v-for="sub in item.subSectors" :key="sub.code" @click="fetchSectorDetails(sub)" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed rgba(255,255,255,0.06);cursor:pointer;">
-                            <span style="color:#cbd5e1;font-size:13px;">{{sub.name}}</span>
-                            <div style="display:flex;align-items:center;gap:8px;">
-                                <span :style="{color:sub.rate>0?'#ff4d4f':'#10b981',fontSize:'13px',fontFamily:'Courier New'}">{{sub.rate>0?'+':''}}{{sub.rate}}%</span>
-                                <span style="color:#4facfe;font-size:11px;">查基金›</span>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
-    </div>
-</div>
-            </div>
         </div>
 
         <div v-if="showSectorDetails" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 2000;">
