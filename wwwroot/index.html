@@ -455,7 +455,9 @@ const isLoggedIn = ref(localStorage.getItem('fund_username') ? true : false);
                 const chartInstance = shallowRef(null);
                 let timer = null;
                 const isUploading = ref(false);
-                const privacyMode = ref(Number(localStorage.getItem('privacy_mode')) || 0); // 0=睁眼, 1=模式一, 2=模式二, 3=模式三
+                // 🚀 逻辑修正：如果没有存储过偏好，则默认启用模式 2
+                const savedMode = localStorage.getItem('privacy_mode');
+                const privacyMode = ref(savedMode !== null ? Number(savedMode) : 2);
                 const showPrivacyModal = ref(false);
                 const setPrivacyMode = (mode) => { privacyMode.value = mode; localStorage.setItem('privacy_mode', mode); showPrivacyModal.value = false; };
                 const editForm = reactive({ show: false, code: '', name: '', cost: '', shares: '', originalCode: '' });
