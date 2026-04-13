@@ -243,7 +243,7 @@
                     <div style="margin-bottom:25px;">
                         <h4 style="color:#ef4444;border-bottom:1px solid rgba(239,68,68,0.3);padding-bottom:8px;margin-bottom:0;">🔥 领涨板块 TOP 30</h4>
                         <div v-for="(item,index) in sectorTopList" :key="'top'+index">
-                            <div @click="expandedSectors.has('top_'+index) ? expandedSectors.delete('top_'+index) : expandedSectors.add('top_'+index); expandedSectors = new Set(expandedSectors)" style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;">
+                            @click="toggleSector('top_' + index)" style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;">
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <span style="display:inline-block;width:24px;color:#ef4444;font-size:12px;font-weight:bold;">{{index+1}}</span>
                                     <div style="display:flex;flex-direction:column;">
@@ -270,7 +270,7 @@
                     <div>
                         <h4 style="color:#10b981;border-bottom:1px solid rgba(16,185,129,0.3);padding-bottom:8px;margin-bottom:0;">🧊 领跌板块 TOP 30</h4>
                         <div v-for="(item,index) in sectorBottomList" :key="'bot'+index">
-                            <div @click="expandedSectors.has('bot_'+index) ? expandedSectors.delete('bot_'+index) : expandedSectors.add('bot_'+index); expandedSectors = new Set(expandedSectors)" style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;">
+                          @click="toggleSector('bot_' + index)" style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;">
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <span style="display:inline-block;width:24px;color:#10b981;font-size:12px;font-weight:bold;">{{index+1}}</span>
                                     <div style="display:flex;flex-direction:column;">
@@ -294,7 +294,71 @@
                             </div>
                         </div>
                     </div>
+                </div><div v-if="showSectorRadar" class="modal-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:flex;justify-content:center;align-items:flex-end;z-index:1000;">
+    <div style="background:#1e293b;width:100%;height:88vh;border-radius:20px 20px 0 0;padding:20px;display:flex;flex-direction:column;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
+            <h3 style="color:white;margin:0;">📡 主题板块监控</h3>
+            <span @click="showSectorRadar=false" style="font-size:24px;color:#94a3b8;cursor:pointer;">&times;</span>
+        </div>
+        <div v-if="isSectorLoading" style="color:#94a3b8;text-align:center;margin-top:50px;">📡 正在拉取全市场数据...</div>
+        <div v-else style="overflow-y:auto;flex:1;padding-right:5px;">
+            <div style="margin-bottom:25px;">
+                <h4 style="color:#ef4444;border-bottom:1px solid rgba(239,68,68,0.3);padding-bottom:8px;margin-bottom:0;">🔥 领涨板块 TOP 30</h4>
+                <div v-for="(item,index) in sectorTopList" :key="'top'+index">
+                    <div @click="toggleSector('top_' + index)" style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span style="display:inline-block;width:24px;color:#ef4444;font-size:12px;font-weight:bold;">{{index+1}}</span>
+                            <div style="display:flex;flex-direction:column;">
+                                <span style="color:#f8fafc;font-weight:bold;font-size:15px;">{{item.name}}</span>
+                                <span v-if="item.subSectors&&item.subSectors.length>1" style="font-size:11px;color:#64748b;">{{item.subSectors.length}}个细分板块 · 点击展开</span>
+                            </div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <span :style="{color:item.rate>0?'#ff4d4f':(item.rate<0?'#10b981':'#94a3b8'),fontWeight:'bold',fontFamily:'Courier New',fontSize:'16px'}">{{item.rate>0?'+':''}}{{item.rate}}%</span>
+                            <span style="color:#64748b;font-size:11px;">{{expandedSectors.has('top_'+index)?'▲':'▼'}}</span>
+                        </div>
+                    </div>
+                    <div v-if="expandedSectors.has('top_'+index)&&item.subSectors" style="background:rgba(0,0,0,0.25);border-radius:8px;margin:4px 0 8px 0;padding:6px 12px;">
+                        <div v-for="sub in item.subSectors" :key="sub.code" @click="fetchSectorDetails(sub)" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed rgba(255,255,255,0.06);cursor:pointer;">
+                            <span style="color:#cbd5e1;font-size:13px;">{{sub.name}}</span>
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <span :style="{color:sub.rate>0?'#ff4d4f':'#10b981',fontSize:'13px',fontFamily:'Courier New'}">{{sub.rate>0?'+':''}}{{sub.rate}}%</span>
+                                <span style="color:#4facfe;font-size:11px;">查基金›</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+            </div>
+            <div>
+                <h4 style="color:#10b981;border-bottom:1px solid rgba(16,185,129,0.3);padding-bottom:8px;margin-bottom:0;">🧊 领跌板块 TOP 30</h4>
+                <div v-for="(item,index) in sectorBottomList" :key="'bot'+index">
+                    <div @click="toggleSector('bot_' + index)" style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span style="display:inline-block;width:24px;color:#10b981;font-size:12px;font-weight:bold;">{{index+1}}</span>
+                            <div style="display:flex;flex-direction:column;">
+                                <span style="color:#f8fafc;font-weight:bold;font-size:15px;">{{item.name}}</span>
+                                <span v-if="item.subSectors&&item.subSectors.length>1" style="font-size:11px;color:#64748b;">{{item.subSectors.length}}个细分板块 · 点击展开</span>
+                            </div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <span :style="{color:item.rate>0?'#ff4d4f':'#10b981',fontWeight:'bold',fontFamily:'Courier New',fontSize:'16px'}">{{item.rate>0?'+':''}}{{item.rate}}%</span>
+                            <span style="color:#64748b;font-size:11px;">{{expandedSectors.has('bot_'+index)?'▲':'▼'}}</span>
+                        </div>
+                    </div>
+                    <div v-if="expandedSectors.has('bot_'+index)&&item.subSectors" style="background:rgba(0,0,0,0.25);border-radius:8px;margin:4px 0 8px 0;padding:6px 12px;">
+                        <div v-for="sub in item.subSectors" :key="sub.code" @click="fetchSectorDetails(sub)" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed rgba(255,255,255,0.06);cursor:pointer;">
+                            <span style="color:#cbd5e1;font-size:13px;">{{sub.name}}</span>
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <span :style="{color:sub.rate>0?'#ff4d4f':'#10b981',fontSize:'13px',fontFamily:'Courier New'}">{{sub.rate>0?'+':''}}{{sub.rate}}%</span>
+                                <span style="color:#4facfe;font-size:11px;">查基金›</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
             </div>
         </div>
 
@@ -412,6 +476,14 @@
                 const API_BASE = 'https://guzhi.21212121.xyz';
                 const toasts = ref([]); let toastId = 0;
                 const expandedSectors = ref(new Set());
+
+                // 🚀 核心修复 1：标准的展开/折叠状态引擎
+                const toggleSector = (id) => {
+                    const newSet = new Set(expandedSectors.value);
+                    if (newSet.has(id)) newSet.delete(id);
+                    else newSet.add(id);
+                    expandedSectors.value = newSet;
+                };
                 window.hasAutoSavedToday = false;
 
                 const showToast = (msg, type = 'info') => {
@@ -719,14 +791,37 @@ const isLoggedIn = ref(localStorage.getItem('fund_username') ? true : false);
                             '传媒游戏': ['传媒', '游戏', '影视', '短剧', '动漫', '文化'],
                         };
 
+                        // 🚀 核心修复 2：全部改为 https
                         const urls = [
-                            'http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3',
-                            'http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=0&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3',
-                            'http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:3&fields=f12,f14,f3',
-                            'http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=0&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:3&fields=f12,f14,f3',
+                            'https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3',
+                            'https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=0&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3',
+                            'https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:3&fields=f12,f14,f3',
+                            'https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=0&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:3&fields=f12,f14,f3',
                         ];
 
-                        const results = await Promise.all(urls.map(u => fetch(u).then(r => r.json()).catch(() => null)));
+                        // 🚀 核心修复 3：装载 JSONP 隐身披风，打穿跨域防火墙！
+                        const fetchJSONP = (url, idx) => {
+                            return new Promise((resolve) => {
+                                const callbackName = 'jsonp_radar_' + idx;
+                                window[callbackName] = function (data) {
+                                    resolve(data);
+                                    try {
+                                        delete window[callbackName];
+                                        const scriptNode = document.getElementById(callbackName);
+                                        if (scriptNode) scriptNode.remove();
+                                    } catch (e) { }
+                                };
+                                const script = document.createElement('script');
+                                script.id = callbackName;
+                                script.referrerPolicy = "no-referrer";
+                                script.src = `${url}&cb=${callbackName}&_t=${Date.now()}`;
+                                script.onerror = () => resolve(null);
+                                document.body.appendChild(script);
+                            });
+                        };
+
+                        // 并发空投请求
+                        const results = await Promise.all(urls.map((u, index) => fetchJSONP(u, index)));
 
                         const rawMap = {};
                         for (const json of results) {
@@ -988,7 +1083,7 @@ if (!window.hasAutoSavedToday && !isNight.value && fundsList.value.length > 0) {
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, showAssets, isUploading, editForm,
                     handleLogin, handleRegister, handleLogout, handleAddFund, handleDeleteFund, triggerUpload, handleFileUpload,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
-                    sectorTopList, sectorBottomList, showSectorDetails, detailsTitle, detailsList, isDetailsLoading, expandedSectors,
+                    sectorTopList, sectorBottomList, showSectorDetails, detailsTitle, detailsList, isDetailsLoading, expandedSectors, toggleSector,
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices,
                     globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, saveDailyArchive, ocrModal
                 };
