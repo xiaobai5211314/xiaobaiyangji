@@ -706,9 +706,9 @@ private async Task<(double? rate, double? exactProfit)> GetTodayRealRateAsync(st
                     .Where(r => r.FetchTime >= today && myFundCodes.Contains(r.FundCode))
                     .OrderBy(r => r.FetchTime)
                     .ToListAsync();
-
-
+var threeDaysAgo = today.AddDays(-3);
                 var lastRecords = await _context.FundRecords.Where(r => r.FetchTime < today && myFundCodes.Contains(r.FundCode)).OrderByDescending(r => r.FetchTime).ToListAsync();
+                var sevenDaysAgo = today.AddDays(-7);
                 var allPastRecords = await _context.FundRecords
                     .Where(r => myFundCodes.Contains(r.FundCode) && r.ActualRate != 0)
                     .OrderByDescending(r => r.FetchTime)
@@ -917,10 +917,13 @@ double? actualExactProfit = exactProfitDict.ContainsKey(config.FundCode) ? exact
             return Ok(resultLog);
         }
 
-        
         [HttpGet("sectors")]
         public async Task<IActionResult> GetSectors()
         {
+        string sectorCacheKey = "SectorData";
+if (_cache.TryGetValue(sectorCacheKey, out object cachedSectors))
+    return Ok(cachedSectors);
+        
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
             try
             {
