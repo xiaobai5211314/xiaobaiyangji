@@ -101,41 +101,36 @@
                 </div>
             </div>
 
-            <div class="glass-panel total-panel" style="margin: 0 15px 15px 15px; padding: 20px 30px; display: flex; justify-content: space-around; align-items: center; background: rgba(15, 23, 42, 0.6); flex-wrap: wrap; row-gap: 15px;">
-                <div style="text-align: center;">
-                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">⏱️ 系统时间雷达</div>
-                    <div :style="{ fontSize: '18px', fontWeight: '900', color: isNight ? '#10b981' : '#f59e0b', margin: '5px 0' }">
-                        {{ isNight ? '🌙 夜间休市模式' : '☀️ 盘中盯盘模式' }}
-                    </div>
+            <div style="text-align: center;">
+                <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">⏱️ 系统时间雷达</div>
+                <div :style="{ fontSize: '18px', fontWeight: '900', color: isNight ? '#10b981' : '#f59e0b', margin: '5px 0' }">
+                    {{ isNight ? '🌙 夜间休市模式' : '☀️ 盘中盯盘模式' }}
                 </div>
-                <div class="divider"></div>
-                <div style="text-align: center;">
-                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">💎 昨日总市值 <span @click="showAssets = !showAssets" style="cursor:pointer">{{ showAssets ? '👁️' : '🙈' }}</span></div>
-                    <div style="font-size: 26px; font-weight: 900; color: #f8fafc; font-family: 'Courier New';">{{ showAssets ? '¥ ' + totalPrincipal.toFixed(2) : '****' }}</div>
-                </div>
-                <div class="divider"></div>
-                <div style="text-align: center;">
-                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">🌟 今日总收益</div>
-                    <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: showAssets ? (totalTodayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ showAssets ? (totalTodayProfit >= 0 ? '+' : '') + totalTodayProfit.toFixed(2) : '****' }}</div>
-                </div>
-                <div class="divider"></div>
-                <div style="text-align: center;">
-                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">🚀 今日总收益率</div>
-                    <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: totalTodayRate >= 0 ? '#ff4d4f' : '#10b981' }">{{ totalTodayRate > 0 ? '+' : '' }}{{ totalTodayRate.toFixed(2) }}%</div>
-                </div>
-                <div class="divider"></div>
-                <div style="text-align: center;">
-                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">💰 累计总盈亏</div>
-                    <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: showAssets ? (totalProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ showAssets ? (totalProfit >= 0 ? '+' : '') + totalProfit.toFixed(2) : '****' }}</div>
-                </div>
-                <div class="divider"></div>
-                <div style="text-align: center;">
-                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">📈 累计总收益率</div>
-                    <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: totalRate >= 0 ? '#ff4d4f' : '#10b981' }">{{ totalRate > 0 ? '+' : '' }}{{ totalRate.toFixed(2) }}%</div>
-                </div>
-                <div style="width: 100%; display: flex; justify-content: center; margin-top: 10px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 20px;">
-                    <button @click="fetchMyArchives('TOTAL', '总阵地')" style="background: linear-gradient(135deg, #0ea5e9, #2563eb); border: none; color: #fff; padding: 12px 35px; border-radius: 30px; cursor: pointer; font-size: 16px; font-weight: bold; box-shadow: 0 6px 20px rgba(14, 165, 233, 0.4);">📂 调阅「总阵地」历史战略档案</button>
-                </div>
+            </div>
+            <div class="divider"></div>
+            <div style="text-align: center;">
+                <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">💎 昨日总市值 <span @click="showPrivacyModal = true" style="cursor:pointer">{{ privacyMode === 0 ? '👁️' : '🙈' }}</span></div>
+                <div style="font-size: 26px; font-weight: 900; color: #f8fafc; font-family: 'Courier New';">{{ privacyMode === 0 ? '¥ ' + totalPrincipal.toFixed(2) : '****' }}</div>
+            </div>
+            <div class="divider"></div>
+            <div style="text-align: center;">
+                <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">🌟 今日总收益</div>
+                <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: privacyMode <= 1 ? (totalTodayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 1 ? (totalTodayProfit >= 0 ? '+' : '') + totalTodayProfit.toFixed(2) : '****' }}</div>
+            </div>
+            <div class="divider"></div>
+            <div style="text-align: center;">
+                <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">🚀 今日总收益率</div>
+                <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: privacyMode <= 2 ? (totalTodayRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 2 ? (totalTodayRate > 0 ? '+' : '') + totalTodayRate.toFixed(2) + '%' : '****' }}</div>
+            </div>
+            <div class="divider"></div>
+            <div style="text-align: center;">
+                <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">💰 累计总盈亏</div>
+                <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: privacyMode <= 1 ? (totalProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 1 ? (totalProfit >= 0 ? '+' : '') + totalProfit.toFixed(2) : '****' }}</div>
+            </div>
+            <div class="divider"></div>
+            <div style="text-align: center;">
+                <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">📈 累计总收益率</div>
+                <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: privacyMode <= 2 ? (totalRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 2 ? (totalRate > 0 ? '+' : '') + totalRate.toFixed(2) + '%' : '****' }}</div>
             </div>
 
             <div class="fund-list-container">
@@ -176,27 +171,27 @@
                     <div class="metrics-grid">
                         <div class="metric-item">
                             <span class="metric-label">昨日市值</span>
-                            <span class="metric-value">{{ showAssets ? fund.amount : '****' }}</span>
+                            <span class="metric-value">{{ privacyMode === 0 ? fund.amount : '****' }}</span>
                         </div>
                         <div class="metric-item" style="background: rgba(79, 172, 254, 0.1); padding: 2px; border-radius: 4px;">
                             <span class="metric-label" style="color: #4facfe;">今日收益</span>
-                            <span class="metric-value" :style="{color: showAssets ? (fund.todayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ showAssets ? (fund.todayProfit >= 0 ? '+' : '') + fund.todayProfit : '****' }}</span>
+                            <span class="metric-value" :style="{color: privacyMode <= 1 ? (fund.todayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 1 ? (fund.todayProfit >= 0 ? '+' : '') + fund.todayProfit : '****' }}</span>
                         </div>
                         <div class="metric-item">
                             <span class="metric-label">持仓本金</span>
-                            <span class="metric-value" :style="{color: showAssets ? ((fund.cost || 0) > 0 ? '#cbd5e1' : '#eab308') : '#cbd5e1'}">{{ showAssets ? (fund.cost > 0 ? fund.cost : '未设置') : '****' }}</span>
+                            <span class="metric-value" :style="{color: privacyMode === 0 ? ((fund.cost || 0) > 0 ? '#cbd5e1' : '#eab308') : '#cbd5e1'}">{{ privacyMode === 0 ? (fund.cost > 0 ? fund.cost : '未设置') : '****' }}</span>
                         </div>
                         <div class="metric-item">
                             <span class="metric-label">累计盈亏</span>
-                            <span class="metric-value" :style="{color: showAssets ? (fund.estimatedProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ showAssets ? (fund.estimatedProfit >= 0 ? '+' : '') + fund.estimatedProfit : '****' }}</span>
+                            <span class="metric-value" :style="{color: privacyMode <= 1 ? (fund.estimatedProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 1 ? (fund.estimatedProfit >= 0 ? '+' : '') + fund.estimatedProfit : '****' }}</span>
                         </div>
                         <div class="metric-item">
                             <span class="metric-label">累计收益率</span>
-                            <span class="metric-value" :style="{color: fund.existingReturnRate >= 0 ? '#ff4d4f' : '#10b981'}">{{ fund.existingReturnRate }}%</span>
+                            <span class="metric-value" :style="{color: privacyMode <= 2 ? (fund.existingReturnRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 2 ? fund.existingReturnRate + '%' : '****' }}</span>
                         </div>
                         <div class="metric-item">
                             <span class="metric-label">回本涨幅</span>
-                            <span class="metric-value" :style="{color: fund.breakEvenRate > 0 ? '#eab308' : '#10b981'}">{{ fund.breakEvenRate > 0 ? fund.breakEvenRate + '%' : '✅ 盈利' }}</span>
+                            <span class="metric-value" :style="{color: privacyMode <= 2 ? (fund.breakEvenRate > 0 ? '#eab308' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 2 ? (fund.breakEvenRate > 0 ? fund.breakEvenRate + '%' : '✅ 盈利') : '****' }}</span>
                         </div>
                     </div>
                 </div>
@@ -214,7 +209,26 @@
             </div>
 
             <div v-show="!isLoading" id="chart-container" class="glass-panel" ref="chartRef"></div>
-
+            <div v-if="showPrivacyModal" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 5000;" @click.self="showPrivacyModal = false">
+                <div style="background: #1e293b; width: 85%; max-width: 320px; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.5);">
+                    <div style="text-align: center; padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); font-weight: bold; color: #f8fafc; font-size: 16px;">闭眼模式选择</div>
+                    <div style="padding: 10px;">
+                        <div @click="setPrivacyMode(0)" style="padding: 15px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer; color: #38bdf8; font-weight: bold;">👁️ 睁眼模式 (全部显示)</div>
+                        <div @click="setPrivacyMode(1)" style="padding: 15px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; align-items: center;">
+                            <div style="font-weight: bold; color: #f8fafc; margin-bottom: 6px;">模式一</div>
+                            <div style="font-size: 11px; color: #94a3b8; background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px;">仅隐藏【持有金额】</div>
+                        </div>
+                        <div @click="setPrivacyMode(2)" style="padding: 15px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; align-items: center;">
+                            <div style="font-weight: bold; color: #f8fafc; margin-bottom: 6px;">模式二</div>
+                            <div style="font-size: 11px; color: #94a3b8; background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px;">隐藏【持有金额】【收益金额】</div>
+                        </div>
+                        <div @click="setPrivacyMode(3)" style="padding: 15px; cursor: pointer; display: flex; flex-direction: column; align-items: center;">
+                            <div style="font-weight: bold; color: #f8fafc; margin-bottom: 6px;">模式三</div>
+                            <div style="font-size: 11px; color: #94a3b8; background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px;">隐藏【持有金额】【收益金额】【持有收益率】</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div v-if="editForm.show" class="modal-mask">
                 <div class="modal-content">
                     <h3 style="margin-top: 0; color: #fff;">🔧 指挥官，请补全战术情报</h3>
@@ -441,7 +455,9 @@ const isLoggedIn = ref(localStorage.getItem('fund_username') ? true : false);
                 const chartInstance = shallowRef(null);
                 let timer = null;
                 const isUploading = ref(false);
-                const showAssets = ref(false);
+                const privacyMode = ref(Number(localStorage.getItem('privacy_mode')) || 0); // 0=睁眼, 1=模式一, 2=模式二, 3=模式三
+                const showPrivacyModal = ref(false);
+                const setPrivacyMode = (mode) => { privacyMode.value = mode; localStorage.setItem('privacy_mode', mode); showPrivacyModal.value = false; };
                 const editForm = reactive({ show: false, code: '', name: '', cost: '', shares: '', originalCode: '' });
 
                 const sectorTopList = ref([]);
@@ -928,14 +944,15 @@ if (!window.hasAutoSavedToday && !isNight.value && fundsList.value.length > 0) {
                                 formatter: (p) => {
                                     let profit = (fund.amount * p.value[1] / 100).toFixed(2);
                                     let sign = profit >= 0 ? '+' : '';
-                                    let profitDisplay = showAssets.value ? `${sign}${profit} 元` : '**** 元';
+                                    let profitDisplay = privacyMode.value <= 1 ? `${sign}${profit} 元` : '**** 元';
+                                    let rateDisplay = privacyMode.value <= 2 ? `${p.value[1]}%` : '****';
                                     if (fund.isSettled) {
                                         let diffSign = fund._diff > 0 ? '+' : '';
-                                        return `${profitDisplay}\n✅ 真: ${p.value[1]}%\n差: ${diffSign}${fund._diff}%`;
+                                        return `${profitDisplay}\n✅ 真: ${rateDisplay}\n差: ${diffSign}${fund._diff}%`;
                                     } else if (isNight.value && fund.data.length > 50) {
                                         return `${profitDisplay}\n⏳ 等待财报...`;
                                     } else {
-                                        return `${profitDisplay}\n估: ${p.value[1]}%`;
+                                        return `${profitDisplay}\n估: ${rateDisplay}`;
                                     }
                                 }
                             },
@@ -959,8 +976,9 @@ if (!window.hasAutoSavedToday && !isNight.value && fundsList.value.length > 0) {
                                     if (isNight.value && p.dataIndex === p.seriesData.length - 1) {
                                         labelSuffix = originalFund.isSettled ? '✅ 真' : '⏳ 待更新';
                                     }
-                                    let profitDisplay = showAssets.value ? `${profit >= 0 ? '+' : ''}${profit} 元` : '**** 元';
-                                    html += `<div>${p.marker} ${p.seriesName}: <span style="color:${color};font-weight:bold;">${profitDisplay}</span> (${p.data[1]}% [${labelSuffix}])</div>`;
+                                    let profitDisplay = privacyMode.value <= 1 ? `${profit >= 0 ? '+' : ''}${profit} 元` : '**** 元';
+                                    let rateDisplay = privacyMode.value <= 2 ? `${p.data[1]}%` : '****';
+                                    html += `<div>${p.marker} ${p.seriesName}: <span style="color:${color};font-weight:bold;">${profitDisplay}</span> (${rateDisplay} [${labelSuffix}])</div>`;
                                 });
                                 return html;
                             }
@@ -973,7 +991,7 @@ if (!window.hasAutoSavedToday && !isNight.value && fundsList.value.length > 0) {
                     }, true);
                 };
 
-                watch(showAssets, () => { if (fundsList.value.length > 0) renderChart(fundsList.value); });
+                watch(privacyMode, () => { if (fundsList.value.length > 0) renderChart(fundsList.value); });
 
                 const updateRadarMode = () => {
                     let d = new Date();
@@ -1014,7 +1032,7 @@ if (!window.hasAutoSavedToday && !isNight.value && fundsList.value.length > 0) {
 
                 return {
                     toasts, isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
-                    totalPrincipal, totalProfit, totalRate, totalTodayProfit, showAssets, isUploading, editForm,
+                    totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
                     handleLogin, handleRegister, handleLogout, handleAddFund, handleDeleteFund, triggerUpload, handleFileUpload,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
                     sectorTopList, sectorBottomList, showSectorDetails, detailsTitle, detailsList, isDetailsLoading, expandedSectors, toggleSector, // 🚀 就是这里！
