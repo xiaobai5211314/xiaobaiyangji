@@ -708,15 +708,11 @@ private async Task<(double? rate, double? exactProfit)> GetTodayRealRateAsync(st
                     .ToListAsync();
 
                 var lastRecords = new List<FundData>();
-                foreach (var code in myFundCodes)
-                {
-                    var lr = await _context.FundRecords
-                        .Where(r => r.FetchTime < today && r.FundCode == code)
-                        .OrderByDescending(r => r.FetchTime)
-                        .FirstOrDefaultAsync();
-                    if (lr != null) lastRecords.Add(lr);
-                }
-
+                var lastRecords = await _context.FundRecords
+    .Where(r => r.FetchTime < today && myFundCodes.Contains(r.FundCode))
+    .GroupBy(r => r.FundCode)
+    .Select(g => g.OrderByDescending(r => r.FetchTime).First())
+    .ToListAsync();
                 var allPastRecords = await _context.FundRecords
                     .Where(r => myFundCodes.Contains(r.FundCode) && r.ActualRate != 0)
                     .OrderByDescending(r => r.FetchTime)
@@ -809,7 +805,7 @@ double? actualExactProfit = exactProfitDict.ContainsKey(config.FundCode) ? exact
                 var finalResult = result.OrderByDescending(x => x.amount).ToList();
 
                 var cacheOptions = new MemoryCacheEntryOptions()
-                    .SetAbsoluteExpiration(TimeSpan.FromSeconds(15));
+                    .SetAbsoluteExpiration(TimeSpan.FromSeconds(30));
                 _cache.Set(cacheKey, finalResult, cacheOptions);
 
                 return Ok(finalResult);
