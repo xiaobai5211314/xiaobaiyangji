@@ -232,62 +232,71 @@
                 </div>
             </div>
         </div>
-<div v-if="showSectorRadar" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: flex-end; z-index: 1000;">
-    <div style="background: #1e293b; width: 100%; height: 85vh; border-radius: 20px 20px 0 0; padding: 20px; display: flex; flex-direction: column;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-            <h3 style="color: white; margin: 0;">📡 主题板块监控</h3>
-            <span @click="showSectorRadar = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
-        </div>
-        <div v-if="isSectorLoading" style="color: #94a3b8; text-align: center; margin-top: 50px;">📡 正在拉取...</div>
-        <div v-else style="overflow-y: auto; flex: 1;">
-            <!-- 涨幅榜 -->
-            <div style="margin-bottom: 20px;">
-                <h4 style="color: #ef4444; border-bottom: 1px solid rgba(239,68,68,0.3); padding-bottom: 8px;">🔥 领涨板块</h4>
-                <div v-for="(item, index) in sectorTopList" :key="'top'+index">
-                    <!-- 大类行，可点击展开 -->
-                    <div @click="item._expanded = !item._expanded" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer;">
-                        <span style="color: #f8fafc; font-weight: bold; font-size: 15px;">
-                            <span style="display:inline-block; width: 24px; color: #ef4444; font-size: 12px;">{{ index+1 }}</span>
-                            {{ item.name }}
-                            <span v-if="item.subSectors && item.subSectors.length > 1" style="font-size: 11px; color: #64748b; margin-left: 4px;">{{ item.subSectors.length }}个细分</span>
-                        </span>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span :style="{ color: item.rate > 0 ? '#ff4d4f' : (item.rate < 0 ? '#10b981' : '#94a3b8'), fontWeight: 'bold', fontFamily: 'Courier New', fontSize: '16px' }">{{ item.rate > 0 ? '+' : '' }}{{ item.rate }}%</span>
-                            <span style="color: #64748b; font-size: 12px;">{{ item._expanded ? '▲' : '▼' }}</span>
+        <div v-if="showSectorRadar" class="modal-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:flex;justify-content:center;align-items:flex-end;z-index:1000;">
+            <div style="background:#1e293b;width:100%;height:88vh;border-radius:20px 20px 0 0;padding:20px;display:flex;flex-direction:column;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
+                    <h3 style="color:white;margin:0;">📡 主题板块监控</h3>
+                    <span @click="showSectorRadar=false" style="font-size:24px;color:#94a3b8;cursor:pointer;">&times;</span>
+                </div>
+                <div v-if="isSectorLoading" style="color:#94a3b8;text-align:center;margin-top:50px;">📡 正在拉取全市场数据...</div>
+                <div v-else style="overflow-y:auto;flex:1;padding-right:5px;">
+                    <div style="margin-bottom:25px;">
+                        <h4 style="color:#ef4444;border-bottom:1px solid rgba(239,68,68,0.3);padding-bottom:8px;margin-bottom:0;">🔥 领涨板块 TOP 30</h4>
+                        <div v-for="(item,index) in sectorTopList" :key="'top'+index">
+                            <div @click="expandedSectors.has('top_'+index) ? expandedSectors.delete('top_'+index) : expandedSectors.add('top_'+index); expandedSectors = new Set(expandedSectors)" style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;">
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <span style="display:inline-block;width:24px;color:#ef4444;font-size:12px;font-weight:bold;">{{index+1}}</span>
+                                    <div style="display:flex;flex-direction:column;">
+                                        <span style="color:#f8fafc;font-weight:bold;font-size:15px;">{{item.name}}</span>
+                                        <span v-if="item.subSectors&&item.subSectors.length>1" style="font-size:11px;color:#64748b;">{{item.subSectors.length}}个细分板块 · 点击展开</span>
+                                    </div>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:6px;">
+                                    <span :style="{color:item.rate>0?'#ff4d4f':(item.rate<0?'#10b981':'#94a3b8'),fontWeight:'bold',fontFamily:'Courier New',fontSize:'16px'}">{{item.rate>0?'+':''}}{{item.rate}}%</span>
+                                    <span style="color:#64748b;font-size:11px;">{{expandedSectors.has('top_'+index)?'▲':'▼'}}</span>
+                                </div>
+                            </div>
+                            <div v-if="expandedSectors.has('top_'+index)&&item.subSectors" style="background:rgba(0,0,0,0.25);border-radius:8px;margin:4px 0 8px 0;padding:6px 12px;">
+                                <div v-for="sub in item.subSectors" :key="sub.code" @click="fetchSectorDetails(sub)" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed rgba(255,255,255,0.06);cursor:pointer;">
+                                    <span style="color:#cbd5e1;font-size:13px;">{{sub.name}}</span>
+                                    <div style="display:flex;align-items:center;gap:8px;">
+                                        <span :style="{color:sub.rate>0?'#ff4d4f':'#10b981',fontSize:'13px',fontFamily:'Courier New'}">{{sub.rate>0?'+':''}}{{sub.rate}}%</span>
+                                        <span style="color:#4facfe;font-size:11px;">查基金›</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <!-- 展开的细分板块 -->
-                    <div v-if="item._expanded && item.subSectors" style="background: rgba(0,0,0,0.2); border-radius: 8px; margin: 4px 0 8px 0; padding: 8px 12px;">
-                        <div v-for="sub in item.subSectors" :key="sub.code" @click="fetchSectorDetails(sub)" style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed rgba(255,255,255,0.05); cursor: pointer;">
-                            <span style="color: #cbd5e1; font-size: 13px;">{{ sub.name }}</span>
-                            <span :style="{ color: sub.rate > 0 ? '#ff4d4f' : '#10b981', fontSize: '13px', fontFamily: 'Courier New' }">{{ sub.rate > 0 ? '+' : '' }}{{ sub.rate }}%</span>
+                    <div>
+                        <h4 style="color:#10b981;border-bottom:1px solid rgba(16,185,129,0.3);padding-bottom:8px;margin-bottom:0;">🧊 领跌板块 TOP 30</h4>
+                        <div v-for="(item,index) in sectorBottomList" :key="'bot'+index">
+                            <div @click="expandedSectors.has('bot_'+index) ? expandedSectors.delete('bot_'+index) : expandedSectors.add('bot_'+index); expandedSectors = new Set(expandedSectors)" style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;">
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <span style="display:inline-block;width:24px;color:#10b981;font-size:12px;font-weight:bold;">{{index+1}}</span>
+                                    <div style="display:flex;flex-direction:column;">
+                                        <span style="color:#f8fafc;font-weight:bold;font-size:15px;">{{item.name}}</span>
+                                        <span v-if="item.subSectors&&item.subSectors.length>1" style="font-size:11px;color:#64748b;">{{item.subSectors.length}}个细分板块 · 点击展开</span>
+                                    </div>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:6px;">
+                                    <span :style="{color:item.rate>0?'#ff4d4f':'#10b981',fontWeight:'bold',fontFamily:'Courier New',fontSize:'16px'}">{{item.rate>0?'+':''}}{{item.rate}}%</span>
+                                    <span style="color:#64748b;font-size:11px;">{{expandedSectors.has('bot_'+index)?'▲':'▼'}}</span>
+                                </div>
+                            </div>
+                            <div v-if="expandedSectors.has('bot_'+index)&&item.subSectors" style="background:rgba(0,0,0,0.25);border-radius:8px;margin:4px 0 8px 0;padding:6px 12px;">
+                                <div v-for="sub in item.subSectors" :key="sub.code" @click="fetchSectorDetails(sub)" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed rgba(255,255,255,0.06);cursor:pointer;">
+                                    <span style="color:#cbd5e1;font-size:13px;">{{sub.name}}</span>
+                                    <div style="display:flex;align-items:center;gap:8px;">
+                                        <span :style="{color:sub.rate>0?'#ff4d4f':'#10b981',fontSize:'13px',fontFamily:'Courier New'}">{{sub.rate>0?'+':''}}{{sub.rate}}%</span>
+                                        <span style="color:#4facfe;font-size:11px;">查基金›</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-            <!-- 跌幅榜 -->
-            <div>
-                <h4 style="color: #10b981; border-bottom: 1px solid rgba(16,185,129,0.3); padding-bottom: 8px;">🧊 领跌板块</h4>
-                <div v-for="(item, index) in sectorBottomList" :key="'bot'+index">
-                    <div @click="item._expanded = !item._expanded" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer;">
-                        <span style="color: #f8fafc; font-weight: bold; font-size: 15px;">
-                            <span style="display:inline-block; width: 24px; color: #10b981; font-size: 12px;">{{ index+1 }}</span>
-                            {{ item.name }}
-                            <span v-if="item.subSectors && item.subSectors.length > 1" style="font-size: 11px; color: #64748b; margin-left: 4px;">{{ item.subSectors.length }}个细分</span>
-                        </span>
-                        <span :style="{ color: '#10b981', fontWeight: 'bold', fontFamily: 'Courier New', fontSize: '16px' }">{{ item.rate }}%</span>
-                    </div>
-                    <div v-if="item._expanded && item.subSectors" style="background: rgba(0,0,0,0.2); border-radius: 8px; margin: 4px 0 8px 0; padding: 8px 12px;">
-                        <div v-for="sub in item.subSectors" :key="sub.code" @click="fetchSectorDetails(sub)" style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed rgba(255,255,255,0.05); cursor: pointer;">
-                            <span style="color: #cbd5e1; font-size: 13px;">{{ sub.name }}</span>
-                            <span :style="{ color: sub.rate > 0 ? '#ff4d4f' : '#10b981', fontSize: '13px', fontFamily: 'Courier New' }">{{ sub.rate > 0 ? '+' : '' }}{{ sub.rate }}%</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
-    </div>
-</div>
 
         <div v-if="showSectorDetails" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 2000;">
             <div style="background: #0f172a; width: 85%; max-width: 400px; border-radius: 15px; padding: 20px; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.8);">
@@ -402,7 +411,7 @@
             setup() {
                 const API_BASE = 'https://guzhi.21212121.xyz';
                 const toasts = ref([]); let toastId = 0;
-
+                const expandedSectors = ref(new Set());
                 window.hasAutoSavedToday = false;
 
                 const showToast = (msg, type = 'info') => {
@@ -691,85 +700,86 @@ const isLoggedIn = ref(localStorage.getItem('fund_username') ? true : false);
                 };
 
                 const fetchSectors = async () => {
-    showSectorRadar.value = true;
-    isSectorLoading.value = true;
-    try {
-        // 大类映射表
-        const categoryMap = {
-            '人工智能': ['人工智能','大模型','算力','数据要素','云计算','软件','信息技术','数字经济','CPO','光通信'],
-            '半导体': ['半导体','芯片','集成电路','存储','光刻','封装','功率器件'],
-            '新能源': ['新能源','光伏','风能','储能','固态电池','锂','钠电池','充电桩'],
-            '消费电子': ['消费电子','苹果','华为','折叠屏','面板','元器件','家用电器','电子'],
-            '医药生物': ['医药','生物','医疗','CRO','创新药','中药','医美','疫苗','基因'],
-            '军工': ['军工','航天','卫星','低空经济','飞行汽车','无人机','船舶'],
-            '汽车': ['汽车','新能源车','整车','零部件','自动驾驶'],
-            '金融': ['银行','券商','保险','证券','金融科技','REITs'],
-            '消费': ['白酒','食品','饮料','商业','零售','旅游','酒店','餐饮','农业'],
-            '地产基建': ['地产','房地产','建筑','基建','建材','水泥'],
-            '有色资源': ['有色','黄金','铜','锂矿','稀土','贵金属','石油','煤炭'],
-            '传媒游戏': ['传媒','游戏','影视','短剧','动漫','文化'],
-            '化工材料': ['化工','材料','新材料','碳纤维','玻璃'],
-        };
+                    showSectorRadar.value = true;
+                    isSectorLoading.value = true;
+                    expandedSectors.value = new Set();
+                    try {
+                        const categoryMap = {
+                            '人工智能': ['人工智能', '大模型', '算力', '数据要素', '云计算', '软件', '信息技术', '数字经济', 'CPO', '光通信', 'AI'],
+                            '半导体': ['半导体', '芯片', '集成电路', '存储', '光刻', '封装', '功率器件', '晶圆'],
+                            '新能源': ['新能源', '光伏', '风能', '储能', '固态电池', '锂', '钠电池', '充电桩', '电池'],
+                            '消费电子': ['消费电子', '苹果', '华为', '折叠屏', '面板', '元器件', '家用电器'],
+                            '医药生物': ['医药', '生物', '医疗', 'CRO', '创新药', '中药', '医美', '疫苗', '基因'],
+                            '军工': ['军工', '航天', '卫星', '低空经济', '飞行', '无人机', '船舶', '国防'],
+                            '汽车': ['汽车', '新能源车', '整车', '零部件', '自动驾驶'],
+                            '金融': ['银行', '券商', '保险', '证券', '金融科技'],
+                            '消费': ['白酒', '食品', '饮料', '商业', '零售', '旅游', '酒店', '餐饮'],
+                            '地产基建': ['地产', '房地产', '建筑', '基建', '建材', '水泥'],
+                            '有色资源': ['有色', '黄金', '铜', '锂矿', '稀土', '贵金属', '石油', '煤炭'],
+                            '传媒游戏': ['传媒', '游戏', '影视', '短剧', '动漫', '文化'],
+                        };
 
-        const urls = [
-            'http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3',
-            'http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=0&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3',
-            'http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:3&fields=f12,f14,f3',
-            'http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=0&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:3&fields=f12,f14,f3',
-        ];
+                        const urls = [
+                            'http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3',
+                            'http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=0&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3',
+                            'http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:3&fields=f12,f14,f3',
+                            'http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=0&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:3&fields=f12,f14,f3',
+                        ];
 
-        const results = await Promise.all(urls.map(u => fetch(u).then(r => r.json()).catch(() => null)));
+                        const results = await Promise.all(urls.map(u => fetch(u).then(r => r.json()).catch(() => null)));
 
-        // 原始板块列表
-        const rawList = {};
-        for (const json of results) {
-            const diff = json?.data?.diff;
-            if (!diff) continue;
-            for (const item of diff) {
-                const name = item.f14;
-                const code = item.f12;
-                const rate = item.f3;
-                if (!name || !rate) continue;
-                if (!rawList[name]) rawList[name] = { code, name, rate };
-            }
-        }
+                        const rawMap = {};
+                        for (const json of results) {
+                            const diff = json?.data?.diff;
+                            if (!diff) continue;
+                            for (const item of diff) {
+                                const name = item.f14;
+                                const code = item.f12;
+                                const rate = item.f3 ?? 0;
+                                if (!name) continue;
+                                if (!rawMap[name]) rawMap[name] = { code, name, rate };
+                            }
+                        }
 
-        // 归并到大类
-        const categoryResult = {};
-        for (const [category, keywords] of Object.entries(categoryMap)) {
-            const matched = Object.values(rawList).filter(item =>
-                keywords.some(kw => item.name.includes(kw))
-            );
-            if (matched.length === 0) continue;
-            const avgRate = matched.reduce((s, x) => s + x.rate, 0) / matched.length;
-            categoryResult[category] = {
-                name: category,
-                rate: Math.round(avgRate * 100) / 100,
-                subSectors: matched.sort((a, b) => b.rate - a.rate)
-            };
-        }
+                        const categoryResult = {};
+                        for (const [category, keywords] of Object.entries(categoryMap)) {
+                            const matched = Object.values(rawMap).filter(item =>
+                                keywords.some(kw => item.name.includes(kw))
+                            );
+                            if (matched.length === 0) continue;
+                            const avgRate = matched.reduce((s, x) => s + x.rate, 0) / matched.length;
+                            categoryResult[category] = {
+                                name: category,
+                                rate: Math.round(avgRate * 100) / 100,
+                                subSectors: matched.sort((a, b) => b.rate - a.rate)
+                            };
+                        }
 
-        // 未归类的板块也保留
-        const categorized = new Set(
-            Object.values(categoryResult).flatMap(c => c.subSectors.map(s => s.name))
-        );
-        const others = Object.values(rawList)
-            .filter(x => !categorized.has(x.name) && x.name.length <= 6 && !x.name.includes('III') && !x.name.includes('II') && !x.name.includes('Ⅲ') && !x.name.includes('Ⅱ'))
-            .slice(0, 20);
+                        const categorizedNames = new Set(
+                            Object.values(categoryResult).flatMap(c => c.subSectors.map(s => s.name))
+                        );
+                        const others = Object.values(rawMap).filter(x =>
+                            !categorizedNames.has(x.name) &&
+                            x.name.length <= 6 &&
+                            !x.name.includes('III') && !x.name.includes('II') &&
+                            !x.name.includes('Ⅲ') && !x.name.includes('Ⅱ') &&
+                            !x.name.includes('其他')
+                        );
 
-        const allCategories = Object.values(categoryResult)
-            .concat(others.map(x => ({ name: x.name, rate: x.rate, subSectors: [x] })))
-            .sort((a, b) => b.rate - a.rate);
+                        const allCategories = [
+                            ...Object.values(categoryResult),
+                            ...others.map(x => ({ name: x.name, rate: x.rate, subSectors: [x] }))
+                        ].sort((a, b) => b.rate - a.rate);
 
-        sectorTopList.value = allCategories.slice(0, 25);
-        sectorBottomList.value = [...allCategories].sort((a, b) => a.rate - b.rate).slice(0, 25);
+                        sectorTopList.value = allCategories.slice(0, 30);
+                        sectorBottomList.value = [...allCategories].sort((a, b) => a.rate - b.rate).slice(0, 30);
 
-    } catch (e) {
-        showToast("🚨 雷达连接失败", "error");
-    } finally {
-        isSectorLoading.value = false;
-    }
-};
+                    } catch (e) {
+                        showToast("🚨 雷达连接失败", "error");
+                    } finally {
+                        isSectorLoading.value = false;
+                    }
+                };
 
                 const fetchData = async () => {
                     if (!currentUser.value) return;
@@ -978,7 +988,7 @@ if (!window.hasAutoSavedToday && !isNight.value && fundsList.value.length > 0) {
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, showAssets, isUploading, editForm,
                     handleLogin, handleRegister, handleLogout, handleAddFund, handleDeleteFund, triggerUpload, handleFileUpload,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
-                    sectorTopList, sectorBottomList, showSectorDetails, detailsTitle, detailsList, isDetailsLoading,
+                    sectorTopList, sectorBottomList, showSectorDetails, detailsTitle, detailsList, isDetailsLoading, expandedSectors,
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices,
                     globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, saveDailyArchive, ocrModal
                 };
