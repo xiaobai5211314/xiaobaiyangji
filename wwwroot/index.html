@@ -100,7 +100,7 @@
                     <button class="btn-logout" @click="handleLogout" style="margin-left: 10px;">撤退</button>
                 </div>
             </div>
-
+<div class="glass-panel total-panel" style="margin: 0 15px 15px 15px; padding: 20px 30px; display: flex; justify-content: space-around; align-items: center; background: rgba(15, 23, 42, 0.6); flex-wrap: wrap; row-gap: 15px;">
             <div style="text-align: center;">
                 <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">⏱️ 系统时间雷达</div>
                 <div :style="{ fontSize: '18px', fontWeight: '900', color: isNight ? '#10b981' : '#f59e0b', margin: '5px 0' }">
@@ -132,7 +132,10 @@
                 <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">📈 累计总收益率</div>
                 <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: privacyMode <= 2 ? (totalRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 2 ? (totalRate > 0 ? '+' : '') + totalRate.toFixed(2) + '%' : '****' }}</div>
             </div>
-
+<div style="width: 100%; display: flex; justify-content: center; margin-top: 10px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 20px;">
+        <button @click="fetchMyArchives('TOTAL', '总阵地')" style="background: linear-gradient(135deg, #0ea5e9, #2563eb); border: none; color: #fff; padding: 12px 35px; border-radius: 30px; cursor: pointer; font-size: 16px; font-weight: bold; box-shadow: 0 6px 20px rgba(14, 165, 233, 0.4);">📂 查阅历史收益</button>
+    </div>
+</div>
             <div class="fund-list-container">
                 <div v-for="fund in fundsList" :key="fund.code" class="glass-panel fund-card">
                     <div style="display: flex; justify-content: space-between; align-items: start;">
@@ -487,7 +490,25 @@ const isLoggedIn = ref(localStorage.getItem('fund_username') ? true : false);
 
                 const showGlobalIndices = ref(false);
                 const isIndicesLoading = ref(false);
-
+const fetchMyArchives = async (targetCode, targetName) => {
+    archiveModal.show = true; 
+    archiveModal.isLoading = true; 
+    archiveModal.targetName = targetName; 
+    archiveModal.data = [];
+    try {
+        const res = await fetch(`${API_BASE}/api/fund/get-archives?username=${encodeURIComponent(currentUser.value)}`);
+        if (res.ok) {
+            const records = await res.json();
+            archiveModal.data = records
+                .filter(r => r.fundCode === targetCode)
+                .sort((a, b) => new Date(b.recordDate) - new Date(a.recordDate));
+        }
+    } catch (e) { 
+        showToast("🌐 档案馆断线", "error"); 
+    } finally { 
+        archiveModal.isLoading = false; 
+    }
+};
                 const saveDailyArchive = async (silent = false) => {
                     if (!silent && !confirm("💾 确定要将大屏当前的数据作为【今日最终战报】永久封存吗？")) return;
                     let d = new Date();
