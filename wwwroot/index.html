@@ -637,16 +637,7 @@ const fetchMyArchives = async (targetCode, targetName) => {
                     document.body.appendChild(script);
                 };
 
-                const fetchMyArchives = async (targetCode, targetName) => {
-                    archiveModal.show = true; archiveModal.isLoading = true; archiveModal.targetName = targetName; archiveModal.data = [];
-                    try {
-                        const res = await fetch(`${API_BASE}/api/fund/get-archives?username=${encodeURIComponent(currentUser.value)}`);
-                        if (res.ok) {
-                            const records = await res.json();
-                            archiveModal.data = records.filter(r => r.fundCode === targetCode).sort((a, b) => new Date(b.recordDate) - new Date(a.recordDate));
-                        }
-                    } catch (e) { showToast("🌐 档案馆断线", "error"); } finally { archiveModal.isLoading = false; }
-                };
+             
 
                 const fetchSectorDetails = async (sector) => {
                     detailsTitle.value = sector.name; showSectorDetails.value = true; isDetailsLoading.value = true; detailsList.value = [];
