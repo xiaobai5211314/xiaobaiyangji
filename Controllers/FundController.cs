@@ -331,7 +331,6 @@ namespace 估值助手.Controllers
                             potentialFragment = nextLine;
                         }
                     }
-
                     // ================= 🚀 第一步：会计数学校验锚定 HI 和 YI =================
                     if (holdingRate != 0 && signedNumbers.Count >= 1)
                     {
