@@ -166,7 +166,6 @@ namespace 估值助手.Controllers
 
             return 0; // 无法获取净值时返回 0
         }
-
         [HttpPost("import-ocr")]
         public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFormFile imageFile)
         {
@@ -228,16 +227,15 @@ namespace 估值助手.Controllers
                     if (Regex.IsMatch(currentLine, amountPattern))
                     {
                         string namePart1 = "";
-                        // 🚀 核心装甲升级：向上搜索真正的基金名称，免疫支付宝所有新版广告标签！
+                        // 向上搜索真正的基金名称，免疫各种广告标签
                         for (int k = i - 1; k >= 0; k--)
                         {
                             string prevLine = texts[k];
-                            // 暴力屏蔽所有杂音：金选、解读、基金经理、阶段、趋势、去看看
-                            if (prevLine.Contains("收益") || prevLine.Contains("金额") || prevLine.Contains("份额") || prevLine.Contains("天数") || prevLine.Contains("已更新") || prevLine.Contains("金选") || prevLine.Contains("市场解读") || prevLine.Contains("基金经理") || prevLine.Contains("阶段") || prevLine.Contains("趋势") || prevLine.Contains("去看看") || Regex.IsMatch(prevLine, @"^[-\d\.,%+]+$"))
+                            if (prevLine.Contains("收益") || prevLine.Contains("金额") || prevLine.Contains("份额") || prevLine.Contains("天数") || prevLine.Contains("已更新") || prevLine.Contains("金选") || prevLine.Contains("市场解读") || Regex.IsMatch(prevLine, @"^[-\d\.,%+]+$"))
                             {
                                 continue;
                             }
-                            namePart1 = prevLine; // 成功锁定真实名称
+                            namePart1 = prevLine;
                             break;
                         }
 
@@ -248,34 +246,46 @@ namespace 估值助手.Controllers
                         double holdShares = 0;
                         string potentialFragment = "";
 
-                        // 向下扫描寻找份额和收益 (加入物理隔离，防止抢夺下一个基金的数据)
-                        for (int j = 1; j <= 4 && (i + j) < texts.Count; j++)
+                        // 🚀 核心逻辑升级：同时捕获多个收益和份额！
+                        List<double> signedNumbers = new List<double>();
+
+                        // 向下扫描寻找收益和份额 (扫描 5 行深度)
+                        for (int j = 1; j <= 5 && (i + j) < texts.Count; j++)
                         {
                             string nextLine = texts[i + j];
 
-                            // 🛡️ 防串台引信：遇到了下一个基金的名字，立刻停止往下找！(同时免疫新广告)
-                            if (Regex.IsMatch(nextLine, @"[\u4e00-\u9fa5]{4,}") && !nextLine.Contains("金选") && !nextLine.Contains("市场解读") && !nextLine.Contains("基金经理") && !nextLine.Contains("阶段") && !nextLine.Contains("趋势") && !nextLine.Contains("去看看"))
+                            // 🛡️ 防串台引信：遇到了下一个基金的名字，立刻停止！
+                            if (Regex.IsMatch(nextLine, @"[\u4e00-\u9fa5]{4,}") && !nextLine.Contains("金选") && !nextLine.Contains("市场解读") && !nextLine.Contains("更新"))
                             {
                                 break;
                             }
 
-                            if (holdingIncome == 0 && Regex.IsMatch(nextLine, @"^[-+]\d[\d,]*\.\d{2}$"))
+                            // 1. 捕获所有带正负号的数字（候选的收益金额）
+                            if (Regex.IsMatch(nextLine, @"^[-+]\d[\d,]*\.\d{2}$"))
                             {
-                                holdingIncome = double.Parse(nextLine.Replace(",", ""));
+                                signedNumbers.Add(double.Parse(nextLine.Replace(",", "")));
                             }
+                            // 2. 🚀 恢复份额扫描：捕获不带正负号的两位小数纯数字作为份额！
                             else if (holdShares == 0 && Regex.IsMatch(nextLine, @"^\d[\d,]*\.\d{2}$"))
                             {
                                 holdShares = double.Parse(nextLine.Replace(",", ""));
                             }
-                            else if (string.IsNullOrEmpty(potentialFragment) && !Regex.IsMatch(nextLine, @"^[-\d\.,%+]+$") && !nextLine.Contains("金选") && !nextLine.Contains("收益") && !nextLine.Contains("更新") && !nextLine.Contains("市场解读") && !nextLine.Contains("基金经理") && !nextLine.Contains("阶段") && !nextLine.Contains("趋势") && !nextLine.Contains("去看看"))
+                            // 3. 捕获基金名字的换行碎片
+                            else if (string.IsNullOrEmpty(potentialFragment) && !Regex.IsMatch(nextLine, @"^[-\d\.,%+]+$") && !nextLine.Contains("金选") && !nextLine.Contains("收益") && !nextLine.Contains("更新") && !nextLine.Contains("市场解读"))
                             {
                                 potentialFragment = nextLine;
                             }
                         }
 
+                        // 🚀 战术决断：取最后一个捕获到的带符号数字作为绝对真实的“持有收益”
+                        if (signedNumbers.Count > 0)
+                        {
+                            holdingIncome = signedNumbers.Last();
+                        }
+
                         string[] testNames = string.IsNullOrEmpty(potentialFragment)
-                    ? new[] { namePart1 }
-                    : new[] { namePart1, namePart1 + potentialFragment };
+                            ? new[] { namePart1 }
+                            : new[] { namePart1, namePart1 + potentialFragment };
 
                         FundInfoCache finalBestMatch = null;
                         double finalBestScore = 0;
@@ -319,18 +329,20 @@ namespace 估值助手.Controllers
                             }
                         }
 
-                        // 保存更新逻辑
+                        // 🚀 满血保存逻辑：本金和份额，一个都不能少！
                         if (finalBestMatch != null && finalBestScore > 65 && holdAmount > 0)
                         {
                             if (userFundDict.TryGetValue(finalBestMatch.Code, out var exist))
                             {
                                 exist.HoldAmount = holdAmount;
 
+                                // 完美逆向推导：持仓本金 = 最新市值 - 真实的持有收益
                                 if (holdingIncome != 0)
                                 {
                                     exist.CostAmount = Math.Round(holdAmount - holdingIncome, 2);
                                 }
 
+                                // 🌟 重新接通份额更新管线
                                 if (holdShares > 0)
                                 {
                                     exist.HoldShares = holdShares;
@@ -347,13 +359,14 @@ namespace 估值助手.Controllers
                                     FundName = finalBestMatch.Name,
                                     HoldAmount = holdAmount,
                                     CostAmount = holdingIncome != 0 ? Math.Round(holdAmount - holdingIncome, 2) : holdAmount,
-                                    HoldShares = holdShares
+                                    HoldShares = holdShares // 🌟 重新接通份额初次注入
                                 };
                                 _context.MyFunds.Add(newFund);
                                 userFundDict[newFund.FundCode] = newFund;
                             }
                             importedCount++;
 
+                            // 🌟 恢复弹窗日志对份额的精准播报
                             if (finalBestScore >= 99.0)
                                 debugLog.Add($"⚡ 精准命中: {finalBestMatch.Name} [份额: {(holdShares > 0 ? holdShares.ToString() : "未扫描到")}]");
                             else
@@ -364,8 +377,7 @@ namespace 估值助手.Controllers
 
                 await _context.SaveChangesAsync();
 
-                // 🚀 核心修复：OCR 识别更新完毕后，瞬间炸毁旧缓存！
-                // 强制前端 Vue 立刻去拉取最新数据，不再原地等待 15 秒！
+                // 炸毁旧缓存，让前端立即刷新！
                 _cache.Remove($"Tactical_TodayData_{username}");
 
                 return Ok($"识别完成！成功同步 {importedCount} 只。\n\n[诊断日志]\n{string.Join("\n", debugLog)}");
@@ -375,7 +387,6 @@ namespace 估值助手.Controllers
                 return StatusCode(500, $"❌ 代码执行出现异常: {ex.Message}");
             }
         }
-
         private string ExtractFundClass(string name)
         {
             if (Regex.IsMatch(name, @"C类?$|\(C\)$|（C）$", RegexOptions.IgnoreCase)) return "C";
