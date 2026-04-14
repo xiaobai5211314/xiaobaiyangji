@@ -1229,11 +1229,11 @@ namespace 估值助手.Controllers
                     var existingRecords = await _context.DailyArchives
                         .Where(a => a.Username == username && a.RecordDate == today)
                         .ToListAsync();
+                    // 🚀 终极碾压法则：夜间机器人的数据永远是最准的！
+                    // 不管白天存了什么，不需要判断，统统删掉，用现在的最新数据绝对覆盖！
                     if (existingRecords.Any())
                     {
-                        bool hasRealData = existingRecords.Any(r => r.FundCode == "TOTAL" && r.DailyRate != 0);
-                        if (hasRealData) continue; // 有真实数据才跳过
-                        _context.DailyArchives.RemoveRange(existingRecords); // 估值数据删掉重写
+                        _context.DailyArchives.RemoveRange(existingRecords);
                     }
 
                     double totalAssets = 0;
