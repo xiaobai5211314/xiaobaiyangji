@@ -1263,9 +1263,7 @@ namespace 估值助手.Controllers
                         .ToListAsync();
                     if (existingRecords.Any())
                     {
-                        bool hasRealData = existingRecords.Any(r => r.FundCode == "TOTAL" && r.DailyRate != 0);
-                        if (hasRealData) continue; // 有真实数据才跳过
-                        _context.DailyArchives.RemoveRange(existingRecords); // 估值数据删掉重写
+                        _context.DailyArchives.RemoveRange(existingRecords);
                     }
 
                     double totalAssets = 0;
