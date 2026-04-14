@@ -1163,28 +1163,17 @@ public async Task<IActionResult> GetSectorFunds([FromQuery] string sectorName)
             if (string.IsNullOrEmpty(req.Username)) return Unauthorized();
 
             try
-            {
-                var date = DateTime.Parse(req.DateStr).Date;
-
-                var oldRecords = await _context.DailyArchives
-                    .Where(a => a.Username == req.Username && a.RecordDate == date)
-                    .ToListAsync();
-                if (oldRecords.Any()) _context.DailyArchives.RemoveRange(oldRecords);
-
-                req.Total.RecordDate = date;
-                req.Total.FundCode = "TOTAL";
-                req.Total.Username = req.Username;
-                _context.DailyArchives.Add(req.Total);
-
-                foreach (var f in req.Funds)
-                {
-                    f.RecordDate = date;
-                    f.Username = req.Username;
-                    _context.DailyArchives.Add(f);
-                }
-
-                await _context.SaveChangesAsync();
-                return Ok("✅ 今日战报已永久封存！");
+            {var oldRecords = await _context.DailyArchives
+    .Where(a => a.Username == req.Username && a.RecordDate == date)
+    .ToListAsync();
+if (oldRecords.Any()) 
+{
+    // 检查是否已有真实数据
+    bool hasRealData = oldRecords.Any(r => r.FundCode == "TOTAL" && r.DailyRate != 0);
+    if (hasRealData) 
+        return Ok("✅ 今日真实战报已存在，无需重复封存！"); // 有真实数据直接返回
+    _context.DailyArchives.RemoveRange(oldRecords); // 估值数据删掉
+}
             }
             catch (Exception ex)
             {
