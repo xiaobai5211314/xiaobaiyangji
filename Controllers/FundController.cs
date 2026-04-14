@@ -1211,22 +1211,14 @@ public async Task<IActionResult> GetSectorFunds([FromQuery] string sectorName)
                 {
                     string username = group.Key;
                     var userFunds = group.ToList();
-
-// 删掉这段防重复跳过逻辑
-// bool alreadyArchived = await _context.DailyArchives
-//     .AnyAsync(a => a.Username == username && a.RecordDate == today);
-// if (alreadyArchived) continue;
-
-// 改成：先删今天已有的，再重新写入
 var existingRecords = await _context.DailyArchives
     .Where(a => a.Username == username && a.RecordDate == today)
     .ToListAsync();
 if (existingRecords.Any())
 {
-    // 如果已有数据且DailyRate不为0，说明是真实净值，不覆盖
-    bool hasRealData = existingRecords.Any(r => r.DailyRate != 0);
-    if (hasRealData) continue; // 已有真实数据，跳过
-    _context.DailyArchives.RemoveRange(existingRecords); // 只有估值数据才覆盖
+    bool hasRealData = existingRecords.Any(r => r.FundCode == "TOTAL" && r.DailyRate != 0);
+    if (hasRealData) continue; // 有真实数据才跳过
+    _context.DailyArchives.RemoveRange(existingRecords); // 估值数据删掉重写
 }
 
                     double totalAssets = 0;
