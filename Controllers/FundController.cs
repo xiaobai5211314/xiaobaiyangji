@@ -227,14 +227,13 @@ namespace 估值助手.Controllers
                     // 锁定第一个两位小数的纯数字作为“持有金额”
                     if (Regex.IsMatch(currentLine, amountPattern))
                     {
-                        // 🚀 核心修复：逆向过滤雷达！向上搜索真正的基金名称，跳过中间存在的涨幅或杂音
-                        // 🚀 核心修复：逆向过滤雷达！加入对“金选”和“市场解读”等干扰标签的免疫
                         string namePart1 = "";
+                        // 🚀 核心装甲升级：向上搜索真正的基金名称，免疫支付宝所有新版广告标签！
                         for (int k = i - 1; k >= 0; k--)
                         {
                             string prevLine = texts[k];
-                            // 跳过杂音数据（新增对“金选”、“市场解读”、“理财”等标签的屏蔽）
-                            if (prevLine.Contains("收益") || prevLine.Contains("金额") || prevLine.Contains("份额") || prevLine.Contains("天数") || prevLine.Contains("已更新") || prevLine.Contains("金选") || prevLine.Contains("市场解读") || Regex.IsMatch(prevLine, @"^[-\d\.,%+]+$"))
+                            // 暴力屏蔽所有杂音：金选、解读、基金经理、阶段、趋势、去看看
+                            if (prevLine.Contains("收益") || prevLine.Contains("金额") || prevLine.Contains("份额") || prevLine.Contains("天数") || prevLine.Contains("已更新") || prevLine.Contains("金选") || prevLine.Contains("市场解读") || prevLine.Contains("基金经理") || prevLine.Contains("阶段") || prevLine.Contains("趋势") || prevLine.Contains("去看看") || Regex.IsMatch(prevLine, @"^[-\d\.,%+]+$"))
                             {
                                 continue;
                             }
@@ -250,12 +249,12 @@ namespace 估值助手.Controllers
                         string potentialFragment = "";
 
                         // 向下扫描寻找份额和收益 (加入物理隔离，防止抢夺下一个基金的数据)
-                        for (int j = 1; j <= 4 && (i + j) < texts.Count; j++) // 将扫描深度从 6 行缩减到 4 行
+                        for (int j = 1; j <= 4 && (i + j) < texts.Count; j++)
                         {
                             string nextLine = texts[i + j];
 
-                            // 🛡️ 防串台引信：如果遇到了连续4个以上的汉字（下一个基金的名字），立刻停止往下找份额！
-                            if (Regex.IsMatch(nextLine, @"[\u4e00-\u9fa5]{4,}") && !nextLine.Contains("金选") && !nextLine.Contains("市场解读"))
+                            // 🛡️ 防串台引信：遇到了下一个基金的名字，立刻停止往下找！(同时免疫新广告)
+                            if (Regex.IsMatch(nextLine, @"[\u4e00-\u9fa5]{4,}") && !nextLine.Contains("金选") && !nextLine.Contains("市场解读") && !nextLine.Contains("基金经理") && !nextLine.Contains("阶段") && !nextLine.Contains("趋势") && !nextLine.Contains("去看看"))
                             {
                                 break;
                             }
@@ -268,7 +267,7 @@ namespace 估值助手.Controllers
                             {
                                 holdShares = double.Parse(nextLine.Replace(",", ""));
                             }
-                            else if (string.IsNullOrEmpty(potentialFragment) && !Regex.IsMatch(nextLine, @"^[-\d\.,%+]+$") && !nextLine.Contains("金选") && !nextLine.Contains("收益") && !nextLine.Contains("更新") && !nextLine.Contains("市场解读"))
+                            else if (string.IsNullOrEmpty(potentialFragment) && !Regex.IsMatch(nextLine, @"^[-\d\.,%+]+$") && !nextLine.Contains("金选") && !nextLine.Contains("收益") && !nextLine.Contains("更新") && !nextLine.Contains("市场解读") && !nextLine.Contains("基金经理") && !nextLine.Contains("阶段") && !nextLine.Contains("趋势") && !nextLine.Contains("去看看"))
                             {
                                 potentialFragment = nextLine;
                             }
@@ -320,7 +319,7 @@ namespace 估值助手.Controllers
                             }
                         }
 
-                        // 🚀 保存更新逻辑
+                        // 保存更新逻辑
                         if (finalBestMatch != null && finalBestScore > 65 && holdAmount > 0)
                         {
                             if (userFundDict.TryGetValue(finalBestMatch.Code, out var exist))
@@ -364,6 +363,11 @@ namespace 估值助手.Controllers
                 }
 
                 await _context.SaveChangesAsync();
+
+                // 🚀 核心修复：OCR 识别更新完毕后，瞬间炸毁旧缓存！
+                // 强制前端 Vue 立刻去拉取最新数据，不再原地等待 15 秒！
+                _cache.Remove($"Tactical_TodayData_{username}");
+
                 return Ok($"识别完成！成功同步 {importedCount} 只。\n\n[诊断日志]\n{string.Join("\n", debugLog)}");
             }
             catch (Exception ex)
