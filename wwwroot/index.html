@@ -903,24 +903,34 @@ const fetchMyArchives = async (targetCode, targetName) => {
                         totalRate.value = tCost > 0 ? ((currentTotalAssets - tCost) / tCost * 100) : 0;
 
                         // 真实净值检测：用 fundgz 接口，无需 Referer
+// 真实净值检测：检查是否有基金已更新真实净值（isSettled）
 if (!window.hasAutoSavedToday && !isNight.value && fundsList.value.length > 0) {
-    const firstFund = fundsList.value[0];
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    const settledFunds = fundsList.value.filter(f => f.isSettled);
     
-    try {
-        const navRes = await fetch(`https://fundgz.1234567.com.cn/js/${firstFund.code}.js?rt=${Date.now()}`);
-        const navText = await navRes.text();
-        const match = navText.match(/"jzrq":"([^"]+)"/);
-        const jzrq = match ? match[1] : null;
-        
-        if (jzrq === todayStr) {
-            // 今日真实净值已出来，立刻封存！
-            console.log(`✅ 真实净值已更新(${jzrq})，自动封存！`);
-            saveDailyArchive(true);
-            window.hasAutoSavedToday = true;
-        }
-    } catch(e) { /* 查不到就等下次15秒轮询 */ }
+    if (settledFunds.length > 0) {
+        // 有基金已更新真实净值，触发封存
+        console.log(`✅ ${settledFunds.length}只基金真实净值已更新，自动封存！`);
+        saveDailyArchive(true);
+        window.hasAutoSavedToday = true;
+    } else {
+        // isSettled 后端拿不到，改用前端直接检测
+        try {
+            const firstFund = fundsList.value[0];
+            const now = new Date();
+            const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+            const navRes = await fetch(`https://fundgz.1234567.com.cn/js/${firstFund.code}.js?rt=${Date.now()}`);
+            const navText = await navRes.text();
+            const dwjzMatch = navText.match(/"dwjz":"([^"]+)"/);
+            const gztimeMatch = navText.match(/"gztime":"([^"]+)"/);
+            
+            // gztime 包含今天日期且时间在15:00之后，说明是收盘后的真实净值
+            if (gztimeMatch && gztimeMatch[1].includes(todayStr) && gztimeMatch[1] >= todayStr + ' 15:00') {
+                console.log(`✅ 检测到今日真实净值(${gztimeMatch[1]})，自动封存！`);
+                saveDailyArchive(true);
+                window.hasAutoSavedToday = true;
+            }
+        } catch(e) { /* 等下次轮询 */ }
+    }
 }
                         renderChart(apiData);
                         isLoading.value = false;
