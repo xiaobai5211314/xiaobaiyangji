@@ -167,66 +167,66 @@ namespace 估值助手.Controllers
             return 0; // 无法获取净值时返回 0
         }
 
-       [HttpPost("import-ocr")]
-public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFormFile imageFile)
-{
-    if (string.IsNullOrEmpty(username)) return Unauthorized("请提供指挥官代号");
-
-    var allFunds = await GetAllFundsAsync();
-    var userFundDict = await _context.MyFunds
-        .Where(f => f.Username == username)
-        .ToDictionaryAsync(f => f.FundCode);
-
-    byte[] finalProcessedBytes = null;
-    List<string> debugLog = new List<string>();
-    var watch = System.Diagnostics.Stopwatch.StartNew();
-
-    try
-    {
-        using (var inputStream = imageFile.OpenReadStream())
+        [HttpPost("import-ocr")]
+        public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFormFile imageFile)
         {
-            using (Image image = Image.Load(inputStream))
+            if (string.IsNullOrEmpty(username)) return Unauthorized("请提供指挥官代号");
+
+            var allFunds = await GetAllFundsAsync();
+            var userFundDict = await _context.MyFunds
+                .Where(f => f.Username == username)
+                .ToDictionaryAsync(f => f.FundCode);
+
+            byte[] finalProcessedBytes = null;
+            List<string> debugLog = new List<string>();
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+
+            try
             {
-                int targetMaxWidth = 1080;
-                if (image.Width > targetMaxWidth)
+                using (var inputStream = imageFile.OpenReadStream())
                 {
-                    int newHeight = (int)((double)image.Height / image.Width * targetMaxWidth);
-                    image.Mutate(x => x.Resize(targetMaxWidth, newHeight));
+                    using (Image image = Image.Load(inputStream))
+                    {
+                        int targetMaxWidth = 1080;
+                        if (image.Width > targetMaxWidth)
+                        {
+                            int newHeight = (int)((double)image.Height / image.Width * targetMaxWidth);
+                            image.Mutate(x => x.Resize(targetMaxWidth, newHeight));
+                        }
+                        image.Mutate(x => x.BackgroundColor(Color.White));
+                        using (var outputStream = new MemoryStream())
+                        {
+                            image.SaveAsJpeg(outputStream, new JpegEncoder { Quality = 60 });
+                            finalProcessedBytes = outputStream.ToArray();
+                        }
+                    }
                 }
-                image.Mutate(x => x.BackgroundColor(Color.White));
-                using (var outputStream = new MemoryStream())
+                debugLog.Add($"⏱️ 图片压缩耗时: {watch.ElapsedMilliseconds} ms");
+                watch.Restart();
+
+                var ocrTask = Task.Run(() => _baiduOcrClient.AccurateBasic(finalProcessedBytes));
+
+                if (await Task.WhenAny(ocrTask, Task.Delay(15000)) != ocrTask)
                 {
-                    image.SaveAsJpeg(outputStream, new JpegEncoder { Quality = 60 });
-                    finalProcessedBytes = outputStream.ToArray();
+                    return StatusCode(500, $"❌ 识别超时熔断！");
                 }
-            }
-        }
-        debugLog.Add($"⏱️ 图片压缩耗时: {watch.ElapsedMilliseconds} ms");
-        watch.Restart();
 
-        var ocrTask = Task.Run(() => _baiduOcrClient.AccurateBasic(finalProcessedBytes));
+                var result = await ocrTask;
+                debugLog.Add($"⏱️ 百度 OCR 耗时: {watch.ElapsedMilliseconds} ms");
 
-        if (await Task.WhenAny(ocrTask, Task.Delay(15000)) != ocrTask)
-        {
-            return StatusCode(500, $"❌ 识别超时熔断！");
-        }
+                var texts = (result["words_result"] as JArray)?.Select(x => x["words"].ToString().Trim()).ToList() ?? new List<string>();
+                if (texts.Count == 0) return BadRequest("❌ OCR未能识别出任何文字");
 
-        var result = await ocrTask;
-        debugLog.Add($"⏱️ 百度 OCR 耗时: {watch.ElapsedMilliseconds} ms");
+                int importedCount = 0;
+                string amountPattern = @"^\d[\d,]*\.\d{2}$";
 
-        var texts = (result["words_result"] as JArray)?.Select(x => x["words"].ToString().Trim()).ToList() ?? new List<string>();
-        if (texts.Count == 0) return BadRequest("❌ OCR未能识别出任何文字");
+                for (int i = 1; i < texts.Count; i++)
+                {
+                    string currentLine = texts[i];
 
-        int importedCount = 0;
-        string amountPattern = @"^\d[\d,]*\.\d{2}$";
-
-        for (int i = 1; i < texts.Count; i++)
-        {
-            string currentLine = texts[i];
-
-            // 锁定第一个两位小数的纯数字作为“持有金额”
-            if (Regex.IsMatch(currentLine, amountPattern))
-            {
+                    // 锁定第一个两位小数的纯数字作为“持有金额”
+                    if (Regex.IsMatch(currentLine, amountPattern))
+                    {
                         // 🚀 核心修复：逆向过滤雷达！向上搜索真正的基金名称，跳过中间存在的涨幅或杂音
                         // 🚀 核心修复：逆向过滤雷达！加入对“金选”和“市场解读”等干扰标签的免疫
                         string namePart1 = "";
@@ -244,10 +244,10 @@ public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFo
 
                         if (string.IsNullOrEmpty(namePart1)) continue;
 
-                double holdAmount = double.Parse(currentLine.Replace(",", ""));
-                double holdingIncome = 0;
-                double holdShares = 0;
-                string potentialFragment = "";
+                        double holdAmount = double.Parse(currentLine.Replace(",", ""));
+                        double holdingIncome = 0;
+                        double holdShares = 0;
+                        string potentialFragment = "";
 
                         // 向下扫描寻找份额和收益 (加入物理隔离，防止抢夺下一个基金的数据)
                         for (int j = 1; j <= 4 && (i + j) < texts.Count; j++) // 将扫描深度从 6 行缩减到 4 行
@@ -278,99 +278,99 @@ public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFo
                     ? new[] { namePart1 }
                     : new[] { namePart1, namePart1 + potentialFragment };
 
-                FundInfoCache finalBestMatch = null;
-                double finalBestScore = 0;
+                        FundInfoCache finalBestMatch = null;
+                        double finalBestScore = 0;
 
-                foreach (var testName in testNames)
-                {
-                    string pureChinese = Regex.Replace(testName, @"[^\u4e00-\u9fa5]", "");
-                    if (pureChinese.Length < 2) continue;
-
-                    string normalizedOcr = NormalizeFundName(testName);
-                    FundInfoCache bestMatch = null;
-                    double bestScore = 0;
-
-                    if (_exactMatchDict != null && (_exactMatchDict.TryGetValue(normalizedOcr, out var exactFund) || _exactMatchDict.TryGetValue(testName, out exactFund)))
-                    {
-                        bestMatch = exactFund;
-                        bestScore = 100.0;
-                    }
-                    else
-                    {
-                        var candidates = allFunds.Where(f => f.NormalizedName.Contains(pureChinese) ||
-                                                            pureChinese.Contains(f.NormalizedName.Substring(0, Math.Min(3, f.NormalizedName.Length))));
-
-                        foreach (var f in candidates)
+                        foreach (var testName in testNames)
                         {
-                            double similarity = CalculateSimilarity(normalizedOcr, f.NormalizedName);
-                            double currentScore = similarity * 100;
+                            string pureChinese = Regex.Replace(testName, @"[^\u4e00-\u9fa5]", "");
+                            if (pureChinese.Length < 2) continue;
 
-                            if (currentScore > bestScore)
+                            string normalizedOcr = NormalizeFundName(testName);
+                            FundInfoCache bestMatch = null;
+                            double bestScore = 0;
+
+                            if (_exactMatchDict != null && (_exactMatchDict.TryGetValue(normalizedOcr, out var exactFund) || _exactMatchDict.TryGetValue(testName, out exactFund)))
                             {
-                                bestScore = currentScore;
-                                bestMatch = f;
+                                bestMatch = exactFund;
+                                bestScore = 100.0;
+                            }
+                            else
+                            {
+                                var candidates = allFunds.Where(f => f.NormalizedName.Contains(pureChinese) ||
+                                                                    pureChinese.Contains(f.NormalizedName.Substring(0, Math.Min(3, f.NormalizedName.Length))));
+
+                                foreach (var f in candidates)
+                                {
+                                    double similarity = CalculateSimilarity(normalizedOcr, f.NormalizedName);
+                                    double currentScore = similarity * 100;
+
+                                    if (currentScore > bestScore)
+                                    {
+                                        bestScore = currentScore;
+                                        bestMatch = f;
+                                    }
+                                }
+                            }
+
+                            if (bestScore > finalBestScore)
+                            {
+                                finalBestScore = bestScore;
+                                finalBestMatch = bestMatch;
                             }
                         }
-                    }
 
-                    if (bestScore > finalBestScore)
-                    {
-                        finalBestScore = bestScore;
-                        finalBestMatch = bestMatch;
+                        // 🚀 保存更新逻辑
+                        if (finalBestMatch != null && finalBestScore > 65 && holdAmount > 0)
+                        {
+                            if (userFundDict.TryGetValue(finalBestMatch.Code, out var exist))
+                            {
+                                exist.HoldAmount = holdAmount;
+
+                                if (holdingIncome != 0)
+                                {
+                                    exist.CostAmount = Math.Round(holdAmount - holdingIncome, 2);
+                                }
+
+                                if (holdShares > 0)
+                                {
+                                    exist.HoldShares = holdShares;
+                                }
+
+                                _context.MyFunds.Update(exist);
+                            }
+                            else
+                            {
+                                var newFund = new MyFundConfig
+                                {
+                                    Username = username,
+                                    FundCode = finalBestMatch.Code,
+                                    FundName = finalBestMatch.Name,
+                                    HoldAmount = holdAmount,
+                                    CostAmount = holdingIncome != 0 ? Math.Round(holdAmount - holdingIncome, 2) : holdAmount,
+                                    HoldShares = holdShares
+                                };
+                                _context.MyFunds.Add(newFund);
+                                userFundDict[newFund.FundCode] = newFund;
+                            }
+                            importedCount++;
+
+                            if (finalBestScore >= 99.0)
+                                debugLog.Add($"⚡ 精准命中: {finalBestMatch.Name} [份额: {(holdShares > 0 ? holdShares.ToString() : "未扫描到")}]");
+                            else
+                                debugLog.Add($"✅ 模糊修复: {finalBestMatch.Name} ({finalBestScore:F1}%) [份额: {(holdShares > 0 ? holdShares.ToString() : "未扫描到")}]");
+                        }
                     }
                 }
 
-                // 🚀 保存更新逻辑
-                if (finalBestMatch != null && finalBestScore > 65 && holdAmount > 0)
-                {
-                    if (userFundDict.TryGetValue(finalBestMatch.Code, out var exist))
-                    {
-                        exist.HoldAmount = holdAmount;
-                        
-                        if (holdingIncome != 0) 
-                        {
-                            exist.CostAmount = Math.Round(holdAmount - holdingIncome, 2);
-                        }
-                        
-                        if (holdShares > 0) 
-                        {
-                            exist.HoldShares = holdShares;
-                        }
-                        
-                        _context.MyFunds.Update(exist);
-                    }
-                    else
-                    {
-                        var newFund = new MyFundConfig
-                        {
-                            Username = username,
-                            FundCode = finalBestMatch.Code,
-                            FundName = finalBestMatch.Name,
-                            HoldAmount = holdAmount,
-                            CostAmount = holdingIncome != 0 ? Math.Round(holdAmount - holdingIncome, 2) : holdAmount,
-                            HoldShares = holdShares
-                        };
-                        _context.MyFunds.Add(newFund);
-                        userFundDict[newFund.FundCode] = newFund;
-                    }
-                    importedCount++;
-
-                    if (finalBestScore >= 99.0)
-                        debugLog.Add($"⚡ 精准命中: {finalBestMatch.Name} [份额: {(holdShares > 0 ? holdShares.ToString() : "未扫描到")}]");
-                    else
-                        debugLog.Add($"✅ 模糊修复: {finalBestMatch.Name} ({finalBestScore:F1}%) [份额: {(holdShares > 0 ? holdShares.ToString() : "未扫描到")}]");
-                }
+                await _context.SaveChangesAsync();
+                return Ok($"识别完成！成功同步 {importedCount} 只。\n\n[诊断日志]\n{string.Join("\n", debugLog)}");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"❌ 代码执行出现异常: {ex.Message}");
             }
         }
-
-        await _context.SaveChangesAsync();
-        return Ok($"识别完成！成功同步 {importedCount} 只。\n\n[诊断日志]\n{string.Join("\n", debugLog)}");
-    }
-    catch (Exception ex)
-    {
-        return StatusCode(500, $"❌ 代码执行出现异常: {ex.Message}");
-    }
-}
 
         private string ExtractFundClass(string name)
         {
@@ -526,11 +526,11 @@ public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFo
                 return StatusCode(500, $"自动清算引擎异常: {ex.Message}");
             }
         }
-[HttpGet("global-indices")]
-public async Task<IActionResult> GetGlobalIndices()
-{
-    var indices = new[]
-    {
+        [HttpGet("global-indices")]
+        public async Task<IActionResult> GetGlobalIndices()
+        {
+            var indices = new[]
+            {
         new { name = "上证指数", secid = "1.000001" },
         new { name = "科创50",   secid = "1.000688" },
         new { name = "创业板指", secid = "0.399006" },
@@ -540,74 +540,75 @@ public async Task<IActionResult> GetGlobalIndices()
         new { name = "道琼斯",   secid = "100.DJIA" }
     };
 
-    // 🛡️ 终极降维打击：无视证书 + 强制降级 HTTP/1.1
-    using var handler = new HttpClientHandler 
-    { 
-        ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true 
-    };
-    using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
-    
-    // 🚀 绝对核心：强制使用 HTTP/1.1！专治东方财富强行挂断电话！
-    http.DefaultRequestVersion = new Version(1, 1); 
-    
-    http.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36");
-    http.DefaultRequestHeaders.Add("Accept", "*/*");
-    http.DefaultRequestHeaders.Add("Connection", "keep-alive");
-    http.DefaultRequestHeaders.Add("Referer", "https://quote.eastmoney.com/");
-
-    var tasks = indices.Select(async idx =>
-    {
-        var url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={idx.secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250";
-        try
-        {
-            var response = await http.GetStringAsync(url);
-            using var doc = JsonDocument.Parse(response);
-            
-            if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind != JsonValueKind.Null)
+            // 🛡️ 终极降维打击：无视证书 + 强制降级 HTTP/1.1
+            using var handler = new HttpClientHandler
             {
-                if (data.TryGetProperty("klines", out var klines) && klines.GetArrayLength() > 0)
+                ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
+            };
+            using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
+
+            // 🚀 绝对核心：强制使用 HTTP/1.1！专治东方财富强行挂断电话！
+            http.DefaultRequestVersion = new Version(1, 1);
+
+            http.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36");
+            http.DefaultRequestHeaders.Add("Accept", "*/*");
+            http.DefaultRequestHeaders.Add("Connection", "keep-alive");
+            http.DefaultRequestHeaders.Add("Referer", "https://quote.eastmoney.com/");
+
+            var tasks = indices.Select(async idx =>
+            {
+                var url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={idx.secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250";
+                try
                 {
-                    var klineArray = klines.EnumerateArray().Select(k => k.GetString()).ToArray();
-                    var latestItem = klineArray[^1].Split(',');
-                    var oldestItem = klineArray[0].Split(',');
+                    var response = await http.GetStringAsync(url);
+                    using var doc = JsonDocument.Parse(response);
 
-                    double latestClose = 0, todayRate = 0, oldestClose = 0;
-                    if (latestItem.Length > 2) double.TryParse(latestItem[2], out latestClose);
-                    if (latestItem.Length > 8) double.TryParse(latestItem[8], out todayRate);
-                    if (oldestItem.Length > 2) double.TryParse(oldestItem[2], out oldestClose);
-
-                    double yearRate = oldestClose > 0 ? Math.Round((latestClose - oldestClose) / oldestClose * 100, 2) : 0;
-
-                    var cleanKlines = klineArray.Reverse().Select(k => {
-                        var p = k.Split(',');
-                        double rate = 0;
-                        if (p.Length > 8) double.TryParse(p[8], out rate);
-                        return (object)new { date = p[0], rate = rate };
-                    }).ToList();
-
-                    return new
+                    if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind != JsonValueKind.Null)
                     {
-                        name = idx.name,
-                        latest = latestClose,
-                        todayRate = todayRate,
-                        yearRate = yearRate,
-                        klines = cleanKlines
-                    };
-                }
-            }
-            
-            return new { name = $"{idx.name} (无数据)", latest = 0.0, todayRate = 0.0, yearRate = 0.0, klines = new List<object>() };
-        }
-        catch (Exception ex)
-        {
-            string innerMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
-            return new { name = $"{idx.name} (异常: {innerMsg})", latest = 0.0, todayRate = 0.0, yearRate = 0.0, klines = new List<object>() };
-        }
-    });
+                        if (data.TryGetProperty("klines", out var klines) && klines.GetArrayLength() > 0)
+                        {
+                            var klineArray = klines.EnumerateArray().Select(k => k.GetString()).ToArray();
+                            var latestItem = klineArray[^1].Split(',');
+                            var oldestItem = klineArray[0].Split(',');
 
-    var results = await Task.WhenAll(tasks);
-    return Ok(results);
-}
+                            double latestClose = 0, todayRate = 0, oldestClose = 0;
+                            if (latestItem.Length > 2) double.TryParse(latestItem[2], out latestClose);
+                            if (latestItem.Length > 8) double.TryParse(latestItem[8], out todayRate);
+                            if (oldestItem.Length > 2) double.TryParse(oldestItem[2], out oldestClose);
+
+                            double yearRate = oldestClose > 0 ? Math.Round((latestClose - oldestClose) / oldestClose * 100, 2) : 0;
+
+                            var cleanKlines = klineArray.Reverse().Select(k =>
+                            {
+                                var p = k.Split(',');
+                                double rate = 0;
+                                if (p.Length > 8) double.TryParse(p[8], out rate);
+                                return (object)new { date = p[0], rate = rate };
+                            }).ToList();
+
+                            return new
+                            {
+                                name = idx.name,
+                                latest = latestClose,
+                                todayRate = todayRate,
+                                yearRate = yearRate,
+                                klines = cleanKlines
+                            };
+                        }
+                    }
+
+                    return new { name = $"{idx.name} (无数据)", latest = 0.0, todayRate = 0.0, yearRate = 0.0, klines = new List<object>() };
+                }
+                catch (Exception ex)
+                {
+                    string innerMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                    return new { name = $"{idx.name} (异常: {innerMsg})", latest = 0.0, todayRate = 0.0, yearRate = 0.0, klines = new List<object>() };
+                }
+            });
+
+            var results = await Task.WhenAll(tasks);
+            return Ok(results);
+        }
 
 
         [HttpGet("test-load")]
@@ -628,54 +629,54 @@ public async Task<IActionResult> GetGlobalIndices()
 
         // 🚀 新增：猎隼侦察兵，去东方财富底层接口刺探真实净值
         // 🚀 猎隼侦察兵升级版：双重刺探，获取单位净值计算绝对物理收益
-private async Task<(double? rate, double? exactProfit)> GetTodayRealRateAsync(string fundCode, string todayStr, double shares)
-{
-    string cacheKey = $"RealRateV2_{fundCode}_{todayStr}_{shares}";
-    if (_cache.TryGetValue(cacheKey, out (double?, double?) cached)) return cached;
-
-    string missKey = $"NoRealRate_{fundCode}_{todayStr}";
-    if (_cache.TryGetValue(missKey, out _)) return (null, null);
-
-    try
-    {
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(1) };
-        client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
-        // 核心修改：请求最近两天的历史净值 pageSize=2
-        string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={fundCode}&pageIndex=1&pageSize=2";
-        string res = await client.GetStringAsync(url);
-        using var doc = JsonDocument.Parse(res);
-        var dataArray = doc.RootElement.GetProperty("Data").GetProperty("LSJZList");
-        
-        if (dataArray.GetArrayLength() > 0)
+        private async Task<(double? rate, double? exactProfit)> GetTodayRealRateAsync(string fundCode, string todayStr, double shares)
         {
-            var latest = dataArray[0];
-            if (latest.GetProperty("FSRQ").GetString() == todayStr)
+            string cacheKey = $"RealRateV2_{fundCode}_{todayStr}_{shares}";
+            if (_cache.TryGetValue(cacheKey, out (double?, double?) cached)) return cached;
+
+            string missKey = $"NoRealRate_{fundCode}_{todayStr}";
+            if (_cache.TryGetValue(missKey, out _)) return (null, null);
+
+            try
             {
-                if (double.TryParse(latest.GetProperty("JZZZL").GetString(), out double realRate))
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(1) };
+                client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
+                // 核心修改：请求最近两天的历史净值 pageSize=2
+                string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={fundCode}&pageIndex=1&pageSize=2";
+                string res = await client.GetStringAsync(url);
+                using var doc = JsonDocument.Parse(res);
+                var dataArray = doc.RootElement.GetProperty("Data").GetProperty("LSJZList");
+
+                if (dataArray.GetArrayLength() > 0)
                 {
-                    double? exactProfit = null;
-                    // 如果指挥官录入了份额，且成功拿到了昨天的数据，启动绝对物理计算！
-                    if (shares > 0 && dataArray.GetArrayLength() > 1)
+                    var latest = dataArray[0];
+                    if (latest.GetProperty("FSRQ").GetString() == todayStr)
                     {
-                        if (double.TryParse(latest.GetProperty("DWJZ").GetString(), out double todayNav) &&
-                            double.TryParse(dataArray[1].GetProperty("DWJZ").GetString(), out double yesterdayNav))
+                        if (double.TryParse(latest.GetProperty("JZZZL").GetString(), out double realRate))
                         {
-                            // 绝对物理公式：份额 * (今日单位净值 - 昨日单位净值)
-                            exactProfit = Math.Round(shares * (todayNav - yesterdayNav), 2);
+                            double? exactProfit = null;
+                            // 如果指挥官录入了份额，且成功拿到了昨天的数据，启动绝对物理计算！
+                            if (shares > 0 && dataArray.GetArrayLength() > 1)
+                            {
+                                if (double.TryParse(latest.GetProperty("DWJZ").GetString(), out double todayNav) &&
+                                    double.TryParse(dataArray[1].GetProperty("DWJZ").GetString(), out double yesterdayNav))
+                                {
+                                    // 绝对物理公式：份额 * (今日单位净值 - 昨日单位净值)
+                                    exactProfit = Math.Round(shares * (todayNav - yesterdayNav), 2);
+                                }
+                            }
+                            var result = (realRate, exactProfit);
+                            _cache.Set(cacheKey, result, TimeSpan.FromHours(12));
+                            return result;
                         }
                     }
-                    var result = (realRate, exactProfit);
-                    _cache.Set(cacheKey, result, TimeSpan.FromHours(12));
-                    return result;
                 }
             }
-        }
-    }
-    catch { }
+            catch { }
 
-    _cache.Set(missKey, true, TimeSpan.FromMinutes(1));
-    return (null, null);
-}
+            _cache.Set(missKey, true, TimeSpan.FromMinutes(1));
+            return (null, null);
+        }
 
 
 
@@ -706,7 +707,7 @@ private async Task<(double? rate, double? exactProfit)> GetTodayRealRateAsync(st
                     .Where(r => r.FetchTime >= today && myFundCodes.Contains(r.FundCode))
                     .OrderBy(r => r.FetchTime)
                     .ToListAsync();
-var threeDaysAgo = today.AddDays(-3);
+                var threeDaysAgo = today.AddDays(-3);
                 var lastRecords = await _context.FundRecords.Where(r => r.FetchTime < today && myFundCodes.Contains(r.FundCode)).OrderByDescending(r => r.FetchTime).ToListAsync();
                 var sevenDaysAgo = today.AddDays(-7);
                 var allPastRecords = await _context.FundRecords
@@ -714,26 +715,26 @@ var threeDaysAgo = today.AddDays(-3);
                     .OrderByDescending(r => r.FetchTime)
                     .ToListAsync();
 
-                
-            // 🌟 猎隼侦察兵启动：下午 17:00 后刺探真实净值
-var realRateDict = new Dictionary<string, double>();
-var exactProfitDict = new Dictionary<string, double>(); // 新增物理利润字典
 
-if (localTime.Hour >= 17)
-{
-    // 改为遍历 myFunds，带上份额参数
-    var realRateTasks = myFunds.Select(async config => 
-    {
-        var res = await GetTodayRealRateAsync(config.FundCode, todayDash, config.HoldShares);
-        return new { code = config.FundCode, rate = res.rate, exactProfit = res.exactProfit };
-    });
-    var realRateResults = await Task.WhenAll(realRateTasks);
-    foreach (var res in realRateResults)
-    {
-        if (res.rate.HasValue) realRateDict[res.code] = res.rate.Value;
-        if (res.exactProfit.HasValue) exactProfitDict[res.code] = res.exactProfit.Value; // 截获物理利润
-    }
-}
+                // 🌟 猎隼侦察兵启动：下午 17:00 后刺探真实净值
+                var realRateDict = new Dictionary<string, double>();
+                var exactProfitDict = new Dictionary<string, double>(); // 新增物理利润字典
+
+                if (localTime.Hour >= 17)
+                {
+                    // 改为遍历 myFunds，带上份额参数
+                    var realRateTasks = myFunds.Select(async config =>
+                    {
+                        var res = await GetTodayRealRateAsync(config.FundCode, todayDash, config.HoldShares);
+                        return new { code = config.FundCode, rate = res.rate, exactProfit = res.exactProfit };
+                    });
+                    var realRateResults = await Task.WhenAll(realRateTasks);
+                    foreach (var res in realRateResults)
+                    {
+                        if (res.rate.HasValue) realRateDict[res.code] = res.rate.Value;
+                        if (res.exactProfit.HasValue) exactProfitDict[res.code] = res.exactProfit.Value; // 截获物理利润
+                    }
+                }
 
 
                 var result = myFunds.Select(config =>
@@ -773,11 +774,11 @@ if (localTime.Hour >= 17)
 
                     // 是否已截获真实净值
                     // 是否已截获真实净值
-bool isSettled = realRateDict.ContainsKey(config.FundCode);
-double? actualRate = isSettled ? realRateDict[config.FundCode] : null;
+                    bool isSettled = realRateDict.ContainsKey(config.FundCode);
+                    double? actualRate = isSettled ? realRateDict[config.FundCode] : null;
 
-// 🚀 新增这一行：尝试提取绝对物理利润
-double? actualExactProfit = exactProfitDict.ContainsKey(config.FundCode) ? exactProfitDict[config.FundCode] : null;
+                    // 🚀 新增这一行：尝试提取绝对物理利润
+                    double? actualExactProfit = exactProfitDict.ContainsKey(config.FundCode) ? exactProfitDict[config.FundCode] : null;
 
                     return new
                     {
@@ -920,10 +921,10 @@ double? actualExactProfit = exactProfitDict.ContainsKey(config.FundCode) ? exact
         [HttpGet("sectors")]
         public async Task<IActionResult> GetSectors()
         {
-        string sectorCacheKey = "SectorData";
-if (_cache.TryGetValue(sectorCacheKey, out object cachedSectors))
-    return Ok(cachedSectors);
-        
+            string sectorCacheKey = "SectorData";
+            if (_cache.TryGetValue(sectorCacheKey, out object cachedSectors))
+                return Ok(cachedSectors);
+
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
             try
             {
@@ -1023,139 +1024,140 @@ if (_cache.TryGetValue(sectorCacheKey, out object cachedSectors))
         }
 
         [HttpGet("sector-funds")]
-public async Task<IActionResult> GetSectorFunds([FromQuery] string sectorName)
-{
-    if (string.IsNullOrEmpty(sectorName)) return BadRequest("缺少板块名称");
-
-    // 1. 基础清理
-    string keyword = sectorName.Replace("概念", "").Replace("板块", "");
-
-    // 2. 🚀 升级版：超级语义映射引擎 (把你截图里的冷门概念都接管了)
-    if (keyword.Contains("蛋白") || keyword.Contains("CRO") || keyword.Contains("药") || keyword.Contains("单抗") || keyword.Contains("肝炎") || keyword.Contains("阿兹海默") || keyword.Contains("医疗") || keyword.Contains("医美") || keyword.Contains("生物"))
-        keyword = "医药";
-    else if (keyword.Contains("CPO") || keyword.Contains("光通信") || keyword.Contains("算力") || keyword.Contains("服务器") || keyword.Contains("宽带") || keyword.Contains("脑机") || keyword.Contains("F5G")) // 新增 F5G
-        keyword = "通信";
-    else if (keyword.Contains("低空经济") || keyword.Contains("飞行") || keyword.Contains("卫星") || keyword.Contains("航天"))
-        keyword = "军工";
-    else if (keyword.Contains("电池") || keyword.Contains("锂") || keyword.Contains("钠") || keyword.Contains("储能") || keyword.Contains("光伏") || keyword.Contains("逆变器")) // 新增 锂电池相关
-        keyword = "新能源";
-    else if (keyword.Contains("半导体") || keyword.Contains("光刻") || keyword.Contains("封装") || keyword.Contains("芯片"))
-        keyword = "半导体";
-    else if (keyword.Contains("苹果") || keyword.Contains("华为") || keyword.Contains("消费电子") || keyword.Contains("面板") || keyword.Contains("元器件"))
-        keyword = "电子";
-    else if (keyword.Contains("汽车") || keyword.Contains("整车"))
-        keyword = "汽车";
-    else if (keyword.Contains("游戏") || keyword.Contains("传媒") || keyword.Contains("短剧") || keyword.Contains("影视") || keyword.Contains("文字") || keyword.Contains("娱乐")) // 新增 文字媒体、娱乐用品
-        keyword = "传媒";
-    else if (keyword.Contains("AI") || keyword.Contains("大模型") || keyword.Contains("数据") || keyword.Contains("软件") || keyword.Contains("大科技"))
-        keyword = "人工智能";
-    else if (keyword.Contains("双创")) 
-        keyword = "科创创业"; // 修复双创50
-    else if (keyword.Contains("券商") || keyword.Contains("证券") || keyword.Contains("保险")) 
-        keyword = "证券";
-    else
-    {
-        // 通用后缀剔除兜底
-        string[] suffixes = { "制造", "外包", "服务", "设备", "商业", "制剂", "用品", "耗材", "制品", "工程", "产业", "概念", "加工", "管材" };
-        foreach (var suffix in suffixes)
+        public async Task<IActionResult> GetSectorFunds([FromQuery] string sectorName)
         {
-            if (keyword.EndsWith(suffix) && keyword.Length > suffix.Length)
+            if (string.IsNullOrEmpty(sectorName)) return BadRequest("缺少板块名称");
+
+            // 1. 基础清理
+            string keyword = sectorName.Replace("概念", "").Replace("板块", "");
+
+            // 2. 🚀 升级版：超级语义映射引擎 (把你截图里的冷门概念都接管了)
+            if (keyword.Contains("蛋白") || keyword.Contains("CRO") || keyword.Contains("药") || keyword.Contains("单抗") || keyword.Contains("肝炎") || keyword.Contains("阿兹海默") || keyword.Contains("医疗") || keyword.Contains("医美") || keyword.Contains("生物"))
+                keyword = "医药";
+            else if (keyword.Contains("CPO") || keyword.Contains("光通信") || keyword.Contains("算力") || keyword.Contains("服务器") || keyword.Contains("宽带") || keyword.Contains("脑机") || keyword.Contains("F5G")) // 新增 F5G
+                keyword = "通信";
+            else if (keyword.Contains("低空经济") || keyword.Contains("飞行") || keyword.Contains("卫星") || keyword.Contains("航天"))
+                keyword = "军工";
+            else if (keyword.Contains("电池") || keyword.Contains("锂") || keyword.Contains("钠") || keyword.Contains("储能") || keyword.Contains("光伏") || keyword.Contains("逆变器")) // 新增 锂电池相关
+                keyword = "新能源";
+            else if (keyword.Contains("半导体") || keyword.Contains("光刻") || keyword.Contains("封装") || keyword.Contains("芯片"))
+                keyword = "半导体";
+            else if (keyword.Contains("苹果") || keyword.Contains("华为") || keyword.Contains("消费电子") || keyword.Contains("面板") || keyword.Contains("元器件"))
+                keyword = "电子";
+            else if (keyword.Contains("汽车") || keyword.Contains("整车"))
+                keyword = "汽车";
+            else if (keyword.Contains("游戏") || keyword.Contains("传媒") || keyword.Contains("短剧") || keyword.Contains("影视") || keyword.Contains("文字") || keyword.Contains("娱乐")) // 新增 文字媒体、娱乐用品
+                keyword = "传媒";
+            else if (keyword.Contains("AI") || keyword.Contains("大模型") || keyword.Contains("数据") || keyword.Contains("软件") || keyword.Contains("大科技"))
+                keyword = "人工智能";
+            else if (keyword.Contains("双创"))
+                keyword = "科创创业"; // 修复双创50
+            else if (keyword.Contains("券商") || keyword.Contains("证券") || keyword.Contains("保险"))
+                keyword = "证券";
+            else
             {
-                keyword = keyword.Substring(0, keyword.Length - suffix.Length);
-                break;
-            }
-        }
-        if (keyword.Length >= 4) keyword = keyword.Substring(0, 2);
-    }
-
-    using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-    var resultList = new List<dynamic>();
-
-    try
-    {
-        // 去天天基金搜索
-        string searchUrl = $"http://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?m=1&key={Uri.EscapeDataString(keyword)}";
-        string searchRes = await client.GetStringAsync(searchUrl);
-
-        using var doc = System.Text.Json.JsonDocument.Parse(searchRes);
-        var datas = doc.RootElement.GetProperty("Datas");
-
-        if (datas.ValueKind != System.Text.Json.JsonValueKind.Null && datas.GetArrayLength() > 0)
-        {
-            var fundCodes = new List<string>();
-            var fundDict = new Dictionary<string, string>();
-
-            // 优先找 ETF/指数/联接基金
-            foreach (var item in datas.EnumerateArray())
-            {
-                if (item.TryGetProperty("CATEGORYDESC", out var cat) && cat.GetString() != "基金") continue;
-                string fCode = item.GetProperty("CODE").GetString();
-                string fName = item.GetProperty("NAME").GetString();
-
-                if ((fName.Contains("ETF") || fName.Contains("联接") || fName.Contains("指数")) && !fundDict.ContainsKey(fCode))
+                // 通用后缀剔除兜底
+                string[] suffixes = { "制造", "外包", "服务", "设备", "商业", "制剂", "用品", "耗材", "制品", "工程", "产业", "概念", "加工", "管材" };
+                foreach (var suffix in suffixes)
                 {
-                    fundCodes.Add(fCode);
-                    fundDict[fCode] = fName;
-                    if (fundCodes.Count >= 6) break;
-                }
-            }
-
-            // 凑不够的话拿主动基金顶上
-            if (fundCodes.Count < 6)
-            {
-                foreach (var item in datas.EnumerateArray())
-                {
-                    if (item.TryGetProperty("CATEGORYDESC", out var cat) && cat.GetString() != "基金") continue;
-                    string fCode = item.GetProperty("CODE").GetString();
-                    string fName = item.GetProperty("NAME").GetString();
-
-                    if (!fundDict.ContainsKey(fCode))
+                    if (keyword.EndsWith(suffix) && keyword.Length > suffix.Length)
                     {
-                        fundCodes.Add(fCode);
-                        fundDict[fCode] = fName;
-                        if (fundCodes.Count >= 6) break;
+                        keyword = keyword.Substring(0, keyword.Length - suffix.Length);
+                        break;
                     }
                 }
+                if (keyword.Length >= 4) keyword = keyword.Substring(0, 2);
             }
 
-            // 🚀 核心修复：即使天天基金的估值接口挂了，也把基金返回！
-            var tasks = fundCodes.Select(async code =>
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            var resultList = new List<dynamic>();
+
+            try
             {
-                double finalRate = 0.0;
-                try
+                // 去天天基金搜索
+                string searchUrl = $"http://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?m=1&key={Uri.EscapeDataString(keyword)}";
+                string searchRes = await client.GetStringAsync(searchUrl);
+
+                using var doc = System.Text.Json.JsonDocument.Parse(searchRes);
+                var datas = doc.RootElement.GetProperty("Datas");
+
+                if (datas.ValueKind != System.Text.Json.JsonValueKind.Null && datas.GetArrayLength() > 0)
                 {
-                    string gzUrl = $"http://fundgz.1234567.com.cn/js/{code}.js?rt={DateTime.Now.Ticks}";
-                    string gzRes = await client.GetStringAsync(gzUrl);
-                    var match = System.Text.RegularExpressions.Regex.Match(gzRes, @"\""gszzl\"":\""([^\""]+)\""");
-                    if (match.Success && double.TryParse(match.Groups[1].Value, out double rate))
+                    var fundCodes = new List<string>();
+                    var fundDict = new Dictionary<string, string>();
+
+                    // 优先找 ETF/指数/联接基金
+                    foreach (var item in datas.EnumerateArray())
                     {
-                        finalRate = rate;
+                        if (item.TryGetProperty("CATEGORYDESC", out var cat) && cat.GetString() != "基金") continue;
+                        string fCode = item.GetProperty("CODE").GetString();
+                        string fName = item.GetProperty("NAME").GetString();
+
+                        if ((fName.Contains("ETF") || fName.Contains("联接") || fName.Contains("指数")) && !fundDict.ContainsKey(fCode))
+                        {
+                            fundCodes.Add(fCode);
+                            fundDict[fCode] = fName;
+                            if (fundCodes.Count >= 6) break;
+                        }
+                    }
+
+                    // 凑不够的话拿主动基金顶上
+                    if (fundCodes.Count < 6)
+                    {
+                        foreach (var item in datas.EnumerateArray())
+                        {
+                            if (item.TryGetProperty("CATEGORYDESC", out var cat) && cat.GetString() != "基金") continue;
+                            string fCode = item.GetProperty("CODE").GetString();
+                            string fName = item.GetProperty("NAME").GetString();
+
+                            if (!fundDict.ContainsKey(fCode))
+                            {
+                                fundCodes.Add(fCode);
+                                fundDict[fCode] = fName;
+                                if (fundCodes.Count >= 6) break;
+                            }
+                        }
+                    }
+
+                    // 🚀 核心修复：即使天天基金的估值接口挂了，也把基金返回！
+                    var tasks = fundCodes.Select(async code =>
+                    {
+                        double finalRate = 0.0;
+                        try
+                        {
+                            string gzUrl = $"http://fundgz.1234567.com.cn/js/{code}.js?rt={DateTime.Now.Ticks}";
+                            string gzRes = await client.GetStringAsync(gzUrl);
+                            var match = System.Text.RegularExpressions.Regex.Match(gzRes, @"\""gszzl\"":\""([^\""]+)\""");
+                            if (match.Success && double.TryParse(match.Groups[1].Value, out double rate))
+                            {
+                                finalRate = rate;
+                            }
+                        }
+                        catch
+                        {
+                            // 接口炸了不抛异常，生吞，保底 rate 为 0
+                        }
+
+                        // 不管有没有查到实时净值，只要搜到了这只基金，就强行返回它！
+                        return new { code = code, name = fundDict[code], rate = finalRate };
+                    });
+
+                    var results = await Task.WhenAll(tasks);
+                    foreach (var res in results)
+                    {
+                        if (res != null) resultList.Add(res);
                     }
                 }
-                catch { 
-                    // 接口炸了不抛异常，生吞，保底 rate 为 0
-                }
-                
-                // 不管有没有查到实时净值，只要搜到了这只基金，就强行返回它！
-                return new { code = code, name = fundDict[code], rate = finalRate };
-            });
 
-            var results = await Task.WhenAll(tasks);
-            foreach (var res in results)
+                // 排序：涨的多的在前面
+                resultList = resultList.OrderByDescending(x => (double)x.GetType().GetProperty("rate").GetValue(x)).ToList();
+                return Ok(resultList);
+            }
+            catch (Exception ex)
             {
-                if (res != null) resultList.Add(res);
+                return StatusCode(500, $"找基失败: {ex.Message}");
             }
         }
-
-        // 排序：涨的多的在前面
-        resultList = resultList.OrderByDescending(x => (double)x.GetType().GetProperty("rate").GetValue(x)).ToList();
-        return Ok(resultList);
-    }
-    catch (Exception ex)
-    {
-        return StatusCode(500, $"找基失败: {ex.Message}");
-    }
-}
 
         [HttpPost("save-archive")]
         public async Task<IActionResult> SaveArchive([FromBody] ArchiveRequest req)
@@ -1163,17 +1165,41 @@ public async Task<IActionResult> GetSectorFunds([FromQuery] string sectorName)
             if (string.IsNullOrEmpty(req.Username)) return Unauthorized();
 
             try
-            {var oldRecords = await _context.DailyArchives
-    .Where(a => a.Username == req.Username && a.RecordDate == date)
-    .ToListAsync();
-if (oldRecords.Any()) 
-{
-    // 检查是否已有真实数据
-    bool hasRealData = oldRecords.Any(r => r.FundCode == "TOTAL" && r.DailyRate != 0);
-    if (hasRealData) 
-        return Ok("✅ 今日真实战报已存在，无需重复封存！"); // 有真实数据直接返回
-    _context.DailyArchives.RemoveRange(oldRecords); // 估值数据删掉
-}
+            {
+                // 🚀 修复 1：找回丢失的 date 变量声明
+                var date = DateTime.Parse(req.DateStr).Date;
+
+                var oldRecords = await _context.DailyArchives
+                    .Where(a => a.Username == req.Username && a.RecordDate == date)
+                    .ToListAsync();
+
+                if (oldRecords.Any())
+                {
+                    // 检查是否已有真实数据
+                    bool hasRealData = oldRecords.Any(r => r.FundCode == "TOTAL" && r.DailyRate != 0);
+                    if (hasRealData)
+                        return Ok("✅ 今日真实战报已存在，无需重复封存！"); // 有真实数据直接返回
+
+                    _context.DailyArchives.RemoveRange(oldRecords); // 估值数据删掉
+                }
+
+                // 🚀 修复 2：找回丢失的“封存新战报”核心逻辑！
+                req.Total.RecordDate = date;
+                req.Total.FundCode = "TOTAL";
+                req.Total.Username = req.Username;
+                _context.DailyArchives.Add(req.Total);
+
+                foreach (var f in req.Funds)
+                {
+                    f.RecordDate = date;
+                    f.Username = req.Username;
+                    _context.DailyArchives.Add(f);
+                }
+
+                await _context.SaveChangesAsync();
+
+                // 🚀 修复 3：补上方法末尾的返回值，彻底消灭 CS0161 报错！
+                return Ok("✅ 今日战报已永久封存！");
             }
             catch (Exception ex)
             {
@@ -1189,7 +1215,7 @@ if (oldRecords.Any())
                 var localTime = DateTime.UtcNow.AddHours(8);
                 var today = localTime.Date;
                 // 周末不封存
-                if (localTime.DayOfWeek == DayOfWeek.Saturday || localTime.DayOfWeek == DayOfWeek.Sunday)    return Ok("周末休市，无需封存。");
+                if (localTime.DayOfWeek == DayOfWeek.Saturday || localTime.DayOfWeek == DayOfWeek.Sunday) return Ok("周末休市，无需封存。");
                 var allFunds = await _context.MyFunds.ToListAsync();
                 if (!allFunds.Any()) return Ok("无阵地需要封存。");
 
@@ -1200,15 +1226,15 @@ if (oldRecords.Any())
                 {
                     string username = group.Key;
                     var userFunds = group.ToList();
-var existingRecords = await _context.DailyArchives
-    .Where(a => a.Username == username && a.RecordDate == today)
-    .ToListAsync();
-if (existingRecords.Any())
-{
-    bool hasRealData = existingRecords.Any(r => r.FundCode == "TOTAL" && r.DailyRate != 0);
-    if (hasRealData) continue; // 有真实数据才跳过
-    _context.DailyArchives.RemoveRange(existingRecords); // 估值数据删掉重写
-}
+                    var existingRecords = await _context.DailyArchives
+                        .Where(a => a.Username == username && a.RecordDate == today)
+                        .ToListAsync();
+                    if (existingRecords.Any())
+                    {
+                        bool hasRealData = existingRecords.Any(r => r.FundCode == "TOTAL" && r.DailyRate != 0);
+                        if (hasRealData) continue; // 有真实数据才跳过
+                        _context.DailyArchives.RemoveRange(existingRecords); // 估值数据删掉重写
+                    }
 
                     double totalAssets = 0;
                     double totalCost = 0;
@@ -1224,52 +1250,52 @@ if (existingRecords.Any())
                             .FirstOrDefaultAsync();
 
                         // 算钱逻辑
-double dailyRate = todayRecord?.ActualRate > 0 ? todayRecord.ActualRate : (todayRecord?.EstimatedRate ?? 0);
-double dailyProfit = fund.HoldAmount * (dailyRate / 100.0);
+                        double dailyRate = todayRecord?.ActualRate > 0 ? todayRecord.ActualRate : (todayRecord?.EstimatedRate ?? 0);
+                        double dailyProfit = fund.HoldAmount * (dailyRate / 100.0);
 
-// 🚀 核心补丁：加入历史总收益的剥离与计算
-double cost = fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount; 
-double currentAssets = fund.HoldAmount + dailyProfit; // 当日清算后的实际最新市值
-double totalProfit = currentAssets - cost;
-double totalRate = cost > 0 ? (totalProfit / cost * 100.0) : 0;
+                        // 🚀 核心补丁：加入历史总收益的剥离与计算
+                        double cost = fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount;
+                        double currentAssets = fund.HoldAmount + dailyProfit; // 当日清算后的实际最新市值
+                        double totalProfit = currentAssets - cost;
+                        double totalRate = cost > 0 ? (totalProfit / cost * 100.0) : 0;
 
-_context.DailyArchives.Add(new DailyArchive
-{
-    Username = username,
-    FundCode = fund.FundCode,
-    FundName = fund.FundName,
-    RecordDate = today,
-    Assets = fund.HoldAmount,
-    DailyProfit = Math.Round(dailyProfit, 2),
-    DailyRate = Math.Round(dailyRate, 2),
-    TotalProfit = Math.Round(totalProfit, 2), // 🎯 补填
-    TotalRate = Math.Round(totalRate, 2)      // 🎯 补填
-});
+                        _context.DailyArchives.Add(new DailyArchive
+                        {
+                            Username = username,
+                            FundCode = fund.FundCode,
+                            FundName = fund.FundName,
+                            RecordDate = today,
+                            Assets = fund.HoldAmount,
+                            DailyProfit = Math.Round(dailyProfit, 2),
+                            DailyRate = Math.Round(dailyRate, 2),
+                            TotalProfit = Math.Round(totalProfit, 2), // 🎯 补填
+                            TotalRate = Math.Round(totalRate, 2)      // 🎯 补填
+                        });
 
                     }
 
                     double totalDailyProfit = _context.DailyArchives.Local
     .Where(a => a.Username == username && a.FundCode != "TOTAL" && a.RecordDate == today)
     .Sum(a => a.DailyProfit);
-double totalDailyRate = totalCost > 0 ? (totalDailyProfit / totalCost) * 100 : 0;
+                    double totalDailyRate = totalCost > 0 ? (totalDailyProfit / totalCost) * 100 : 0;
 
-// 🚀 核心补丁：总阵地的累计盈亏核算
-double currentTotalAssetsAfter = totalAssets + totalDailyProfit;
-double totalCampProfit = currentTotalAssetsAfter - totalCost;
-double totalCampRate = totalCost > 0 ? (totalCampProfit / totalCost * 100.0) : 0;
+                    // 🚀 核心补丁：总阵地的累计盈亏核算
+                    double currentTotalAssetsAfter = totalAssets + totalDailyProfit;
+                    double totalCampProfit = currentTotalAssetsAfter - totalCost;
+                    double totalCampRate = totalCost > 0 ? (totalCampProfit / totalCost * 100.0) : 0;
 
-_context.DailyArchives.Add(new DailyArchive
-{
-    Username = username,
-    FundCode = "TOTAL",
-    FundName = "总阵地",
-    RecordDate = today,
-    Assets = totalAssets,
-    DailyProfit = Math.Round(totalDailyProfit, 2),
-    DailyRate = Math.Round(totalDailyRate, 2),
-    TotalProfit = Math.Round(totalCampProfit, 2), // 🎯 补填总阵地累计
-    TotalRate = Math.Round(totalCampRate, 2)      // 🎯 补填总阵地累计
-});
+                    _context.DailyArchives.Add(new DailyArchive
+                    {
+                        Username = username,
+                        FundCode = "TOTAL",
+                        FundName = "总阵地",
+                        RecordDate = today,
+                        Assets = totalAssets,
+                        DailyProfit = Math.Round(totalDailyProfit, 2),
+                        DailyRate = Math.Round(totalDailyRate, 2),
+                        TotalProfit = Math.Round(totalCampProfit, 2), // 🎯 补填总阵地累计
+                        TotalRate = Math.Round(totalCampRate, 2)      // 🎯 补填总阵地累计
+                    });
 
                     savedCount++;
                 }
