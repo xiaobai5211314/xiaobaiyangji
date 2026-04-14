@@ -638,8 +638,6 @@ namespace 估值助手.Controllers
             }
         }
 
-        // 🚀 新增：猎隼侦察兵，去东方财富底层接口刺探真实净值
-        // 🚀 猎隼侦察兵升级版：双重刺探，获取单位净值计算绝对物理收益
         // 🚀 猎隼侦察兵升级版：双重刺探，获取单位净值计算绝对物理收益
         private async Task<(double? rate, double? exactProfit)> GetTodayRealRateAsync(string fundCode, string todayStr, double shares)
         {
@@ -651,7 +649,7 @@ namespace 估值助手.Controllers
 
             try
             {
-                // 🚀 修复点 1：将 1 秒超时延长至 5 秒，防止并发请求被强行掐断！
+                // 🚀 修复 1：5秒超时，从容应对高并发
                 using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
                 client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
                 string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={fundCode}&pageIndex=1&pageSize=2";
@@ -662,7 +660,7 @@ namespace 估值助手.Controllers
                 if (dataArray.GetArrayLength() > 0)
                 {
                     var latest = dataArray[0];
-                    // 🚀 修复点 2：只有东方财富明确返回了数据，我们才去判断日期
+                    // 🚀 修复 2：必须是网络通畅且返回了数据，才判断日期
                     if (latest.GetProperty("FSRQ").GetString() == todayStr)
                     {
                         if (double.TryParse(latest.GetProperty("JZZZL").GetString(), out double realRate))
@@ -683,8 +681,7 @@ namespace 估值助手.Controllers
                     }
                     else
                     {
-                        // 🚀 修复点 3：确凿证据！API 成功连通，但返回的最新日期依然不是今天，这才是真正的“官方未更新”！
-                        // 此时才允许写入拦截缓存。
+                        // 🚀 修复 3：确凿证据表明官方日期还没更新，才关入小黑屋
                         _cache.Set(missKey, true, TimeSpan.FromMinutes(2));
                         return (null, null);
                     }
@@ -692,8 +689,7 @@ namespace 估值助手.Controllers
             }
             catch (Exception ex)
             {
-                // 🚀 修复点 4：如果发生超时或断网等 Exception，绝对不写 missKey 缓存！
-                // 让下一次前端刷新时，系统能立刻重新发起突击，而不是被困在 1 分钟的错误缓存里！
+                // 🚀 修复 4：网络超时报错绝不连坐！直接放行，等前端 15 秒后重试！
                 Console.WriteLine($"[猎隼刺探异常] {fundCode}: {ex.Message}");
             }
 
