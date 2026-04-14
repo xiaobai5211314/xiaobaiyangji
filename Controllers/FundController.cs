@@ -1214,8 +1214,11 @@ namespace 估值助手.Controllers
             {
                 var localTime = DateTime.UtcNow.AddHours(8);
                 var today = localTime.Date;
+
                 // 周末不封存
-                if (localTime.DayOfWeek == DayOfWeek.Saturday || localTime.DayOfWeek == DayOfWeek.Sunday) return Ok("周末休市，无需封存。");
+                if (localTime.DayOfWeek == DayOfWeek.Saturday || localTime.DayOfWeek == DayOfWeek.Sunday)
+                    return Ok("周末休市，无需封存。");
+
                 var allFunds = await _context.MyFunds.ToListAsync();
                 if (!allFunds.Any()) return Ok("无阵地需要封存。");
 
@@ -1226,11 +1229,11 @@ namespace 估值助手.Controllers
                 {
                     string username = group.Key;
                     var userFunds = group.ToList();
+
+                    // 🚀 终极碾压法则：夜间机器人的数据永远是最准的！绝对覆盖！
                     var existingRecords = await _context.DailyArchives
                         .Where(a => a.Username == username && a.RecordDate == today)
                         .ToListAsync();
-                    // 🚀 终极碾压法则：夜间机器人的数据永远是最准的！
-                    // 不管白天存了什么，不需要判断，统统删掉，用现在的最新数据绝对覆盖！
                     if (existingRecords.Any())
                     {
                         _context.DailyArchives.RemoveRange(existingRecords);
@@ -1238,6 +1241,7 @@ namespace 估值助手.Controllers
 
                     double totalAssets = 0;
                     double totalCost = 0;
+                    double totalDailyProfit = 0; // 🎯 优化：直接累加今日总收益，杜绝误差
 
                     foreach (var fund in userFunds)
                     {
@@ -1249,16 +1253,28 @@ namespace 估值助手.Controllers
                             .OrderByDescending(r => r.FetchTime)
                             .FirstOrDefaultAsync();
 
-                        // 算钱逻辑
+                        // 算钱逻辑 (基础粗略版)
                         double dailyRate = todayRecord?.ActualRate > 0 ? todayRecord.ActualRate : (todayRecord?.EstimatedRate ?? 0);
                         double dailyProfit = fund.HoldAmount * (dailyRate / 100.0);
 
-                        // 🚀 核心补丁：加入历史总收益的剥离与计算
+                        // 🚀 核心对齐补丁 1：高精度物理对齐！(调用猎隼侦察兵)
+                        if (fund.HoldShares > 0)
+                        {
+                            var realData = await GetTodayRealRateAsync(fund.FundCode, today.ToString("yyyy-MM-dd"), fund.HoldShares);
+                            if (realData.exactProfit.HasValue)
+                            {
+                                dailyProfit = realData.exactProfit.Value; // 替换为前端同款绝对利润
+                                if (realData.rate.HasValue) dailyRate = realData.rate.Value;
+                            }
+                        }
+
+                        // 🚀 算历史总收益
                         double cost = fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount;
                         double currentAssets = fund.HoldAmount + dailyProfit; // 当日清算后的实际最新市值
                         double totalProfit = currentAssets - cost;
                         double totalRate = cost > 0 ? (totalProfit / cost * 100.0) : 0;
 
+                        // 保存单只基金战报
                         _context.DailyArchives.Add(new DailyArchive
                         {
                             Username = username,
@@ -1268,22 +1284,23 @@ namespace 估值助手.Controllers
                             Assets = fund.HoldAmount,
                             DailyProfit = Math.Round(dailyProfit, 2),
                             DailyRate = Math.Round(dailyRate, 2),
-                            TotalProfit = Math.Round(totalProfit, 2), // 🎯 补填
-                            TotalRate = Math.Round(totalRate, 2)      // 🎯 补填
+                            TotalProfit = Math.Round(totalProfit, 2),
+                            TotalRate = Math.Round(totalRate, 2)
                         });
 
+                        // 累加总阵地今日收益
+                        totalDailyProfit += dailyProfit;
                     }
 
-                    double totalDailyProfit = _context.DailyArchives.Local
-    .Where(a => a.Username == username && a.FundCode != "TOTAL" && a.RecordDate == today)
-    .Sum(a => a.DailyProfit);
-                    double totalDailyRate = totalCost > 0 ? (totalDailyProfit / totalCost) * 100 : 0;
+                    // 🚀 核心对齐补丁 2：今日收益率的分母，必须是【昨日总市值(totalAssets)】！
+                    double totalDailyRate = totalAssets > 0 ? (totalDailyProfit / totalAssets) * 100.0 : 0;
 
-                    // 🚀 核心补丁：总阵地的累计盈亏核算
+                    // 🚀 总阵地的累计盈亏核算
                     double currentTotalAssetsAfter = totalAssets + totalDailyProfit;
                     double totalCampProfit = currentTotalAssetsAfter - totalCost;
                     double totalCampRate = totalCost > 0 ? (totalCampProfit / totalCost * 100.0) : 0;
 
+                    // 保存总阵地战报
                     _context.DailyArchives.Add(new DailyArchive
                     {
                         Username = username,
@@ -1293,8 +1310,8 @@ namespace 估值助手.Controllers
                         Assets = totalAssets,
                         DailyProfit = Math.Round(totalDailyProfit, 2),
                         DailyRate = Math.Round(totalDailyRate, 2),
-                        TotalProfit = Math.Round(totalCampProfit, 2), // 🎯 补填总阵地累计
-                        TotalRate = Math.Round(totalCampRate, 2)      // 🎯 补填总阵地累计
+                        TotalProfit = Math.Round(totalCampProfit, 2),
+                        TotalRate = Math.Round(totalCampRate, 2)
                     });
 
                     savedCount++;
