@@ -640,6 +640,7 @@ namespace 估值助手.Controllers
 
         // 🚀 新增：猎隼侦察兵，去东方财富底层接口刺探真实净值
         // 🚀 猎隼侦察兵升级版：双重刺探，获取单位净值计算绝对物理收益
+        // 🚀 猎隼侦察兵升级版：双重刺探，获取单位净值计算绝对物理收益
         private async Task<(double? rate, double? exactProfit)> GetTodayRealRateAsync(string fundCode, string todayStr, double shares)
         {
             string cacheKey = $"RealRateV2_{fundCode}_{todayStr}_{shares}";
@@ -650,9 +651,9 @@ namespace 估值助手.Controllers
 
             try
             {
-                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(1) };
+                // 🚀 修复点 1：将 1 秒超时延长至 5 秒，防止并发请求被强行掐断！
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
                 client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
-                // 核心修改：请求最近两天的历史净值 pageSize=2
                 string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={fundCode}&pageIndex=1&pageSize=2";
                 string res = await client.GetStringAsync(url);
                 using var doc = JsonDocument.Parse(res);
@@ -661,18 +662,17 @@ namespace 估值助手.Controllers
                 if (dataArray.GetArrayLength() > 0)
                 {
                     var latest = dataArray[0];
+                    // 🚀 修复点 2：只有东方财富明确返回了数据，我们才去判断日期
                     if (latest.GetProperty("FSRQ").GetString() == todayStr)
                     {
                         if (double.TryParse(latest.GetProperty("JZZZL").GetString(), out double realRate))
                         {
                             double? exactProfit = null;
-                            // 如果指挥官录入了份额，且成功拿到了昨天的数据，启动绝对物理计算！
                             if (shares > 0 && dataArray.GetArrayLength() > 1)
                             {
                                 if (double.TryParse(latest.GetProperty("DWJZ").GetString(), out double todayNav) &&
                                     double.TryParse(dataArray[1].GetProperty("DWJZ").GetString(), out double yesterdayNav))
                                 {
-                                    // 绝对物理公式：份额 * (今日单位净值 - 昨日单位净值)
                                     exactProfit = Math.Round(shares * (todayNav - yesterdayNav), 2);
                                 }
                             }
@@ -681,16 +681,24 @@ namespace 估值助手.Controllers
                             return result;
                         }
                     }
+                    else
+                    {
+                        // 🚀 修复点 3：确凿证据！API 成功连通，但返回的最新日期依然不是今天，这才是真正的“官方未更新”！
+                        // 此时才允许写入拦截缓存。
+                        _cache.Set(missKey, true, TimeSpan.FromMinutes(2));
+                        return (null, null);
+                    }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // 🚀 修复点 4：如果发生超时或断网等 Exception，绝对不写 missKey 缓存！
+                // 让下一次前端刷新时，系统能立刻重新发起突击，而不是被困在 1 分钟的错误缓存里！
+                Console.WriteLine($"[猎隼刺探异常] {fundCode}: {ex.Message}");
+            }
 
-            _cache.Set(missKey, true, TimeSpan.FromMinutes(1));
             return (null, null);
         }
-
-
-
         [HttpGet("today")]
         public async Task<IActionResult> GetTodayData([FromQuery] string username)
         {
