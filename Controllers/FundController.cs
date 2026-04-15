@@ -1320,11 +1320,17 @@ namespace 估值助手.Controllers
                     double totalAssets = 0;
                     double totalCost = 0;
                     double totalDailyProfit = 0; // 🎯 优化：直接累加今日总收益，杜绝误差
+                    double totalRealized = 0;    // 🚀 修复 1：新增总落袋利润统计容器
+
+                    // 获取今天的字符串，用于判断今日加仓
+                    string todayStrSlash = today.ToString("yyyy/MM/dd");
+                    string todayStrDash = today.ToString("yyyy-MM-dd");
 
                     foreach (var fund in userFunds)
                     {
                         totalAssets += fund.HoldAmount;
                         totalCost += (fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount);
+                        totalRealized += fund.RealizedProfit; // 🚀 累加单只基金的落袋利润
 
                         var todayRecord = await _context.FundRecords
                             .Where(r => r.FundCode == fund.FundCode && r.FetchTime >= today)
@@ -1333,30 +1339,35 @@ namespace 估值助手.Controllers
 
                         // 算钱逻辑 (基础粗略版)
                         double dailyRate = todayRecord?.ActualRate > 0 ? todayRecord.ActualRate : (todayRecord?.EstimatedRate ?? 0);
-                        double dailyProfit = fund.HoldAmount * (dailyRate / 100.0);
+
+                        // 🚀 修复 2：剥离今日加仓本金，防止新子弹凭空产生收益
+                        double baseAmount = fund.HoldAmount;
+                        if (fund.LastTradeDate == todayStrDash || fund.LastTradeDate == todayStrSlash)
+                        {
+                            baseAmount -= fund.LastAddAmount;
+                        }
+                        double dailyProfit = baseAmount * (dailyRate / 100.0);
+
                         // 🚀 核心对齐补丁 1：高精度物理对齐！(调用猎隼侦察兵)
                         if (fund.HoldShares > 0)
                         {
                             var realData = await GetTodayRealRateAsync(fund.FundCode, today.ToString("yyyy-MM-dd"), fund.HoldShares);
                             if (realData.exactProfit.HasValue)
                             {
-                                dailyProfit = realData.exactProfit.Value;
-                                // 替换为前端同款绝对利润
+                                dailyProfit = realData.exactProfit.Value; // 替换为前端同款绝对利润
                                 if (realData.rate.HasValue) dailyRate = realData.rate.Value;
                             }
                         }
 
-                        // 🚀 算历史总收益
+                        // 🚀 算历史总收益 (包含单只基金的落袋利润)
                         double cost = fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount;
                         double currentAssets = fund.HoldAmount + dailyProfit; // 当日清算后的实际最新市值
                         double totalProfit = currentAssets - cost + fund.RealizedProfit;
                         double totalRate = cost > 0 ? (totalProfit / cost * 100.0) : 0;
 
-                        // ==========================================
-                        // 🚀 刚刚粘贴进来的真理补丁：
+                        // 更新最新市值到数据库
                         fund.HoldAmount = Math.Round(currentAssets, 2);
                         _context.MyFunds.Update(fund);
-                        // ==========================================
 
                         // 保存单只基金战报
                         _context.DailyArchives.Add(new DailyArchive
@@ -1365,7 +1376,7 @@ namespace 估值助手.Controllers
                             FundCode = fund.FundCode,
                             FundName = fund.FundName,
                             RecordDate = today,
-                            Assets = fund.HoldAmount,
+                            Assets = fund.HoldAmount, // 单只基金市值不含落袋，这与前端一致
                             DailyProfit = Math.Round(dailyProfit, 2),
                             DailyRate = Math.Round(dailyRate, 2),
                             TotalProfit = Math.Round(totalProfit, 2),
@@ -1375,13 +1386,17 @@ namespace 估值助手.Controllers
                         totalDailyProfit += dailyProfit;
                     }
 
-                    // 🚀 核心对齐补丁 2：今日收益率的分母，必须是【昨日总市值(totalAssets)】！
+                    // 🚀 核心对齐补丁 2：今日收益率的分母，必须是【扣除落袋后的纯持仓总市值(totalAssets)】！
                     double totalDailyRate = totalAssets > 0 ? (totalDailyProfit / totalAssets) * 100.0 : 0;
 
-                    // 🚀 总阵地的累计盈亏核算
+                    // 🚀 修复 3：总阵地的累计盈亏核算，必须加回落袋利润！
                     double currentTotalAssetsAfter = totalAssets + totalDailyProfit;
-                    double totalCampProfit = currentTotalAssetsAfter - totalCost;
+                    double totalCampProfit = currentTotalAssetsAfter - totalCost + totalRealized;
                     double totalCampRate = totalCost > 0 ? (totalCampProfit / totalCost * 100.0) : 0;
+
+                    // 🚀 修复 4：总阵地历史记录的 Assets 字段对齐前端大屏（持仓 + 已落袋小金库）
+                    double alignedTotalAssets = totalAssets + totalRealized;
+
                     // 保存总阵地战报
                     _context.DailyArchives.Add(new DailyArchive
                     {
@@ -1389,10 +1404,10 @@ namespace 估值助手.Controllers
                         FundCode = "TOTAL",
                         FundName = "总阵地",
                         RecordDate = today,
-                        Assets = totalAssets,
+                        Assets = alignedTotalAssets, // 对齐前端大屏的展示逻辑
                         DailyProfit = Math.Round(totalDailyProfit, 2),
                         DailyRate = Math.Round(totalDailyRate, 2),
-                        TotalProfit = Math.Round(totalCampProfit, 2),
+                        TotalProfit = Math.Round(totalCampProfit, 2), // 已包含落袋利润
                         TotalRate = Math.Round(totalCampRate, 2)
                     });
 
