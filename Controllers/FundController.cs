@@ -745,6 +745,8 @@ namespace 估值助手.Controllers
                         shares = config.HoldShares,
                         cost = config.CostAmount > 0 ? config.CostAmount : (double?)null, // 🚀 修复点：直接读取数据库中的持仓本金
                         realizedProfit = config.RealizedProfit, // 🚀 必须新增这行，否则前端看不见落袋收益
+                        lastTradeDate = config.LastTradeDate, 
+                        lastAddAmount = config.LastAddAmount,
                         existingReturnRate = 0,      // 🚀 修复点：前端现已全权接管实时计算，这里直接传 0 卸载后端压力
                         breakEvenRate = 0,           // 🚀 同上，交由前端物理引擎动态计算
                         diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
@@ -841,8 +843,13 @@ namespace 估值助手.Controllers
 
                 // 核心逻辑：加仓即增加本金和市值。
                 // 注意：若日期为“今天”，这笔钱产生的收益通常要明天才开始算，系统会自动在前端进行收益剥离。
-                fund.HoldAmount += addAmount;
+                                fund.HoldAmount += addAmount;
                 fund.CostAmount += addAmount;
+
+                // 🚀 补丁：把加仓的时间和金额烙印在数据库里
+                fund.LastTradeDate = tradeDate;
+                fund.LastAddAmount = addAmount;
+
 
                 _context.MyFunds.Update(fund);
                 await _context.SaveChangesAsync();
