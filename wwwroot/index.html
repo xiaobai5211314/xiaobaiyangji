@@ -1492,16 +1492,19 @@
 
 
                 const handleReducePosition = async () => {
-                    if (!reduceModal.shares || !reduceModal.amount || !reduceModal.date) {
-                        return showToast("情报不完整，请检查日期", "error");
+                    // ✅ 修复：去掉了对 amount 的强行校验，只检查份额和日期
+                    if (!reduceModal.shares || !reduceModal.date) {
+                        return showToast("情报不完整，请检查份额或日期", "error");
                     }
 
                     const fd = new FormData();
                     fd.append('username', currentUser.value);
                     fd.append('code', reduceModal.code);
                     fd.append('reduceShares', reduceModal.shares);
-                    fd.append('reduceAmount', reduceModal.amount);
-                    fd.append('tradeDate', reduceModal.date); // 🚨 核心：这里终于把日期发给后端了！
+
+                    // 🚀 补丁：如果没填金额，就传一个 0 过去，触发后端的自动推演引擎！
+                    fd.append('reduceAmount', reduceModal.amount || 0);
+                    fd.append('tradeDate', reduceModal.date);
 
                     try {
                         const res = await fetch(API_BASE + '/api/Fund/reduce-position', { method: 'POST', body: fd });
