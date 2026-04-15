@@ -1386,15 +1386,17 @@ namespace 估值助手.Controllers
                         totalDailyProfit += dailyProfit;
                     }
 
-                    // 🚀 核心对齐补丁 2：今日收益率的分母，必须是【扣除落袋后的纯持仓总市值(totalAssets)】！
+                    // 🚀 补丁：今日总收益率的分母，必须是【纯持仓总市值(totalAssets)】！
                     double totalDailyRate = totalAssets > 0 ? (totalDailyProfit / totalAssets) * 100.0 : 0;
 
-                    // 🚀 修复 3：总阵地的累计盈亏核算，必须加回落袋利润！
+                    // --- 在循环后的“总阵地”核算处修改 ---
                     double currentTotalAssetsAfter = totalAssets + totalDailyProfit;
+
+                    // 🚀 核心修复：把已落袋收益加回盈亏分子
                     double totalCampProfit = currentTotalAssetsAfter - totalCost + totalRealized;
                     double totalCampRate = totalCost > 0 ? (totalCampProfit / totalCost * 100.0) : 0;
 
-                    // 🚀 修复 4：总阵地历史记录的 Assets 字段对齐前端大屏（持仓 + 已落袋小金库）
+                    // 🚀 资产对齐：存档的 Assets 也要包含落袋现金，才能对齐前端大屏
                     double alignedTotalAssets = totalAssets + totalRealized;
 
                     // 保存总阵地战报
