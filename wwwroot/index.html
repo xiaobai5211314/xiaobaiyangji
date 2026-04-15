@@ -1168,12 +1168,6 @@
                     if (!currentUser.value) return;
 
                     try {
-                        //// 在循环每一只基金时
-                        //let todayAddAmount = (fund.lastTradeDate === todayStr) ? fund.lastAddAmount : 0;
-
-                        // 计算今日收益时，扣除掉今天新打进去的子弹
-                        fund.todayProfit = (fund.amount - todayAddAmount) * (fund.actualRate / 100);
-
                         const response = await fetch(`${API_BASE}/api/fund/today?username=${encodeURIComponent(currentUser.value)}&_t=${new Date().getTime()}`);
                         const apiData = await response.json();
 

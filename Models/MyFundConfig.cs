@@ -21,11 +21,10 @@ namespace 估值助手.Models
 
 
         // 🚀 新增：加仓时间戳与金额（用于 T+1 收益过滤）
-        public string LastTradeDate { get; set; }
-        public double LastAddAmount { get; set; }
+      
         // 注意：如果您的数据库允许它们为空，建议写成 public string? LastTradeDate { get; set; }
-        //public string LastTradeDate { get; set; }
-        //public double LastAddAmount { get; set; } = 0;
+        public string LastTradeDate { get; set; }
+        public double LastAddAmount { get; set; } = 0;
 
 
     }
