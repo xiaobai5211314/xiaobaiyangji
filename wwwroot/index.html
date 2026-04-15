@@ -456,6 +456,12 @@
                             <span class="metric-label">昨日市值</span>
                             <span class="metric-value">{{ privacyMode === 0 ? fund.amount : '****' }}</span>
                         </div>
+                        <div class="metric-item" style="background: rgba(16, 185, 129, 0.1); padding: 2px; border-radius: 4px;">
+                            <span class="metric-label" style="color: #10b981;">今日市值</span>
+                            <span class="metric-value" style="color: #f8fafc; font-weight: bold;">
+                                {{ privacyMode === 0 ? (parseFloat(fund.amount || 0) + parseFloat(fund.todayProfit || 0)).toFixed(2) : '****' }}
+                            </span>
+                        </div>
                         <div class="metric-item" style="background: rgba(79, 172, 254, 0.1); padding: 2px; border-radius: 4px;">
                             <span class="metric-label" style="color: #4facfe;">今日收益</span>
                             <span class="metric-value" :style="{color: privacyMode <= 1 ? (fund.todayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 1 ? (fund.todayProfit >= 0 ? '+' : '') + fund.todayProfit : '****' }}</span>
