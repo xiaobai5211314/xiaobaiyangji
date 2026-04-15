@@ -1348,15 +1348,21 @@ namespace 估值助手.Controllers
                         }
                         double dailyProfit = baseAmount * (dailyRate / 100.0);
 
+                      
                         // 🚀 核心对齐补丁 1：高精度物理对齐！(调用猎隼侦察兵)
-                        if (fund.HoldShares > 0)
+                        var realData = await GetTodayRealRateAsync(fund.FundCode, today.ToString("yyyy-MM-dd"), fund.HoldShares);
+
+                        // 1. 突击指令：只要拿到了官方真实收益率，立刻覆盖！绝对不能被物理利润的计算结果绑架
+                        if (realData.rate.HasValue)
                         {
-                            var realData = await GetTodayRealRateAsync(fund.FundCode, today.ToString("yyyy-MM-dd"), fund.HoldShares);
-                            if (realData.exactProfit.HasValue)
-                            {
-                                dailyProfit = realData.exactProfit.Value; // 替换为前端同款绝对利润
-                                if (realData.rate.HasValue) dailyRate = realData.rate.Value;
-                            }
+                            dailyRate = realData.rate.Value;
+                            dailyProfit = baseAmount * (dailyRate / 100.0); // 先用真实收益率重新算一遍保底利润
+                        }
+
+                        // 2. 狙击指令：如果东方财富数据完整，算出了高精度的绝对物理利润，再执行覆盖
+                        if (realData.exactProfit.HasValue)
+                        {
+                            dailyProfit = realData.exactProfit.Value;
                         }
 
                         // 🚀 算历史总收益 (包含单只基金的落袋利润)
