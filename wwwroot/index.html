@@ -1254,9 +1254,8 @@
                                 ? (((fund.cost / currentRealTimeAmount) - 1) * 100).toFixed(2)
                                 : "0.00";
 
-                            fund.existingReturnRate = (fund.cost && fund.cost > 0)
-                                ? ((floatProfit / fund.cost) * 100).toFixed(2)
-                                : "0.00";
+                            // 🚀 终极补丁：算收益率必须加上已经落袋的钱！
+                            fund.existingReturnRate = (fund.cost && fund.cost > 0) ? (((floatProfit + fund.realizedProfit) / fund.cost) * 100).toFixed(2) : "0.00";
 
                             // ==================== 5. 累计总额 ====================
                             tPrincipal += currentAmount;

@@ -1310,8 +1310,9 @@ namespace 估值助手.Controllers
                         .ToListAsync();
                     if (existingRecords.Any())
                     {
-                        bool hasRealData = existingRecords.Any(r => r.FundCode == "TOTAL" && r.DailyRate != 0);
-                        if (hasRealData) continue; // 有真实数据才跳过
+                        //bool hasRealData = existingRecords.Any(r => r.FundCode == "TOTAL" && r.DailyRate != 0);
+                        //if (hasRealData) continue; // 有真实数据才跳过
+                        // 🚀 撤销保护锁，允许一天内无限次测试覆写
                         _context.DailyArchives.RemoveRange(existingRecords);
                         // 估值数据删掉重写
                     }
@@ -1352,10 +1353,11 @@ namespace 估值助手.Controllers
                         double totalRate = cost > 0 ? (totalProfit / cost * 100.0) : 0;
 
                         // ==========================================
-                        // 🚀 新增指令：赋予机器人自动覆写底仓的权力！
-                        fund.HoldAmount = currentAssets;
+                        // 🚀 刚刚粘贴进来的真理补丁：
+                        fund.HoldAmount = Math.Round(currentAssets, 2);
                         _context.MyFunds.Update(fund);
                         // ==========================================
+
                         // 保存单只基金战报
                         _context.DailyArchives.Add(new DailyArchive
                         {
