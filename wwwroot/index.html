@@ -1496,6 +1496,7 @@ const openReduceModal = (fund) => {
                     });
 
                     // ==================== 终极导出 (已包含新接口) ====================
+                                        // ==================== 终极导出 (已包含新接口) ====================
                     return {
                         toasts, isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
                         totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
@@ -1505,10 +1506,12 @@ const openReduceModal = (fund) => {
                         fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices,
                         globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, saveDailyArchive, ocrModal,
 
-                        // 🚀 补丁：导出减仓相关的变量和方法，让 HTML 可以调用它们
-                        // 🚀 补丁：导出减仓相关的变量和方法，让 HTML 可以调用它们
-                        reduceModal, openReduceModal, handleReducePosition
+                        // 🛒 导出减仓引擎
+                        reduceModal, openReduceModal, handleReducePosition,
+                        // 💰 导出加仓引擎 (就是少了这三个，导致蓝屏！)
+                        addModal, openAddModal, handleAddPosition
                     };
+
                 }
             }).mount('#app');
         </script>
