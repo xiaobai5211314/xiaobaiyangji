@@ -1348,8 +1348,14 @@ namespace 估值助手.Controllers
                         // 🚀 算历史总收益
                         double cost = fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount;
                         double currentAssets = fund.HoldAmount + dailyProfit; // 当日清算后的实际最新市值
-                        double totalProfit = currentAssets - cost;
+                        double totalProfit = currentAssets - cost + fund.RealizedProfit;
                         double totalRate = cost > 0 ? (totalProfit / cost * 100.0) : 0;
+
+                        // ==========================================
+                        // 🚀 新增指令：赋予机器人自动覆写底仓的权力！
+                        fund.HoldAmount = currentAssets;
+                        _context.MyFunds.Update(fund);
+                        // ==========================================
                         // 保存单只基金战报
                         _context.DailyArchives.Add(new DailyArchive
                         {
