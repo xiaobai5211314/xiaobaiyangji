@@ -1205,7 +1205,8 @@
                                 if (!isNaN(profitVal)) {
                                     tToday += profitVal;
                                 }
-
+                                // 🌟【必须新增这行】：计算当前实时总金额 = 昨日市值 + 今日收益
+                                let currentRealTimeAmount = fund.amount + (isNaN(profitVal) ? 0 : profitVal);
                                 // ==================== 3. 计算实时市值（关键修复） ====================
                                 const currentAmount = parseFloat(fund.amount) || 0;
                                 const todayProfitVal = parseFloat(fund.todayProfit) || 0;
