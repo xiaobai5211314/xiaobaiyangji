@@ -428,7 +428,9 @@
                         <div style="display: flex; gap: 6px; flex-shrink: 0;">
                             <button @click="fetchHistory(fund.code, fund.name)" style="background: rgba(56, 189, 248, 0.2); border: none; color: #38bdf8; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;" title="查看官方档案">📈</button>
                             <button @click="fetchMyArchives(fund.code, fund.name)" style="background: rgba(139, 92, 246, 0.2); border: none; color: #8b5cf6; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;" title="查看专属档案">📂</button>
-                            <button @click="openReduceModal(fund)" style="background: rgba(16, 185, 129, 0.2); border: none; color: #10b981; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;" title="落袋结转/战术减仓">🛒</button>
+<button @click="openAddModal(fund)" style="background: rgba(59, 130, 246, 0.2); border: none; color: #3b82f6; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; margin-right: 4px;" title="战术加仓">💰</button>
+<button @click="openReduceModal(fund)" style="background: rgba(16, 185, 129, 0.2); border: none; color: #10b981; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;" title="落袋结转">🛒</button>
+
                             <button @click="openEditModal(fund)" style="background: rgba(255,255,255,0.1); border: none; color: #cbd5e1; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;">🔧</button>
                             <button @click="handleDeleteFund(fund.code, fund.name)" style="background: rgba(255, 77, 79, 0.2); border: none; color: #ff4d4f; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;">✕</button>
                         </div>
@@ -629,6 +631,22 @@
             </div>
         </div>
 
+<div v-if="addModal.show" class="modal-mask">
+    <div class="modal-content">
+        <h3 style="margin-top: 0; color: #3b82f6;">💰 战术加仓</h3>
+        <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">交易日期</div>
+        <input v-model="addModal.date" type="date" class="modal-input">
+        <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">加仓金额 (人民币)</div>
+        <input v-model="addModal.amount" type="number" placeholder="只需输入金额，如: 1000" class="modal-input">
+        <div style="display: flex; gap: 10px; margin-top: 10px;">
+            <button @click="handleAddPosition" style="flex: 1; padding: 12px; background: linear-gradient(135deg,#3b82f6,#2563eb); border: none; border-radius: 8px; color: #fff; font-weight: bold; cursor: pointer;">确认加仓</button>
+            <button @click="addModal.show = false" style="flex: 1; padding: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: #cbd5e1; cursor: pointer;">取消</button>
+        </div>
+    </div>
+</div>
+
+
+
         <div v-show="reduceModal.show" class="modal-mask">
             <div class="modal-content">
                 <h3 style="margin-top: 0; color: #10b981;">🛒 战术减仓 & 利润结转</h3>
@@ -781,6 +799,7 @@
 
                     const historyModal = reactive({ show: false, isLoading: false, name: '', data: [] });
                     const archiveModal = reactive({ show: false, isLoading: false, targetName: '', data: [] });
+                    
                     const ocrModal = reactive({ show: false, content: '' });
 
                     const globalIndices = ref([
@@ -1149,6 +1168,12 @@
                         if (!currentUser.value) return;
 
                         try {
+                        // 在循环每一只基金时
+let todayAddAmount = (fund.lastTradeDate === todayStr) ? fund.lastAddAmount : 0; 
+
+// 计算今日收益时，扣除掉今天新打进去的子弹
+fund.todayProfit = (fund.amount - todayAddAmount) * (fund.actualRate / 100);
+
                             const response = await fetch(`${API_BASE}/api/fund/today?username=${encodeURIComponent(currentUser.value)}&_t=${new Date().getTime()}`);
                             const apiData = await response.json();
 
@@ -1387,14 +1412,32 @@
                     });
 
                     // ==================== 🚀 战术减仓与利润结转引擎 (满血版) ====================
-                    const reduceModal = reactive({ show: false, code: '', name: '', shares: '', amount: '', date: '', isAfter3PM: false });
+                    const todayStr = new Date(new Date().getTime() + 8 * 3600 * 1000).toISOString().split('T')[0];
 
-                    const openReduceModal = (fund) => {
-                        reduceModal.show = true;
-                        reduceModal.code = fund.code;
-                        reduceModal.name = fund.name;
-                        reduceModal.shares = '';
-                        reduceModal.amount = '';
+const addModal = reactive({ show: false, code: '', name: '', amount: '', date: todayStr });
+// 确保 reactive 里有 isAfter3PM 这个开关
+const reduceModal = reactive({ 
+    show: false, 
+    code: '', 
+    name: '', 
+    shares: '', 
+    amount: '', 
+    date: todayStr,
+    isAfter3PM: false // 👈 加上这个
+});
+
+// 在打开弹窗的 openReduceModal 方法里，加上智能判断逻辑：
+const openReduceModal = (fund) => {
+    reduceModal.show = true; 
+    reduceModal.code = fund.code; 
+    reduceModal.name = fund.name;
+    reduceModal.shares = ''; 
+    reduceModal.amount = '';
+    
+    // 智能推演：如果当前时间超过下午 15:00，自动触发预警！
+    const currentHour = new Date().getHours();
+    reduceModal.isAfter3PM = currentHour >= 15;
+};
 
                         const now = new Date();
                         const hour = now.getHours();
