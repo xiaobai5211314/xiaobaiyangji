@@ -829,52 +829,67 @@ namespace 估值助手.Controllers
             return (null, null);
         }
 
-        // 🚀 升级版接口：带时间感知的战术减仓与利润结转
-        [HttpPost("reduce-position")]
-        public async Task<IActionResult> ReducePosition([FromForm] string username, [FromForm] string code, [FromForm] double reduceShares, [FromForm] double reduceAmount, [FromForm] string tradeDate)
+                      // 🚀 1. 战术加仓接口：支持日期，仅需金额
+        [HttpPost("add-position")]
+        public async Task<IActionResult> AddPosition([FromForm] string username, [FromForm] string code, [FromForm] double addAmount, [FromForm] string tradeDate)
         {
             if (string.IsNullOrEmpty(username)) return Unauthorized("未授权");
             try
             {
                 var fund = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && f.FundCode == code);
-                if (fund == null) return BadRequest("未找到该阵地");
+                if (fund == null) return BadRequest("未找到阵地");
 
-                if (reduceShares <= 0 || reduceAmount < 0) return BadRequest("参数不合法");
-                if (fund.HoldShares <= 0) return BadRequest("没有份额数据，请先用🔧补全份额");
-                if (reduceShares > fund.HoldShares) return BadRequest("卖出份额超过了您当前的持有总量！");
-
-                // 🚀 记录跨日/实时交易日志
-                Console.WriteLine($"[战术减仓] 指挥官 {username} 减仓 {fund.FundName}, 交易归属日: {tradeDate}");
-
-                // 1. 算出当前每份的平均成本
-                double unitCost = fund.CostAmount / fund.HoldShares;
-                // 2. 剥离本次卖出的成本
-                double soldCost = unitCost * reduceShares;
-                // 3. 算出本次落袋的真实利润
-                double profit = reduceAmount - soldCost;
-
-                // 4. 安全更新底仓，扣除弹药
-                fund.HoldShares -= reduceShares;
-                fund.CostAmount -= soldCost;
-
-                // 5. 等比例扣减当前市值，防止大屏曲线突然暴跌断层
-                double unitAmount = fund.HoldAmount / (fund.HoldShares + reduceShares);
-                fund.HoldAmount -= (unitAmount * reduceShares);
-
-                // 6. 利润装入小金库！永久保存！
-                fund.RealizedProfit += profit;
+                // 核心逻辑：加仓即增加本金和市值。
+                // 注意：若日期为“今天”，这笔钱产生的收益通常要明天才开始算，系统会自动在前端进行收益剥离。
+                fund.HoldAmount += addAmount;
+                fund.CostAmount += addAmount;
 
                 _context.MyFunds.Update(fund);
                 await _context.SaveChangesAsync();
                 _cache.Remove($"Tactical_TodayData_{username}");
 
-                // 弹窗提示加上日期反馈
-                return Ok(new { success = true, msg = $"核算完毕！按 [{tradeDate}] 结算，成功落袋: {profit:F2} 元" });
+                return Ok(new { success = true, msg = $"加仓成功！[{tradeDate}] 注入资金: {addAmount:F2} 元" });
             }
-            catch (Exception ex)
-            {
-                return StatusCode(500, $"减仓核算异常: {ex.Message}");
-            }
+            catch (Exception ex) { return StatusCode(500, $"加仓异常: {ex.Message}"); }
         }
+
+        // 🚀 2. 战术减仓接口：日期支持，金额可选 (留空则系统自动按份额比例算)
+        [HttpPost("reduce-position")]
+        public async Task<IActionResult> ReducePosition([FromForm] string username, [FromForm] string code, [FromForm] double reduceShares, [FromForm] double? reduceAmount, [FromForm] string tradeDate)
+        {
+            if (string.IsNullOrEmpty(username)) return Unauthorized("未授权");
+            var fund = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && f.FundCode == code);
+            if (fund == null) return BadRequest("未找到阵地");
+
+            // 养基宝逻辑：如果没填卖出金额，系统利用“当前市值/总份额”算出单价，自动推演卖出总额
+            double finalReduceAmount = reduceAmount ?? 0;
+            if (finalReduceAmount == 0)
+            {
+                double currentUnitPrice = fund.HoldAmount / fund.HoldShares;
+                finalReduceAmount = currentUnitPrice * reduceShares;
+            }
+
+            // 财务核算：计算这部分卖出份额的平均成本
+            double unitCost = fund.CostAmount / fund.HoldShares;
+            double soldCost = unitCost * reduceShares;
+            double profit = finalReduceAmount - soldCost;
+
+            // 物理执行：扣减份额、扣减本金、等比例扣减当前市值
+            fund.HoldShares -= reduceShares;
+            fund.CostAmount -= soldCost;
+            double unitAmount = fund.HoldAmount / (fund.HoldShares + reduceShares);
+            fund.HoldAmount -= (unitAmount * reduceShares);
+
+            // 利润封存：将变现利润锁入落袋小金库
+            fund.RealizedProfit += profit;
+
+            _context.MyFunds.Update(fund);
+            await _context.SaveChangesAsync();
+            _cache.Remove($"Tactical_TodayData_{username}");
+
+            return Ok(new { success = true, msg = $"[{tradeDate}] 减仓完毕！归库利润: {profit:F2} 元" });
+        }
+
+
     }
 }
