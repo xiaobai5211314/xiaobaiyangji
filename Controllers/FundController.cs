@@ -637,6 +637,139 @@ namespace 估值助手.Controllers
                 return StatusCode(500, $"❌ 装载失败: {ex.Message}");
             }
         }
+        [HttpGet("today")]
+        public async Task<IActionResult> GetTodayData([FromQuery] string username)
+        {
+            if (string.IsNullOrEmpty(username)) return Unauthorized("请提供指挥官代号");
+
+            try
+            {
+                string cacheKey = $"Tactical_TodayData_{username}";
+                if (_cache.TryGetValue(cacheKey, out object cachedResult))
+                {
+                    return Ok(cachedResult);
+                }
+
+                var myFunds = await _context.MyFunds.Where(f => f.Username == username).ToListAsync();
+                var myFundCodes = myFunds.Select(f => f.FundCode).ToList();
+
+                if (!myFundCodes.Any()) return Ok(new List<object>());
+
+                var localTime = DateTime.UtcNow.AddHours(8);
+                var today = localTime.Date;
+                string todayStr = localTime.ToString("yyyy'/'MM'/'dd");
+                string todayDash = localTime.ToString("yyyy-MM-dd");
+
+                var todayRecords = await _context.FundRecords
+                    .Where(r => r.FetchTime >= today && myFundCodes.Contains(r.FundCode))
+                    .OrderBy(r => r.FetchTime)
+                    .ToListAsync();
+                var threeDaysAgo = today.AddDays(-3);
+                var lastRecords = await _context.FundRecords.Where(r => r.FetchTime < today && myFundCodes.Contains(r.FundCode)).OrderByDescending(r => r.FetchTime).ToListAsync();
+                var sevenDaysAgo = today.AddDays(-7);
+                var allPastRecords = await _context.FundRecords
+                    .Where(r => myFundCodes.Contains(r.FundCode) && r.ActualRate != 0)
+                    .OrderByDescending(r => r.FetchTime)
+                    .ToListAsync();
+
+
+                // 🌟 猎隼侦察兵启动：下午 17:00 后刺探真实净值
+                var realRateDict = new Dictionary<string, double>();
+                var exactProfitDict = new Dictionary<string, double>(); // 新增物理利润字典
+
+                if (localTime.Hour >= 17)
+                {
+                    // 改为遍历 myFunds，带上份额参数
+                    var realRateTasks = myFunds.Select(async config =>
+                    {
+                        var res = await GetTodayRealRateAsync(config.FundCode, todayDash, config.HoldShares);
+                        return new { code = config.FundCode, rate = res.rate, exactProfit = res.exactProfit };
+                    });
+                    var realRateResults = await Task.WhenAll(realRateTasks);
+                    foreach (var res in realRateResults)
+                    {
+                        if (res.rate.HasValue) realRateDict[res.code] = res.rate.Value;
+                        if (res.exactProfit.HasValue) exactProfitDict[res.code] = res.exactProfit.Value; // 截获物理利润
+                    }
+                }
+
+
+                var result = myFunds.Select(config =>
+                {
+                    var fundRecords = todayRecords.Where(r => r.FundCode == config.FundCode).ToList();
+                    var lastRecord = lastRecords.FirstOrDefault(r => r.FundCode == config.FundCode);
+
+                    var past3DaysRecords = allPastRecords
+                        .Where(r => r.FundCode == config.FundCode)
+                        .Take(3)
+                        .ToList();
+
+                    double avgDiff = 0;
+                    if (past3DaysRecords.Count > 0)
+                    {
+                        avgDiff = past3DaysRecords.Average(r => r.ActualRate - r.EstimatedRate);
+                        if (avgDiff > 0.5) avgDiff = 0.5;
+                        if (avgDiff < -0.5) avgDiff = -0.5;
+                    }
+
+                    var dataPoints = new List<object[]>();
+
+                    if (lastRecord != null)
+                    {
+                        dataPoints.Add(new object[] { todayStr + " 09:30:00", Math.Round(lastRecord.EstimatedRate + avgDiff, 2) });
+                    }
+
+                    dataPoints.AddRange(fundRecords.Select(r => new object[] {
+                        r.FetchTime.ToString("yyyy'/'MM'/'dd HH:mm:ss"),
+                        Math.Round(r.EstimatedRate + avgDiff, 2)
+                    }));
+
+                    if (dataPoints.Count == 0)
+                    {
+                        dataPoints.Add(new object[] { todayStr + " 09:30:00", 0 });
+                    }
+
+                    // 是否已截获真实净值
+                    // 是否已截获真实净值
+                    bool isSettled = realRateDict.ContainsKey(config.FundCode);
+                    double? actualRate = isSettled ? realRateDict[config.FundCode] : null;
+
+                    // 🚀 新增这一行：尝试提取绝对物理利润
+                    double? actualExactProfit = exactProfitDict.ContainsKey(config.FundCode) ? exactProfitDict[config.FundCode] : null;
+
+                    return new
+                    {
+                        code = config.FundCode,
+                        name = config.FundName,
+                        amount = config.HoldAmount,  // 🚀 修复点：直接读取数据库中的昨日市值
+                        shares = config.HoldShares,
+                        cost = config.CostAmount > 0 ? config.CostAmount : (double?)null, // 🚀 修复点：直接读取数据库中的持仓本金
+                        realizedProfit = config.RealizedProfit, // 🚀 必须新增这行，否则前端看不见落袋收益
+                        existingReturnRate = 0,      // 🚀 修复点：前端现已全权接管实时计算，这里直接传 0 卸载后端压力
+                        breakEvenRate = 0,           // 🚀 同上，交由前端物理引擎动态计算
+                        diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
+                        calibrationOffset = Math.Round(avgDiff, 4),
+                        data = dataPoints,
+                        isSettled = isSettled,
+                        actualRate = actualRate,
+                        actualExactProfit = actualExactProfit // 将这把终极武器发给前端
+                    };
+
+                });
+
+                var finalResult = result.OrderByDescending(x => x.amount).ToList();
+
+                var cacheOptions = new MemoryCacheEntryOptions()
+                    .SetAbsoluteExpiration(TimeSpan.FromSeconds(30));
+                _cache.Set(cacheKey, finalResult, cacheOptions);
+
+                return Ok(finalResult);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"服务器当场阵亡：{ex.Message}");
+            }
+        }
 
         // 🚀 猎隼侦察兵升级版：双重刺探，获取单位净值计算绝对物理收益
         private async Task<(double? rate, double? exactProfit)> GetTodayRealRateAsync(string fundCode, string todayStr, double shares)
