@@ -18,7 +18,7 @@ namespace 估值助手.Models
         // 🚀 新增：落袋为安小金库（记录历史变现的利润）
         public double RealizedProfit { get; set; } = 0;
         // 🚀 之前的落袋小金库
-        public double RealizedProfit { get; set; } = 0;
+       
 
         // 🚀 新增：加仓时间戳与金额（用于 T+1 收益过滤）
         public string LastTradeDate { get; set; }
