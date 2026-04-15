@@ -750,7 +750,7 @@ namespace 估值助手.Controllers
                         shares = config.HoldShares,
                         cost = config.CostAmount > 0 ? config.CostAmount : (double?)null, // 🚀 修复点：直接读取数据库中的持仓本金
                         realizedProfit = config.RealizedProfit, // 🚀 必须新增这行，否则前端看不见落袋收益
-                        lastTradeDate = config.LastTradeDate, 
+                        lastTradeDate = config.LastTradeDate,
                         lastAddAmount = config.LastAddAmount,
                         existingReturnRate = 0,      // 🚀 修复点：前端现已全权接管实时计算，这里直接传 0 卸载后端压力
                         breakEvenRate = 0,           // 🚀 同上，交由前端物理引擎动态计算
@@ -836,7 +836,7 @@ namespace 估值助手.Controllers
             return (null, null);
         }
 
-                      // 🚀 1. 战术加仓接口：支持日期，仅需金额
+        // 🚀 1. 战术加仓接口：支持日期，仅需金额
         [HttpPost("add-position")]
         public async Task<IActionResult> AddPosition([FromForm] string username, [FromForm] string code, [FromForm] double addAmount, [FromForm] string tradeDate)
         {
@@ -848,7 +848,7 @@ namespace 估值助手.Controllers
 
                 // 核心逻辑：加仓即增加本金和市值。
                 // 注意：若日期为“今天”，这笔钱产生的收益通常要明天才开始算，系统会自动在前端进行收益剥离。
-                                fund.HoldAmount += addAmount;
+                fund.HoldAmount += addAmount;
                 fund.CostAmount += addAmount;
 
                 // 🚀 补丁：把加仓的时间和金额烙印在数据库里
@@ -908,7 +908,7 @@ namespace 估值助手.Controllers
 
         // 🚀 恢复带份额的修改接口
         [HttpPost("update-details")]
-        public async Task<IActionResult> UpdateDetailsAsync([FromQuery] string username, [FromForm] string code, [FromForm] double costAmount, [FromForm] double holdShares, [FromForm] string originalCode)
+        public async Task<IActionResult> UpdateDetailsAsync([FromForm] string username, [FromForm] string code, [FromForm] double costAmount, [FromForm] double holdShares, [FromForm] string originalCode)
         {
             if (string.IsNullOrEmpty(username)) return Unauthorized("指挥官身份未确认");
             if (string.IsNullOrEmpty(code) || costAmount <= 0) return BadRequest("本金或东财代码信息不完整");
@@ -1414,6 +1414,17 @@ namespace 估值助手.Controllers
             var records = await _context.DailyArchives
                 .Where(a => a.Username == username)
                 .OrderBy(a => a.RecordDate)
+                .Select(a => new
+                {
+                    fundCode = a.FundCode,
+                    fundName = a.FundName,
+                    recordDate = a.RecordDate,
+                    assets = a.Assets,
+                    dailyProfit = a.DailyProfit,
+                    dailyRate = a.DailyRate,
+                    totalProfit = a.TotalProfit,
+                    totalRate = a.TotalRate
+                })
                 .ToListAsync();
             return Ok(records);
         }

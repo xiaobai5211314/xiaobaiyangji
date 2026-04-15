@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using 估值助手.Models;
 using 估值助手.Services;
 
@@ -28,8 +29,10 @@ builder.Services.AddControllers();
 builder.Services.AddHostedService<FundScraperService>();
 builder.Services.AddHostedService<NavSettlementService>();
 // 申请开启内存缓存弹药库
-builder.Services.AddMemoryCache(); 
-
+builder.Services.AddMemoryCache();
+builder.Services.AddControllers()
+    .AddJsonOptions(opt =>
+        opt.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
 var app = builder.Build();
 
 // 🌟🌟🌟 新增：启用跨域中间件 (必须放在 app.MapControllers() 前面) 🌟🌟🌟
