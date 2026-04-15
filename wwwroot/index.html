@@ -655,6 +655,32 @@
                     <button @click="reduceModal.show = false" style="flex: 1; padding: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: #cbd5e1; cursor: pointer;">取消</button>
                 </div>
             </div>
+        </div><div v-if="reduceModal.show" class="modal-mask">
+            <div class="modal-content">
+                <h3 style="margin-top: 0; color: #10b981;">🛒 战术减仓 & 利润结转</h3>
+                <p style="font-size: 13px; color: #94a3b8; margin-bottom: 10px;">阵地: <strong>{{ reduceModal.name }}</strong></p>
+
+                <div v-if="reduceModal.isAfter3PM" style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px; padding: 10px; margin-bottom: 15px;">
+                    <div style="color: #f59e0b; font-size: 12px; display: flex; align-items: flex-start; gap: 5px;">
+                        <span>⚠️</span>
+                        <span><strong>时间预警：</strong>当前已过 15:00 (或非交易日)。此笔减仓将按 <strong>下一交易日</strong> 净值结算，系统已自动推演交易日。</span>
+                    </div>
+                </div>
+
+                <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">交易归属日期 (T日)</div>
+                <input v-model="reduceModal.date" type="date" class="modal-input">
+
+                <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">卖出多少兵力 (份额)</div>
+                <input v-model="reduceModal.shares" type="number" placeholder="例如: 5708" class="modal-input">
+
+                <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">换回多少军费 (卖出确认总金额)</div>
+                <input v-model="reduceModal.amount" type="number" placeholder="例如: 10950.5" class="modal-input">
+
+                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                    <button @click="handleReducePosition" style="flex: 1; padding: 12px; background: linear-gradient(135deg,#10b981,#059669); border: none; border-radius: 8px; color: #fff; font-weight: bold; cursor: pointer;">确认结转</button>
+                    <button @click="reduceModal.show = false" style="flex: 1; padding: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: #cbd5e1; cursor: pointer;">取消</button>
+                </div>
+            </div>
         </div>
 
         <div v-show="historyModal.show" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: flex-end; z-index: 3000;">
@@ -841,19 +867,23 @@
                 };
 
                 const handleReducePosition = async () => {
+                    // 🚨 这里的判断加上了 date，情报不全不发车
                     if (!reduceModal.shares || !reduceModal.amount || !reduceModal.date) return showToast("情报不完整", "error");
                     const fd = new FormData();
                     fd.append('username', currentUser.value);
                     fd.append('code', reduceModal.code);
                     fd.append('reduceShares', reduceModal.shares);
                     fd.append('reduceAmount', reduceModal.amount);
-                    fd.append('tradeDate', reduceModal.date); // 🚀 传给后端
+                    fd.append('tradeDate', reduceModal.date); // 🚀 核心修复：把日期发给后端！
 
                     try {
                         const res = await fetch(API_BASE + '/api/Fund/reduce-position', { method: 'POST', body: fd });
-                        const result = await res.json();
+                        // 兼容 ASP.NET 的默认错误格式
+                        let result;
+                        try { result = await res.json(); } catch (e) { result = { msg: "服务器拒绝，参数可能错误" }; }
+
                         if (res.ok) {
-                            showToast(result.msg, "success");
+                            showToast(result.msg || "结转成功", "success");
                             reduceModal.show = false;
                             fetchData();
                         } else {
