@@ -1275,20 +1275,30 @@
                             const now = new Date();
                             const hour = now.getHours();
                             const isAfter15 = hour >= 15;
-
                             if (isAfter15) {
                                 try {
                                     const firstFund = fundsList.value[0];
                                     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-                                    const navRes = await fetch(`https://fundgz.1234567.com.cn/js/${firstFund.code}.js?rt=${Date.now()}`);
-                                    const navText = await navRes.text();
-                                    const gztimeMatch = navText.match(/"gztime":"([^"]+)"/);
 
-                                    if (gztimeMatch && gztimeMatch[1].startsWith(todayStr) && gztimeMatch[1] >= todayStr + ' 15:00') {
-                                        console.log(`✅ 收盘后真实净值已出，自动封存！`);
-                                        saveDailyArchive(true);
-                                        window.hasAutoSavedToday = true;
-                                    }
+                                    // ✅ 修复：换用 JSONP 隐身战术穿透跨域封锁
+                                    window.jsonpgz = function (data) {
+                                        if (data && data.gztime && data.gztime.startsWith(todayStr) && data.gztime >= todayStr + ' 15:00') {
+                                            console.log(`✅ 收盘后真实净值已出，自动封存！`);
+                                            saveDailyArchive(true);
+                                            window.hasAutoSavedToday = true;
+                                        }
+                                        delete window.jsonpgz; // 用完销毁痕迹
+                                    };
+
+                                    const scriptId = `jsonp_check_${firstFund.code}`;
+                                    let oldScript = document.getElementById(scriptId);
+                                    if (oldScript) oldScript.remove();
+
+                                    const script = document.createElement('script');
+                                    script.id = scriptId;
+                                    script.src = `https://fundgz.1234567.com.cn/js/${firstFund.code}.js?rt=${Date.now()}`;
+                                    document.body.appendChild(script);
+
                                 } catch (e) { }
                             }
                         }
