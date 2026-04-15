@@ -10,57 +10,331 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <style>
-        html { background-color: #0f172a; }
-        [v-cloak] { display: none !important; }
+        html {
+            background-color: #0f172a;
+        }
+
+        [v-cloak] {
+            display: none !important;
+        }
+
         body {
-            margin: 0; padding: 0;
+            margin: 0;
+            padding: 0;
             background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
-            color: #f8fafc; font-family: -apple-system, sans-serif;
-            overflow-x: hidden; min-height: 100vh;
+            color: #f8fafc;
+            font-family: -apple-system, sans-serif;
+            overflow-x: hidden;
+            min-height: 100vh;
         }
+
         .glass-panel {
-            background: rgba(30, 41, 59, 0.4); 
-            border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            background: rgba(30, 41, 59, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
         }
-        .header { margin: 15px; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
-        .header h1 { margin: 0; font-size: 20px; background: linear-gradient(to right, #00f2fe 0%, #4facfe 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800; }
-        .control-panel { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-        .control-panel input { background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.15); color: #00e5ff; padding: 8px 15px; border-radius: 20px; outline: none; width: 140px; transition: 0.3s; }
-        .btn-add { background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%); color: #fff; border: none; padding: 9px 20px; border-radius: 20px; cursor: pointer; font-weight: bold; }
-        .btn-ocr { background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); color: white; border: none; padding: 9px 15px; border-radius: 20px; cursor: pointer; font-weight: bold; transition: 0.3s; display: flex; align-items: center; gap: 5px; }
-        .btn-ocr:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4); }
-        .btn-ocr:disabled { background: #475569; cursor: not-allowed; opacity: 0.7; }
-        .btn-global { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; padding: 9px 15px; border-radius: 20px; cursor: pointer; font-weight: bold; transition: 0.3s; }
-        .btn-global:hover { box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4); transform: translateY(-2px); }
-        .btn-logout { background: transparent; color: #ff4d4f; border: 1px solid #ff4d4f; padding: 8px 15px; border-radius: 20px; cursor: pointer; }
-        .fund-list-container { margin: 0 15px; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; margin-bottom: 20px; }
-        .fund-card { padding: 15px; border-radius: 16px; font-size: 13px; display: flex; flex-direction: column; gap: 8px; position: relative; }
-        .radar-badge { background: rgba(255, 77, 79, 0.15); color: #ff4d4f; font-size: 11px; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255, 77, 79, 0.3); animation: blink 2s infinite; }
-        @keyframes blink { 50% { opacity: 0.5; } }
-        .metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background: rgba(0, 0, 0, 0.2); padding: 10px; border-radius: 10px; text-align: center; }
-        .metric-item { display: flex; flex-direction: column; }
-        .metric-label { font-size: 11px; color: #94a3b8; margin-bottom: 3px; }
-        .metric-value { font-weight: bold; }
-        .modal-mask { position: fixed; z-index: 1000; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6);  display: flex; align-items: center; justify-content: center; transition: 0.3s; }
-        .modal-content { background: #1e293b; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 20px; width: 90%; max-width: 400px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
-        .modal-input { width: 100%; background: #0f172a; border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 12px; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box; }
-        #chart-container { width: calc(100vw - 30px); height: calc(100vh - 280px); margin: 15px; box-sizing: border-box; }
-        .divider { width: 1px; height: 40px; background: rgba(255,255,255,0.1); }
-        .skeleton-box { background: linear-gradient(90deg, rgba(40,49,66,0.5) 25%, rgba(55,65,81,0.8) 37%, rgba(40,49,66,0.5) 63%); background-size: 400% 100%; animation: skeleton-loading 1.4s ease infinite; border-radius: 8px; }
-        @keyframes skeleton-loading { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
-        .toast-container { position: fixed; top: 30px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
-        .toast { padding: 12px 24px; border-radius: 30px; color: #fff; font-size: 14px; font-weight: bold; box-shadow: 0 10px 30px rgba(0,0,0,0.5); animation: slideDown 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; backdrop-filter: blur(10px); display: flex; align-items: center; gap: 8px; }
-        .toast.success { background: rgba(16, 185, 129, 0.9); border: 1px solid #34d399; }
-        .toast.error { background: rgba(239, 68, 68, 0.9); border: 1px solid #f87171; }
-        .toast.info { background: rgba(56, 189, 248, 0.9); border: 1px solid #7dd3fc; }
-        @keyframes slideDown { 0% { transform: translateY(-50px) scale(0.9); opacity: 0; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
+
+        .header {
+            margin: 15px;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+            .header h1 {
+                margin: 0;
+                font-size: 20px;
+                background: linear-gradient(to right, #00f2fe 0%, #4facfe 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                font-weight: 800;
+            }
+
+        .control-panel {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+            .control-panel input {
+                background: rgba(15, 23, 42, 0.6);
+                border: 1px solid rgba(255,255,255,0.15);
+                color: #00e5ff;
+                padding: 8px 15px;
+                border-radius: 20px;
+                outline: none;
+                width: 140px;
+                transition: 0.3s;
+            }
+
+        .btn-add {
+            background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+            color: #fff;
+            border: none;
+            padding: 9px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .btn-ocr {
+            background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+            color: white;
+            border: none;
+            padding: 9px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+            .btn-ocr:hover:not(:disabled) {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+            }
+
+            .btn-ocr:disabled {
+                background: #475569;
+                cursor: not-allowed;
+                opacity: 0.7;
+            }
+
+        .btn-global {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            border: none;
+            padding: 9px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+
+            .btn-global:hover {
+                box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+                transform: translateY(-2px);
+            }
+
+        .btn-logout {
+            background: transparent;
+            color: #ff4d4f;
+            border: 1px solid #ff4d4f;
+            padding: 8px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+        }
+
+        .fund-list-container {
+            margin: 0 15px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .fund-card {
+            padding: 15px;
+            border-radius: 16px;
+            font-size: 13px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            position: relative;
+        }
+
+        .radar-badge {
+            background: rgba(255, 77, 79, 0.15);
+            color: #ff4d4f;
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 77, 79, 0.3);
+            animation: blink 2s infinite;
+        }
+
+        @keyframes blink {
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 10px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .metric-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .metric-label {
+            font-size: 11px;
+            color: #94a3b8;
+            margin-bottom: 3px;
+        }
+
+        .metric-value {
+            font-weight: bold;
+        }
+
+        .modal-mask {
+            position: fixed;
+            z-index: 1000;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: 0.3s;
+        }
+
+        .modal-content {
+            background: #1e293b;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 20px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        }
+
+        .modal-input {
+            width: 100%;
+            background: #0f172a;
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #fff;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            box-sizing: border-box;
+        }
+
+        #chart-container {
+            width: calc(100vw - 30px);
+            height: calc(100vh - 280px);
+            margin: 15px;
+            box-sizing: border-box;
+        }
+
+        .divider {
+            width: 1px;
+            height: 40px;
+            background: rgba(255,255,255,0.1);
+        }
+
+        .skeleton-box {
+            background: linear-gradient(90deg, rgba(40,49,66,0.5) 25%, rgba(55,65,81,0.8) 37%, rgba(40,49,66,0.5) 63%);
+            background-size: 400% 100%;
+            animation: skeleton-loading 1.4s ease infinite;
+            border-radius: 8px;
+        }
+
+        @keyframes skeleton-loading {
+            0% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0 50%;
+            }
+        }
+
+        .toast-container {
+            position: fixed;
+            top: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+
+        .toast {
+            padding: 12px 24px;
+            border-radius: 30px;
+            color: #fff;
+            font-size: 14px;
+            font-weight: bold;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            animation: slideDown 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+            .toast.success {
+                background: rgba(16, 185, 129, 0.9);
+                border: 1px solid #34d399;
+            }
+
+            .toast.error {
+                background: rgba(239, 68, 68, 0.9);
+                border: 1px solid #f87171;
+            }
+
+            .toast.info {
+                background: rgba(56, 189, 248, 0.9);
+                border: 1px solid #7dd3fc;
+            }
+
+        @keyframes slideDown {
+            0% {
+                transform: translateY(-50px) scale(0.9);
+                opacity: 0;
+            }
+
+            100% {
+                transform: translateY(0) scale(1);
+                opacity: 1;
+            }
+        }
+
         @media screen and (max-width: 768px) {
-            .header { flex-direction: column; align-items: flex-start; gap: 15px; }
-            .control-panel { width: 100%; }
-            .control-panel input { flex: 1; min-width: 90px; }
-            #chart-container { height: 50vh; }
-            .total-panel { flex-wrap: wrap; gap: 20px; }
-            .divider { display: none; }
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+
+            .control-panel {
+                width: 100%;
+            }
+
+                .control-panel input {
+                    flex: 1;
+                    min-width: 90px;
+                }
+
+            #chart-container {
+                height: 50vh;
+            }
+
+            .total-panel {
+                flex-wrap: wrap;
+                gap: 20px;
+            }
+
+            .divider {
+                display: none;
+            }
         }
     </style>
 </head>
@@ -100,42 +374,42 @@
                     <button class="btn-logout" @click="handleLogout" style="margin-left: 10px;">撤退</button>
                 </div>
             </div>
-<div class="glass-panel total-panel" style="margin: 0 15px 15px 15px; padding: 20px 30px; display: flex; justify-content: space-around; align-items: center; background: rgba(15, 23, 42, 0.6); flex-wrap: wrap; row-gap: 15px;">
-            <div style="text-align: center;">
-                <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">⏱️ 系统时间雷达</div>
-                <div :style="{ fontSize: '18px', fontWeight: '900', color: isNight ? '#10b981' : '#f59e0b', margin: '5px 0' }">
-                    {{ isNight ? '🌙 夜间休市模式' : '☀️ 盘中盯盘模式' }}
+            <div class="glass-panel total-panel" style="margin: 0 15px 15px 15px; padding: 20px 30px; display: flex; justify-content: space-around; align-items: center; background: rgba(15, 23, 42, 0.6); flex-wrap: wrap; row-gap: 15px;">
+                <div style="text-align: center;">
+                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">⏱️ 系统时间雷达</div>
+                    <div :style="{ fontSize: '18px', fontWeight: '900', color: isNight ? '#10b981' : '#f59e0b', margin: '5px 0' }">
+                        {{ isNight ? '🌙 夜间休市模式' : '☀️ 盘中盯盘模式' }}
+                    </div>
+                </div>
+                <div class="divider"></div>
+                <div style="text-align: center;">
+                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">💎 昨日总市值 <span @click="showPrivacyModal = true" style="cursor:pointer">{{ privacyMode === 0 ? '👁️' : '🙈' }}</span></div>
+                    <div style="font-size: 26px; font-weight: 900; color: #f8fafc; font-family: 'Courier New';">{{ privacyMode === 0 ? '¥ ' + totalPrincipal.toFixed(2) : '****' }}</div>
+                </div>
+                <div class="divider"></div>
+                <div style="text-align: center;">
+                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">🌟 今日总收益</div>
+                    <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: privacyMode <= 1 ? (totalTodayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 1 ? (totalTodayProfit >= 0 ? '+' : '') + totalTodayProfit.toFixed(2) : '****' }}</div>
+                </div>
+                <div class="divider"></div>
+                <div style="text-align: center;">
+                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">🚀 今日总收益率</div>
+                    <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: privacyMode <= 2 ? (totalTodayRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 2 ? (totalTodayRate > 0 ? '+' : '') + totalTodayRate.toFixed(2) + '%' : '****' }}</div>
+                </div>
+                <div class="divider"></div>
+                <div style="text-align: center;">
+                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">💰 累计总盈亏</div>
+                    <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: privacyMode <= 1 ? (totalProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 1 ? (totalProfit >= 0 ? '+' : '') + totalProfit.toFixed(2) : '****' }}</div>
+                </div>
+                <div class="divider"></div>
+                <div style="text-align: center;">
+                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">📈 累计总收益率</div>
+                    <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: privacyMode <= 2 ? (totalRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 2 ? (totalRate > 0 ? '+' : '') + totalRate.toFixed(2) + '%' : '****' }}</div>
+                </div>
+                <div style="width: 100%; display: flex; justify-content: center; margin-top: 10px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 20px;">
+                    <button @click="fetchMyArchives('TOTAL', '总阵地')" style="background: linear-gradient(135deg, #0ea5e9, #2563eb); border: none; color: #fff; padding: 12px 35px; border-radius: 30px; cursor: pointer; font-size: 16px; font-weight: bold; box-shadow: 0 6px 20px rgba(14, 165, 233, 0.4);">📂 查阅历史收益</button>
                 </div>
             </div>
-            <div class="divider"></div>
-            <div style="text-align: center;">
-                <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">💎 昨日总市值 <span @click="showPrivacyModal = true" style="cursor:pointer">{{ privacyMode === 0 ? '👁️' : '🙈' }}</span></div>
-                <div style="font-size: 26px; font-weight: 900; color: #f8fafc; font-family: 'Courier New';">{{ privacyMode === 0 ? '¥ ' + totalPrincipal.toFixed(2) : '****' }}</div>
-            </div>
-            <div class="divider"></div>
-            <div style="text-align: center;">
-                <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">🌟 今日总收益</div>
-                <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: privacyMode <= 1 ? (totalTodayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 1 ? (totalTodayProfit >= 0 ? '+' : '') + totalTodayProfit.toFixed(2) : '****' }}</div>
-            </div>
-            <div class="divider"></div>
-            <div style="text-align: center;">
-                <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">🚀 今日总收益率</div>
-                <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: privacyMode <= 2 ? (totalTodayRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 2 ? (totalTodayRate > 0 ? '+' : '') + totalTodayRate.toFixed(2) + '%' : '****' }}</div>
-            </div>
-            <div class="divider"></div>
-            <div style="text-align: center;">
-                <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">💰 累计总盈亏</div>
-                <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: privacyMode <= 1 ? (totalProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 1 ? (totalProfit >= 0 ? '+' : '') + totalProfit.toFixed(2) : '****' }}</div>
-            </div>
-            <div class="divider"></div>
-            <div style="text-align: center;">
-                <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold;">📈 累计总收益率</div>
-                <div :style="{ fontSize: '26px', fontWeight: '900', fontFamily: 'Courier New', color: privacyMode <= 2 ? (totalRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 2 ? (totalRate > 0 ? '+' : '') + totalRate.toFixed(2) + '%' : '****' }}</div>
-            </div>
-<div style="width: 100%; display: flex; justify-content: center; margin-top: 10px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 20px;">
-        <button @click="fetchMyArchives('TOTAL', '总阵地')" style="background: linear-gradient(135deg, #0ea5e9, #2563eb); border: none; color: #fff; padding: 12px 35px; border-radius: 30px; cursor: pointer; font-size: 16px; font-weight: bold; box-shadow: 0 6px 20px rgba(14, 165, 233, 0.4);">📂 查阅历史收益</button>
-    </div>
-</div>
             <div class="fund-list-container">
                 <div v-for="fund in fundsList" :key="fund.code" class="glass-panel fund-card">
                     <div style="display: flex; justify-content: space-between; align-items: start;">
@@ -146,11 +420,15 @@
                                 <span v-if="fund.shares > 0" style="color:#10b981; margin-left: 5px; border: 1px solid rgba(16,185,129,0.3); padding: 1px 4px; border-radius: 4px; background: rgba(16,185,129,0.1);">
                                     💠 份额: {{ fund.shares }}
                                 </span>
+                                <span v-if="fund.realizedProfit && fund.realizedProfit !== 0" style="color:#f59e0b; margin-left: 5px; border: 1px solid rgba(245,158,11,0.3); padding: 1px 4px; border-radius: 4px; background: rgba(245,158,11,0.1);">
+                                    💰 已落袋: {{ fund.realizedProfit > 0 ? '+' : '' }}{{ fund.realizedProfit.toFixed(2) }}
+                                </span>
                             </span>
                         </span>
                         <div style="display: flex; gap: 6px; flex-shrink: 0;">
                             <button @click="fetchHistory(fund.code, fund.name)" style="background: rgba(56, 189, 248, 0.2); border: none; color: #38bdf8; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;" title="查看官方档案">📈</button>
                             <button @click="fetchMyArchives(fund.code, fund.name)" style="background: rgba(139, 92, 246, 0.2); border: none; color: #8b5cf6; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;" title="查看专属档案">📂</button>
+                            <button @click="openReduceModal(fund)" style="background: rgba(16, 185, 129, 0.2); border: none; color: #10b981; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;" title="落袋结转/战术减仓">🛒</button>
                             <button @click="openEditModal(fund)" style="background: rgba(255,255,255,0.1); border: none; color: #cbd5e1; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;">🔧</button>
                             <button @click="handleDeleteFund(fund.code, fund.name)" style="background: rgba(255, 77, 79, 0.2); border: none; color: #ff4d4f; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;">✕</button>
                         </div>
@@ -351,6 +629,34 @@
             </div>
         </div>
 
+        <div v-show="reduceModal.show" class="modal-mask">
+            <div class="modal-content">
+                <h3 style="margin-top: 0; color: #10b981;">🛒 战术减仓 & 利润结转</h3>
+                <p style="font-size: 13px; color: #94a3b8; margin-bottom: 10px;">阵地: <strong>{{ reduceModal.name }}</strong></p>
+
+                <div v-if="reduceModal.isAfter3PM" style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px; padding: 10px; margin-bottom: 15px;">
+                    <div style="color: #f59e0b; font-size: 12px; display: flex; align-items: flex-start; gap: 5px;">
+                        <span>⚠️</span>
+                        <span><strong>时间预警：</strong>当前已过 15:00 (或非交易日)。此笔减仓将按 <strong>下一交易日</strong> 净值结算，系统已自动推演交易日。</span>
+                    </div>
+                </div>
+
+                <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">交易归属日期 (T日)</div>
+                <input v-model="reduceModal.date" type="date" class="modal-input">
+
+                <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">卖出多少兵力 (份额)</div>
+                <input v-model="reduceModal.shares" type="number" placeholder="例如: 5708" class="modal-input">
+
+                <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">换回多少军费 (卖出确认总金额)</div>
+                <input v-model="reduceModal.amount" type="number" placeholder="例如: 10950.5" class="modal-input">
+
+                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                    <button @click="handleReducePosition" style="flex: 1; padding: 12px; background: linear-gradient(135deg,#10b981,#059669); border: none; border-radius: 8px; color: #fff; font-weight: bold; cursor: pointer;">确认结转</button>
+                    <button @click="reduceModal.show = false" style="flex: 1; padding: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: #cbd5e1; cursor: pointer;">取消</button>
+                </div>
+            </div>
+        </div>
+
         <div v-show="historyModal.show" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: flex-end; z-index: 3000;">
             <div style="background: #1e293b; width: 100%; height: 75vh; border-radius: 20px 20px 0 0; padding: 20px; display: flex; flex-direction: column;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
@@ -409,8 +715,8 @@
             </div>
         </div>
     </div>
-<script src="https://cdn.jsdelivr.net/npm/vue@3.3.4/dist/vue.global.prod.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.3.4/dist/vue.global.prod.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 
     <script>
         if (window.hasOwnProperty('chrome') && window.chrome.webview || window.location.protocol === 'file:') {
@@ -437,10 +743,10 @@
                 window.hasAutoSavedToday = false;
 
                 const showToast = (msg, type = 'info') => {
-    const id = toastId++; toasts.value.push({ id, msg, type });
-    setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id); }, 3000);
-};
-const isLoggedIn = ref(localStorage.getItem('fund_username') ? true : false);
+                    const id = toastId++; toasts.value.push({ id, msg, type });
+                    setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id); }, 3000);
+                };
+                const isLoggedIn = ref(localStorage.getItem('fund_username') ? true : false);
 
                 const currentUser = ref(localStorage.getItem('fund_username') || '');
                 const fundsList = ref([]);
@@ -477,37 +783,107 @@ const isLoggedIn = ref(localStorage.getItem('fund_username') ? true : false);
                 const archiveModal = reactive({ show: false, isLoading: false, targetName: '', data: [] });
                 const ocrModal = reactive({ show: false, content: '' });
 
-                                const globalIndices = ref([
+                const globalIndices = ref([
                     { name: '上证指数', secid: '1.000001', code: '000001', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '科创50', secid: '1.000688', code: '000688', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '创业板指', secid: '0.399006', code: '399006', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '恒生指数', secid: '100.HSI', code: 'HSI', latest: 0, todayRate: 0, yearRate: 0, klines: [] }, 
-                    { name: '纳斯达克', secid: '100.NDX', code: 'NDX', latest: 0, todayRate: 0, yearRate: 0, klines: [] }, 
-                    { name: '标普500', secid: '100.SPX', code: 'SPX', latest: 0, todayRate: 0, yearRate: 0, klines: [] },  
+                    { name: '恒生指数', secid: '100.HSI', code: 'HSI', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
+                    { name: '纳斯达克', secid: '100.NDX', code: 'NDX', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
+                    { name: '标普500', secid: '100.SPX', code: 'SPX', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '道琼斯', secid: '100.DJIA', code: 'DJIA', latest: 0, todayRate: 0, yearRate: 0, klines: [] }
                 ]);
+                // ==================== 🚀 战术减仓与利润结转引擎 ====================
+                // 扩充字段：date 和 isAfter3PM
+                const reduceModal = reactive({ show: false, code: '', name: '', shares: '', amount: '', date: '', isAfter3PM: false });
 
+                const openReduceModal = (fund) => {
+                    reduceModal.show = true;
+                    reduceModal.code = fund.code;
+                    reduceModal.name = fund.name;
+                    reduceModal.shares = '';
+                    reduceModal.amount = '';
+
+                    // 🚀 时空推演引擎：自动判别 15:00 与 周末
+                    const now = new Date();
+                    const hour = now.getHours();
+                    const day = now.getDay(); // 0=周日, 1-5=周一至五, 6=周六
+
+                    let isAfter3PM = false;
+                    let targetDate = new Date(now);
+
+                    if (day === 6) {
+                        // 周六 -> 顺延到周一
+                        isAfter3PM = true;
+                        targetDate.setDate(now.getDate() + 2);
+                    } else if (day === 0) {
+                        // 周日 -> 顺延到周一
+                        isAfter3PM = true;
+                        targetDate.setDate(now.getDate() + 1);
+                    } else if (hour >= 15) {
+                        // 工作日过了 15:00
+                        isAfter3PM = true;
+                        if (day === 5) {
+                            // 周五过 3 点 -> 顺延到下周一
+                            targetDate.setDate(now.getDate() + 3);
+                        } else {
+                            // 普通工作日 -> 顺延到明天
+                            targetDate.setDate(now.getDate() + 1);
+                        }
+                    }
+
+                    reduceModal.isAfter3PM = isAfter3PM;
+
+                    // 格式化为 YYYY-MM-DD 填入日历控件
+                    const year = targetDate.getFullYear();
+                    const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+                    const dt = String(targetDate.getDate()).padStart(2, '0');
+                    reduceModal.date = `${year}-${month}-${dt}`;
+                };
+
+                const handleReducePosition = async () => {
+                    if (!reduceModal.shares || !reduceModal.amount || !reduceModal.date) return showToast("情报不完整", "error");
+                    const fd = new FormData();
+                    fd.append('username', currentUser.value);
+                    fd.append('code', reduceModal.code);
+                    fd.append('reduceShares', reduceModal.shares);
+                    fd.append('reduceAmount', reduceModal.amount);
+                    fd.append('tradeDate', reduceModal.date); // 🚀 传给后端
+
+                    try {
+                        const res = await fetch(API_BASE + '/api/Fund/reduce-position', { method: 'POST', body: fd });
+                        const result = await res.json();
+                        if (res.ok) {
+                            showToast(result.msg, "success");
+                            reduceModal.show = false;
+                            fetchData();
+                        } else {
+                            showToast(result.msg || "核算失败", "error");
+                        }
+                    } catch (e) {
+                        showToast("网络异常", "error");
+                    }
+                };
                 const showGlobalIndices = ref(false);
                 const isIndicesLoading = ref(false);
-const fetchMyArchives = async (targetCode, targetName) => {
-    archiveModal.show = true;
-    archiveModal.isLoading = true;
-    archiveModal.targetName = targetName;
-    archiveModal.data = [];
-    try {
-        const res = await fetch(`${API_BASE}/api/fund/get-archives?username=${encodeURIComponent(currentUser.value)}`);
-        if (res.ok) {
-            const records = await res.json();
-            archiveModal.data = records
-                .filter(r => r.fundCode === targetCode)
-                .sort((a, b) => new Date(b.recordDate) - new Date(a.recordDate));
-        }
-    } catch (e) {
-        showToast("🌐 档案馆断线", "error");
-    } finally {
-        archiveModal.isLoading = false;
-    }
-};
+                const fetchMyArchives = async (targetCode, targetName) => {
+                    archiveModal.show = true;
+                    archiveModal.isLoading = true;
+                    archiveModal.targetName = targetName;
+                    archiveModal.data = [];
+                    try {
+                        const res = await fetch(`${API_BASE}/api/fund/get-archives?username=${encodeURIComponent(currentUser.value)}`);
+                        if (res.ok) {
+                            const records = await res.json();
+                            archiveModal.data = records
+                                .filter(r => r.fundCode === targetCode)
+                                .sort((a, b) => new Date(b.recordDate) - new Date(a.recordDate));
+                        }
+                    } catch (e) {
+                        showToast("🌐 档案馆断线", "error");
+                    } finally {
+                        archiveModal.isLoading = false;
+                    }
+                };
                 const saveDailyArchive = async (silent = false) => {
                     if (!silent && !confirm("💾 确定要将大屏当前的数据作为【今日最终战报】永久封存吗？")) return;
                     let d = new Date();
@@ -539,12 +915,12 @@ const fetchMyArchives = async (targetCode, targetName) => {
 
                     const indices = [
                         { name: '上证指数', secid: '1.000001' },
-                        { name: '科创50',   secid: '1.000688' },
+                        { name: '科创50', secid: '1.000688' },
                         { name: '创业板指', secid: '0.399006' },
-                        { name: '恒生指数', secid: '100.HSI'  }, 
-                        { name: '纳斯达克', secid: '100.NDX' },  
-                        { name: '标普500',  secid: '100.SPX'  }, 
-                        { name: '道琼斯',   secid: '100.DJIA' }
+                        { name: '恒生指数', secid: '100.HSI' },
+                        { name: '纳斯达克', secid: '100.NDX' },
+                        { name: '标普500', secid: '100.SPX' },
+                        { name: '道琼斯', secid: '100.DJIA' }
                     ];
 
 
@@ -552,20 +928,20 @@ const fetchMyArchives = async (targetCode, targetName) => {
                         const fetchJSONP = (secid) => {
                             return new Promise((resolve) => {
                                 const callbackName = 'jsonp_' + secid.replace(/\./g, '_');
-                                
-                                window[callbackName] = function(data) {
+
+                                window[callbackName] = function (data) {
                                     resolve(data);
                                     try {
                                         delete window[callbackName];
                                         const scriptNode = document.getElementById(callbackName);
                                         if (scriptNode) scriptNode.remove();
-                                    } catch(e) {}
+                                    } catch (e) { }
                                 };
 
                                 const script = document.createElement('script');
                                 script.id = callbackName;
-                                script.referrerPolicy = "no-referrer"; 
-                                
+                                script.referrerPolicy = "no-referrer";
+
                                 script.src = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250&cb=${callbackName}&_t=${Date.now()}`;
                                 script.onerror = () => resolve(null);
                                 document.body.appendChild(script);
@@ -581,11 +957,11 @@ const fetchMyArchives = async (targetCode, targetName) => {
 
                             const latest = klines[klines.length - 1].split(',');
                             const oldest = klines[0].split(',');
-                            
+
                             const latestClose = parseFloat(latest[2]) || 0;
                             const todayRate = parseFloat(latest[8]) || 0;
-                            const oldestClose = parseFloat(oldest[2]) || 1; 
-                            
+                            const oldestClose = parseFloat(oldest[2]) || 1;
+
                             const yearRate = ((latestClose - oldestClose) / oldestClose * 100).toFixed(2);
 
                             return {
@@ -601,11 +977,11 @@ const fetchMyArchives = async (targetCode, targetName) => {
                         });
 
                         const results = await Promise.all(tasks);
-                        
+
                         globalIndices.value = globalIndices.value.map(item => {
                             const found = results.find(r => r && r.name === item.name);
                             if (found) {
-                                return { ...item, ...found }; 
+                                return { ...item, ...found };
                             }
                             return item;
                         });
@@ -637,7 +1013,7 @@ const fetchMyArchives = async (targetCode, targetName) => {
                     document.body.appendChild(script);
                 };
 
-             
+
 
                 const fetchSectorDetails = async (sector) => {
                     detailsTitle.value = sector.name; showSectorDetails.value = true; isDetailsLoading.value = true; detailsList.value = [];
@@ -709,10 +1085,10 @@ const fetchMyArchives = async (targetCode, targetName) => {
                         const formData = new FormData(); formData.append('imageFile', compressedFile);
                         try {
                             const response = await fetch(`${API_BASE}/api/Fund/import-ocr?username=${encodeURIComponent(currentUser.value)}`, { method: 'POST', body: formData });
-                            if (response.ok) { 
-                                ocrModal.content = await response.text(); 
-                                ocrModal.show = true; 
-                                fetchData(); 
+                            if (response.ok) {
+                                ocrModal.content = await response.text();
+                                ocrModal.show = true;
+                                fetchData();
                             }
                             else { showToast("❌ 识别失败", "error"); }
                         } catch (error) { showToast("🌐 网络异常", "error"); } finally { isUploading.value = false; event.target.value = ''; }
@@ -850,12 +1226,12 @@ const fetchMyArchives = async (targetCode, targetName) => {
                         let todayDash = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
                         let currentMinutes = d.getHours() * 60 + d.getMinutes(); let isWeekend = (d.getDay() === 0 || d.getDay() === 6);
 
-                        let hasSettledToday = false; 
+                        let hasSettledToday = false;
 
                         apiData.forEach(fund => {
                             if (fund.isSettled) {
                                 hasSettledToday = true;
-                                fund.currentRate = fund.actualRate; 
+                                fund.currentRate = fund.actualRate;
                                 fund.isHoliday = false;
                                 if (fund.data.length > 0 && String(fund.data[fund.data.length - 1][0]).includes("15:00:00")) {
                                     fund.data[fund.data.length - 1][1] = fund.actualRate;
@@ -884,11 +1260,15 @@ const fetchMyArchives = async (targetCode, targetName) => {
                             const profitVal = parseFloat(fund.todayProfit);
                             if (!isNaN(profitVal)) { tToday += profitVal; }
 
-                            let currentRealTimeAmount = fund.amount + profitVal;
-                            fund.estimatedProfit = (fund.cost && fund.cost > 0) ? (currentRealTimeAmount - fund.cost).toFixed(2) : 0;
-                            fund.breakEvenRate = (fund.cost && fund.cost > currentRealTimeAmount) ? (((fund.cost / currentRealTimeAmount) - 1) * 100).toFixed(2) : "0.00";
-                            fund.existingReturnRate = (fund.cost && fund.cost > 0) ? (((currentRealTimeAmount - fund.cost) / fund.cost) * 100).toFixed(2) : "0.00";
+                            // 🚀 补丁：融入落袋利润
+                            fund.realizedProfit = fund.realizedProfit || 0;
+                            let floatProfit = (fund.cost && fund.cost > 0) ? (currentRealTimeAmount - fund.cost) : 0;
 
+                            // 累计盈亏 = 现在的浮动盈亏 + 过去落袋的盈亏！
+                            fund.estimatedProfit = (floatProfit + fund.realizedProfit).toFixed(2);
+
+                            fund.breakEvenRate = (fund.cost && fund.cost > currentRealTimeAmount) ? (((fund.cost / currentRealTimeAmount) - 1) * 100).toFixed(2) : "0.00";
+                            fund.existingReturnRate = (fund.cost && fund.cost > 0) ? ((floatProfit / fund.cost) * 100).toFixed(2) : "0.00";
                             tPrincipal += fund.amount;
                             tCost += (fund.cost || fund.amount);
                         });
@@ -898,31 +1278,35 @@ const fetchMyArchives = async (targetCode, targetName) => {
                         totalTodayProfit.value = tToday;
                         totalTodayRate.value = tPrincipal > 0 ? (tToday / tPrincipal * 100) : 0;
 
+                        // 🚀 补丁：加入总落袋利润
                         let currentTotalAssets = tPrincipal + tToday;
-                        totalProfit.value = currentTotalAssets - tCost;
-                        totalRate.value = tCost > 0 ? ((currentTotalAssets - tCost) / tCost * 100) : 0;
+                        // 注意：这里的变量名要看您 forEach 循环的是什么，如果是 data.forEach，这里就改成 data.reduce
+                        let tRealized = fundsList.value.reduce((sum, f) => sum + (f.realizedProfit || 0), 0);
 
-if (!window.hasAutoSavedToday && !isNight.value && fundsList.value.length > 0) {
-    const now = new Date();
-    const hour = now.getHours();
-    const isAfter15 = hour >= 15; // 只有收盘后才触发
-    
-    if (isAfter15) {
-        try {
-            const firstFund = fundsList.value[0];
-            const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-            const navRes = await fetch(`https://fundgz.1234567.com.cn/js/${firstFund.code}.js?rt=${Date.now()}`);
-            const navText = await navRes.text();
-            const gztimeMatch = navText.match(/"gztime":"([^"]+)"/);
-            
-            if (gztimeMatch && gztimeMatch[1].startsWith(todayStr) && gztimeMatch[1] >= todayStr + ' 15:00') {
-                console.log(`✅ 收盘后真实净值已出，自动封存！`);
-                saveDailyArchive(true);
-                window.hasAutoSavedToday = true;
-            }
-        } catch(e) {}
-    }
-}
+                        totalProfit.value = currentTotalAssets - tCost + tRealized; // 加入总落袋
+                        totalRate.value = tCost > 0 ? ((currentTotalAssets - tCost + tRealized) / tCost * 100) : 0;
+
+                        if (!window.hasAutoSavedToday && !isNight.value && fundsList.value.length > 0) {
+                            const now = new Date();
+                            const hour = now.getHours();
+                            const isAfter15 = hour >= 15; // 只有收盘后才触发
+
+                            if (isAfter15) {
+                                try {
+                                    const firstFund = fundsList.value[0];
+                                    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                                    const navRes = await fetch(`https://fundgz.1234567.com.cn/js/${firstFund.code}.js?rt=${Date.now()}`);
+                                    const navText = await navRes.text();
+                                    const gztimeMatch = navText.match(/"gztime":"([^"]+)"/);
+
+                                    if (gztimeMatch && gztimeMatch[1].startsWith(todayStr) && gztimeMatch[1] >= todayStr + ' 15:00') {
+                                        console.log(`✅ 收盘后真实净值已出，自动封存！`);
+                                        saveDailyArchive(true);
+                                        window.hasAutoSavedToday = true;
+                                    }
+                                } catch (e) { }
+                            }
+                        }
                         renderChart(apiData);
                         isLoading.value = false;
                     } catch (e) { isLoading.value = false; }
@@ -1037,6 +1421,40 @@ if (!window.hasAutoSavedToday && !isNight.value && fundsList.value.length > 0) {
                     document.addEventListener('visibilitychange', handleVisibilityChange);
                 });
 
+                // ==================== 🚀 战术减仓与利润结转引擎 ====================
+                const reduceModal = reactive({ show: false, code: '', name: '', shares: '', amount: '' });
+
+                const openReduceModal = (fund) => {
+                    reduceModal.show = true;
+                    reduceModal.code = fund.code;
+                    reduceModal.name = fund.name;
+                    reduceModal.shares = '';
+                    reduceModal.amount = '';
+                };
+
+                const handleReducePosition = async () => {
+                    if (!reduceModal.shares || !reduceModal.amount) return showToast("情报不完整", "error");
+                    const fd = new FormData();
+                    fd.append('username', currentUser.value);
+                    fd.append('code', reduceModal.code);
+                    fd.append('reduceShares', reduceModal.shares);
+                    fd.append('reduceAmount', reduceModal.amount);
+                    try {
+                        const res = await fetch(API_BASE + '/api/Fund/reduce-position', { method: 'POST', body: fd });
+                        const result = await res.json();
+                        if (res.ok) {
+                            showToast(result.msg, "success");
+                            reduceModal.show = false;
+                            fetchData(); // 重新拉取最新数据
+                        } else {
+                            showToast(result.msg || "核算失败", "error");
+                        }
+                    } catch (e) {
+                        showToast("网络异常", "error");
+                    }
+                };
+
+                // ==================== 原有的生命周期卸载 ====================
                 onUnmounted(() => {
                     if (timer) clearInterval(timer);
                     window.removeEventListener('resize', handleResize);
@@ -1044,15 +1462,24 @@ if (!window.hasAutoSavedToday && !isNight.value && fundsList.value.length > 0) {
                     if (chartInstance.value) chartInstance.value.dispose();
                 });
 
+                // ==================== 终极导出 (已包含新接口) ====================
                 return {
                     toasts, isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
                     handleLogin, handleRegister, handleLogout, handleAddFund, handleDeleteFund, triggerUpload, handleFileUpload,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
-                    sectorTopList, sectorBottomList, showSectorDetails, detailsTitle, detailsList, isDetailsLoading, expandedSectors, toggleSector, // 🚀 就是这里！
+                    sectorTopList, sectorBottomList, showSectorDetails, detailsTitle, detailsList, isDetailsLoading, expandedSectors, toggleSector,
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices,
-                    globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, saveDailyArchive, ocrModal
+                    globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, saveDailyArchive, ocrModal,
+
+                    // 🚀 补丁：导出减仓相关的变量和方法，让 HTML 可以调用它们
+                    reduceModal, openReduceModal, handleReducePosition
                 };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
             }
         }).mount('#app');
     </script>
