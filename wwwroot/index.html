@@ -1425,6 +1425,41 @@ const reduceModal = reactive({
     date: todayStr,
     isAfter3PM: false // 👈 加上这个
 });
+                // ==================== 🚀 遗漏的加仓引擎补丁 ====================
+                const openAddModal = (fund) => {
+                    addModal.show = true;
+                    addModal.code = fund.code;
+                    addModal.name = fund.name;
+                    addModal.amount = '';
+                    
+                    // 同样加上智能推演预警
+                    const currentHour = new Date().getHours();
+                    addModal.isAfter3PM = currentHour >= 15;
+                };
+
+                const handleAddPosition = async () => {
+                    if (!addModal.amount) return showToast("请输入加仓金额", "error");
+                    const fd = new FormData();
+                    fd.append('username', currentUser.value);
+                    fd.append('code', addModal.code);
+                    fd.append('addAmount', addModal.amount);
+                    fd.append('tradeDate', addModal.date);
+
+                    try {
+                        const res = await fetch(API_BASE + '/api/Fund/add-position', { method: 'POST', body: fd });
+                        const result = await res.json();
+                        if (res.ok) {
+                            showToast(result.msg, "success");
+                            addModal.show = false;
+                            fetchData(); // 刷新大屏
+                        } else {
+                            showToast(result.msg || "加仓失败", "error");
+                        }
+                    } catch (e) {
+                        showToast("网络异常", "error");
+                    }
+                };
+                // ==========================================================
 
 // 在打开弹窗的 openReduceModal 方法里，加上智能判断逻辑：
 const openReduceModal = (fund) => {
@@ -1497,6 +1532,7 @@ const openReduceModal = (fund) => {
 
                     // ==================== 终极导出 (已包含新接口) ====================
                                         // ==================== 终极导出 (已包含新接口) ====================
+                    // ==================== 终极导出 (已包含新接口) ====================
                     return {
                         toasts, isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
                         totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
@@ -1506,11 +1542,13 @@ const openReduceModal = (fund) => {
                         fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices,
                         globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, saveDailyArchive, ocrModal,
 
-                        // 🛒 导出减仓引擎
+                        // 🛒 减仓模块全套导出
                         reduceModal, openReduceModal, handleReducePosition,
-                        // 💰 导出加仓引擎 (就是少了这三个，导致蓝屏！)
+                        
+                        // 💰 加仓模块全套导出 (加上这行，蓝屏瞬间消失！)
                         addModal, openAddModal, handleAddPosition
                     };
+
 
                 }
             }).mount('#app');
