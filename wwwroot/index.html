@@ -1462,38 +1462,35 @@ const reduceModal = reactive({
                 // ==========================================================
 
 // 在打开弹窗的 openReduceModal 方法里，加上智能判断逻辑：
-const openReduceModal = (fund) => {
-    reduceModal.show = true; 
-    reduceModal.code = fund.code; 
-    reduceModal.name = fund.name;
-    reduceModal.shares = ''; 
-    reduceModal.amount = '';
-    
-    // 智能推演：如果当前时间超过下午 15:00，自动触发预警！
-    const currentHour = new Date().getHours();
-    reduceModal.isAfter3PM = currentHour >= 15;
-};
+                // 在打开弹窗的 openReduceModal 方法里，加上智能判断逻辑：
+                const openReduceModal = (fund) => {
+                    reduceModal.show = true; 
+                    reduceModal.code = fund.code; 
+                    reduceModal.name = fund.name;
+                    reduceModal.shares = ''; 
+                    reduceModal.amount = '';
+                    
+                    const now = new Date();
+                    const hour = now.getHours();
+                    const day = now.getDay();
+                    let isAfter3PM = false;
+                    let targetDate = new Date(now);
 
-                        const now = new Date();
-                        const hour = now.getHours();
-                        const day = now.getDay();
-                        let isAfter3PM = false;
-                        let targetDate = new Date(now);
+                    if (day === 6) { targetDate.setDate(now.getDate() + 2); isAfter3PM = true; }
+                    else if (day === 0) { targetDate.setDate(now.getDate() + 1); isAfter3PM = true; }
+                    else if (hour >= 15) {
+                        isAfter3PM = true;
+                        if (day === 5) targetDate.setDate(now.getDate() + 3);
+                        else targetDate.setDate(now.getDate() + 1);
+                    }
 
-                        if (day === 6) { targetDate.setDate(now.getDate() + 2); isAfter3PM = true; }
-                        else if (day === 0) { targetDate.setDate(now.getDate() + 1); isAfter3PM = true; }
-                        else if (hour >= 15) {
-                            isAfter3PM = true;
-                            if (day === 5) targetDate.setDate(now.getDate() + 3);
-                            else targetDate.setDate(now.getDate() + 1);
-                        }
+                    reduceModal.isAfter3PM = isAfter3PM;
+                    const year = targetDate.getFullYear();
+                    const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+                    const dt = String(targetDate.getDate()).padStart(2, '0');
+                    reduceModal.date = `${year}-${month}-${dt}`;
+                };
 
-                        reduceModal.isAfter3PM = isAfter3PM;
-                        const year = targetDate.getFullYear();
-                        const month = String(targetDate.getMonth() + 1).padStart(2, '0');
-                        const dt = String(targetDate.getDate()).padStart(2, '0');
-                        reduceModal.date = `${year}-${month}-${dt}`;
-                    };
 
                     const handleReducePosition = async () => {
                         if (!reduceModal.shares || !reduceModal.amount || !reduceModal.date) {
