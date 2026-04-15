@@ -818,81 +818,7 @@
                     { name: '标普500', secid: '100.SPX', code: 'SPX', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
                     { name: '道琼斯', secid: '100.DJIA', code: 'DJIA', latest: 0, todayRate: 0, yearRate: 0, klines: [] }
                 ]);
-                // ==================== 🚀 战术减仓与利润结转引擎 ====================
-                // 扩充字段：date 和 isAfter3PM
-                const reduceModal = reactive({ show: false, code: '', name: '', shares: '', amount: '', date: '', isAfter3PM: false });
-
-                const openReduceModal = (fund) => {
-                    reduceModal.show = true;
-                    reduceModal.code = fund.code;
-                    reduceModal.name = fund.name;
-                    reduceModal.shares = '';
-                    reduceModal.amount = '';
-
-                    // 🚀 时空推演引擎：自动判别 15:00 与 周末
-                    const now = new Date();
-                    const hour = now.getHours();
-                    const day = now.getDay(); // 0=周日, 1-5=周一至五, 6=周六
-
-                    let isAfter3PM = false;
-                    let targetDate = new Date(now);
-
-                    if (day === 6) {
-                        // 周六 -> 顺延到周一
-                        isAfter3PM = true;
-                        targetDate.setDate(now.getDate() + 2);
-                    } else if (day === 0) {
-                        // 周日 -> 顺延到周一
-                        isAfter3PM = true;
-                        targetDate.setDate(now.getDate() + 1);
-                    } else if (hour >= 15) {
-                        // 工作日过了 15:00
-                        isAfter3PM = true;
-                        if (day === 5) {
-                            // 周五过 3 点 -> 顺延到下周一
-                            targetDate.setDate(now.getDate() + 3);
-                        } else {
-                            // 普通工作日 -> 顺延到明天
-                            targetDate.setDate(now.getDate() + 1);
-                        }
-                    }
-
-                    reduceModal.isAfter3PM = isAfter3PM;
-
-                    // 格式化为 YYYY-MM-DD 填入日历控件
-                    const year = targetDate.getFullYear();
-                    const month = String(targetDate.getMonth() + 1).padStart(2, '0');
-                    const dt = String(targetDate.getDate()).padStart(2, '0');
-                    reduceModal.date = `${year}-${month}-${dt}`;
-                };
-
-                const handleReducePosition = async () => {
-                    // 🚨 这里的判断加上了 date，情报不全不发车
-                    if (!reduceModal.shares || !reduceModal.amount || !reduceModal.date) return showToast("情报不完整", "error");
-                    const fd = new FormData();
-                    fd.append('username', currentUser.value);
-                    fd.append('code', reduceModal.code);
-                    fd.append('reduceShares', reduceModal.shares);
-                    fd.append('reduceAmount', reduceModal.amount);
-                    fd.append('tradeDate', reduceModal.date); // 🚀 核心修复：把日期发给后端！
-
-                    try {
-                        const res = await fetch(API_BASE + '/api/Fund/reduce-position', { method: 'POST', body: fd });
-                        // 兼容 ASP.NET 的默认错误格式
-                        let result;
-                        try { result = await res.json(); } catch (e) { result = { msg: "服务器拒绝，参数可能错误" }; }
-
-                        if (res.ok) {
-                            showToast(result.msg || "结转成功", "success");
-                            reduceModal.show = false;
-                            fetchData();
-                        } else {
-                            showToast(result.msg || "核算失败", "error");
-                        }
-                    } catch (e) {
-                        showToast("网络异常", "error");
-                    }
-                };
+              
                 const showGlobalIndices = ref(false);
                 const isIndicesLoading = ref(false);
                 const fetchMyArchives = async (targetCode, targetName) => {
@@ -1451,8 +1377,8 @@
                     document.addEventListener('visibilitychange', handleVisibilityChange);
                 });
 
-                // ==================== 🚀 战术减仓与利润结转引擎 ====================
-                const reduceModal = reactive({ show: false, code: '', name: '', shares: '', amount: '' });
+                // ==================== 🚀 战术减仓与利润结转引擎 (满血版) ====================
+                const reduceModal = reactive({ show: false, code: '', name: '', shares: '', amount: '', date: '', isAfter3PM: false });
 
                 const openReduceModal = (fund) => {
                     reduceModal.show = true;
@@ -1460,22 +1386,47 @@
                     reduceModal.name = fund.name;
                     reduceModal.shares = '';
                     reduceModal.amount = '';
+
+                    const now = new Date();
+                    const hour = now.getHours();
+                    const day = now.getDay();
+                    let isAfter3PM = false;
+                    let targetDate = new Date(now);
+
+                    if (day === 6) { targetDate.setDate(now.getDate() + 2); isAfter3PM = true; }
+                    else if (day === 0) { targetDate.setDate(now.getDate() + 1); isAfter3PM = true; }
+                    else if (hour >= 15) {
+                        isAfter3PM = true;
+                        if (day === 5) targetDate.setDate(now.getDate() + 3);
+                        else targetDate.setDate(now.getDate() + 1);
+                    }
+
+                    reduceModal.isAfter3PM = isAfter3PM;
+                    const year = targetDate.getFullYear();
+                    const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+                    const dt = String(targetDate.getDate()).padStart(2, '0');
+                    reduceModal.date = `${year}-${month}-${dt}`;
                 };
 
                 const handleReducePosition = async () => {
-                    if (!reduceModal.shares || !reduceModal.amount) return showToast("情报不完整", "error");
+                    if (!reduceModal.shares || !reduceModal.amount || !reduceModal.date) {
+                        return showToast("情报不完整，请检查日期", "error");
+                    }
+
                     const fd = new FormData();
                     fd.append('username', currentUser.value);
                     fd.append('code', reduceModal.code);
                     fd.append('reduceShares', reduceModal.shares);
                     fd.append('reduceAmount', reduceModal.amount);
+                    fd.append('tradeDate', reduceModal.date); // 🚨 核心：这里终于把日期发给后端了！
+
                     try {
                         const res = await fetch(API_BASE + '/api/Fund/reduce-position', { method: 'POST', body: fd });
                         const result = await res.json();
                         if (res.ok) {
-                            showToast(result.msg, "success");
+                            showToast(result.msg || "结转成功", "success");
                             reduceModal.show = false;
-                            fetchData(); // 重新拉取最新数据
+                            fetchData();
                         } else {
                             showToast(result.msg || "核算失败", "error");
                         }
