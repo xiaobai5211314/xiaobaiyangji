@@ -342,14 +342,19 @@ namespace 估值助手.Controllers
 
                         if (userFundDict.TryGetValue(finalBestMatch.Code, out var exist))
                         {
-                            // 🛡️ 强制指令保护：绝对不覆盖已更新的更高市值！
+                            // 🛡️ 之前的逻辑（删掉）：
+                            /*
                             if (holdAmount >= exist.HoldAmount || exist.HoldAmount == 0)
                             {
                                 exist.HoldAmount = holdAmount;
                             }
-                            else
+                            */
+
+                            // ✅ 修改为「截图铁律」逻辑：
+                            // 只要扫到了市值，就以截图为准（行情下跌也要跟进更新）
+                            if (holdAmount > 0)
                             {
-                                calcMethod += " (保护已有市值)";
+                                exist.HoldAmount = holdAmount;
                             }
 
                             if (holdingIncome != 0) exist.CostAmount = Math.Round(holdAmount - holdingIncome, 2);

@@ -1259,14 +1259,18 @@
 
                         // ==================== 更新全局状态 ====================
                         fundsList.value = apiData;
-                        totalPrincipal.value = tPrincipal;
+
+                        // 1. 先把所有落袋的小金库汇总起来
+                        const tRealized = fundsList.value.reduce((sum, f) => sum + (f.realizedProfit || 0), 0);
+
+                        // 2. 🚀 核心对齐：把落袋的现金加到大屏的总资产里，完美对齐支付宝！
+                        totalPrincipal.value = tPrincipal + tRealized;
+
                         totalTodayProfit.value = tToday;
                         totalTodayRate.value = tPrincipal > 0 ? (tToday / tPrincipal * 100) : 0;
 
-                        // 累计总盈亏（含已落袋利润）
+                        // 3. 累计总盈亏（保持原样，继续包含落袋利润）
                         const currentTotalAssets = tPrincipal + tToday;
-                        const tRealized = fundsList.value.reduce((sum, f) => sum + (f.realizedProfit || 0), 0);
-
                         totalProfit.value = currentTotalAssets - tCost + tRealized;
                         totalRate.value = tCost > 0 ? ((currentTotalAssets - tCost + tRealized) / tCost * 100) : 0;
 
