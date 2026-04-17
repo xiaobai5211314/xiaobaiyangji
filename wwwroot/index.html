@@ -668,10 +668,10 @@
                 <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">交易归属日期 (T日)</div>
                 <input v-model="reduceModal.date" type="date" class="modal-input">
 
-                <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">卖出多少兵力 (份额)</div>
+                <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">卖出多少 (份额)</div>
                 <input v-model="reduceModal.shares" type="number" placeholder="例如: 5708" class="modal-input">
 
-                <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">换回多少军费 (卖出确认总金额)</div>
+                <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">换回多少 (卖出确认总金额)</div>
                 <input v-model="reduceModal.amount" type="number" placeholder="例如: 10950.5" class="modal-input">
 
                 <div style="display: flex; gap: 10px; margin-top: 15px;">
@@ -1548,8 +1548,7 @@
                     if (chartInstance.value) chartInstance.value.dispose();
                 });
 
-                // ==================== 终极导出 (已包含新接口) ====================
-                // ==================== 终极导出 (已包含新接口) ====================
+             
                 // ==================== 终极导出 (已包含新接口) ====================
                 return {
                     toasts, isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
