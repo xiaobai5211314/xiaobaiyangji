@@ -350,14 +350,25 @@ namespace 估值助手.Controllers
                             }
                             */
 
-                            // ✅ 修改为「截图铁律」逻辑：
-                            // 只要扫到了市值，就以截图为准（行情下跌也要跟进更新）
+                                                        // ==================== 🚀 终极防线装甲 ====================
+                            // 1. 在途市值保护：如果今天有未确认的加仓资金，OCR扫描到的肯定没包含这笔钱！
+                            var todayStr = DateTime.UtcNow.AddHours(8).ToString("yyyy-MM-dd");
                             if (holdAmount > 0)
                             {
-                                exist.HoldAmount = holdAmount;
+                                if (exist.LastTradeDate == todayStr)
+                                    exist.HoldAmount = holdAmount + exist.LastAddAmount; // 强行加回在途的援军
+                                else
+                                    exist.HoldAmount = holdAmount;
                             }
 
-                            if (holdingIncome != 0) exist.CostAmount = Math.Round(holdAmount - holdingIncome, 2);
+                            // 2. 本金铁律保护：OCR 经常眼花抓错负数！
+                            // 只要您的数据库里已经有本金了（大于0），绝对不允许 OCR 瞎篡改！
+                            if (holdingIncome != 0 && exist.CostAmount == 0) 
+                            {
+                                exist.CostAmount = Math.Round(holdAmount - holdingIncome, 2);
+                            }
+                            // =========================================================
+
 
                             // 更新推演份额（允许微调，防止误差积累）
                             if (holdShares > 0)
@@ -1337,16 +1348,20 @@ namespace 估值助手.Controllers
                             .OrderByDescending(r => r.FetchTime)
                             .FirstOrDefaultAsync();
 
-                        // 算钱逻辑 (基础粗略版)
+                                                // 算钱逻辑 (基础粗略版)
                         double dailyRate = todayRecord?.ActualRate > 0 ? todayRecord.ActualRate : (todayRecord?.EstimatedRate ?? 0);
-
-                        // 🚀 修复 2：剥离今日加仓本金，防止新子弹凭空产生收益
+                        
+                        // ==========================================
+                        // 🚀 核心补丁：后端必须像前端一样，精准剥离今日新军！
+                        // 绝对禁止未确认的资金参与今日收益结算，掐断虚假印钞！
                         double baseAmount = fund.HoldAmount;
-                        if (fund.LastTradeDate == todayStrDash || fund.LastTradeDate == todayStrSlash)
+                        if (fund.LastTradeDate == today.ToString("yyyy-MM-dd"))
                         {
                             baseAmount -= fund.LastAddAmount;
                         }
                         double dailyProfit = baseAmount * (dailyRate / 100.0);
+                        // ==========================================
+
 
                       
                         // 🚀 核心对齐补丁 1：高精度物理对齐！(调用猎隼侦察兵)
