@@ -353,20 +353,35 @@ namespace 估值助手.Controllers
                                                         // ==================== 🚀 终极防线装甲 ====================
                             // 1. 在途市值保护：如果今天有未确认的加仓资金，OCR扫描到的肯定没包含这笔钱！
                             var todayStr = DateTime.UtcNow.AddHours(8).ToString("yyyy-MM-dd");
+                                                      // ==================== 🚀 终极防线装甲 ====================
+                            // 1. 在途市值保护：跨越周末的物理识别！
                             if (holdAmount > 0)
                             {
-                                if (exist.LastTradeDate == todayStr)
-                                    exist.HoldAmount = holdAmount + exist.LastAddAmount; // 强行加回在途的援军
+                                bool isRecentAdd = false;
+                                if (DateTime.TryParse(exist.LastTradeDate, out DateTime lastTradeDate))
+                                {
+                                    // 只要是最近 4 天内加的仓，都处于“在途保护期”（完美覆盖周末逻辑）
+                                    isRecentAdd = (DateTime.UtcNow.AddHours(8) - lastTradeDate).TotalDays <= 4;
+                                }
+
+                                // 如果处于保护期，且支付宝扫出来的钱比系统里少了很多（说明支付宝还没把那笔钱加上去）
+                                if (isRecentAdd && exist.LastAddAmount > 0 && (exist.HoldAmount - holdAmount) > (exist.LastAddAmount * 0.5))
+                                {
+                                    exist.HoldAmount = holdAmount + exist.LastAddAmount; // 强行加回在途援军！
+                                }
                                 else
-                                    exist.HoldAmount = holdAmount;
+                                {
+                                    exist.HoldAmount = holdAmount; // 正常覆盖
+                                }
                             }
 
-                            // 2. 本金铁律保护：OCR 经常眼花抓错负数！
-                            // 只要您的数据库里已经有本金了（大于0），绝对不允许 OCR 瞎篡改！
+                            // 2. 本金铁律保护
                             if (holdingIncome != 0 && exist.CostAmount == 0) 
                             {
                                 exist.CostAmount = Math.Round(holdAmount - holdingIncome, 2);
                             }
+                            // =========================================================
+
                             // =========================================================
 
 
