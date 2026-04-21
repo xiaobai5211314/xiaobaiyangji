@@ -1220,16 +1220,17 @@
                             }
 
                             // ==================== 2. 计算今日收益 ====================
-                            if (fund.isSettled && fund.actualExactProfit !== undefined && fund.actualExactProfit !== null) {
-                                fund.todayProfit = fund.actualExactProfit.toFixed(2);
-                            } else {
-                                // 🚀 核心战术：计算今日收益时，精准扣除今天刚打进去的子弹！
-                                let isAddedToday = (fund.lastTradeDate === todayDash || fund.lastTradeDate === todaySlash);
-                                let todayAddAmount = isAddedToday ? (parseFloat(fund.lastAddAmount) || 0) : 0;
-                                let baseAmount = fund.amount - todayAddAmount; // 剔除今日加仓金额的“生息本金”
+                           // 新增：如果本金已被结算脚本更新过，今日收益不能再叠加
+let isAlreadySettled = (fund.lastSettledDate === todayDash);
 
-                                fund.todayProfit = (baseAmount * (fund.currentRate / 100)).toFixed(2);
-                            }
+if (isAlreadySettled) {
+    fund.todayProfit = "0.00"; // 结算后市值就是最终值，前端不再叠加
+} else if (fund.isSettled && fund.actualExactProfit != null) {
+    fund.todayProfit = fund.actualExactProfit.toFixed(2);
+} else {
+    let baseAmount = fund.amount - todayAddAmount;
+    fund.todayProfit = (baseAmount * (fund.currentRate / 100)).toFixed(2);
+}
 
                             const profitVal = parseFloat(fund.todayProfit);
                             if (!isNaN(profitVal)) {
