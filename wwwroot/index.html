@@ -1273,7 +1273,7 @@
 
                             // ==================== 5. 累计总额 ====================
                             // 🚀 核心修复 2：将总资产和“用于计算收益率的资产”分离
-                            const currentAmount = parseFloat(fund.amount) || 0;
+                          
                             tPrincipal += currentAmount; // 总展示资产（包含在途加仓金额）
                             tPrincipalForRate += (currentAmount - todayAddAmount); // 算收益率必须剔除在途资金！
                             tCost += (fund.cost || currentAmount);
