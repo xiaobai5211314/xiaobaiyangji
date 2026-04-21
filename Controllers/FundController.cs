@@ -336,10 +336,26 @@ namespace 估值助手.Controllers
                         // 🚀 核心：若未扫出份额，全面启用时空碰撞推演！
                         if (holdShares == 0)
                         {
-                            double calcShares = await DeduceSharesFromHistoryAsync(finalBestMatch.Code, holdAmount, yesterdayIncome);
+                            // 🛡️ 在途资金剥离装甲：防止推演份额时，把今天刚加仓的钱当成已确认份额！
+                            double effectiveAmountForShares = holdAmount;
+
+                            if (userFundDict.TryGetValue(finalBestMatch.Code, out var tempExist))
+                            {
+                                // 检查是否在 4 天内有过加仓操作
+                                if (DateTime.TryParse(tempExist.LastTradeDate, out DateTime ltd) && (DateTime.UtcNow.AddHours(8) - ltd).TotalDays <= 4)
+                                {
+                                    // 如果 OCR 扫出的总金额 > 在途金额，说明支付宝已将这笔钱计入总额，我们必须将它剥离出来再算份额！
+                                    if (tempExist.LastAddAmount > 0 && holdAmount > tempExist.LastAddAmount)
+                                    {
+                                        effectiveAmountForShares = holdAmount - tempExist.LastAddAmount;
+                                    }
+                                }
+                            }
+
+                            // 使用剥离了在途资金后的【纯净本金】去推演真实份额
+                            double calcShares = await DeduceSharesFromHistoryAsync(finalBestMatch.Code, effectiveAmountForShares, yesterdayIncome);
                             if (calcShares > 0) { holdShares = calcShares; calcMethod = "AI物理推演"; }
                         }
-
                         if (userFundDict.TryGetValue(finalBestMatch.Code, out var exist))
                         {
                             // 🛡️ 之前的逻辑（删掉）：

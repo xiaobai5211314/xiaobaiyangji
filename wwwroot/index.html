@@ -636,12 +636,20 @@
                 </div>
             </div>
         </div>
-
         <div v-if="addModal.show" class="modal-mask">
             <div class="modal-content">
                 <h3 style="margin-top: 0; color: #3b82f6;">💰 战术加仓</h3>
-                <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">交易日期</div>
+
+                <div v-if="addModal.isAfter3PM" style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px; padding: 10px; margin-bottom: 15px;">
+                    <div style="color: #f59e0b; font-size: 12px; display: flex; align-items: flex-start; gap: 5px;">
+                        <span>⚠️</span>
+                        <span><strong>时间预警：</strong>当前已过 15:00 (或非交易日)。此笔加仓将按 <strong>下一交易日</strong> 净值确认，系统已自动推演。</span>
+                    </div>
+                </div>
+
+                <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">交易归属日期 (T日)</div>
                 <input v-model="addModal.date" type="date" class="modal-input">
+
                 <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">加仓金额 (人民币)</div>
                 <input v-model="addModal.amount" type="number" placeholder="只需输入金额，如: 1000" class="modal-input">
                 <div style="display: flex; gap: 10px; margin-top: 10px;">
@@ -650,7 +658,6 @@
                 </div>
             </div>
         </div>
-
 
 
         <div v-show="reduceModal.show" class="modal-mask">
@@ -1178,6 +1185,7 @@
                         const apiData = await response.json();
 
                         let tPrincipal = 0;
+                        let tPrincipalForRate = 0; // 🚀 新增：专用于算收益率的“净本金”
                         let tCost = 0;
                         let tToday = 0;
                         let d = new Date();
@@ -1220,21 +1228,21 @@
                             }
 
                             // ==================== 2. 计算今日收益 ====================
-                       // 1. 定义 todayAddAmount：如果最后一次交易日期是今天，则应用对应的金额，否则为 0
-    let todayAddAmount = (fund.lastTradeDate === todayDash) ? (fund.lastAddAmount || 0) : 0;
+                            // 🚀 核心修复 1：利用时间推演判定在途资金。只要 T日 >= 今天，绝不给算收益！
+                            let isUnconfirmed = fund.lastTradeDate && (fund.lastTradeDate >= todayDash);
+                            let todayAddAmount = isUnconfirmed ? (fund.lastAddAmount || 0) : 0;
 
-    // 2. 使用正确的变量进行计算
-    let isAlreadySettled = (fund.lastSettledDate === todayDash);
+                            let isAlreadySettled = (fund.lastSettledDate === todayDash);
 
-    if (isAlreadySettled) {
-        fund.todayProfit = "0.00";
-    } else if (fund.isSettled && fund.actualExactProfit != null) {
-        fund.todayProfit = fund.actualExactProfit.toFixed(2);
-    } else {
-        let baseAmount = fund.amount - todayAddAmount; 
-        fund.todayProfit = (baseAmount * (fund.currentRate / 100)).toFixed(2);
-    }
-    // --- 修复结束 ---
+                            if (isAlreadySettled) {
+                                fund.todayProfit = "0.00";
+                            } else if (fund.isSettled && fund.actualExactProfit != null) {
+                                fund.todayProfit = fund.actualExactProfit.toFixed(2);
+                            } else {
+                                let baseAmount = fund.amount - todayAddAmount;
+                                fund.todayProfit = (baseAmount * (fund.currentRate / 100)).toFixed(2);
+                            }
+
                             const profitVal = parseFloat(fund.todayProfit);
                             if (!isNaN(profitVal)) {
                                 tToday += profitVal;
@@ -1259,26 +1267,28 @@
                                 : "0.00";
 
                             // 🚀 支付宝同款对齐公式：纯粹的 当前浮动盈亏 ÷ 持仓本金
-fund.existingReturnRate = (fund.cost && fund.cost > 0) ? ((floatProfit / fund.cost) * 100).toFixed(2) : "0.00";
+                            fund.existingReturnRate = (fund.cost && fund.cost > 0) ? ((floatProfit / fund.cost) * 100).toFixed(2) : "0.00";
 
 
 
                             // ==================== 5. 累计总额 ====================
-                            tPrincipal += currentAmount;
+                            // 🚀 核心修复 2：将总资产和“用于计算收益率的资产”分离
+                            const currentAmount = parseFloat(fund.amount) || 0;
+                            tPrincipal += currentAmount; // 总展示资产（包含在途加仓金额）
+                            tPrincipalForRate += (currentAmount - todayAddAmount); // 算收益率必须剔除在途资金！
                             tCost += (fund.cost || currentAmount);
                         });
 
                         // ==================== 更新全局状态 ====================
                         fundsList.value = apiData;
 
-                        // 1. 先把所有落袋的小金库汇总起来
                         const tRealized = fundsList.value.reduce((sum, f) => sum + (f.realizedProfit || 0), 0);
 
-                        // 2. 🚀 核心对齐：把落袋的现金加到大屏的总资产里，完美对齐支付宝！
                         totalPrincipal.value = tPrincipal + tRealized;
-
                         totalTodayProfit.value = tToday;
-                        totalTodayRate.value = tPrincipal > 0 ? (tToday / tPrincipal * 100) : 0;
+
+                        // 🚀 核心修复 3：大屏收益率分母切换为 tPrincipalForRate 完美对齐支付宝！
+                        totalTodayRate.value = tPrincipalForRate > 0 ? (tToday / tPrincipalForRate * 100) : 0;
 
                         // 3. 累计总盈亏（保持原样，继续包含落袋利润）
                         const currentTotalAssets = tPrincipal + tToday;
@@ -1450,15 +1460,33 @@ fund.existingReturnRate = (fund.cost && fund.cost > 0) ? ((floatProfit / fund.co
                     isAfter3PM: false // 👈 加上这个
                 });
                 // ==================== 🚀 遗漏的加仓引擎补丁 ====================
+                // 🚀 加仓推演引擎：智能推算 15:00 及周末顺延
                 const openAddModal = (fund) => {
                     addModal.show = true;
                     addModal.code = fund.code;
                     addModal.name = fund.name;
                     addModal.amount = '';
 
-                    // 同样加上智能推演预警
-                    const currentHour = new Date().getHours();
-                    addModal.isAfter3PM = currentHour >= 15;
+                    const now = new Date();
+                    const hour = now.getHours();
+                    const day = now.getDay();
+                    let isAfter3PM = false;
+                    let targetDate = new Date(now);
+
+                    // 判断逻辑：周末推到周一，周五下午推到下周一，其他下午推到次日
+                    if (day === 6) { targetDate.setDate(now.getDate() + 2); isAfter3PM = true; }
+                    else if (day === 0) { targetDate.setDate(now.getDate() + 1); isAfter3PM = true; }
+                    else if (hour >= 15) {
+                        isAfter3PM = true;
+                        if (day === 5) targetDate.setDate(now.getDate() + 3);
+                        else targetDate.setDate(now.getDate() + 1);
+                    }
+
+                    addModal.isAfter3PM = isAfter3PM;
+                    const year = targetDate.getFullYear();
+                    const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+                    const dt = String(targetDate.getDate()).padStart(2, '0');
+                    addModal.date = `${year}-${month}-${dt}`;
                 };
 
                 const handleAddPosition = async () => {
@@ -1554,7 +1582,7 @@ fund.existingReturnRate = (fund.cost && fund.cost > 0) ? ((floatProfit / fund.co
                     if (chartInstance.value) chartInstance.value.dispose();
                 });
 
-             
+
                 // ==================== 终极导出 (已包含新接口) ====================
                 return {
                     toasts, isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
