@@ -391,15 +391,13 @@ namespace 估值助手.Controllers
                                 }
                             }
 
-                            // 2. 本金铁律保护
-                            if (holdingIncome != 0 && exist.CostAmount == 0) 
+                          
+                            // 2. 🚀 本金铁律保护升级：强制校准！彻底解决大屏与支付宝收益率对不上的问题！
+                            if (holdingIncome != 0)
                             {
+                                // 只要扫出了真实的累计利润，直接反推并强制覆盖本金！绝不留死角！
                                 exist.CostAmount = Math.Round(holdAmount - holdingIncome, 2);
                             }
-                            // =========================================================
-
-                            // =========================================================
-
 
                             // 更新推演份额（允许微调，防止误差积累）
                             if (holdShares > 0)
