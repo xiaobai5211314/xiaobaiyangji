@@ -1220,18 +1220,21 @@
                             }
 
                             // ==================== 2. 计算今日收益 ====================
-                           // 新增：如果本金已被结算脚本更新过，今日收益不能再叠加
-let isAlreadySettled = (fund.lastSettledDate === todayDash);
+                       // 1. 定义 todayAddAmount：如果最后一次交易日期是今天，则应用对应的金额，否则为 0
+    let todayAddAmount = (fund.lastTradeDate === todayDash) ? (fund.lastAddAmount || 0) : 0;
 
-if (isAlreadySettled) {
-    fund.todayProfit = "0.00"; // 结算后市值就是最终值，前端不再叠加
-} else if (fund.isSettled && fund.actualExactProfit != null) {
-    fund.todayProfit = fund.actualExactProfit.toFixed(2);
-} else {
-    let baseAmount = fund.amount - todayAddAmount;
-    fund.todayProfit = (baseAmount * (fund.currentRate / 100)).toFixed(2);
-}
+    // 2. 使用正确的变量进行计算
+    let isAlreadySettled = (fund.lastSettledDate === todayDash);
 
+    if (isAlreadySettled) {
+        fund.todayProfit = "0.00";
+    } else if (fund.isSettled && fund.actualExactProfit != null) {
+        fund.todayProfit = fund.actualExactProfit.toFixed(2);
+    } else {
+        let baseAmount = fund.amount - todayAddAmount; 
+        fund.todayProfit = (baseAmount * (fund.currentRate / 100)).toFixed(2);
+    }
+    // --- 修复结束 ---
                             const profitVal = parseFloat(fund.todayProfit);
                             if (!isNaN(profitVal)) {
                                 tToday += profitVal;
