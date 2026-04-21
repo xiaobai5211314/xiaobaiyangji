@@ -518,6 +518,8 @@ namespace 估值助手.Controllers
                         {
                             double todayProfit = fund.HoldAmount * (rate / 100.0);
                             fund.HoldAmount = Math.Round(fund.HoldAmount + todayProfit, 2);
+fund.LastSettledDate = DateTime.UtcNow.AddHours(8).ToString("yyyy-MM-dd"); // 新增
+                            
                             count++;
                         }
                     }
@@ -553,7 +555,8 @@ namespace 估值助手.Controllers
                         if (match.Success && double.TryParse(match.Groups[1].Value, out double rate))
                         {
                             double todayProfit = fund.HoldAmount * (rate / 100.0);
-                            fund.HoldAmount = Math.Round(fund.HoldAmount + todayProfit, 2);
+                           fund.HoldAmount = Math.Round(fund.HoldAmount + todayProfit, 2);
+fund.LastSettledDate = DateTime.UtcNow.AddHours(8).ToString("yyyy-MM-dd"); // 新增
                             successCount++;
                         }
                     }
