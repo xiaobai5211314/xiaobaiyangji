@@ -1412,7 +1412,9 @@
                                     let color = profit >= 0 ? '#ff4d4f' : '#10b981';
                                     let originalFund = apiData.find(f => f.name === p.seriesName);
                                     let labelSuffix = '估';
-                                    if (isNight.value && p.dataIndex === p.seriesData.length - 1) {
+
+                                    // 🚀 核心修复：使用 originalFund.data.length 来安全获取数据长度
+                                    if (isNight.value && originalFund && originalFund.data && p.dataIndex === originalFund.data.length - 1) {
                                         labelSuffix = originalFund.isSettled ? '✅ 真' : '⏳ 待更新';
                                     }
                                     let profitDisplay = privacyMode.value <= 1 ? `${profit >= 0 ? '+' : ''}${profit} 元` : '**** 元';
