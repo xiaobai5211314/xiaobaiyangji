@@ -269,12 +269,29 @@ foreach (Match m in pctMatches)
     holdingRate = double.Parse(m.Groups[1].Value.Replace(",", "."));
 }
 
-// 🚀 终极防排版污染：全行抓取所有带正负号的金额（自动过滤掉带%的收益率）
-var numMatches = Regex.Matches(nextLine, @"([-+]\d[\d,]*\.\d{2})(?!\s*%)");
+// 🚀 核心破解：全面捕获所有金额（包括丢失符号的残疾数字）
+var numMatches = Regex.Matches(nextLine, @"([-+]?\d[\d,]*\.\d{2})(?!\s*%)");
 foreach (Match m in numMatches)
 {
-    signedNumbers.Add(double.Parse(m.Groups[1].Value.Replace(",", "")));
+    string valStr = m.Groups[1].Value.Replace(",", "");
+    double val = double.Parse(valStr);
+
+    if (valStr.StartsWith("+") || valStr.StartsWith("-"))
+    {
+        // 带有明确符号的，绝对信任
+        if (!signedNumbers.Contains(val)) signedNumbers.Add(val);
+    }
+    else
+    {
+        // 🚨 OCR 搞丢了弱鸡的绿色减号！我们把数字的【正、负】双重形态同时扔进候选池，让数学模型去严惩它！
+        if (val != 0)
+        {
+            if (!signedNumbers.Contains(val)) signedNumbers.Add(val);
+            if (!signedNumbers.Contains(-val)) signedNumbers.Add(-val);
+        }
+    }
 }
+
 
                         if (holdShares == 0 && Regex.IsMatch(nextLine, amountPattern))
                         {
@@ -318,7 +335,8 @@ foreach (Match m in numMatches)
                         if (bestDiff < 8.0)
                         {
                             holdingIncome = bestIncome;
-                            yesterdayIncome = signedNumbers.FirstOrDefault(n => n != bestIncome);
+                            yesterdayIncome = signedNumbers.FirstOrDefault(n => Math.Abs(n) != Math.Abs(bestIncome));
+
                         }
                     }
 
