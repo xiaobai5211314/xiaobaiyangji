@@ -959,9 +959,16 @@ return new
                 fund.HoldAmount += addAmount;
                 fund.CostAmount += addAmount;
 
-                // 🚀 补丁：把加仓的时间和金额烙印在数据库里
-                fund.LastTradeDate = tradeDate;
-                fund.LastAddAmount = addAmount;
+                // 🚀 终极补丁：把加仓的时间和金额烙印在数据库里
+                if (fund.LastTradeDate == tradeDate)
+                {
+                    fund.LastAddAmount += addAmount; // 同日多次加仓累加
+                }
+                else
+                {
+                    fund.LastTradeDate = tradeDate;
+                    fund.LastAddAmount = addAmount;
+                }
 
 
                 _context.MyFunds.Update(fund);
@@ -1002,7 +1009,17 @@ return new
 
             // 利润封存：将变现利润锁入落袋小金库
             fund.RealizedProfit += profit;
-
+            // 🚀 核心补丁：逆向记录减仓在途资金！(存入负数)
+            // 这样前端计算今日收益率时，会用“减去负数(等于加回)”的魔法，完美保住当日收益率！
+            if (fund.LastTradeDate == tradeDate)
+            {
+                fund.LastAddAmount -= finalReduceAmount; // 同日多次操作抵消/累加
+            }
+            else
+            {
+                fund.LastTradeDate = tradeDate;
+                fund.LastAddAmount = -finalReduceAmount;
+            }
             _context.MyFunds.Update(fund);
             await _context.SaveChangesAsync();
             _cache.Remove($"Tactical_TodayData_{username}");
