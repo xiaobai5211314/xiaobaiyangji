@@ -262,11 +262,21 @@ namespace 估值助手.Controllers
                         string nextLine = texts[i + j].Trim();
                         if (Regex.IsMatch(nextLine, @"[\u4e00-\u9fa5]{4,}") && !nextLine.Contains("金选") && !nextLine.Contains("市场解读") && !nextLine.Contains("基金经理") && !nextLine.Contains("阶段") && !nextLine.Contains("趋势") && !nextLine.Contains("去看看") && !nextLine.Contains("更新")) break;
 
-                        var pctMatch = Regex.Match(nextLine, @"^([-+]?\d+[\.,]\d{2})\s*%$");
-                        if (pctMatch.Success) { holdingRate = double.Parse(pctMatch.Groups[1].Value.Replace(",", ".")); continue; }
+                        // 🚀 终极防排版污染：地毯式搜索百分比，无视同行其他字符
+var pctMatches = Regex.Matches(nextLine, @"([-+]?\d+[\.,]\d{2})\s*%");
+foreach (Match m in pctMatches)
+{
+    holdingRate = double.Parse(m.Groups[1].Value.Replace(",", "."));
+}
 
-                        if (Regex.IsMatch(nextLine, @"^[-+]\d[\d,]*\.\d{2}$")) { signedNumbers.Add(double.Parse(nextLine.Replace(",", ""))); }
-                        else if (holdShares == 0 && Regex.IsMatch(nextLine, amountPattern))
+// 🚀 终极防排版污染：全行抓取所有带正负号的金额（自动过滤掉带%的收益率）
+var numMatches = Regex.Matches(nextLine, @"([-+]\d[\d,]*\.\d{2})(?!\s*%)");
+foreach (Match m in numMatches)
+{
+    signedNumbers.Add(double.Parse(m.Groups[1].Value.Replace(",", "")));
+}
+
+                        if (holdShares == 0 && Regex.IsMatch(nextLine, amountPattern))
                         {
                             string contextText = string.Join("", texts.Skip(Math.Max(0, i - 2)).Take(j + 3));
                             if (contextText.Contains("份额"))
