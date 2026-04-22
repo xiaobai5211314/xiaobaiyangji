@@ -27,6 +27,9 @@ jobs:
           upx login ${{ secrets.UPYUN_SERVICE }} ${{ secrets.UPYUN_OPERATOR }} ${{ secrets.UPYUN_PASSWORD }}
           upx put wwwroot/index.html /index.html
           
-      - name: 🧹 自动刷新 CDN 缓存
+      - name: 刷新又拍云CDN缓存
         run: |
-          upx purge https://guzhicdn.21212121.xyz/index.html
+          curl -X POST "https://purge.upyun.com/purge/" \
+            -H "Content-Type: application/json" \
+            -u "${{ secrets.UPYUN_OPERATOR }}:${{ secrets.UPYUN_PASSWORD }}" \
+            -d '{"urls":"https://guzhicdn.21212121.xyz/index.html"}'
