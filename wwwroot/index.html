@@ -1301,7 +1301,8 @@
 
                         const tRealized = fundsList.value.reduce((sum, f) => sum + (f.realizedProfit || 0), 0);
 
-                        totalPrincipal.value = tPrincipal + tRealized;
+                        totalPrincipal.value = tPrincipal; // 🚀 剥离已落袋利润，完美对齐支付宝的纯持仓资产
+
                         totalTodayProfit.value = tToday;
 
                         // 🚀 核心修复 3：大屏收益率分母切换为 tPrincipalForRate 完美对齐支付宝！
