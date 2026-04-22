@@ -1413,7 +1413,7 @@
                                     let originalFund = apiData.find(f => f.name === p.seriesName);
                                     let labelSuffix = '估';
 
-                                    // 🚀 核心修复：使用 originalFund.data.length 来安全获取数据长度
+                                    // 🚀 核心修复：使用originalFund.data.length 来安全获取数据长度
                                     if (isNight.value && originalFund && originalFund.data && p.dataIndex === originalFund.data.length - 1) {
                                         labelSuffix = originalFund.isSettled ? '✅ 真' : '⏳ 待更新';
                                     }
