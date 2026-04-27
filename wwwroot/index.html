@@ -1037,7 +1037,17 @@
                         } else { showToast("❌ 密码错误", "error"); }
                     } catch (error) { showToast("🌐 登录失败", "error"); }
                 };
+                // ✅ 新增：防抖函数
+                const debounce = (fn, delay) => {
+                    let timer = null;
+                    return (...args) => {
+                        clearTimeout(timer);
+                        timer = setTimeout(() => fn(...args), delay);
+                    };
+                };
 
+                // ✅ 创建防抖版本的 fetchData
+                const debouncedFetchData = debounce(fetchData, 500);
                 const handleLogout = () => { localStorage.removeItem('fund_username'); location.reload(); };
                 const triggerUpload = () => { document.getElementById('ocrInput').click(); };
 
@@ -1089,7 +1099,21 @@
                     } catch (e) { showToast("🌐 异常", "error"); }
                 };
 
+                // ✅ 新增：板块雷达缓存
+                let sectorCache = null;
+                let sectorCacheTime = 0;
+                const SECTOR_CACHE_DURATION = 60000;  // 60秒
+
                 const fetchSectors = async () => {
+                    // ✅ 检查缓存
+                    const now = Date.now();
+                    if (sectorCache && (now - sectorCacheTime) < SECTOR_CACHE_DURATION) {
+                        sectorTopList.value = sectorCache.top;
+                        sectorBottomList.value = sectorCache.bottom;
+                        showSectorRadar.value = true;
+                        return;
+                    }
+
                     showSectorRadar.value = true;
                     isSectorLoading.value = true;
                     expandedSectors.value = new Set();
@@ -1186,12 +1210,18 @@
 
                         sectorTopList.value = allCategories.slice(0, 30);
                         sectorBottomList.value = [...allCategories].sort((a, b) => a.rate - b.rate).slice(0, 30);
-
+                        // ✅ 保存到缓存
+                        sectorCache = {
+                            top: sectorTopList.value,
+                            bottom: sectorBottomList.value
+                        };
+                        sectorCacheTime = now;
                     } catch (e) {
                         showToast("🚨 雷达连接失败", "error");
                     } finally {
                         isSectorLoading.value = false;
                     }
+
                 };
 
                 const fetchData = async () => {
@@ -1355,9 +1385,20 @@
                     }
                 };
                 const handleResize = () => { if (chartInstance.value) chartInstance.value.resize(); };
-
+                // ✅ 新增：保存上一次的数据
+                let lastChartDataHash = '';
                 const renderChart = (apiData) => {
                     if (!chartRef.value) return;
+                    // ✅ 计算数据哈希，避免重复渲染
+                    const currentHash = JSON.stringify(apiData.map(f => ({
+                        code: f.code,
+                        data: f.data?.slice(-5)  // 只比较最后5个点
+                    })));
+
+                    if (currentHash === lastChartDataHash) {
+                        return;  // 数据没变，不重绘
+                    }
+                    lastChartDataHash = currentHash;
                     if (!chartInstance.value) {
                         chartInstance.value = echarts.init(chartRef.value, 'dark');
                         window.addEventListener('resize', handleResize);
@@ -1441,8 +1482,12 @@
                     isNight.value = (d.getDay() === 0 || d.getDay() === 6 || time < 925 || time > 1605);
                 };
 
+                // 在 handleVisibilityChange 中使用
                 const handleVisibilityChange = () => {
-                    if (document.visibilityState === 'visible') { updateRadarMode(); fetchData(); }
+                    if (document.visibilityState === 'visible') {
+                        updateRadarMode();
+                        debouncedFetchData();  // 使用防抖版本
+                    }
                 };
 
                 const initDashboard = () => {

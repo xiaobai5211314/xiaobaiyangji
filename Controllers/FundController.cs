@@ -761,7 +761,11 @@ namespace 估值助手.Controllers
                     return Ok(cachedResult);
                 }
 
-                var myFunds = await _context.MyFunds.Where(f => f.Username == username).ToListAsync();
+                // ✅ 优化后（只读查询，不跟踪变更）
+                var myFunds = await _context.MyFunds
+                    .AsNoTracking()  // 添加这行
+                    .Where(f => f.Username == username)
+                    .ToListAsync();
                 var myFundCodes = myFunds.Select(f => f.FundCode).ToList();
 
                 if (!myFundCodes.Any()) return Ok(new List<object>());
@@ -771,14 +775,22 @@ namespace 估值助手.Controllers
                 string todayStr = localTime.ToString("yyyy'/'MM'/'dd");
                 string todayDash = localTime.ToString("yyyy-MM-dd");
 
-                var todayRecords = await _context.FundRecords
-                    .Where(r => r.FetchTime >= today && myFundCodes.Contains(r.FundCode))
-                    .OrderBy(r => r.FetchTime)
-                    .ToListAsync();
+                var todayRecords = await
+ _context.FundRecords
+    .AsNoTracking()
+    // 添加
+    .Where(r => r.FetchTime >= today && myFundCodes.Contains(r.FundCode))
+    .OrderBy(r => r.FetchTime)
+    .ToListAsync();
                 var threeDaysAgo = today.AddDays(-3);
-                var lastRecords = await _context.FundRecords.Where(r => r.FetchTime < today && myFundCodes.Contains(r.FundCode)).OrderByDescending(r => r.FetchTime).ToListAsync();
+                var lastRecords = await _context.FundRecords
+       .AsNoTracking()  // 添加
+       .Where(r => r.FetchTime < today && myFundCodes.Contains(r.FundCode))
+       .OrderByDescending(r => r.FetchTime)
+       .ToListAsync();
                 var sevenDaysAgo = today.AddDays(-7);
                 var allPastRecords = await _context.FundRecords
+                    .AsNoTracking()
                     .Where(r => myFundCodes.Contains(r.FundCode) && r.ActualRate != 0)
                     .OrderByDescending(r => r.FetchTime)
                     .ToListAsync();
@@ -889,8 +901,10 @@ namespace 估值助手.Controllers
 
                 var finalResult = result.OrderByDescending(x => x.amount).ToList();
 
+                // ✅ 优化后（60秒缓存，减少数据库压力）
                 var cacheOptions = new MemoryCacheEntryOptions()
-                    .SetAbsoluteExpiration(TimeSpan.FromSeconds(30));
+                    .SetAbsoluteExpiration(TimeSpan.FromSeconds(60))
+                    .SetSlidingExpiration(TimeSpan.FromSeconds(30));  // 滑动过期
                 _cache.Set(cacheKey, finalResult, cacheOptions);
 
                 return Ok(finalResult);
