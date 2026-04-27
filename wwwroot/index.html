@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>量化估值终端</title>
+    <title>估值助手</title>
     <base href="/" />
     <meta name="theme-color" content="#0f172a">
     <meta name="mobile-web-app-capable" content="yes">
@@ -378,7 +378,7 @@
 
         <div v-if="!isLoggedIn" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,23,42,0.8);backdrop-filter:blur(15px);z-index:999;display:flex;align-items:center;justify-content:center;">
             <div class="glass-panel" style="padding: 40px; text-align: center; width: 300px;">
-                <h2 class="logo-text" style="margin-bottom: 25px;">📊 量化估值终端</h2>
+                <h2 class="logo-text" style="margin-bottom: 25px;">📊 估值助手</h2>
                 <input v-model="loginForm.username" type="text" placeholder="输入指挥官代号" style="width:100%;margin:15px 0;padding:12px;border-radius:12px;box-sizing:border-box;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);color:#fff;">
                 <input v-model="loginForm.password" type="password" placeholder="安全密钥" @keyup.enter="handleLogin" style="width:100%;margin-bottom:20px;padding:12px;border-radius:12px;box-sizing:border-box;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);color:#fff;">
                 <div style="display:flex;gap:10px;">
@@ -775,11 +775,11 @@
             <div v-show="archiveModal.show" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 3500;">
                 <div style="background: #0f172a; width: 90%; max-width: 500px; height: 75vh; border-radius: 15px; border: 1px solid #38bdf8; box-shadow: 0 0 30px rgba(56, 189, 248, 0.2); padding: 20px; display: flex; flex-direction: column;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px;">
-                        <h3 style="color: #38bdf8; margin: 0;">🗄️ {{ archiveModal.targetName }} - 专属战报</h3>
+                        <h3 style="color: #38bdf8; margin: 0;">🗄️ {{ archiveModal.targetName }} - 专属收益</h3>
                         <span @click="archiveModal.show = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
                     </div>
                     <div v-if="archiveModal.isLoading" style="color: #4facfe; text-align: center; margin-top: 50px;">📡 正在提取...</div>
-                    <div v-else-if="archiveModal.data.length === 0" style="color: #64748b; text-align: center; margin-top: 50px;">暂无战报</div>
+                    <div v-else-if="archiveModal.data.length === 0" style="color: #64748b; text-align: center; margin-top: 50px;">暂无收益</div>
                     <div v-else style="overflow-y: auto; flex: 1; padding-right: 5px;">
                         <div style="display: flex; justify-content: space-between; color: #64748b; font-size: 12px; margin-bottom: 10px;"><span>封存日期</span><span style="text-align: right;">当日收益 / 累计盈亏</span></div>
                         <div v-for="(item, index) in archiveModal.data" :key="index" style="background: #1e293b; border-radius: 10px; padding: 12px; margin-bottom: 10px; border-left: 4px solid #38bdf8;">
@@ -805,7 +805,7 @@
             <div v-if="ocrModal.show" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 4000;">
                 <div style="background: #1e293b; width: 85%; max-width: 400px; border-radius: 15px; border: 1px solid #10b981; padding: 20px; display: flex; flex-direction: column;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px;">
-                        <h3 style="color: #10b981; margin: 0; font-size: 18px;">✅ 智能识别战报</h3>
+                        <h3 style="color: #10b981; margin: 0; font-size: 18px;">✅ 智能识别收益</h3>
                         <span @click="ocrModal.show = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
                     </div>
                     <div style="color: #cbd5e1; font-size: 13px; line-height: 1.8; white-space: pre-wrap; max-height: 60vh; overflow-y: auto; font-family: monospace;">{{ ocrModal.content }}</div>
@@ -904,7 +904,7 @@
                 };
 
                 const saveDailyArchive = async (silent = false) => {
-                    if (!silent && !confirm("💾 确定要将大屏当前的数据作为【今日最终战报】永久封存吗？")) return;
+                    if (!silent && !confirm("💾 确定要将大屏当前的数据作为【今日最终收益】永久封存吗？")) return;
                     let d = new Date();
                     let localDateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
                     const safeNumber = (val) => Number((parseFloat(val) || 0).toFixed(2));
@@ -915,7 +915,7 @@
                     };
                     try {
                         const response = await fetch(`${API_BASE}/api/fund/save-archive`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                        if (response.ok) { if (!silent) showToast("✅ 今日战报已安全锁入密码箱！", "success"); } else { if (!silent) showToast("❌ 封存受阻", "error"); }
+                        if (response.ok) { if (!silent) showToast("✅ 今日收益已安全锁入密码箱！", "success"); } else { if (!silent) showToast("❌ 封存受阻", "error"); }
                     } catch (e) { if (!silent) showToast("🌐 指挥中心失联", "error"); }
                 };
 

@@ -1120,7 +1120,7 @@ namespace 估值助手.Controllers
 
             var resultLog = new List<string>
             {
-                $"===== 手动清算战报 =====",
+                $"===== 手动清算收益 =====",
                 $"当前时间: {localTime:yyyy-MM-dd HH:mm:ss}"
             };
             foreach (var code in targetFunds)
@@ -1407,14 +1407,14 @@ namespace 估值助手.Controllers
                     // 检查是否已有真实数据
                     bool hasRealData = oldRecords.Any(r => r.FundCode == "TOTAL" && r.DailyRate != 0);
                     if (hasRealData)
-                        return Ok("✅ 今日真实战报已存在，无需重复封存！");
+                        return Ok("✅ 今日真实收益已存在，无需重复封存！");
                     // 有真实数据直接返回
 
                     _context.DailyArchives.RemoveRange(oldRecords);
                     // 估值数据删掉
                 }
 
-                // 🚀 修复 2：找回丢失的“封存新战报”核心逻辑！
+                // 🚀 修复 2：找回丢失的“封存新收益”核心逻辑！
                 req.Total.RecordDate = date;
                 req.Total.FundCode = "TOTAL";
                 req.Total.Username = req.Username;
@@ -1429,7 +1429,7 @@ namespace 估值助手.Controllers
 
                 await _context.SaveChangesAsync();
                 // 🚀 修复 3：补上方法末尾的返回值，彻底消灭 CS0161 报错！
-                return Ok("✅ 今日战报已永久封存！");
+                return Ok("✅ 今日收益已永久封存！");
             }
             catch (Exception ex)
             {
@@ -1541,7 +1541,7 @@ namespace 估值助手.Controllers
                         fund.HoldAmount = Math.Round(currentAssets, 2);
                         _context.MyFunds.Update(fund);
 
-                        // 保存单只基金战报
+                        // 保存单只基金收益
                         _context.DailyArchives.Add(new DailyArchive
                         {
                             Username = username,
@@ -1571,7 +1571,7 @@ namespace 估值助手.Controllers
                     // 🚀 资产对齐：存档的 Assets 也要包含落袋现金，才能对齐前端大屏
                     double alignedTotalAssets = totalAssets + totalRealized;
 
-                    // 保存总持仓战报
+                    // 保存总持仓收益
                     _context.DailyArchives.Add(new DailyArchive
                     {
                         Username = username,
@@ -1589,7 +1589,7 @@ namespace 估值助手.Controllers
                 }
 
                 await _context.SaveChangesAsync();
-                return Ok($"[{localTime:yyyy-MM-dd HH:mm:ss}] 🌙 夜间自动战报封存完毕！成功为 {savedCount} 位指挥官生成了历史档案。");
+                return Ok($"[{localTime:yyyy-MM-dd HH:mm:ss}] 🌙 夜间自动收益封存完毕！成功为 {savedCount} 位指挥官生成了历史档案。");
             }
             catch (Exception ex)
             {
