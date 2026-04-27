@@ -1046,8 +1046,7 @@
                     };
                 };
 
-                // ✅ 创建防抖版本的 fetchData
-                const debouncedFetchData = debounce(fetchData, 500);
+             
                 const handleLogout = () => { localStorage.removeItem('fund_username'); location.reload(); };
                 const triggerUpload = () => { document.getElementById('ocrInput').click(); };
 
@@ -1481,7 +1480,8 @@
                     let time = d.getHours() * 100 + d.getMinutes();
                     isNight.value = (d.getDay() === 0 || d.getDay() === 6 || time < 925 || time > 1605);
                 };
-
+                // ✅ 创建防抖版本的 fetchData
+                const debouncedFetchData = debounce(fetchData, 500);
                 // 在 handleVisibilityChange 中使用
                 const handleVisibilityChange = () => {
                     if (document.visibilityState === 'visible') {
