@@ -1,0 +1,49 @@
+# ==========================================
+# C# / .NET 专属 Token 省流屏蔽清单
+# ==========================================
+
+# 1. 编译输出与中间文件 (最致命的 Token 杀手，坚决屏蔽)
+bin/
+obj/
+TestResults/
+Build/
+
+# 2. 巨型日志文件 (MES 交互日志、设备心跳日志等，极其庞大且对重构无用)
+*.log
+logs/
+Logs/
+*.svclog
+*.trace
+
+# 3. 各种乱码的二进制与缓存文件 (AI 读不懂，还会导致乱码报错)
+*.dll
+*.exe
+*.pdb
+*.cache
+*.suo
+*.user
+*.bak
+*.tmp
+
+# 4. 第三方依赖包 (NuGet 下载的海量第三方代码，不需要让 AI 去读)
+packages/
+.nuget/
+
+# 5. 本地数据库文件 (如果你的项目用到本地 SQLite 或 Access 缓存)
+*.db
+*.sqlite
+*.sqlite3
+*.mdf
+*.ldf
+
+# 6. IDE 的隐藏配置与状态缓存 (VS 或 VS Code 的自带缓存)
+.vs/
+.vscode/
+.idea/
+
+# 7. 其他不需要 AI 分析的大型静态资源
+*.png
+*.jpg
+*.jpeg
+*.ico
+*.pdf
