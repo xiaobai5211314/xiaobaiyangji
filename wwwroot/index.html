@@ -390,11 +390,11 @@
 
         <div v-else>
             <div class="header glass-panel">
-                <div class="logo-text">🚀 量化终端 ({{ currentUser }})</div>
+                <div class="logo-text">🚀 估值助手 ({{ currentUser }})</div>
                 <div class="control-panel">
                     <input v-model="fundForm.code" type="text" placeholder="代码 (如 017811)">
                     <input v-model="fundForm.amount" type="number" placeholder="昨日市值">
-                    <button class="btn btn-primary" @click="handleAddFund" style="padding: 9px 15px;">➕ 驻扎</button>
+                    <button class="btn btn-primary" @click="handleAddFund" style="padding: 9px 15px;">➕ 添加</button>
 
                     <input type="file" id="ocrInput" accept="image/*" style="display: none;" @change="handleFileUpload">
                     <button class="btn btn-ocr" @click="triggerUpload" :disabled="isUploading" style="margin-left: 10px;">
@@ -403,7 +403,7 @@
 
                     <button class="btn" @click="fetchSectors" style="margin-left: 10px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none;">🎯 板块雷达</button>
                     <button class="btn btn-success" @click="fetchGlobalIndices" style="margin-left: 10px;">🌍 全球大盘</button>
-                    <button class="btn btn-danger" @click="handleLogout" style="margin-left: 10px;">🚪 撤退</button>
+                    <button class="btn btn-danger" @click="handleLogout" style="margin-left: 10px;">🚪 登出</button>
                 </div>
             </div>
 
@@ -440,13 +440,13 @@
                     <div class="number-display" :style="{ color: privacyMode <= 2 ? (totalRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 2 ? (totalRate > 0 ? '+' : '') + totalRate.toFixed(2) + '%' : '****' }}</div>
                 </div>
                 <div style="width: 100%; display: flex; justify-content: center; margin-top: 10px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 20px;">
-                    <button @click="fetchMyArchives('TOTAL', '总阵地')" class="btn btn-primary" style="padding: 10px 30px; font-size: 15px; border-radius: 30px;">📂 查阅历史收益</button>
+                    <button @click="fetchMyArchives('TOTAL', '总持仓')" class="btn btn-primary" style="padding: 10px 30px; font-size: 15px; border-radius: 30px;">📂 查阅历史收益</button>
                 </div>
             </div>
 
             <div style="margin: 0 15px 10px 15px; display: flex; justify-content: space-between; align-items: center;">
                 <div style="font-size: 16px; font-weight: bold; color: #e2e8f0; display: flex; align-items: center; gap: 8px;">
-                    🛡️ 现役阵地
+                    🛡️ 总持仓
                     <span style="font-size: 12px; font-weight: normal; color: #94a3b8;">(共 {{ fundsList.length }} 支)</span>
                 </div>
             </div>
@@ -530,7 +530,7 @@
                         </div>
                     </div>
                 </div>
-                <span v-if="fundsList.length === 0 && !isLoading" style="color:#64748b; font-size:13px; width: 100%; text-align: center; padding: 20px;">暂无阵地，请手动添加代码，或点击上方「📷 智能截图导入」自动扫描</span>
+                <span v-if="fundsList.length === 0 && !isLoading" style="color:#64748b; font-size:13px; width: 100%; text-align: center; padding: 20px;">暂无持仓，请手动添加代码，或点击上方「📷 智能截图导入」自动扫描</span>
             </div>
 
             <div v-show="isLoading" class="glass-panel" style="height: calc(100vh - 280px); margin: 15px; display: flex; flex-direction: column; padding: 20px; box-sizing: border-box; gap: 20px;">
@@ -910,7 +910,7 @@
                     const safeNumber = (val) => Number((parseFloat(val) || 0).toFixed(2));
                     const payload = {
                         Username: currentUser.value, DateStr: localDateStr,
-                        Total: { FundName: "总阵地", Assets: safeNumber(totalPrincipal.value), DailyProfit: safeNumber(totalTodayProfit.value), DailyRate: safeNumber(totalTodayRate.value), TotalProfit: safeNumber(totalProfit.value), TotalRate: safeNumber(totalRate.value) },
+                        Total: { FundName: "总持仓", Assets: safeNumber(totalPrincipal.value), DailyProfit: safeNumber(totalTodayProfit.value), DailyRate: safeNumber(totalTodayRate.value), TotalProfit: safeNumber(totalProfit.value), TotalRate: safeNumber(totalRate.value) },
                         Funds: fundsList.value.map(f => ({ FundCode: f.code, FundName: f.name, Assets: safeNumber(f.amount), DailyProfit: safeNumber(f.todayProfit), DailyRate: safeNumber(f.currentRate), TotalProfit: safeNumber(f.estimatedProfit), TotalRate: safeNumber(f.existingReturnRate) }))
                     };
                     try {

@@ -981,7 +981,7 @@ namespace 估值助手.Controllers
             try
             {
                 var fund = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && f.FundCode == code);
-                if (fund == null) return BadRequest("未找到阵地");
+                if (fund == null) return BadRequest("未找到基金");
 
                 // 核心逻辑：加仓即增加本金和市值。
                 // 注意：若日期为“今天”，这笔钱产生的收益通常要明天才开始算，系统会自动在前端进行收益剥离。
@@ -1015,7 +1015,7 @@ namespace 估值助手.Controllers
         {
             if (string.IsNullOrEmpty(username)) return Unauthorized("未授权");
             var fund = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && f.FundCode == code);
-            if (fund == null) return BadRequest("未找到阵地");
+            if (fund == null) return BadRequest("未找到基金");
 
             // 养基宝逻辑：如果没填卖出金额，系统利用“当前市值/总份额”算出单价，自动推演卖出总额
             double finalReduceAmount = reduceAmount ?? 0;
@@ -1097,7 +1097,7 @@ namespace 估值助手.Controllers
                     return Ok($"本金、代码与份额补给完成！");
                 }
 
-                return BadRequest("未能匹配到该基金阵地");
+                return BadRequest("未能匹配到该基金");
             }
             catch (Exception ex)
             {
@@ -1449,7 +1449,7 @@ namespace 估值助手.Controllers
                 if (localTime.DayOfWeek == DayOfWeek.Saturday || localTime.DayOfWeek == DayOfWeek.Sunday)
                     return Ok("周末休市，无需封存。");
                 var allFunds = await _context.MyFunds.ToListAsync();
-                if (!allFunds.Any()) return Ok("无阵地需要封存。");
+                if (!allFunds.Any()) return Ok("无基金需要封存。");
 
                 var userGroups = allFunds.GroupBy(f => f.Username);
                 int savedCount = 0;
@@ -1571,12 +1571,12 @@ namespace 估值助手.Controllers
                     // 🚀 资产对齐：存档的 Assets 也要包含落袋现金，才能对齐前端大屏
                     double alignedTotalAssets = totalAssets + totalRealized;
 
-                    // 保存总阵地战报
+                    // 保存总持仓战报
                     _context.DailyArchives.Add(new DailyArchive
                     {
                         Username = username,
                         FundCode = "TOTAL",
-                        FundName = "总阵地",
+                        FundName = "总持仓",
                         RecordDate = today,
                         Assets = alignedTotalAssets, // 对齐前端大屏的展示逻辑
                         DailyProfit = Math.Round(totalDailyProfit, 2),
