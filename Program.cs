@@ -1,4 +1,7 @@
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Net.Http.Headers;
+using System.IO.Compression;
 using System.Text.Json;
 using 估值助手.Models;
 using 估值助手.Services;
@@ -6,49 +9,100 @@ using 估值助手.Services;
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. 注册 数据库
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
 
-// 🌟🌟🌟 新增：注册跨域服务 (CORS) 🌟🌟🌟
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        policy.AllowAnyOrigin()   // 允许任何人访问
-              .AllowAnyMethod()   // 允许 GET/POST 等
-              .AllowAnyHeader();  // 允许任何请求头
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
     });
 });
 
-// 2. 注册 Controller
-builder.Services.AddControllers();
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+    options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(new[]
+    {
+        "application/javascript",
+        "application/json",
+        "text/css",
+        "text/html",
+        "image/svg+xml"
+    });
+});
 
-// 3. 注册后台抓取服务
-builder.Services.AddHostedService<FundScraperService>();
-builder.Services.AddHostedService<NavSettlementService>();
-// 申请开启内存缓存弹药库
+builder.Services.Configure<BrotliCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest;
+});
+
+builder.Services.Configure<GzipCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest;
+});
+
 builder.Services.AddMemoryCache();
 builder.Services.AddControllers()
     .AddJsonOptions(opt =>
         opt.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
+
+builder.Services.AddHostedService<FundScraperService>();
+builder.Services.AddHostedService<NavSettlementService>();
+
 var app = builder.Build();
 
-// 🌟🌟🌟 新增：启用跨域中间件 (必须放在 app.MapControllers() 前面) 🌟🌟🌟
 app.UseCors("AllowAll");
+app.UseResponseCompression();
 
-// 4. 自动建表
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     dbContext.Database.EnsureCreated();
+
+    var runtimeSql = new[]
+    {
+        "ALTER TABLE MyFunds ADD COLUMN LastSettledProfit DOUBLE NOT NULL DEFAULT 0;",
+        "ALTER TABLE MyFunds ADD COLUMN LastSettledRate DOUBLE NOT NULL DEFAULT 0;",
+        "ALTER TABLE MyFunds ADD COLUMN LastTradeDate VARCHAR(20);",
+        "ALTER TABLE MyFunds ADD COLUMN LastAddAmount DOUBLE NOT NULL DEFAULT 0;",
+        "ALTER TABLE MyFunds ADD COLUMN RealizedProfit DOUBLE NOT NULL DEFAULT 0;",
+        "ALTER TABLE FundRecords ADD COLUMN ActualRate DOUBLE NOT NULL DEFAULT 0;",
+        "ALTER TABLE FundRecords ADD COLUMN DiffRate DOUBLE NOT NULL DEFAULT 0;",
+        "CREATE INDEX IX_FundRecord_Code_Time ON FundRecords (FundCode, FetchTime);",
+        "CREATE INDEX IX_DailyArchive_User_Date_Code ON DailyArchives (Username, RecordDate, FundCode);"
+    };
+
+    foreach (var sql in runtimeSql)
+    {
+        try { dbContext.Database.ExecuteSqlRaw(sql); }
+        catch { }
+    }
 }
 
-// 5. 静态文件
-app.UseStaticFiles();
+app.UseDefaultFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        var path = ctx.File.PhysicalPath ?? string.Empty;
+        if (path.EndsWith("index.html", StringComparison.OrdinalIgnoreCase))
+        {
+            ctx.Context.Response.Headers[HeaderNames.CacheControl] = "no-cache";
+            return;
+        }
 
-// 6. 路由
+        const int durationInSeconds = 60 * 60 * 24 * 7;
+        ctx.Context.Response.Headers[HeaderNames.CacheControl] = "public,max-age=" + durationInSeconds;
+    }
+});
+
 app.MapControllers();
 app.MapGet("/", () => Results.Redirect("/index.html"));
 

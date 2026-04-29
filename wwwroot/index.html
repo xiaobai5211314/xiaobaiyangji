@@ -9,6 +9,8 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
     <style>
         html {
             background-color: #0f172a;
@@ -505,7 +507,7 @@
                         <div class="metric-item" style="background: rgba(16, 185, 129, 0.1); padding: 2px; border-radius: 4px;">
                             <span class="metric-label" style="color: #10b981;">💎 今日市值</span>
                             <span class="metric-value" style="color: #f8fafc; font-weight: bold;">
-                                {{ privacyMode === 0 ? (parseFloat(fund.amount || 0) + parseFloat(fund.todayProfit || 0)).toFixed(2) : '****' }}
+                                {{ privacyMode === 0 ? fund.todayAmount : '****' }}
                             </span>
                         </div>
                         <div class="metric-item" style="background: rgba(79, 172, 254, 0.1); padding: 2px; border-radius: 4px;">
@@ -908,10 +910,11 @@
                     let d = new Date();
                     let localDateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
                     const safeNumber = (val) => Number((parseFloat(val) || 0).toFixed(2));
+                    const totalAssetsNow = fundsList.value.reduce((sum, f) => sum + safeNumber(f.todayAmount || f.amount), 0);
                     const payload = {
                         Username: currentUser.value, DateStr: localDateStr,
-                        Total: { FundName: "总持仓", Assets: safeNumber(totalPrincipal.value), DailyProfit: safeNumber(totalTodayProfit.value), DailyRate: safeNumber(totalTodayRate.value), TotalProfit: safeNumber(totalProfit.value), TotalRate: safeNumber(totalRate.value) },
-                        Funds: fundsList.value.map(f => ({ FundCode: f.code, FundName: f.name, Assets: safeNumber(f.amount), DailyProfit: safeNumber(f.todayProfit), DailyRate: safeNumber(f.currentRate), TotalProfit: safeNumber(f.estimatedProfit), TotalRate: safeNumber(f.existingReturnRate) }))
+                        Total: { FundName: "总持仓", Assets: safeNumber(totalAssetsNow), DailyProfit: safeNumber(totalTodayProfit.value), DailyRate: safeNumber(totalTodayRate.value), TotalProfit: safeNumber(totalProfit.value), TotalRate: safeNumber(totalRate.value) },
+                        Funds: fundsList.value.map(f => ({ FundCode: f.code, FundName: f.name, Assets: safeNumber(f.todayAmount || f.amount), DailyProfit: safeNumber(f.todayProfit), DailyRate: safeNumber(f.currentRate), TotalProfit: safeNumber(f.estimatedProfit), TotalRate: safeNumber(f.existingReturnRate) }))
                     };
                     try {
                         const response = await fetch(`${API_BASE}/api/fund/save-archive`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -1055,27 +1058,51 @@
                             if (fund.isSettled) { fund.currentRate = fund.actualRate; fund.isHoliday = false; if (fund.data.length > 0 && String(fund.data[fund.data.length - 1][0]).includes("15:00:00")) { fund.data[fund.data.length - 1][1] = fund.actualRate; } else { fund.data.push([`${todaySlash} 15:00:00`, fund.actualRate]); } } else if (isWeekend || currentMinutes < 565) { fund.currentRate = 0; fund.isHoliday = true; } else if (fund.data && fund.data.length > 0) { let lastDataTime = String(fund.data[fund.data.length - 1][0]); let hasTodayDate = lastDataTime.includes(todaySlash) || lastDataTime.includes(todayDash); let isPast935 = (d.getHours() > 9) || (d.getHours() === 9 && d.getMinutes() >= 35); if (hasTodayDate && !(isPast935 && fund.data.length <= 2)) { fund.currentRate = fund.data[fund.data.length - 1][1]; fund.isHoliday = false; } else { fund.currentRate = 0; fund.isHoliday = true; } } else { fund.currentRate = 0; fund.isHoliday = true; }
 
                             let isUnconfirmed = fund.lastTradeDate && (fund.lastTradeDate >= todayDash);
-                            let todayAddAmount = isUnconfirmed ? (fund.lastAddAmount || 0) : 0;
+                            let todayAddAmount = isUnconfirmed ? (Number(fund.lastAddAmount) || 0) : 0;
                             let isAlreadySettled = (fund.lastSettledDate === todayDash);
-                            if (isAlreadySettled) { fund.todayProfit = "0.00"; } else if (fund.isSettled && fund.actualExactProfit != null) { fund.todayProfit = fund.actualExactProfit.toFixed(2); } else { let baseAmount = fund.amount - todayAddAmount; fund.todayProfit = (baseAmount * (fund.currentRate / 100)).toFixed(2); }
+                            let currentAmount = Number(fund.amount) || 0;
+                            let todayProfitVal = 0;
+                            let currentRealTimeAmount = currentAmount;
 
-                            const profitVal = parseFloat(fund.todayProfit); if (!isNaN(profitVal)) { tToday += profitVal; }
-                            const currentAmount = parseFloat(fund.amount) || 0; const todayProfitVal = parseFloat(fund.todayProfit) || 0; const currentRealTimeAmount = currentAmount + todayProfitVal;
+                            if (isAlreadySettled) {
+                                todayProfitVal = Number(fund.lastSettledProfit) || 0;
+                                fund.todayProfit = todayProfitVal.toFixed(2);
+                                currentRealTimeAmount = currentAmount;
+                                fund.currentRate = Number(fund.lastSettledRate) || fund.currentRate || 0;
+                            } else if (fund.isSettled && fund.actualExactProfit != null) {
+                                todayProfitVal = Number(fund.actualExactProfit) || 0;
+                                fund.todayProfit = todayProfitVal.toFixed(2);
+                                currentRealTimeAmount = currentAmount + todayProfitVal;
+                            } else {
+                                let baseAmount = currentAmount - todayAddAmount;
+                                todayProfitVal = baseAmount * ((Number(fund.currentRate) || 0) / 100);
+                                fund.todayProfit = todayProfitVal.toFixed(2);
+                                currentRealTimeAmount = currentAmount + todayProfitVal;
+                            }
 
-                            fund.realizedProfit = fund.realizedProfit || 0;
+                            fund.todayAmount = currentRealTimeAmount.toFixed(2);
+                            if (!isNaN(todayProfitVal)) { tToday += todayProfitVal; }
+
+                            fund.realizedProfit = Number(fund.realizedProfit) || 0;
                             const floatProfit = (fund.cost && fund.cost > 0) ? (currentRealTimeAmount - fund.cost) : 0;
-                            fund.estimatedProfit = (floatProfit + fund.realizedProfit).toFixed(2);
+                            const allProfit = floatProfit + fund.realizedProfit;
+                            fund.estimatedProfit = allProfit.toFixed(2);
                             fund.breakEvenRate = (fund.cost && fund.cost > currentRealTimeAmount) ? (((fund.cost / currentRealTimeAmount) - 1) * 100).toFixed(2) : "0.00";
-                            fund.existingReturnRate = (fund.cost && fund.cost > 0) ? ((floatProfit / fund.cost) * 100).toFixed(2) : "0.00";
+                            fund.existingReturnRate = (fund.cost && fund.cost > 0) ? ((allProfit / fund.cost) * 100).toFixed(2) : "0.00";
 
-                            tPrincipal += currentAmount; tPrincipalForRate += (currentAmount - todayAddAmount); tCost += (fund.cost || currentAmount);
+                            const rateBaseForToday = isAlreadySettled
+                                ? (currentAmount - todayProfitVal - todayAddAmount)
+                                : (currentAmount - todayAddAmount);
+                            tPrincipal += currentAmount; tPrincipalForRate += rateBaseForToday; tCost += (fund.cost || currentAmount);
                         });
 
                         fundsList.value = apiData;
                         const tRealized = fundsList.value.reduce((sum, f) => sum + (f.realizedProfit || 0), 0);
                         totalPrincipal.value = tPrincipal; totalTodayProfit.value = tToday;
                         totalTodayRate.value = tPrincipalForRate > 0 ? (tToday / tPrincipalForRate * 100) : 0;
-                        const currentTotalAssets = tPrincipal + tToday; totalProfit.value = currentTotalAssets - tCost + tRealized; totalRate.value = tCost > 0 ? ((currentTotalAssets - tCost + tRealized) / tCost * 100) : 0;
+                        const currentTotalAssets = fundsList.value.reduce((sum, f) => sum + (parseFloat(f.todayAmount || f.amount) || 0), 0);
+                        totalProfit.value = currentTotalAssets - tCost + tRealized;
+                        totalRate.value = tCost > 0 ? ((currentTotalAssets - tCost + tRealized) / tCost * 100) : 0;
 
                         if (!window.hasAutoSavedToday && !isNight.value && fundsList.value.length > 0) {
                             const now = new Date(); const hour = now.getHours(); const isAfter15 = hour >= 15;
@@ -1088,7 +1115,10 @@
                                 } catch (e) { }
                             }
                         }
-                        renderChart(apiData); isLoading.value = false;
+                        isLoading.value = false;
+                        const runChart = () => renderChart(apiData);
+                        if ('requestIdleCallback' in window) requestIdleCallback(runChart, { timeout: 800 });
+                        else requestAnimationFrame(runChart);
                     } catch (e) { isLoading.value = false; }
                 };
 

@@ -14,6 +14,8 @@ namespace 估值助手.Models
         public double HoldAmount { get; set; } // 持仓本金
         public double HoldShares { get; set; } // 🚀 新增：持仓份额
         public string? LastSettledDate { get; set; }
+        public double LastSettledProfit { get; set; } = 0;
+        public double LastSettledRate { get; set; } = 0;
         public double CostAmount { get; set; }
         // 🚀 新增：落袋为安小金库（记录历史变现的利润）
         public double RealizedProfit { get; set; } = 0;

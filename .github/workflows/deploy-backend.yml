@@ -1,0 +1,241 @@
+name: 部署估值助手后端
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "**/*.cs"
+      - "**/*.csproj"
+      - "appsettings*.json"
+      - "wwwroot/**"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      SERVER_PORT: ${{ secrets.SERVER_PORT || '22' }}
+      APP_DIR: /www/wwwroot/估值助手
+      SERVICE_NAME: guzhi-assistant.service
+      PORT: "7084"
+      TEST_USER: dabai521
+      REMOTE_PACKAGE: /home/deploy/guzhi_release.tar.gz
+      REMOTE_TMP_DIR: /home/deploy/guzhi_release_unpack
+      CONTROL_SCRIPT: /usr/local/sbin/guzhi-deploy-control
+
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: 查找项目文件
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          CSPROJ="$(find . -maxdepth 3 -name '*.csproj' | head -n 1)"
+          if [ -z "$CSPROJ" ]; then
+            echo "没找到 .csproj"
+            exit 1
+          fi
+          echo "CSPROJ=$CSPROJ" >> "$GITHUB_ENV"
+          echo "使用项目：$CSPROJ"
+
+      - name: 还原依赖
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          dotnet restore "$CSPROJ"
+
+      - name: 编译
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          dotnet build "$CSPROJ" -c Release --no-restore
+
+      - name: 发布 DLL
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -rf ./publish
+          mkdir -p ./publish
+          dotnet publish "$CSPROJ" -c Release -o ./publish --no-restore
+
+          echo "发布目录："
+          ls -lah ./publish
+
+          if [ ! -f "./publish/估值助手.dll" ]; then
+            echo "发布目录里没有 估值助手.dll"
+            find ./publish -maxdepth 1 -name "*.dll" -print
+            exit 1
+          fi
+
+          tar -czf release.tar.gz -C ./publish .
+          ls -lh release.tar.gz
+
+      - name: 配置 SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          echo "检查私钥格式："
+          head -n 1 ~/.ssh/deploy_key
+          tail -n 1 ~/.ssh/deploy_key
+
+          ssh-keyscan -p "$SERVER_PORT" -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts
+
+          echo "测试 SSH 登录："
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -i ~/.ssh/deploy_key \
+            -p "$SERVER_PORT" \
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+            "echo SSH_OK && hostname && whoami && test -w /home/deploy && echo HOME_WRITE_OK && sudo -n /usr/local/sbin/guzhi-deploy-control is-active || true"
+
+      - name: 上传发布包到服务器
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          scp -v -i ~/.ssh/deploy_key \
+            -P "$SERVER_PORT" \
+            release.tar.gz \
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${REMOTE_PACKAGE}"
+
+      - name: 服务器部署并重启
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          ssh -i ~/.ssh/deploy_key \
+            -p "$SERVER_PORT" \
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" <<'EOF_REMOTE'
+          set -Eeuo pipefail
+
+          APP_DIR="/www/wwwroot/估值助手"
+          SERVICE_NAME="guzhi-assistant.service"
+          PORT="7084"
+          TEST_USER="dabai521"
+          REMOTE_PACKAGE="/home/deploy/guzhi_release.tar.gz"
+          TMP_DIR="/home/deploy/guzhi_release_unpack"
+          CONTROL_SCRIPT="/usr/local/sbin/guzhi-deploy-control"
+
+          echo "======= 1. 确认当前用户和发布包 ======="
+          whoami
+          ls -lh "$REMOTE_PACKAGE"
+          sudo -n "$CONTROL_SCRIPT" is-active || true
+
+          echo "======= 2. 解压 GitHub 生成的发布包 ======="
+          rm -rf "$TMP_DIR"
+          mkdir -p "$TMP_DIR"
+          tar -xzf "$REMOTE_PACKAGE" -C "$TMP_DIR"
+
+          if [ ! -f "$TMP_DIR/估值助手.dll" ]; then
+            echo "发布包里没有 估值助手.dll"
+            exit 1
+          fi
+
+          echo "发布包 DLL 信息："
+          ls -lh "$TMP_DIR/估值助手.dll"
+          file "$TMP_DIR/估值助手.dll" || true
+
+          echo "======= 3. 停止旧服务并强制释放端口 ======="
+          sudo -n "$CONTROL_SCRIPT" stop-clean || true
+          sudo -n systemctl stop "$SERVICE_NAME" || true
+          sleep 2
+
+          for i in 1 2 3 4 5; do
+            if ! ss -lntp | grep -q ":${PORT} "; then
+              echo "端口 ${PORT} 已释放"
+              break
+            fi
+
+            echo "端口 ${PORT} 仍被占用，第 ${i} 次清理："
+            ss -lntp | grep ":${PORT} " || true
+            PIDS="$(ss -lntp | grep ":${PORT} " | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | sort -u || true)"
+            if [ -n "$PIDS" ]; then
+              echo "$PIDS" | xargs -r sudo -n kill -TERM || true
+            fi
+            sleep 2
+          done
+
+          if ss -lntp | grep -q ":${PORT} "; then
+            echo "端口 ${PORT} 仍未释放，执行 KILL："
+            ss -lntp | grep ":${PORT} " || true
+            PIDS="$(ss -lntp | grep ":${PORT} " | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | sort -u || true)"
+            if [ -n "$PIDS" ]; then
+              echo "$PIDS" | xargs -r sudo -n kill -KILL || true
+            fi
+            sleep 2
+          fi
+
+          if ss -lntp | grep -q ":${PORT} "; then
+            echo "端口 ${PORT} 仍被占用，停止部署。"
+            ss -lntp | grep ":${PORT} " || true
+            exit 1
+          fi
+
+          echo "======= 4. 备份并覆盖线上文件 ======="
+          mkdir -p "$APP_DIR"
+
+          if [ ! -w "$APP_DIR" ]; then
+            echo "$APP_DIR 不可写。请先用 root 修复 deploy 用户权限。"
+            exit 1
+          fi
+
+          if [ -f "$APP_DIR/估值助手.dll" ]; then
+            cp -f "$APP_DIR/估值助手.dll" "$APP_DIR/估值助手.dll.bak.$(date +%Y%m%d_%H%M%S)"
+          fi
+
+          cp -a "$TMP_DIR"/. "$APP_DIR"/
+
+          echo "线上 DLL 信息："
+          ls -lh "$APP_DIR/估值助手.dll"
+          file "$APP_DIR/估值助手.dll" || true
+
+          echo "======= 5. 启动服务 ======="
+          sudo -n "$CONTROL_SCRIPT" daemon-reload || sudo -n systemctl daemon-reload
+          sudo -n "$CONTROL_SCRIPT" enable || sudo -n systemctl enable "$SERVICE_NAME"
+          sudo -n "$CONTROL_SCRIPT" start || sudo -n systemctl start "$SERVICE_NAME"
+
+          sleep 10
+
+          echo "服务状态："
+          sudo -n "$CONTROL_SCRIPT" status || sudo -n systemctl status "$SERVICE_NAME" --no-pager || true
+
+          ACTIVE="$(sudo -n "$CONTROL_SCRIPT" is-active || sudo -n systemctl is-active "$SERVICE_NAME" || true)"
+          echo "active 状态：$ACTIVE"
+
+          if [ "$ACTIVE" != "active" ]; then
+            echo "服务没有稳定 active，最近日志："
+            sudo -n "$CONTROL_SCRIPT" logs 200 || sudo -n journalctl -u "$SERVICE_NAME" -n 200 --no-pager || true
+            exit 1
+          fi
+
+          echo "======= 6. 测试接口 ======="
+
+          echo "测试 today 接口..."
+          TODAY_CODE="$(curl -sS -o /home/deploy/guzhi_today_check.json -w "%{http_code}" \
+            "http://127.0.0.1:${PORT}/api/fund/today?username=${TEST_USER}")"
+
+          echo "today 状态码：${TODAY_CODE}"
+          echo "today 返回前 800 字："
+          head -c 800 /home/deploy/guzhi_today_check.json || true
+          echo ""
+          echo ""
+
+          if [ "$TODAY_CODE" != "200" ]; then
+            echo "today 接口不是 200，最近日志："
+            sudo -n "$CONTROL_SCRIPT" logs 120 || sudo -n journalctl -u "$SERVICE_NAME" -n 120 --no-pager || true
+            exit 1
+          fi
+
+          echo "======= 部署完成 ======="
+          EOF_REMOTE

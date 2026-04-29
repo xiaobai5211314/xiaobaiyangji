@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 
 namespace 估值助手.Models
@@ -7,34 +6,41 @@ namespace 估值助手.Models
     {
         public DbSet<FundData> FundRecords { get; set; }
         public DbSet<MyFundConfig> MyFunds { get; set; }
-        public DbSet<User> Users { get; set; } // 真实账户表
+        public DbSet<User> Users { get; set; }
         public DbSet<DailyArchive> DailyArchives { get; set; }
 
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
         {
         }
 
-        // 👇 就是这个新增的方法，它是给数据库装上“高铁轨道”的核心 👇
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            // 必须先调用基类的方法
             base.OnModelCreating(modelBuilder);
 
-            // 🚀 1. 提速最明显的地方：给估值记录表的“基金代码”和“抓取时间”加上复合索引
-            // 以后查询今天的数据时，数据库会直接跳到对应的位置，耗时从几秒降到几毫秒
             modelBuilder.Entity<FundData>()
                 .HasIndex(r => new { r.FundCode, r.FetchTime })
-                .HasDatabaseName("IX_FundRecord_Code_Time"); 
-            
-            // 🚀 2. 给个人持仓配置表加上“用户名”索引
+                .HasDatabaseName("IX_FundRecord_Code_Time");
+
+            modelBuilder.Entity<FundData>()
+                .HasIndex(r => r.FetchTime)
+                .HasDatabaseName("IX_FundRecord_Time");
+
             modelBuilder.Entity<MyFundConfig>()
                 .HasIndex(f => f.Username)
                 .HasDatabaseName("IX_MyFundConfig_Username");
 
-            // 🚀 3. 给用户表加上用户名“唯一”索引（加速登录，且防止重名注册）
+            modelBuilder.Entity<MyFundConfig>()
+                .HasIndex(f => new { f.Username, f.FundCode })
+                .IsUnique()
+                .HasDatabaseName("IX_MyFundConfig_User_Code");
+
+            modelBuilder.Entity<DailyArchive>()
+                .HasIndex(a => new { a.Username, a.RecordDate, a.FundCode })
+                .HasDatabaseName("IX_DailyArchive_User_Date_Code");
+
             modelBuilder.Entity<User>()
                 .HasIndex(u => u.Username)
-                .IsUnique() // 强制唯一
+                .IsUnique()
                 .HasDatabaseName("IX_User_Username");
         }
     }
