@@ -368,21 +368,101 @@
             transition: opacity .18s ease, transform .18s ease;
         }
 
+
+
+        .news-sheet {
+            background:#f8fafc;
+            width:100%;
+            height:92vh;
+            border-radius:22px 22px 0 0;
+            display:flex;
+            flex-direction:column;
+            box-sizing:border-box;
+            color:#111827;
+            overflow:hidden;
+        }
+
+        .news-header {
+            padding:16px 18px 10px;
+            border-bottom:1px solid #e5e7eb;
+            background:linear-gradient(180deg,#f8fafc 0%,#eef6ff 100%);
+        }
+
+        .news-tabs { display:flex; gap:10px; margin-top:14px; }
+        .news-tab {
+            flex:1; border:0; border-radius:14px; padding:11px 8px; font-size:15px; font-weight:900;
+            background:#e5e7eb; color:#64748b; cursor:pointer;
+        }
+        .news-tab.active { background:#3b82f6; color:#fff; box-shadow:0 8px 20px rgba(59,130,246,.28); }
+        .news-toolbar { display:flex; align-items:center; justify-content:space-between; padding:10px 18px; border-bottom:1px solid #e5e7eb; color:#475569; font-size:14px; }
+        .news-switch { display:flex; align-items:center; gap:8px; font-weight:700; }
+        .news-switch input { width:18px; height:18px; }
+        .news-list { flex:1; overflow-y:auto; background:#fff; padding:0 18px 24px; }
+        .news-date { color:#374151; font-size:17px; font-weight:800; padding:18px 0 6px; }
+        .news-item { display:grid; grid-template-columns:22px 1fr; gap:10px; position:relative; }
+        .news-line { width:1px; background:#dbe4f0; margin-left:8px; }
+        .news-dot { width:10px; height:10px; border-radius:999px; background:#4f7df3; border:2px solid #dbeafe; position:absolute; left:3px; top:14px; }
+        .news-item.positive .news-dot { background:#ef4444; border-color:#fee2e2; }
+        .news-item.negative .news-dot { background:#10b981; border-color:#dcfce7; }
+        .news-card { padding:10px 0 18px; border-bottom:1px solid #eef2f7; cursor:pointer; }
+        .news-time { color:#4f7df3; font-size:17px; font-weight:800; margin-bottom:6px; }
+        .news-title { color:#1f2937; font-size:18px; line-height:1.55; font-weight:700; }
+        .news-summary { color:#4b5563; font-size:15px; line-height:1.55; margin-top:6px; }
+        .news-badges { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+        .news-badge { font-size:11px; border-radius:999px; padding:3px 7px; background:#eef2ff; color:#4f46e5; font-weight:800; }
+        .news-badge.good { background:#fee2e2; color:#dc2626; }
+        .news-badge.bad { background:#dcfce7; color:#059669; }
+        .news-badge.neutral { background:#f1f5f9; color:#64748b; }
+        .news-empty { color:#94a3b8; text-align:center; padding:60px 0; font-weight:800; }
+
         @media screen and (max-width: 768px) {
+            body { padding-bottom: env(safe-area-inset-bottom); }
+
             .header {
                 flex-direction: column;
-                align-items: flex-start;
-                gap: 15px;
+                align-items: stretch;
+                gap: 18px;
+                margin: 12px;
+                padding: 20px 18px;
+            }
+
+            .logo-text {
+                text-align: center;
+                font-size: 24px;
             }
 
             .control-panel {
                 width: 100%;
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 12px;
             }
 
-                .control-panel input {
-                    flex: 1;
-                    min-width: 90px;
-                }
+            .control-panel input {
+                width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
+                height: 46px;
+                border-radius: 24px;
+                text-align: center;
+                font-size: 15px;
+                margin: 0 !important;
+            }
+
+            .control-panel .btn {
+                margin: 0 !important;
+                width: 100%;
+                min-height: 48px;
+                justify-content: center;
+                border-radius: 24px;
+                font-size: 15px;
+                box-sizing: border-box;
+                padding: 10px 8px !important;
+            }
+
+            .control-panel .btn-primary:first-of-type {
+                grid-column: 1 / 2;
+            }
 
             #chart-container {
                 height: 50vh;
@@ -396,6 +476,14 @@
             .divider {
                 display: none;
             }
+
+            .news-sheet {
+                height: 100vh;
+                border-radius: 0;
+            }
+
+            .news-title { font-size: 18px; }
+            .news-summary { font-size: 14px; }
         }
     </style>
 </head>
@@ -434,6 +522,7 @@
                     </button>
 
                     <button class="btn" @click="fetchSectors" style="margin-left: 10px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none;">🎯 板块雷达</button>
+                    <button class="btn" @click="openNewsPanel" style="margin-left: 10px; background: linear-gradient(135deg, #38bdf8, #2563eb); border: none;">📰 资讯雷达</button>
                     <button class="btn btn-success" @click="fetchGlobalIndices" style="margin-left: 10px;">🌍 全球大盘</button>
                     <button class="btn" @click="refreshNow(true)" :disabled="pullRefresh.loading" style="margin-left: 10px; background: rgba(56,189,248,0.15); border-color: rgba(56,189,248,0.35); color: #7dd3fc;">🔄 {{ pullRefresh.loading ? '刷新中' : '刷新' }}</button>
                     <button class="btn btn-danger" @click="handleLogout" style="margin-left: 10px;">🚪 登出</button>
@@ -755,6 +844,55 @@
                 </div>
             </div>
 
+
+
+            <div v-if="showNewsPanel" class="modal-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,0.55);display:flex;justify-content:center;align-items:flex-end;z-index:2600;">
+                <div class="news-sheet">
+                    <div class="news-header">
+                        <div style="display:flex;align-items:center;justify-content:space-between;">
+                            <div>
+                                <div style="font-size:24px;font-weight:900;color:#0f172a;">📰 资讯雷达</div>
+                                <div style="font-size:12px;color:#64748b;margin-top:5px;">{{ newsSource || '东方财富7x24快讯' }} · {{ newsUpdatedAt || '待更新' }}</div>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:12px;">
+                                <button @click="fetchNews(newsMode, true)" class="btn" style="background:#e0f2fe;color:#0369a1;border-color:#bae6fd;border-radius:14px;">🔄</button>
+                                <span @click="showNewsPanel=false" style="font-size:30px;color:#64748b;cursor:pointer;line-height:1;">&times;</span>
+                            </div>
+                        </div>
+                        <div class="news-tabs">
+                            <button :class="['news-tab', newsMode==='global'?'active':'']" @click="switchNewsMode('global')">7x24快讯</button>
+                            <button :class="['news-tab', newsMode==='holding'?'active':'']" @click="switchNewsMode('holding')">持仓资讯</button>
+                        </div>
+                    </div>
+                    <div class="news-toolbar">
+                        <span>{{ newsMode === 'holding' ? '只显示和你持仓基金主题相关的消息' : '全市场财经快讯时间线' }}</span>
+                        <label class="news-switch"><input type="checkbox" v-model="newsOnlyImportant" @change="fetchNews(newsMode, true)"> 只看重要</label>
+                    </div>
+                    <div v-if="isNewsLoading" class="news-empty">📡 正在同步资讯...</div>
+                    <div v-else-if="newsList.length === 0" class="news-empty">暂无匹配资讯</div>
+                    <div v-else class="news-list">
+                        <template v-for="group in groupedNews" :key="group.date">
+                            <div class="news-date">{{ group.date }}</div>
+                            <div v-for="item in group.items" :key="item.id + item.showTime" :class="['news-item', item.sentiment]">
+                                <div class="news-line"></div>
+                                <div class="news-dot"></div>
+                                <div class="news-card" @click="openNewsItem(item)">
+                                    <div class="news-time">{{ item.timeText }}</div>
+                                    <div class="news-title">{{ item.title }}</div>
+                                    <div v-if="item.summary && item.summary !== item.title" class="news-summary">{{ item.summary }}</div>
+                                    <div class="news-badges">
+                                        <span v-if="item.important" class="news-badge good">重要</span>
+                                        <span v-if="item.matchedFundName" class="news-badge">{{ item.matchedFundName }}</span>
+                                        <span :class="['news-badge', item.sentiment==='positive'?'good':(item.sentiment==='negative'?'bad':'neutral') ]">{{ item.sentiment==='positive'?'偏利好':(item.sentiment==='negative'?'偏利空':'中性') }} · {{ item.impactScore }}分</span>
+                                        <span v-for="tag in (item.tags || []).slice(0,3)" :key="tag" class="news-badge neutral">{{ tag }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
             <div v-show="showGlobalIndices" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: flex-end; z-index: 2500;">
                 <div style="background: #1e293b; width: 100%; height: 80vh; border-radius: 20px 20px 0 0; padding: 20px; display: flex; flex-direction: column;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
@@ -842,7 +980,7 @@
         }
     </script>
     <script>
-        const { createApp, ref, reactive, onMounted, onUnmounted, nextTick, shallowRef, watch } = Vue;
+        const { createApp, ref, reactive, onMounted, onUnmounted, nextTick, shallowRef, watch, computed } = Vue;
 
         createApp({
             setup() {
@@ -901,6 +1039,24 @@
                 const sectorDetailMeta = reactive({ rate: 0, fundCount: 0, updatedAt: '' });
                 const isDetailsLoading = ref(false);
 
+                const showNewsPanel = ref(false);
+                const isNewsLoading = ref(false);
+                const newsMode = ref('global');
+                const newsOnlyImportant = ref(false);
+                const newsList = ref([]);
+                const newsSource = ref('');
+                const newsUpdatedAt = ref('');
+
+                const groupedNews = computed(() => {
+                    const map = new Map();
+                    for (const item of newsList.value) {
+                        const key = item.dateText || (item.showTime ? item.showTime.slice(0, 10) : '今日');
+                        if (!map.has(key)) map.set(key, []);
+                        map.get(key).push(item);
+                    }
+                    return Array.from(map.entries()).map(([date, items]) => ({ date, items }));
+                });
+
                 const historyModal = reactive({ show: false, isLoading: false, name: '', data: [] });
                 const archiveModal = reactive({ show: false, isLoading: false, targetName: '', data: [] });
                 const ocrModal = reactive({ show: false, content: '' });
@@ -917,6 +1073,38 @@
 
                 const showGlobalIndices = ref(false);
                 const isIndicesLoading = ref(false);
+
+                const fetchNews = async (mode = newsMode.value, force = false) => {
+                    newsMode.value = mode;
+                    isNewsLoading.value = true;
+                    try {
+                        const url = `${API_BASE}/api/fund/news?username=${encodeURIComponent(currentUser.value)}&mode=${encodeURIComponent(mode)}&important=${newsOnlyImportant.value}&limit=90${force ? '&force=true' : ''}&_t=${Date.now()}`;
+                        const res = await fetch(url, { cache: 'no-store' });
+                        if (!res.ok) throw new Error(await res.text());
+                        const data = await res.json();
+                        newsList.value = data.items || [];
+                        newsSource.value = data.source || '东方财富7x24快讯';
+                        newsUpdatedAt.value = data.updatedAt || '';
+                    } catch (e) {
+                        showToast('📰 资讯同步失败', 'error');
+                    } finally {
+                        isNewsLoading.value = false;
+                    }
+                };
+
+                const openNewsPanel = () => {
+                    showNewsPanel.value = true;
+                    fetchNews(newsMode.value, false);
+                };
+
+                const switchNewsMode = (mode) => {
+                    if (newsMode.value === mode && newsList.value.length > 0) return;
+                    fetchNews(mode, false);
+                };
+
+                const openNewsItem = (item) => {
+                    if (item && item.url) window.open(item.url, '_blank');
+                };
 
                 const fetchMyArchives = async (targetCode, targetName) => {
                     archiveModal.show = true; archiveModal.isLoading = true; archiveModal.targetName = targetName; archiveModal.data = [];
@@ -1384,6 +1572,7 @@
                     sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt,
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, isDetailsLoading, expandedSectors, toggleSector,
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices,
+                    showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
                     globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, saveDailyArchive, ocrModal,
                     reduceModal, openReduceModal, handleReducePosition, addModal, openAddModal, handleAddPosition
                 };
