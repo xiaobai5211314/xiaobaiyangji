@@ -1,34 +1,20 @@
-本轮优化内容：
-
-1. 后端新增“板块基金雷达”逻辑：
-   - /api/fund/sectors
-   - /api/fund/sectors?force=true
-   - /api/fund/sector-funds?se tctorName=黄金&limit=24
-   - /api/fund/sector-funds?sectorName=gold&limit=24
-
-2. 不再把股票概念板块直接当成基金板块。
-   旧版“钨、逆变器、纳米银”等是股票概念，下面没有基金池，用户体验差。
-   新版先按基金全市场名称池做主题归类，再拉取对应基金的实时估算涨跌幅。
-
-3. 前端板块雷达改成类似养基宝：
-   - 领涨板块/领跌板块切换
-   - 板块名称、涨跌幅、方向、基金数
-   - 点击板块后展示该板块基金列表
-   - 基金列表展示当日涨幅、近一月涨幅
-
-4. 数据源说明：
-   - 基金基础池：东方财富/天天基金基金代码库
-   - 当日涨幅：fundgz 估算接口
-   - 近一月涨幅：东方财富基金历史净值接口反算
-
-5. 注意：
-   - 这是“基金名称主题归类 + 估算均值”，不是官方养基宝完整持仓穿透模型。
-   - 如果某个主题基金名称里没有明显关键词，可能不会被归入该板块。
-   - 若后续要完全复刻养基宝，需要真实板块-基金映射库或付费/授权数据源。
+本轮修改点：
+1. 用户头像改为保存到 Users.AvatarDataUrl 数据库字段，不再只存在 localStorage。
+2. 新增 AuthController：GET /api/auth/profile、POST /api/auth/avatar、POST /api/auth/avatar/clear。
+3. Program.cs 启动时自动补 Users.AvatarDataUrl LONGTEXT 字段。
+4. 首页去掉重复的刷新按钮和“估值助手/用户名”大标题；首页只保留头像入口和截图导入。
+5. PC 端底部四页导航加宽、弱化突兀感；移动端保留紧凑底部导航。
+6. 移动端盈亏明细右侧数字增加安全边距，避免曲面屏或浏览器边缘裁切。
+7. 全局字体改为 Microsoft YaHei / 微软雅黑 优先。
+8. 板块页新增主力资金流入模块，后端新增 GET /api/fund/capital-flow。
 
 重点替换：
-- FundController.cs
 - index.html
+- User.cs
+- AuthController.cs
+- Program.cs
+- FundController.cs
 
-整包覆盖也可以。
-# 估值助手
+注意：
+- 数据库自动 ALTER TABLE 适合你当前快速迭代；正式生产建议后续迁移到 EF Core migrations。
+- 主力资金数据来自东方财富板块资金流向公开页面/接口链路，仅供参考，不构成投资建议。
