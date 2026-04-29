@@ -33,6 +33,19 @@ namespace 估值助手.Controllers
             Timeout = 10000
         };
 
+
+        public class CapitalFlowRowDto
+        {
+            public string Code { get; set; } = string.Empty;
+            public string Name { get; set; } = string.Empty;
+            public double Rate { get; set; }
+            public double MainNet { get; set; }
+            public string MainNetText { get; set; } = string.Empty;
+            public double MainRatio { get; set; }
+            public double SuperNet { get; set; }
+            public double BigNet { get; set; }
+        }
+
         public class FundInfoCache
         {
             public string Code { get; set; }
@@ -1872,36 +1885,58 @@ namespace 估值助手.Controllers
         public async Task<IActionResult> GetCapitalFlow([FromQuery] bool force = false, [FromQuery] int limit = 30)
         {
             limit = Math.Clamp(limit, 10, 80);
-            string cacheKey = $"CapitalFlowV1_{limit}";
+            string cacheKey = $"CapitalFlowV2_{limit}";
             if (!force && _cache.TryGetValue(cacheKey, out object cached)) return Ok(cached);
 
             try
             {
-                long ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                string url = $"https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz={limit}&po=1&np=1&fltt=2&invt=2&fid=f62&fs=m:90+t:2,m:90+t:3&fields=f12,f14,f3,f62,f184,f66,f72&_={ts}";
-                using var handler = new HttpClientHandler { ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true };
-                using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(6) };
-                client.DefaultRequestVersion = new Version(1, 1);
-                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
-                client.DefaultRequestHeaders.Add("Referer", "https://data.eastmoney.com/bkzj/");
-                string body = await client.GetStringAsync(url);
-                using var doc = JsonDocument.Parse(body);
-                var list = doc.RootElement.GetProperty("data").GetProperty("diff");
-                var rows = new List<object>();
-                foreach (var item in list.EnumerateArray())
+                async Task<List<CapitalFlowRowDto>> FetchRowsAsync(int po)
                 {
-                    string code = item.TryGetProperty("f12", out var f12) ? f12.GetString() ?? "" : "";
-                    string name = item.TryGetProperty("f14", out var f14) ? f14.GetString() ?? "" : "";
-                    double rate = item.TryGetProperty("f3", out var f3) && f3.ValueKind == JsonValueKind.Number ? f3.GetDouble() : 0;
-                    double mainNet = item.TryGetProperty("f62", out var f62) && f62.ValueKind == JsonValueKind.Number ? f62.GetDouble() : 0;
-                    double mainRatio = item.TryGetProperty("f184", out var f184) && f184.ValueKind == JsonValueKind.Number ? f184.GetDouble() : 0;
-                    double superNet = item.TryGetProperty("f66", out var f66) && f66.ValueKind == JsonValueKind.Number ? f66.GetDouble() : 0;
-                    double bigNet = item.TryGetProperty("f72", out var f72) && f72.ValueKind == JsonValueKind.Number ? f72.GetDouble() : 0;
-                    if (string.IsNullOrWhiteSpace(name)) continue;
-                    rows.Add(new { code, name, rate = Math.Round(rate, 2), mainNet, mainNetText = FormatMoneyWanYi(mainNet), mainRatio = Math.Round(mainRatio, 2), superNet, bigNet });
+                    long ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                    string url = $"https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz={limit}&po={po}&np=1&fltt=2&invt=2&fid=f62&fs=m:90+t:2,m:90+t:3&fields=f12,f14,f3,f62,f184,f66,f72&_={ts}";
+                    using var handler = new HttpClientHandler { ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true };
+                    using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(6) };
+                    client.DefaultRequestVersion = new Version(1, 1);
+                    client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
+                    client.DefaultRequestHeaders.Add("Referer", "https://data.eastmoney.com/bkzj/");
+                    string body = await client.GetStringAsync(url);
+                    using var doc = JsonDocument.Parse(body);
+                    var list = doc.RootElement.GetProperty("data").GetProperty("diff");
+                    var result = new List<CapitalFlowRowDto>();
+                    foreach (var item in list.EnumerateArray())
+                    {
+                        string code = item.TryGetProperty("f12", out var f12) ? f12.GetString() ?? "" : "";
+                        string name = item.TryGetProperty("f14", out var f14) ? f14.GetString() ?? "" : "";
+                        double rate = item.TryGetProperty("f3", out var f3) && f3.ValueKind == JsonValueKind.Number ? f3.GetDouble() : 0;
+                        double mainNet = item.TryGetProperty("f62", out var f62) && f62.ValueKind == JsonValueKind.Number ? f62.GetDouble() : 0;
+                        double mainRatio = item.TryGetProperty("f184", out var f184) && f184.ValueKind == JsonValueKind.Number ? f184.GetDouble() : 0;
+                        double superNet = item.TryGetProperty("f66", out var f66) && f66.ValueKind == JsonValueKind.Number ? f66.GetDouble() : 0;
+                        double bigNet = item.TryGetProperty("f72", out var f72) && f72.ValueKind == JsonValueKind.Number ? f72.GetDouble() : 0;
+                        if (string.IsNullOrWhiteSpace(name)) continue;
+                        result.Add(new CapitalFlowRowDto
+                        {
+                            Code = code,
+                            Name = name,
+                            Rate = Math.Round(rate, 2),
+                            MainNet = mainNet,
+                            MainNetText = FormatMoneyWanYi(mainNet),
+                            MainRatio = Math.Round(mainRatio, 2),
+                            SuperNet = superNet,
+                            BigNet = bigNet
+                        });
+                    }
+                    return result;
                 }
 
-                var payload = new { source = "东方财富数据中心-板块资金流向", updatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), rows };
+                var inflow = (await FetchRowsAsync(1)).OrderByDescending(x => x.MainNet).Take(limit).ToList();
+                var outflow = (await FetchRowsAsync(0)).OrderBy(x => x.MainNet).Take(limit).ToList();
+                var rows = inflow.Concat(outflow)
+                    .GroupBy(x => x.Code)
+                    .Select(g => g.OrderByDescending(x => Math.Abs(x.MainNet)).First())
+                    .OrderByDescending(x => x.MainNet)
+                    .ToList();
+
+                var payload = new { source = "东方财富数据中心-板块资金流向", updatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), rows, inflow, outflow };
                 _cache.Set(cacheKey, payload, TimeSpan.FromMinutes(2));
                 return Ok(payload);
             }
