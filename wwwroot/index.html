@@ -545,11 +545,45 @@
             .control-panel .btn { min-height:44px; font-size:14px; }
         }
 
+
+        /* 本轮：首页去重 + 头像账户入口 */
+        .home-hero-clean { margin: 15px; padding: 18px 22px; }
+        .home-identity-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+        .home-identity-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
+        .user-avatar-btn { width: 54px; height: 54px; border-radius: 50%; border: 1px solid rgba(255,255,255,.18); background: linear-gradient(135deg, rgba(96,165,250,.35), rgba(139,92,246,.28)); display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: pointer; box-shadow: 0 10px 24px rgba(59,130,246,.22); flex: 0 0 auto; }
+        .user-avatar-btn img { width: 100%; height: 100%; object-fit: cover; display:block; }
+        .user-avatar-fallback { font-size: 26px; font-weight: 900; color: #dbeafe; }
+        .home-title-stack { min-width: 0; }
+        .home-title-stack .logo-text { font-size: 24px; line-height: 1.15; }
+        .home-subtitle { color: #94a3b8; font-size: 12px; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .home-quick-actions { display: grid; grid-template-columns: minmax(0, 1fr) 48px; gap: 12px; margin-top: 18px; align-items: center; }
+        .home-ocr-main { min-height: 50px; border-radius: 999px; justify-content: center; background: linear-gradient(135deg, #8b5cf6 0%, #2563eb 100%); border: 0; box-shadow: 0 10px 26px rgba(99,102,241,.30); font-size: 16px; }
+        .home-refresh-icon { width: 48px; height: 48px; border-radius: 50%; justify-content: center; padding: 0; color: #7dd3fc; background: rgba(56,189,248,.13); border-color: rgba(56,189,248,.35); }
+        .profile-modal-card { width: min(88vw, 360px); background: #0f172a; border: 1px solid rgba(96,165,250,.35); border-radius: 24px; box-shadow: 0 20px 60px rgba(0,0,0,.55); overflow: hidden; }
+        .profile-head { padding: 26px 22px 20px; text-align: center; background: radial-gradient(circle at top, rgba(96,165,250,.18), rgba(15,23,42,0)); }
+        .profile-avatar-large { width: 86px; height: 86px; border-radius: 50%; margin: 0 auto 12px; border: 2px solid rgba(255,255,255,.18); background: linear-gradient(135deg, rgba(96,165,250,.35), rgba(139,92,246,.3)); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        .profile-avatar-large img { width:100%; height:100%; object-fit:cover; }
+        .profile-name { font-size: 20px; font-weight: 900; color:#f8fafc; }
+        .profile-note { font-size: 12px; color:#94a3b8; margin-top: 6px; }
+        .profile-actions { padding: 0 18px 20px; display: grid; gap: 12px; }
+        .profile-action-btn { min-height: 48px; border-radius: 14px; justify-content: center; }
+        .profile-logout-btn { background: rgba(239,68,68,.16); border-color: rgba(239,68,68,.35); color:#f87171; }
+        .fund-card .fund-archive-btn, .total-archive-entry { display:none !important; }
+        @media screen and (max-width: 768px) {
+            .home-hero-clean { margin: 12px; padding: 18px; border-radius: 22px; }
+            .home-identity-row { align-items: flex-start; }
+            .user-avatar-btn { width: 50px; height: 50px; }
+            .home-title-stack .logo-text { font-size: 24px; text-align: left; }
+            .home-subtitle { font-size: 12px; }
+            .home-quick-actions { grid-template-columns: minmax(0, 1fr) 48px; }
+            .home-ocr-main { min-height: 50px; font-size: 16px; }
+        }
+
     </style>
 </head>
 <body>
     <div id="app" v-cloak>
-        <div v-if="pullRefresh.show || pullRefresh.loading" class="pull-refresh-indicator" :style="{ opacity: pullRefresh.show || pullRefresh.loading ? 1 : 0 }">
+        <div v-if="activePage === 'home' && (pullRefresh.show || pullRefresh.loading)" class="pull-refresh-indicator" :style="{ opacity: activePage === 'home' && (pullRefresh.show || pullRefresh.loading) ? 1 : 0 }">
             {{ pullRefresh.loading ? '正在刷新...' : (pullRefresh.distance >= 70 ? '松开刷新' : '下拉刷新') }}
         </div>
         <div class="toast-container">
@@ -570,23 +604,29 @@
 
         <div v-else>
             <div v-show="activePage === 'home'" class="app-page home-page">
-            <div class="header glass-panel">
-                <div class="logo-text">🚀 估值助手 ({{ currentUser }})</div>
-                <div class="control-panel">
-                    <input v-model="fundForm.code" type="text" placeholder="代码 (如 017811)">
-                    <input v-model="fundForm.amount" type="number" placeholder="昨日市值">
-                    <button class="btn btn-primary" @click="handleAddFund" style="padding: 9px 15px;">➕ 添加</button>
-
-                    <input type="file" id="ocrInput" accept="image/*" style="display: none;" @change="handleFileUpload">
-                    <button class="btn btn-ocr" @click="triggerUpload" :disabled="isUploading" style="margin-left: 10px;">
-                        📷 {{ isUploading ? '📡 解析中...' : '智能截图导入' }}
+            <div class="home-hero-clean glass-panel">
+                <div class="home-identity-row">
+                    <div class="home-identity-left">
+                        <button class="user-avatar-btn" @click="showProfileModal = true" title="个人信息">
+                            <img v-if="userAvatar" :src="userAvatar" alt="头像">
+                            <span v-else class="user-avatar-fallback">{{ currentUser ? currentUser.slice(0,1).toUpperCase() : '我' }}</span>
+                        </button>
+                        <div class="home-title-stack">
+                            <div class="logo-text">🚀 估值助手</div>
+                            <div class="home-subtitle">{{ currentUser }} · 点击头像设置头像 / 退出登录</div>
+                        </div>
+                    </div>
+                    <button class="btn home-refresh-icon" @click="refreshNow(true)" :disabled="pullRefresh.loading" title="刷新持仓">
+                        {{ pullRefresh.loading ? '…' : '↻' }}
                     </button>
-
-                    <button class="btn" @click="switchPage('sector')" style="margin-left: 10px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none;">🎯 板块雷达</button>
-                    <button class="btn" @click="switchPage('news')" style="margin-left: 10px; background: linear-gradient(135deg, #38bdf8, #2563eb); border: none;">📰 资讯雷达</button>
-                    <button class="btn btn-success" @click="fetchGlobalIndices" style="margin-left: 10px;">🌍 全球大盘</button>
-                    <button class="btn" @click="refreshNow(true)" :disabled="pullRefresh.loading" style="margin-left: 10px; background: rgba(56,189,248,0.15); border-color: rgba(56,189,248,0.35); color: #7dd3fc;">🔄 {{ pullRefresh.loading ? '刷新中' : '刷新' }}</button>
-                    <button class="btn btn-danger" @click="handleLogout" style="margin-left: 10px;">🚪 登出</button>
+                </div>
+                <input type="file" id="ocrInput" accept="image/*" style="display: none;" @change="handleFileUpload">
+                <input type="file" id="avatarInput" accept="image/*" style="display: none;" @change="handleAvatarUpload">
+                <div class="home-quick-actions">
+                    <button class="btn home-ocr-main" @click="triggerUpload" :disabled="isUploading">
+                        📷 {{ isUploading ? '解析中...' : '智能截图导入持仓' }}
+                    </button>
+                    <button class="btn home-refresh-icon" @click="refreshNow(true)" :disabled="pullRefresh.loading" title="刷新持仓">🔄</button>
                 </div>
             </div>
 
@@ -622,9 +662,7 @@
                     <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">📈 累计收益率</div>
                     <div class="number-display" :style="{ color: privacyMode <= 2 ? (totalRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 2 ? (totalRate > 0 ? '+' : '') + totalRate.toFixed(2) + '%' : '****' }}</div>
                 </div>
-                <div style="width: 100%; display: flex; justify-content: center; margin-top: 10px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 20px;">
-                    <button @click="fetchMyArchives('TOTAL', '总持仓')" class="btn btn-primary" style="padding: 10px 30px; font-size: 15px; border-radius: 30px;">📂 查阅历史收益</button>
-                </div>
+                <div class="total-archive-entry"></div>
             </div>
 
             <div style="margin: 0 15px 10px 15px; display: flex; justify-content: space-between; align-items: center;">
@@ -654,7 +692,7 @@
 
                         <div style="display: flex; gap: 6px; flex-shrink: 0; align-items: center;">
                             <button @click="fetchHistory(fund.code, fund.name)" style="background: rgba(56, 189, 248, 0.2); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 12px; display: flex; align-items: center; justify-content: center;" title="查看官方档案">📈</button>
-                            <button @click="fetchMyArchives(fund.code, fund.name)" style="background: rgba(139, 92, 246, 0.2); border: 1px solid rgba(139, 92, 246, 0.3); color: #8b5cf6; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 12px; display: flex; align-items: center; justify-content: center; margin-right: 4px;" title="查看专属档案">📂</button>
+                            <button class="fund-archive-btn" @click="fetchMyArchives(fund.code, fund.name)" title="查看专属档案">📂</button>
 
                             <button @click="openAddModal(fund)" style="background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;" title="战术加仓">➕</button>
                             <button @click="openReduceModal(fund)" style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;" title="战略减仓">➖</button>
@@ -759,6 +797,25 @@
             </div>
 
             <div class="bottom-tabbar" v-if="isLoggedIn"><button :class="['bottom-tab', activePage==='home'?'active':'']" @click="switchPage('home')"><span class="tab-icon">🛡️</span><span>持仓</span></button><button :class="['bottom-tab', activePage==='sector'?'active':'']" @click="switchPage('sector')"><span class="tab-icon">📈</span><span>板块</span></button><button :class="['bottom-tab', activePage==='news'?'active':'']" @click="switchPage('news')"><span class="tab-icon">📰</span><span>资讯</span></button><button :class="['bottom-tab', activePage==='analysis'?'active':'']" @click="switchPage('analysis')"><span class="tab-icon">📊</span><span>盈亏</span></button></div>
+
+            <div v-if="showProfileModal" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); display: flex; justify-content: center; align-items: center; z-index: 5200;" @click.self="showProfileModal = false">
+                <div class="profile-modal-card">
+                    <div class="profile-head">
+                        <div class="profile-avatar-large">
+                            <img v-if="userAvatar" :src="userAvatar" alt="头像">
+                            <span v-else class="user-avatar-fallback">{{ currentUser ? currentUser.slice(0,1).toUpperCase() : '我' }}</span>
+                        </div>
+                        <div class="profile-name">{{ currentUser }}</div>
+                        <div class="profile-note">本地头像只保存在当前浏览器 / App WebView</div>
+                    </div>
+                    <div class="profile-actions">
+                        <button class="btn profile-action-btn btn-primary" @click="triggerAvatarUpload">🖼️ 设置头像</button>
+                        <button v-if="userAvatar" class="btn profile-action-btn" @click="clearAvatar">🧹 清除头像</button>
+                        <button class="btn profile-action-btn profile-logout-btn" @click="handleLogout">🚪 退出登录</button>
+                        <button class="btn profile-action-btn" @click="showProfileModal = false">取消</button>
+                    </div>
+                </div>
+            </div>
 
             <div v-if="showPrivacyModal" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 5000;" @click.self="showPrivacyModal = false">
                 <div style="background: #1e293b; width: 85%; max-width: 320px; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.5);">
@@ -1112,7 +1169,9 @@
                 let isFetchingData = false;
                 let lastDataFetchAt = 0;
                 const isUploading = ref(false);
-                const pullRefresh = reactive({ startY: 0, distance: 0, active: false, show: false, loading: false });
+                const showProfileModal = ref(false);
+                const userAvatar = ref(localStorage.getItem('fund_user_avatar_' + (currentUser.value || 'default')) || '');
+                const pullRefresh = reactive({ startY: 0, startX: 0, distance: 0, active: false, show: false, loading: false });
 
                 const activePage = ref('home');
                 const todayDashStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
@@ -1353,11 +1412,38 @@
                 const handleLogin = async () => {
                     if (!loginForm.username || !loginForm.password) return showToast("为空！", "error");
                     let fd = new FormData(); fd.append('username', loginForm.username); fd.append('password', loginForm.password);
-                    try { const res = await fetch(API_BASE + '/api/auth/login', { method: 'POST', body: fd }); if (res.ok) { localStorage.setItem('fund_username', loginForm.username); currentUser.value = loginForm.username; isLoggedIn.value = true; showToast("接入成功", "success"); initDashboard(); } else { showToast("❌ 密码错误", "error"); } } catch (error) { showToast("🌐 登录失败", "error"); }
+                    try { const res = await fetch(API_BASE + '/api/auth/login', { method: 'POST', body: fd }); if (res.ok) { localStorage.setItem('fund_username', loginForm.username); currentUser.value = loginForm.username; userAvatar.value = localStorage.getItem('fund_user_avatar_' + currentUser.value) || ''; isLoggedIn.value = true; showToast("接入成功", "success"); initDashboard(); } else { showToast("❌ 密码错误", "error"); } } catch (error) { showToast("🌐 登录失败", "error"); }
                 };
 
-                const handleLogout = () => { localStorage.removeItem('fund_username'); location.reload(); };
+                const handleLogout = () => { localStorage.removeItem('fund_username'); showProfileModal.value = false; location.reload(); };
                 const triggerUpload = () => { document.getElementById('ocrInput').click(); };
+                const triggerAvatarUpload = () => { document.getElementById('avatarInput')?.click(); };
+                const clearAvatar = () => { if (!currentUser.value) return; localStorage.removeItem('fund_user_avatar_' + currentUser.value); userAvatar.value = ''; showToast('头像已清除', 'success'); };
+                const handleAvatarUpload = (event) => {
+                    const file = event.target.files && event.target.files[0];
+                    if (!file || !currentUser.value) return;
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            const size = 180;
+                            const canvas = document.createElement('canvas');
+                            canvas.width = size; canvas.height = size;
+                            const ctx = canvas.getContext('2d');
+                            const minSide = Math.min(img.width, img.height);
+                            const sx = (img.width - minSide) / 2;
+                            const sy = (img.height - minSide) / 2;
+                            ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
+                            const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
+                            localStorage.setItem('fund_user_avatar_' + currentUser.value, dataUrl);
+                            userAvatar.value = dataUrl;
+                            showToast('头像已更新', 'success');
+                            event.target.value = '';
+                        };
+                        img.src = e.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                };
 
                 const handleAddFund = async () => {
                     if (!fundForm.code || !fundForm.amount) return showToast("⚠️ 输入完整！", "error");
@@ -1482,30 +1568,65 @@
                     }
                 };
 
+                const isAtPageTop = () => {
+                    const docTop = document.documentElement.scrollTop || 0;
+                    const bodyTop = document.body.scrollTop || 0;
+                    return window.scrollY <= 2 && docTop <= 2 && bodyTop <= 2;
+                };
+
+                const isPullRefreshGestureAllowed = (e) => {
+                    if (!isLoggedIn.value || pullRefresh.loading || isFetchingData) return false;
+                    if (activePage.value !== 'home') return false;
+                    if (!isAtPageTop()) return false;
+                    if (!e.touches || e.touches.length !== 1) return false;
+
+                    const target = e.target;
+                    if (target && target.closest) {
+                        // 弹窗、表单、按钮、内层滚动容器禁止触发，避免用户滑新闻/档案/弹窗时被误判为刷新。
+                        const blocked = target.closest('.modal-mask, .modal-overlay, .news-page-list, .sector-page-layout, .news-page-layout, .analysis-grid, .archive-scroll, .scrollable, .no-pull-refresh, input, textarea, select, button');
+                        if (blocked) return false;
+                    }
+                    return true;
+                };
+
+                const resetPullRefresh = () => {
+                    pullRefresh.active = false;
+                    pullRefresh.show = false;
+                    pullRefresh.distance = 0;
+                };
+
                 const onPullStart = (e) => {
-                    if (!isLoggedIn.value || pullRefresh.loading || isFetchingData) return;
-                    if (window.scrollY > 0) return;
-                    const touch = e.touches && e.touches[0];
-                    if (!touch) return;
+                    if (!isPullRefreshGestureAllowed(e)) return;
+                    const touch = e.touches[0];
                     pullRefresh.startY = touch.clientY;
+                    pullRefresh.startX = touch.clientX;
                     pullRefresh.distance = 0;
                     pullRefresh.active = true;
                 };
 
                 const onPullMove = (e) => {
                     if (!pullRefresh.active || pullRefresh.loading) return;
+                    if (activePage.value !== 'home' || !isAtPageTop()) { resetPullRefresh(); return; }
                     const touch = e.touches && e.touches[0];
                     if (!touch) return;
+
                     const dy = touch.clientY - pullRefresh.startY;
-                    if (dy <= 0 || window.scrollY > 0) return;
-                    pullRefresh.distance = Math.min(Math.round(dy * 0.45), 90);
-                    pullRefresh.show = pullRefresh.distance > 8;
-                    if (pullRefresh.distance > 0) e.preventDefault();
+                    const dx = touch.clientX - pullRefresh.startX;
+
+                    // 向上滑、横向滑、斜向滑都不算刷新；必须是首页顶部明显向下拖。
+                    if (dy <= 0) { resetPullRefresh(); return; }
+                    if (Math.abs(dx) > 24 && Math.abs(dx) > dy * 0.65) { resetPullRefresh(); return; }
+                    if (dy < 18) return;
+
+                    pullRefresh.distance = Math.min(Math.round((dy - 14) * 0.38), 86);
+                    pullRefresh.show = pullRefresh.distance > 10;
+
+                    if (pullRefresh.show && e.cancelable) e.preventDefault();
                 };
 
                 const onPullEnd = () => {
                     if (!pullRefresh.active) return;
-                    const shouldRefresh = pullRefresh.distance >= 70;
+                    const shouldRefresh = activePage.value === 'home' && pullRefresh.distance >= 72;
                     pullRefresh.active = false;
                     if (shouldRefresh) refreshNow(true);
                     else {
@@ -1725,9 +1846,9 @@
                 onUnmounted(() => { if (timer) clearInterval(timer); window.removeEventListener('resize', handleResize); document.removeEventListener('visibilitychange', handleVisibilityChange); window.removeEventListener('touchstart', onPullStart); window.removeEventListener('touchmove', onPullMove); window.removeEventListener('touchend', onPullEnd); if (chartInstance.value) chartInstance.value.dispose(); });
 
                 return {
-                    toasts, isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, activePage, switchPage,
+                    toasts, isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, activePage, switchPage, showProfileModal, userAvatar,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
-                    handleLogin, handleRegister, handleLogout, handleAddFund, handleDeleteFund, triggerUpload, handleFileUpload,
+                    handleLogin, handleRegister, handleLogout, handleAddFund, handleDeleteFund, triggerUpload, handleFileUpload, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
                     sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt,
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, isDetailsLoading, expandedSectors, toggleSector,
