@@ -532,7 +532,7 @@ namespace 估值助手.Controllers
                 {
                     using (Image image = Image.Load(inputStream))
                     {
-                        int targetMaxWidth = 1080;
+                        int targetMaxWidth = 1800; // OCR 高清模式：保留支付宝持仓截图小字、小数点、正负号
                         if (image.Width > targetMaxWidth)
                         {
                             int newHeight = (int)((double)image.Height / image.Width * targetMaxWidth);
@@ -541,7 +541,7 @@ namespace 估值助手.Controllers
                         image.Mutate(x => x.BackgroundColor(Color.White));
                         using (var outputStream = new MemoryStream())
                         {
-                            image.SaveAsJpeg(outputStream, new JpegEncoder { Quality = 60 });
+                            image.SaveAsJpeg(outputStream, new JpegEncoder { Quality = 90 });
                             finalProcessedBytes = outputStream.ToArray();
                         }
                     }
