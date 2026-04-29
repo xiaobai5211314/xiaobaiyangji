@@ -32,7 +32,7 @@ namespace 估值助手.Services
                 try
                 {
                     var localTime = ChinaNow();
-                    if (localTime.Hour >= 20 || localTime.Hour < 2)
+                    if ((localTime.Hour >= 17 && localTime.Hour <= 23) || localTime.Hour < 2)
                     {
                         await SettleTodayNavAsync(localTime, stoppingToken);
                     }
@@ -42,7 +42,7 @@ namespace 估值助手.Services
                     _logger.LogError(ex, "夜间清算主循环异常");
                 }
 
-                await Task.Delay(TimeSpan.FromMinutes(10), stoppingToken);
+                await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
             }
         }
 
@@ -63,15 +63,120 @@ namespace 估值助手.Services
             return fund.LastTradeDate == settleDate ? fund.LastAddAmount : 0;
         }
 
-        private static bool ApplyOneDaySettlement(MyFundConfig fund, double actualRate, string settleDate)
+        private static double GetEffectiveShares(MyFundConfig fund, string settleDate)
         {
-            if (fund.LastSettledDate == settleDate) return false;
+            if (fund.HoldShares <= 0) return 0;
 
+            double baseAmount = GetEffectiveBaseAmount(fund, settleDate);
+            if (fund.LastTradeDate == settleDate && fund.LastAddAmount < 0 && fund.HoldAmount > 0)
+            {
+                return Math.Max(0, fund.HoldShares * (baseAmount / fund.HoldAmount));
+            }
+
+            return fund.HoldShares;
+        }
+
+        private sealed class OfficialNavSnapshot
+        {
+            public string Date { get; set; } = string.Empty;
+            public double Rate { get; set; }
+            public double? TodayNav { get; set; }
+            public double? YesterdayNav { get; set; }
+            public double? NavDiff { get; set; }
+            public string Source { get; set; } = string.Empty;
+        }
+
+        private static bool TryGetDouble(JsonElement element, string propertyName, out double value)
+        {
+            value = 0;
+            if (!element.TryGetProperty(propertyName, out var prop)) return false;
+            if (prop.ValueKind == JsonValueKind.Number) return prop.TryGetDouble(out value);
+            if (prop.ValueKind == JsonValueKind.String)
+            {
+                var text = prop.GetString();
+                if (string.IsNullOrWhiteSpace(text) || text == "--") return false;
+                return double.TryParse(text, out value);
+            }
+            return false;
+        }
+
+        private static OfficialNavSnapshot? TryBuildOfficialNavSnapshot(JsonElement dataArray, string settleDate)
+        {
+            if (dataArray.ValueKind != JsonValueKind.Array || dataArray.GetArrayLength() == 0) return null;
+
+            var latest = dataArray[0];
+            string fsrq = latest.TryGetProperty("FSRQ", out var fsrqElement) ? (fsrqElement.GetString() ?? string.Empty) : string.Empty;
+            if (fsrq != settleDate) return null;
+
+            double? apiRate = TryGetDouble(latest, "JZZZL", out var parsedRate) ? parsedRate : null;
+            double? navRate = null;
+            double? todayNav = null;
+            double? yesterdayNav = null;
+            double? navDiff = null;
+
+            if (dataArray.GetArrayLength() > 1 &&
+                TryGetDouble(latest, "DWJZ", out var navToday) &&
+                TryGetDouble(dataArray[1], "DWJZ", out var navYesterday) &&
+                navYesterday > 0)
+            {
+                todayNav = navToday;
+                yesterdayNav = navYesterday;
+                navDiff = navToday - navYesterday;
+                navRate = Math.Round(navDiff.Value / navYesterday * 100.0, 4);
+            }
+
+            double? finalRate = null;
+            string source = string.Empty;
+
+            if (navRate.HasValue && (!apiRate.HasValue ||
+                                     (Math.Abs(apiRate.Value) < 0.000001 && Math.Abs(navRate.Value) > 0.000001) ||
+                                     Math.Abs(apiRate.Value - navRate.Value) > 0.05))
+            {
+                finalRate = navRate.Value;
+                source = "DWJZ反算";
+            }
+            else if (apiRate.HasValue)
+            {
+                finalRate = apiRate.Value;
+                source = "JZZZL";
+            }
+            else if (navRate.HasValue)
+            {
+                finalRate = navRate.Value;
+                source = "DWJZ反算";
+            }
+
+            // 只有接口给了 0、但没有前后两个单位净值可校验时，不打“净值确认”标签。
+            // 否则旧版本会把 0 当成真实涨跌幅写入，造成“净值确认 0%”。
+            if (!finalRate.HasValue) return null;
+            if (Math.Abs(finalRate.Value) < 0.000001 && !navRate.HasValue) return null;
+
+            return new OfficialNavSnapshot
+            {
+                Date = fsrq,
+                Rate = Math.Round(finalRate.Value, 4),
+                TodayNav = todayNav,
+                YesterdayNav = yesterdayNav,
+                NavDiff = navDiff,
+                Source = source
+            };
+        }
+
+        private static bool ApplyOneDaySettlement(MyFundConfig fund, double actualRate, string settleDate, double? exactProfit = null)
+        {
             double baseAmount = GetDailyBaseAmount(fund, settleDate);
             double pending = GetPendingTradeAmount(fund, settleDate);
-            double settledProfit = Math.Round(baseAmount * (actualRate / 100.0), 2);
+            double settledProfit = Math.Round(exactProfit ?? (baseAmount * (actualRate / 100.0)), 2);
+            double newHoldAmount = Math.Round(baseAmount + settledProfit + pending, 2);
 
-            fund.HoldAmount = Math.Round(baseAmount + settledProfit + pending, 2);
+            bool changed = fund.LastSettledDate != settleDate ||
+                           Math.Abs(fund.LastSettledRate - actualRate) > 0.0001 ||
+                           Math.Abs(fund.LastSettledProfit - settledProfit) > 0.01 ||
+                           Math.Abs(fund.HoldAmount - newHoldAmount) > 0.01;
+
+            if (!changed) return false;
+
+            fund.HoldAmount = newHoldAmount;
             fund.LastSettledDate = settleDate;
             fund.LastSettledProfit = settledProfit;
             fund.LastSettledRate = Math.Round(actualRate, 4);
@@ -273,7 +378,7 @@ namespace 估值助手.Services
                 try
                 {
                     long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                    string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize=1&_={timestamp}";
+                    string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize=2&_={timestamp}";
                     string response = await _httpClient.GetStringAsync(url, stoppingToken);
 
                     using var doc = JsonDocument.Parse(response);
@@ -284,14 +389,13 @@ namespace 估值助手.Services
                         continue;
                     }
 
-                    var latestData = dataArray[0];
-                    string fsrq = latestData.GetProperty("FSRQ").GetString() ?? "";
-                    string jzzzlStr = latestData.GetProperty("JZZZL").GetString() ?? "";
-
-                    if (fsrq != settleDate || !double.TryParse(jzzzlStr, out double actualRate))
+                    var navSnapshot = TryBuildOfficialNavSnapshot(dataArray, settleDate);
+                    if (navSnapshot == null)
                     {
                         continue;
                     }
+
+                    double actualRate = navSnapshot.Rate;
 
                     var targetRecord = await dbContext.FundRecords
                         .Where(r => r.FundCode == code && r.FetchTime >= todayStart && r.FetchTime < tomorrowStart)
@@ -310,10 +414,17 @@ namespace 估值助手.Services
 
                     foreach (var holding in holdingUsers)
                     {
-                        if (ApplyOneDaySettlement(holding, actualRate, settleDate))
+                        double? exactProfit = null;
+                        if (navSnapshot.NavDiff.HasValue)
+                        {
+                            double effectiveShares = GetEffectiveShares(holding, settleDate);
+                            if (effectiveShares > 0) exactProfit = Math.Round(effectiveShares * navSnapshot.NavDiff.Value, 2);
+                        }
+
+                        if (ApplyOneDaySettlement(holding, actualRate, settleDate, exactProfit))
                         {
                             affectedUsers.Add(holding.Username);
-                            _logger.LogInformation("清算完成 {FundName}({Code}) {Rate}% -> {Amount}", holding.FundName, code, actualRate, holding.HoldAmount);
+                            _logger.LogInformation("清算完成 {FundName}({Code}) {Rate}% [{Source}] -> {Amount}", holding.FundName, code, actualRate, navSnapshot.Source, holding.HoldAmount);
                         }
                     }
                 }

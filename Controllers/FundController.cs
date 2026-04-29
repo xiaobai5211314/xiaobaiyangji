@@ -85,16 +85,120 @@ namespace 估值助手.Controllers
             return fund.HoldShares;
         }
 
-        private static bool ApplyOneDaySettlement(MyFundConfig fund, double actualRate, string settleDate)
+        private sealed class OfficialNavSnapshot
         {
-            if (fund.LastSettledDate == settleDate) return false;
+            public string Date { get; set; } = string.Empty;
+            public double Rate { get; set; }
+            public double? TodayNav { get; set; }
+            public double? YesterdayNav { get; set; }
+            public double? NavDiff { get; set; }
+            public string Source { get; set; } = string.Empty;
+        }
 
-            double baseAmount = GetEffectiveBaseAmount(fund, settleDate);
+        private static bool TryGetDouble(JsonElement element, string propertyName, out double value)
+        {
+            value = 0;
+            if (!element.TryGetProperty(propertyName, out var prop)) return false;
+            if (prop.ValueKind == JsonValueKind.Number) return prop.TryGetDouble(out value);
+            if (prop.ValueKind == JsonValueKind.String)
+            {
+                var text = prop.GetString();
+                if (string.IsNullOrWhiteSpace(text) || text == "--") return false;
+                return double.TryParse(text, out value);
+            }
+            return false;
+        }
+
+        private static OfficialNavSnapshot? TryBuildOfficialNavSnapshot(JsonElement dataArray, string settleDate)
+        {
+            if (dataArray.ValueKind != JsonValueKind.Array || dataArray.GetArrayLength() == 0) return null;
+
+            var latest = dataArray[0];
+            string fsrq = latest.TryGetProperty("FSRQ", out var fsrqElement) ? (fsrqElement.GetString() ?? string.Empty) : string.Empty;
+            if (fsrq != settleDate) return null;
+
+            double? apiRate = TryGetDouble(latest, "JZZZL", out var parsedRate) ? parsedRate : null;
+            double? navRate = null;
+            double? todayNav = null;
+            double? yesterdayNav = null;
+            double? navDiff = null;
+
+            if (dataArray.GetArrayLength() > 1 &&
+                TryGetDouble(latest, "DWJZ", out var navToday) &&
+                TryGetDouble(dataArray[1], "DWJZ", out var navYesterday) &&
+                navYesterday > 0)
+            {
+                todayNav = navToday;
+                yesterdayNav = navYesterday;
+                navDiff = navToday - navYesterday;
+                navRate = Math.Round(navDiff.Value / navYesterday * 100.0, 4);
+            }
+
+            double? finalRate = null;
+            string source = string.Empty;
+
+            if (navRate.HasValue && (!apiRate.HasValue ||
+                                     (Math.Abs(apiRate.Value) < 0.000001 && Math.Abs(navRate.Value) > 0.000001) ||
+                                     Math.Abs(apiRate.Value - navRate.Value) > 0.05))
+            {
+                finalRate = navRate.Value;
+                source = "DWJZ反算";
+            }
+            else if (apiRate.HasValue)
+            {
+                finalRate = apiRate.Value;
+                source = "JZZZL";
+            }
+            else if (navRate.HasValue)
+            {
+                finalRate = navRate.Value;
+                source = "DWJZ反算";
+            }
+
+            if (!finalRate.HasValue) return null;
+            if (Math.Abs(finalRate.Value) < 0.000001 && !navRate.HasValue) return null;
+
+            return new OfficialNavSnapshot
+            {
+                Date = fsrq,
+                Rate = Math.Round(finalRate.Value, 4),
+                TodayNav = todayNav,
+                YesterdayNav = yesterdayNav,
+                NavDiff = navDiff,
+                Source = source
+            };
+        }
+
+        private async Task<OfficialNavSnapshot?> FetchOfficialNavSnapshotAsync(HttpClient client, string fundCode, string settleDate)
+        {
+            long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={fundCode}&pageIndex=1&pageSize=2&_={timestamp}";
+            string res = await client.GetStringAsync(url);
+            using var doc = JsonDocument.Parse(res);
+            if (!doc.RootElement.TryGetProperty("Data", out var data) ||
+                !data.TryGetProperty("LSJZList", out var dataArray))
+            {
+                return null;
+            }
+
+            return TryBuildOfficialNavSnapshot(dataArray, settleDate);
+        }
+
+        private static bool ApplyOneDaySettlement(MyFundConfig fund, double actualRate, string settleDate, double? exactProfit = null)
+        {
+            double baseAmount = GetDailyBaseAmount(fund, settleDate);
             double pending = GetPendingTradeAmount(fund, settleDate);
-            double settledProfit = Math.Round(baseAmount * (actualRate / 100.0), 2);
-            double settledBaseAmount = baseAmount + settledProfit;
+            double settledProfit = Math.Round(exactProfit ?? (baseAmount * (actualRate / 100.0)), 2);
+            double newHoldAmount = Math.Round(baseAmount + settledProfit + pending, 2);
 
-            fund.HoldAmount = Math.Round(settledBaseAmount + pending, 2);
+            bool changed = fund.LastSettledDate != settleDate ||
+                           Math.Abs(fund.LastSettledRate - actualRate) > 0.0001 ||
+                           Math.Abs(fund.LastSettledProfit - settledProfit) > 0.01 ||
+                           Math.Abs(fund.HoldAmount - newHoldAmount) > 0.01;
+
+            if (!changed) return false;
+
+            fund.HoldAmount = newHoldAmount;
             fund.LastSettledDate = settleDate;
             fund.LastSettledProfit = settledProfit;
             fund.LastSettledRate = Math.Round(actualRate, 4);
@@ -1135,6 +1239,99 @@ namespace 估值助手.Controllers
             }
         }
 
+        [HttpPost("sync-real-nav")]
+        public async Task<IActionResult> SyncRealNav([FromForm] string username)
+        {
+            if (string.IsNullOrWhiteSpace(username)) return Unauthorized("请提供指挥官代号");
+
+            var localTime = ChinaNow();
+            string settleDate = localTime.ToString("yyyy-MM-dd");
+            DateTime today = localTime.Date;
+            DateTime tomorrow = today.AddDays(1);
+
+            try
+            {
+                var funds = await _context.MyFunds
+                    .Where(f => f.Username == username)
+                    .ToListAsync();
+
+                if (funds.Count == 0)
+                {
+                    return Ok(new { success = true, updated = 0, message = "暂无持仓" });
+                }
+
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
+                client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
+                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36");
+                client.DefaultRequestHeaders.Add("Accept", "application/json, text/javascript, */*; q=0.01");
+
+                int updated = 0;
+                int skipped = 0;
+                var diagnostics = new List<string>();
+
+                foreach (var group in funds.GroupBy(f => f.FundCode))
+                {
+                    var snapshot = await FetchOfficialNavSnapshotAsync(client, group.Key, settleDate);
+                    if (snapshot == null)
+                    {
+                        skipped++;
+                        diagnostics.Add($"{group.Key}: 尚未拿到可校验真实净值");
+                        continue;
+                    }
+
+                    var targetRecord = await _context.FundRecords
+                        .Where(r => r.FundCode == group.Key && r.FetchTime >= today && r.FetchTime < tomorrow)
+                        .OrderByDescending(r => r.FetchTime)
+                        .FirstOrDefaultAsync();
+
+                    if (targetRecord != null)
+                    {
+                        targetRecord.ActualRate = snapshot.Rate;
+                        targetRecord.DiffRate = Math.Round(snapshot.Rate - targetRecord.EstimatedRate, 2);
+                    }
+
+                    foreach (var fund in group)
+                    {
+                        double? exactProfit = null;
+                        if (snapshot.NavDiff.HasValue)
+                        {
+                            double effectiveShares = GetEffectiveShares(fund, settleDate);
+                            if (effectiveShares > 0) exactProfit = Math.Round(effectiveShares * snapshot.NavDiff.Value, 2);
+                        }
+
+                        if (ApplyOneDaySettlement(fund, snapshot.Rate, settleDate, exactProfit))
+                        {
+                            updated++;
+                        }
+                    }
+
+                    diagnostics.Add($"{group.Key}: {snapshot.Rate:F4}% [{snapshot.Source}]");
+                }
+
+                var todayRecords = await _context.FundRecords
+                    .Where(r => r.FetchTime >= today && r.FetchTime < tomorrow)
+                    .ToListAsync();
+
+                await UpsertTodayArchivesFromCurrentHoldingsAsync(username, today, funds, todayRecords);
+                await _context.SaveChangesAsync();
+
+                ClearTodayCache(username);
+
+                return Ok(new
+                {
+                    success = true,
+                    updated,
+                    skipped,
+                    message = $"真实净值同步完成，更新 {updated} 条持仓。",
+                    diagnostics
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"真实净值同步失败: {ex.Message}");
+            }
+        }
+
         // 🚀 猎隼侦察兵升级版：双重刺探，获取单位净值计算绝对物理收益
         private async Task<(double? rate, double? exactProfit)> GetTodayRealRateAsync(string fundCode, string todayStr, double shares)
         {
@@ -1154,31 +1351,25 @@ namespace 估值助手.Controllers
                 using var doc = JsonDocument.Parse(res);
                 var dataArray = doc.RootElement.GetProperty("Data").GetProperty("LSJZList");
 
+                var snapshot = TryBuildOfficialNavSnapshot(dataArray, todayStr);
+                if (snapshot != null)
+                {
+                    double? exactProfit = null;
+                    if (shares > 0 && snapshot.NavDiff.HasValue)
+                    {
+                        exactProfit = Math.Round(shares * snapshot.NavDiff.Value, 2);
+                    }
+
+                    var result = (snapshot.Rate, exactProfit);
+                    _cache.Set(cacheKey, result, TimeSpan.FromHours(12));
+                    return result;
+                }
+
                 if (dataArray.GetArrayLength() > 0)
                 {
                     var latest = dataArray[0];
-                    // 🚀 修复 2：必须是网络通畅且返回了数据，才判断日期
-                    if (latest.GetProperty("FSRQ").GetString() == todayStr)
+                    if ((latest.GetProperty("FSRQ").GetString() ?? "") != todayStr)
                     {
-                        if (double.TryParse(latest.GetProperty("JZZZL").GetString(), out double realRate))
-                        {
-                            double? exactProfit = null;
-                            if (shares > 0 && dataArray.GetArrayLength() > 1)
-                            {
-                                if (double.TryParse(latest.GetProperty("DWJZ").GetString(), out double todayNav) &&
-                                    double.TryParse(dataArray[1].GetProperty("DWJZ").GetString(), out double yesterdayNav))
-                                {
-                                    exactProfit = Math.Round(shares * (todayNav - yesterdayNav), 2);
-                                }
-                            }
-                            var result = (realRate, exactProfit);
-                            _cache.Set(cacheKey, result, TimeSpan.FromHours(12));
-                            return result;
-                        }
-                    }
-                    else
-                    {
-                        // 🚀 修复 3：确凿证据表明官方日期还没更新，才关入小黑屋
                         _cache.Set(missKey, true, TimeSpan.FromMinutes(2));
                         return (null, null);
                     }

@@ -1101,10 +1101,35 @@
                     return echartsLoadingPromise;
                 };
 
+                const syncRealNavIfNeeded = async () => {
+                    if (!currentUser.value) return;
+                    const now = new Date();
+                    const minutes = now.getHours() * 60 + now.getMinutes();
+                    if (minutes < 17 * 60) return;
+
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 12000);
+                    try {
+                        const fd = new FormData();
+                        fd.append('username', currentUser.value);
+                        await fetch(`${API_BASE}/api/fund/sync-real-nav`, {
+                            method: 'POST',
+                            body: fd,
+                            signal: controller.signal,
+                            cache: 'no-store'
+                        });
+                    } catch (e) {
+                        // 外部净值源偶发慢，不阻断本地数据刷新。
+                    } finally {
+                        clearTimeout(timeoutId);
+                    }
+                };
+
                 const refreshNow = async (force = true) => {
                     if (pullRefresh.loading || isFetchingData) return;
                     pullRefresh.loading = true;
                     try {
+                        if (force) await syncRealNavIfNeeded();
                         await fetchData({ force, silent: true });
                         showToast('✅ 数据已刷新', 'success');
                     } finally {
