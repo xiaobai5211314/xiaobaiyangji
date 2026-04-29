@@ -13,7 +13,6 @@ namespace 估值助手.Controllers
         private readonly AppDbContext _context;
         public AuthController(AppDbContext context) { _context = context; }
 
-        // 核心机密：SHA256 密码加密算法
         private string HashPassword(string password)
         {
             using var sha256 = SHA256.Create();
@@ -24,24 +23,55 @@ namespace 估值助手.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromForm] string username, [FromForm] string password)
         {
-            if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password)) return BadRequest("账号和密码不能为空");
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)) return BadRequest("账号和密码不能为空");
+            if (await _context.Users.AnyAsync(u => u.Username == username)) return BadRequest("该账号已被注册");
 
-            // 查重：防止别人注册同样的账号
-            if (await _context.Users.AnyAsync(u => u.Username == username)) return BadRequest("该指挥官代号已被注册！");
-
-            // 存入数据库（注意：这里存的是加密后的密码）
-            _context.Users.Add(new User { Username = username, PasswordHash = HashPassword(password) });
+            _context.Users.Add(new User { Username = username, PasswordHash = HashPassword(password), AvatarDataUrl = string.Empty });
             await _context.SaveChangesAsync();
-            return Ok(new { success = true });
+            return Ok(new { success = true, username, avatarDataUrl = "" });
         }
 
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromForm] string username, [FromForm] string password)
         {
             var user = await _context.Users.FindAsync(username);
-            // 校验账号是否存在，以及密码哈希值是否对得上
-            if (user == null || user.PasswordHash != HashPassword(password)) return BadRequest("账号或密码错误！");
+            if (user == null || user.PasswordHash != HashPassword(password)) return BadRequest("账号或密码错误");
 
+            return Ok(new { success = true, username = user.Username, avatarDataUrl = user.AvatarDataUrl ?? "" });
+        }
+
+        [HttpGet("profile")]
+        public async Task<IActionResult> Profile([FromQuery] string username)
+        {
+            if (string.IsNullOrWhiteSpace(username)) return BadRequest("缺少账号");
+            var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Username == username);
+            if (user == null) return NotFound("账号不存在");
+            return Ok(new { username = user.Username, avatarDataUrl = user.AvatarDataUrl ?? "" });
+        }
+
+        [HttpPost("avatar")]
+        public async Task<IActionResult> SaveAvatar([FromForm] string username, [FromForm] string avatarDataUrl)
+        {
+            if (string.IsNullOrWhiteSpace(username)) return BadRequest("缺少账号");
+            if (string.IsNullOrWhiteSpace(avatarDataUrl)) return BadRequest("头像不能为空");
+            if (!avatarDataUrl.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase)) return BadRequest("头像格式不正确");
+            if (avatarDataUrl.Length > 900_000) return BadRequest("头像过大，请换一张更小的图片");
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
+            if (user == null) return NotFound("账号不存在");
+            user.AvatarDataUrl = avatarDataUrl;
+            await _context.SaveChangesAsync();
+            return Ok(new { success = true, avatarDataUrl = user.AvatarDataUrl });
+        }
+
+        [HttpPost("avatar/clear")]
+        public async Task<IActionResult> ClearAvatar([FromForm] string username)
+        {
+            if (string.IsNullOrWhiteSpace(username)) return BadRequest("缺少账号");
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
+            if (user == null) return NotFound("账号不存在");
+            user.AvatarDataUrl = string.Empty;
+            await _context.SaveChangesAsync();
             return Ok(new { success = true });
         }
     }
