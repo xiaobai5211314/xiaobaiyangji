@@ -29,7 +29,7 @@
             padding: 0;
             background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
             color: #f8fafc;
-            font-family: -apple-system, sans-serif;
+            font-family: "Microsoft YaHei", "微软雅黑", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             overflow-x: hidden;
             min-height: 100vh;
             overscroll-behavior-y: contain;
@@ -579,6 +579,34 @@
             .home-ocr-main { min-height: 50px; font-size: 16px; }
         }
 
+
+        /* 本轮：数据库头像、首页去重、导航/移动端可读性、主力资金 */
+        .home-identity-row { justify-content: flex-start; }
+        .home-identity-row.compact { align-items: center; }
+        .home-profile-hint { white-space: normal; color:#94a3b8; }
+        .home-quick-actions.one-action { grid-template-columns: 1fr; }
+        .home-refresh-icon { display: none !important; }
+        .profile-note { max-width: 280px; margin-left:auto; margin-right:auto; }
+        .capital-flow-panel { margin-top:15px; padding:16px; }
+        .capital-row { display:grid; grid-template-columns: minmax(0, 1.1fr) .75fr .75fr; gap:8px; align-items:center; padding:12px 6px; border-bottom:1px solid rgba(255,255,255,.06); }
+        .capital-head { color:#94a3b8; font-size:12px; }
+        .capital-name { color:#f8fafc; font-weight:900; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .capital-sub { color:#64748b; font-size:11px; margin-top:3px; }
+        .capital-value { text-align:right; font-family:'Courier New', monospace; font-weight:900; }
+        .profit-list-row > div:last-child { padding-right: 12px; min-width: 102px; box-sizing:border-box; overflow:visible; }
+        @media screen and (min-width: 769px) {
+            .bottom-tabbar { width: min(760px, calc(100vw - 80px)); bottom: 20px; padding: 8px; border-radius: 22px; background: rgba(15,23,42,.72); }
+            .bottom-tab { height: 46px; }
+        }
+        @media screen and (max-width: 768px) {
+            .home-hero-clean { padding: 16px; }
+            .home-identity-left { width:100%; }
+            .home-ocr-main { min-height: 52px; }
+            .analysis-grid { padding-left: 2px; padding-right: 14px; box-sizing:border-box; }
+            .profit-list-row { grid-template-columns: 30px minmax(0, 1fr) minmax(96px, 112px); gap:8px; padding-right: 8px; }
+            .profit-list-row > div:last-child { padding-right: 14px; min-width: 96px; }
+            .capital-row { grid-template-columns: minmax(0, 1.15fr) .75fr .7fr; }
+        }
     </style>
 </head>
 <body>
@@ -611,22 +639,15 @@
                             <img v-if="userAvatar" :src="userAvatar" alt="头像">
                             <span v-else class="user-avatar-fallback">{{ currentUser ? currentUser.slice(0,1).toUpperCase() : '我' }}</span>
                         </button>
-                        <div class="home-title-stack">
-                            <div class="logo-text">🚀 估值助手</div>
-                            <div class="home-subtitle">{{ currentUser }} · 点击头像设置头像 / 退出登录</div>
-                        </div>
+                        <div class="home-subtitle home-profile-hint">点击头像设置头像 / 退出登录</div>
                     </div>
-                    <button class="btn home-refresh-icon" @click="refreshNow(true)" :disabled="pullRefresh.loading" title="刷新持仓">
-                        {{ pullRefresh.loading ? '…' : '↻' }}
-                    </button>
                 </div>
                 <input type="file" id="ocrInput" accept="image/*" style="display: none;" @change="handleFileUpload">
                 <input type="file" id="avatarInput" accept="image/*" style="display: none;" @change="handleAvatarUpload">
-                <div class="home-quick-actions">
+                <div class="home-quick-actions one-action">
                     <button class="btn home-ocr-main" @click="triggerUpload" :disabled="isUploading">
                         📷 {{ isUploading ? '解析中...' : '智能截图导入持仓' }}
                     </button>
-                    <button class="btn home-refresh-icon" @click="refreshNow(true)" :disabled="pullRefresh.loading" title="刷新持仓">🔄</button>
                 </div>
             </div>
 
@@ -786,6 +807,24 @@
                 </div>
             </div>
 
+                <div class="glass-panel capital-flow-panel">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;">
+                        <div>
+                            <div class="page-title" style="font-size:18px;">💧 主力资金流入</div>
+                            <div class="page-subtitle">{{ capitalFlowSource || '东方财富板块资金流向' }} · {{ capitalFlowUpdatedAt || '待更新' }}</div>
+                        </div>
+                        <button class="btn" @click="fetchCapitalFlow(true)">🔄</button>
+                    </div>
+                    <div v-if="isCapitalLoading" class="news-empty">📡 正在同步主力资金...</div>
+                    <div v-else>
+                        <div class="capital-row capital-head"><span>板块</span><span class="capital-value">主力净流入</span><span class="capital-value">净占比</span></div>
+                        <div v-for="item in capitalFlowRows.slice(0, 30)" :key="item.code" class="capital-row">
+                            <div style="min-width:0;"><div class="capital-name">{{ item.name }}</div><div class="capital-sub">涨跌 {{ item.rate > 0 ? '+' : '' }}{{ item.rate }}%</div></div>
+                            <div class="capital-value" :style="{color:item.mainNet>=0?'#ff4d4f':'#10b981'}">{{ item.mainNetText }}</div>
+                            <div class="capital-value" :style="{color:item.mainRatio>=0?'#ff4d4f':'#10b981'}">{{ item.mainRatio > 0 ? '+' : '' }}{{ item.mainRatio }}%</div>
+                        </div>
+                    </div>
+                </div>
             <div v-show="activePage === 'news'" class="app-page">
                 <div class="page-topbar glass-panel"><div><div class="page-title">📰 资讯</div><div class="page-subtitle">{{ newsSource || '东方财富7x24快讯' }} · {{ newsUpdatedAt || '待更新' }}</div></div><div class="analysis-toolbar"><label style="font-size:12px;color:#cbd5e1;"><input type="checkbox" v-model="newsOnlyImportant" @change="fetchNews(newsMode, true)"> 只看重要</label><button class="btn" @click="fetchNews(newsMode, true)">🔄 刷新</button></div></div>
                 <div class="news-page-layout"><div class="glass-panel" style="padding:16px;"><div class="news-tabs" style="margin-bottom:12px;"><button :class="['news-tab', newsMode==='global'?'active':'']" @click="switchNewsMode('global')">7x24快讯</button><button :class="['news-tab', newsMode==='holding'?'active':'']" @click="switchNewsMode('holding')">持仓资讯</button></div><div class="news-toolbar" style="border-radius:14px;margin-bottom:12px;"><span>{{ newsMode === 'holding' ? '只显示和你持仓基金主题相关的消息' : '全市场财经快讯时间线' }}</span></div><div v-if="isNewsLoading" class="news-empty">📡 正在同步资讯...</div><div v-else-if="newsList.length === 0" class="news-empty">暂无匹配资讯</div><div v-else class="news-list news-page-list"><template v-for="group in groupedNews" :key="group.date"><div class="news-date">{{ group.date }}</div><div v-for="item in group.items" :key="item.id + item.showTime" :class="['news-item', item.sentiment]"><div class="news-line"></div><div class="news-dot"></div><div class="news-card" @click="openNewsItem(item)"><div class="news-time">{{ item.timeText }}</div><div class="news-title">{{ item.title }}</div><div v-if="item.summary && item.summary !== item.title" class="news-summary">{{ item.summary }}</div><div class="news-badges"><span v-if="item.important" class="news-badge good">重要</span><span v-if="item.matchedFundName" class="news-badge">{{ item.matchedFundName }}</span><span :class="['news-badge', item.sentiment==='positive'?'good':(item.sentiment==='negative'?'bad':'neutral') ]">{{ item.sentiment==='positive'?'偏利好':(item.sentiment==='negative'?'偏利空':'中性') }} · {{ item.impactScore }}分</span><span v-for="tag in (item.tags || []).slice(0,3)" :key="tag" class="news-badge neutral">{{ tag }}</span></div></div></div></template></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">🧩 持仓资讯入口</div><div class="page-subtitle">点基金可切到持仓资讯并按主题匹配</div><div style="margin-top:12px;"><div v-for="fund in fundsList" :key="'news-hold-'+fund.code" class="quick-holding-card" @click="newsMode='holding'; fetchNews('holding', true);"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ fund.name }}</div><div style="display:flex;justify-content:space-between;margin-top:6px;color:#94a3b8;font-size:12px;"><span>{{ fund.code }}</span><span>{{ fund.currentRate>0?'+':'' }}{{ fund.currentRate }}%</span></div></div></div></div></div>
@@ -806,7 +845,7 @@
                             <span v-else class="user-avatar-fallback">{{ currentUser ? currentUser.slice(0,1).toUpperCase() : '我' }}</span>
                         </div>
                         <div class="profile-name">{{ currentUser }}</div>
-                        <div class="profile-note">本地头像只保存在当前浏览器 / App WebView</div>
+                        <div class="profile-note">头像已保存到账号数据库，换设备或清缓存后仍可恢复</div>
                     </div>
                     <div class="profile-actions">
                         <button class="btn profile-action-btn btn-primary" @click="triggerAvatarUpload">🖼️ 设置头像</button>
@@ -1170,7 +1209,7 @@
                 let lastDataFetchAt = 0;
                 const isUploading = ref(false);
                 const showProfileModal = ref(false);
-                const userAvatar = ref(localStorage.getItem('fund_user_avatar_' + (currentUser.value || 'default')) || '');
+                const userAvatar = ref('');
                 const pullRefresh = reactive({ startY: 0, startX: 0, distance: 0, active: false, show: false, loading: false });
 
                 const activePage = ref('home');
@@ -1193,6 +1232,10 @@
                 const sectorMode = ref('top');
                 const sectorSource = ref('');
                 const sectorUpdatedAt = ref('');
+                const capitalFlowRows = ref([]);
+                const capitalFlowSource = ref('');
+                const capitalFlowUpdatedAt = ref('');
+                const isCapitalLoading = ref(false);
                 const showSectorRadar = ref(false);
                 const isSectorLoading = ref(false);
                 const showSectorDetails = ref(false);
@@ -1412,20 +1455,41 @@
                 const handleLogin = async () => {
                     if (!loginForm.username || !loginForm.password) return showToast("为空！", "error");
                     let fd = new FormData(); fd.append('username', loginForm.username); fd.append('password', loginForm.password);
-                    try { const res = await fetch(API_BASE + '/api/auth/login', { method: 'POST', body: fd }); if (res.ok) { localStorage.setItem('fund_username', loginForm.username); currentUser.value = loginForm.username; userAvatar.value = localStorage.getItem('fund_user_avatar_' + currentUser.value) || ''; isLoggedIn.value = true; showToast("接入成功", "success"); initDashboard(); } else { showToast("❌ 密码错误", "error"); } } catch (error) { showToast("🌐 登录失败", "error"); }
+                    try {
+                        const res = await fetch(API_BASE + '/api/auth/login', { method: 'POST', body: fd });
+                        if (res.ok) {
+                            const data = await res.json();
+                            localStorage.setItem('fund_username', loginForm.username);
+                            currentUser.value = loginForm.username;
+                            userAvatar.value = data.avatarDataUrl || '';
+                            isLoggedIn.value = true;
+                            showToast("接入成功", "success");
+                            initDashboard();
+                        } else {
+                            showToast("❌ 密码错误", "error");
+                        }
+                    } catch (error) { showToast("🌐 登录失败", "error"); }
                 };
 
                 const handleLogout = () => { localStorage.removeItem('fund_username'); showProfileModal.value = false; location.reload(); };
                 const triggerUpload = () => { document.getElementById('ocrInput').click(); };
                 const triggerAvatarUpload = () => { document.getElementById('avatarInput')?.click(); };
-                const clearAvatar = () => { if (!currentUser.value) return; localStorage.removeItem('fund_user_avatar_' + currentUser.value); userAvatar.value = ''; showToast('头像已清除', 'success'); };
+                const clearAvatar = async () => {
+                    if (!currentUser.value) return;
+                    const fd = new FormData(); fd.append('username', currentUser.value);
+                    try {
+                        const res = await fetch(API_BASE + '/api/auth/avatar/clear', { method: 'POST', body: fd });
+                        if (res.ok) { userAvatar.value = ''; showToast('头像已清除', 'success'); }
+                        else showToast('清除失败', 'error');
+                    } catch(e) { showToast('网络异常', 'error'); }
+                };
                 const handleAvatarUpload = (event) => {
                     const file = event.target.files && event.target.files[0];
                     if (!file || !currentUser.value) return;
                     const reader = new FileReader();
                     reader.onload = (e) => {
                         const img = new Image();
-                        img.onload = () => {
+                        img.onload = async () => {
                             const size = 180;
                             const canvas = document.createElement('canvas');
                             canvas.width = size; canvas.height = size;
@@ -1435,9 +1499,12 @@
                             const sy = (img.height - minSide) / 2;
                             ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
                             const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
-                            localStorage.setItem('fund_user_avatar_' + currentUser.value, dataUrl);
-                            userAvatar.value = dataUrl;
-                            showToast('头像已更新', 'success');
+                            const fd = new FormData(); fd.append('username', currentUser.value); fd.append('avatarDataUrl', dataUrl);
+                            try {
+                                const res = await fetch(API_BASE + '/api/auth/avatar', { method: 'POST', body: fd });
+                                if (res.ok) { const saved = await res.json(); userAvatar.value = saved.avatarDataUrl || dataUrl; showToast('头像已更新', 'success'); }
+                                else showToast(await res.text() || '头像保存失败', 'error');
+                            } catch(e) { showToast('网络异常', 'error'); }
                             event.target.value = '';
                         };
                         img.src = e.target.result;
@@ -1508,6 +1575,26 @@
                 };
 
 
+
+                let capitalCacheTime = 0;
+                const fetchCapitalFlow = async (force = false) => {
+                    const now = Date.now();
+                    if (!force && capitalFlowRows.value.length > 0 && (now - capitalCacheTime) < 120000) return;
+                    isCapitalLoading.value = true;
+                    try {
+                        const res = await fetch(`${API_BASE}/api/fund/capital-flow?limit=40${force ? '&force=true' : ''}`);
+                        if (!res.ok) throw new Error(await res.text());
+                        const data = await res.json();
+                        capitalFlowRows.value = data.rows || [];
+                        capitalFlowSource.value = data.source || '';
+                        capitalFlowUpdatedAt.value = data.updatedAt || '';
+                        capitalCacheTime = now;
+                    } catch(e) {
+                        showToast('主力资金流获取失败', 'error');
+                    } finally {
+                        isCapitalLoading.value = false;
+                    }
+                };
                 let echartsLoadingPromise = null;
                 const ensureEcharts = () => {
                     if (window.echarts) return Promise.resolve(window.echarts);
@@ -1659,7 +1746,7 @@
                 const switchPage = async (page) => {
                     activePage.value = page;
                     window.scrollTo({ top: 0, behavior: 'smooth' });
-                    if (page === 'sector') await fetchSectors(false, false);
+                    if (page === 'sector') { await fetchSectors(false, false); fetchCapitalFlow(false); }
                     if (page === 'news') await fetchNews(newsMode.value, newsList.value.length === 0);
                     if (page === 'analysis') await fetchAnalysis(false);
                     if (page === 'home') nextTick(() => { if (chartInstance.value) chartInstance.value.resize(); });
@@ -1827,7 +1914,15 @@
 
                 const initDashboard = () => { nextTick(() => { updateRadarMode(); setTimeout(() => { fetchData({ force: false }); }, 120); }); };
 
-                onMounted(() => { if (currentUser.value) { isLoggedIn.value = true; initDashboard(); } document.addEventListener('visibilitychange', handleVisibilityChange); window.addEventListener('touchstart', onPullStart, { passive: true }); window.addEventListener('touchmove', onPullMove, { passive: false }); window.addEventListener('touchend', onPullEnd, { passive: true }); });
+                const fetchUserProfile = async () => {
+                    if (!currentUser.value) return;
+                    try {
+                        const res = await fetch(API_BASE + '/api/auth/profile?username=' + encodeURIComponent(currentUser.value));
+                        if (res.ok) { const data = await res.json(); userAvatar.value = data.avatarDataUrl || ''; }
+                    } catch(e) { }
+                };
+
+                onMounted(() => { if (currentUser.value) { isLoggedIn.value = true; fetchUserProfile(); initDashboard(); } document.addEventListener('visibilitychange', handleVisibilityChange); window.addEventListener('touchstart', onPullStart, { passive: true }); window.addEventListener('touchmove', onPullMove, { passive: false }); window.addEventListener('touchend', onPullEnd, { passive: true }); });
 
                 const todayStr = new Date(new Date().getTime() + 8 * 3600 * 1000).toISOString().split('T')[0];
                 const addModal = reactive({ show: false, code: '', name: '', amount: '', rawDate: todayStr, timeSlot: 'before', currentAmount: 0, currentCost: 0 });
@@ -1850,7 +1945,7 @@
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
                     handleLogin, handleRegister, handleLogout, handleAddFund, handleDeleteFund, triggerUpload, handleFileUpload, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
-                    sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt,
+                    sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowSource, capitalFlowUpdatedAt, isCapitalLoading, fetchCapitalFlow,
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, isDetailsLoading, expandedSectors, toggleSector,
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
