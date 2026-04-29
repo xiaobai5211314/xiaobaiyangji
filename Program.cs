@@ -77,7 +77,8 @@ using (var scope = app.Services.CreateScope())
         "ALTER TABLE FundRecords ADD COLUMN DiffRate DOUBLE NOT NULL DEFAULT 0;",
         "CREATE INDEX IX_FundRecord_Code_Time ON FundRecords (FundCode, FetchTime);",
         "CREATE INDEX IX_DailyArchive_User_Date_Code ON DailyArchives (Username, RecordDate, FundCode);",
-        "CREATE INDEX IX_DailyArchive_User_Code_Date ON DailyArchives (Username, FundCode, RecordDate);"
+        "CREATE INDEX IX_DailyArchive_User_Code_Date ON DailyArchives (Username, FundCode, RecordDate);",
+        "ALTER TABLE Users ADD COLUMN AvatarDataUrl LONGTEXT;"
     };
 
     foreach (var sql in runtimeSql)
