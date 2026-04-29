@@ -11,9 +11,13 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
+    <link rel="preconnect" href="https://guzhi.21212121.xyz" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
     <style>
         html {
             background-color: #0f172a;
+            overscroll-behavior-y: contain;
         }
 
         [v-cloak] {
@@ -28,6 +32,7 @@
             font-family: -apple-system, sans-serif;
             overflow-x: hidden;
             min-height: 100vh;
+            overscroll-behavior-y: contain;
         }
 
         /* 借鉴的新版毛玻璃与阴影质感 */
@@ -341,6 +346,28 @@
             }
         }
 
+
+
+        .pull-refresh-indicator {
+            position: fixed;
+            top: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 6000;
+            padding: 8px 18px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.88);
+            border: 1px solid rgba(96, 165, 250, 0.35);
+            color: #dbeafe;
+            font-size: 13px;
+            font-weight: 800;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            pointer-events: none;
+            transition: opacity .18s ease, transform .18s ease;
+        }
+
         @media screen and (max-width: 768px) {
             .header {
                 flex-direction: column;
@@ -374,6 +401,9 @@
 </head>
 <body>
     <div id="app" v-cloak>
+        <div v-if="pullRefresh.show || pullRefresh.loading" class="pull-refresh-indicator" :style="{ opacity: pullRefresh.show || pullRefresh.loading ? 1 : 0 }">
+            {{ pullRefresh.loading ? '正在刷新...' : (pullRefresh.distance >= 70 ? '松开刷新' : '下拉刷新') }}
+        </div>
         <div class="toast-container">
             <div v-for="t in toasts" :key="t.id" :class="['toast', t.type]">{{ t.msg }}</div>
         </div>
@@ -818,7 +848,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/vue@3.3.4/dist/vue.global.prod.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
     <script>
         if (window.hasOwnProperty('chrome') && window.chrome.webview || window.location.protocol === 'file:') {
             var script = document.createElement('script'); script.src = "_framework/blazor.webview.js"; document.body.appendChild(script);
@@ -860,7 +889,10 @@
                 const fundForm = reactive({ code: '', amount: '' });
                 const chartInstance = shallowRef(null);
                 let timer = null;
+                let isFetchingData = false;
+                let lastDataFetchAt = 0;
                 const isUploading = ref(false);
+                const pullRefresh = reactive({ startY: 0, distance: 0, active: false, show: false, loading: false });
 
                 const savedMode = localStorage.getItem('privacy_mode');
                 const privacyMode = ref(savedMode !== null ? Number(savedMode) : 2);
@@ -999,18 +1031,18 @@
                 const handleAddFund = async () => {
                     if (!fundForm.code || !fundForm.amount) return showToast("⚠️ 输入完整！", "error");
                     const fd = new FormData(); fd.append('username', currentUser.value); fd.append('code', fundForm.code); fd.append('amount', fundForm.amount);
-                    try { const res = await fetch(API_BASE + '/api/fund/add', { method: 'POST', body: fd }); if (res.ok) { fundForm.code = ''; fundForm.amount = ''; fetchData(); showToast("✅ 成功", "success"); } } catch (e) { showToast("🌐 异常", "error"); }
+                    try { const res = await fetch(API_BASE + '/api/fund/add', { method: 'POST', body: fd }); if (res.ok) { fundForm.code = ''; fundForm.amount = ''; fetchData({ force: true, silent: true }); showToast("✅ 成功", "success"); } } catch (e) { showToast("🌐 异常", "error"); }
                 };
 
                 const handleDeleteFund = async (code, name) => {
-                    if (confirm(`移除 [${name}]？`)) { const fd = new FormData(); fd.append('username', currentUser.value); fd.append('code', code); try { await fetch(API_BASE + '/api/fund/delete', { method: 'POST', body: fd }); fetchData(); showToast("✅ 移除", "success"); } catch (e) { } }
+                    if (confirm(`移除 [${name}]？`)) { const fd = new FormData(); fd.append('username', currentUser.value); fd.append('code', code); try { await fetch(API_BASE + '/api/fund/delete', { method: 'POST', body: fd }); fetchData({ force: true, silent: true }); showToast("✅ 移除", "success"); } catch (e) { } }
                 };
 
                 const handleFileUpload = async (event) => {
                     const file = event.target.files[0]; if (!file) return; isUploading.value = true;
                     compressImageBeforeUpload(file, async (compressedFile) => {
                         const formData = new FormData(); formData.append('imageFile', compressedFile);
-                        try { const response = await fetch(`${API_BASE}/api/Fund/import-ocr?username=${encodeURIComponent(currentUser.value)}`, { method: 'POST', body: formData }); if (response.ok) { ocrModal.content = await response.text(); ocrModal.show = true; fetchData(); } else { showToast("❌ 识别失败", "error"); } } catch (error) { showToast("🌐 网络异常", "error"); } finally { isUploading.value = false; event.target.value = ''; }
+                        try { const response = await fetch(`${API_BASE}/api/Fund/import-ocr?username=${encodeURIComponent(currentUser.value)}`, { method: 'POST', body: formData }); if (response.ok) { ocrModal.content = await response.text(); ocrModal.show = true; fetchData({ force: true, silent: true }); } else { showToast("❌ 识别失败", "error"); } } catch (error) { showToast("🌐 网络异常", "error"); } finally { isUploading.value = false; event.target.value = ''; }
                     });
                 };
 
@@ -1019,7 +1051,7 @@
                 const handleSaveDetails = async () => {
                     if (!editForm.cost || editForm.cost <= 0) return showToast("⚠️ 成本必填", "error");
                     const fd = new FormData(); fd.append('username', currentUser.value); fd.append('code', editForm.code); fd.append('costAmount', editForm.cost); fd.append('holdShares', editForm.shares || 0); fd.append('originalCode', editForm.originalCode);
-                    try { const res = await fetch(API_BASE + '/api/Fund/update-details', { method: 'POST', body: fd }); if (res.ok) { showToast("✅ 补给完成", "success"); editForm.show = false; fetchData(); } } catch (e) { showToast("🌐 异常", "error"); }
+                    try { const res = await fetch(API_BASE + '/api/Fund/update-details', { method: 'POST', body: fd }); if (res.ok) { showToast("✅ 补给完成", "success"); editForm.show = false; fetchData({ force: true, silent: true }); } } catch (e) { showToast("🌐 异常", "error"); }
                 };
 
                 let sectorCache = null; let sectorCacheTime = 0; const SECTOR_CACHE_DURATION = 60000;
@@ -1044,11 +1076,87 @@
                     } catch (e) { showToast("🚨 雷达连接失败", "error"); } finally { isSectorLoading.value = false; }
                 };
 
-                const fetchData = async () => {
-                    if (!currentUser.value) return;
+
+                let echartsLoadingPromise = null;
+                const ensureEcharts = () => {
+                    if (window.echarts) return Promise.resolve(window.echarts);
+                    if (echartsLoadingPromise) return echartsLoadingPromise;
+                    echartsLoadingPromise = new Promise((resolve, reject) => {
+                        const existing = document.getElementById('lazy-echarts');
+                        if (existing) {
+                            existing.addEventListener('load', () => resolve(window.echarts), { once: true });
+                            existing.addEventListener('error', reject, { once: true });
+                            return;
+                        }
+                        const script = document.createElement('script');
+                        script.id = 'lazy-echarts';
+                        script.src = 'https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js';
+                        script.async = true;
+                        script.onload = () => resolve(window.echarts);
+                        script.onerror = reject;
+                        document.body.appendChild(script);
+                    });
+                    return echartsLoadingPromise;
+                };
+
+                const refreshNow = async (force = true) => {
+                    if (pullRefresh.loading || isFetchingData) return;
+                    pullRefresh.loading = true;
                     try {
-                        const response = await fetch(`${API_BASE}/api/fund/today?username=${encodeURIComponent(currentUser.value)}&_t=${new Date().getTime()}`);
+                        await fetchData({ force, silent: true });
+                        showToast('✅ 数据已刷新', 'success');
+                    } finally {
+                        pullRefresh.loading = false;
+                        pullRefresh.show = false;
+                        pullRefresh.distance = 0;
+                    }
+                };
+
+                const onPullStart = (e) => {
+                    if (!isLoggedIn.value || pullRefresh.loading || isFetchingData) return;
+                    if (window.scrollY > 0) return;
+                    const touch = e.touches && e.touches[0];
+                    if (!touch) return;
+                    pullRefresh.startY = touch.clientY;
+                    pullRefresh.distance = 0;
+                    pullRefresh.active = true;
+                };
+
+                const onPullMove = (e) => {
+                    if (!pullRefresh.active || pullRefresh.loading) return;
+                    const touch = e.touches && e.touches[0];
+                    if (!touch) return;
+                    const dy = touch.clientY - pullRefresh.startY;
+                    if (dy <= 0 || window.scrollY > 0) return;
+                    pullRefresh.distance = Math.min(Math.round(dy * 0.45), 90);
+                    pullRefresh.show = pullRefresh.distance > 8;
+                    if (pullRefresh.distance > 0) e.preventDefault();
+                };
+
+                const onPullEnd = () => {
+                    if (!pullRefresh.active) return;
+                    const shouldRefresh = pullRefresh.distance >= 70;
+                    pullRefresh.active = false;
+                    if (shouldRefresh) refreshNow(true);
+                    else {
+                        pullRefresh.show = false;
+                        pullRefresh.distance = 0;
+                    }
+                };
+
+                const fetchData = async (options = {}) => {
+                    if (!currentUser.value) return;
+                    if (isFetchingData) return;
+                    const force = !!options.force;
+                    const silent = !!options.silent;
+                    isFetchingData = true;
+                    if (!silent && fundsList.value.length === 0) isLoading.value = true;
+                    try {
+                        const forceParam = force ? '&force=true' : '';
+                        const response = await fetch(`${API_BASE}/api/fund/today?username=${encodeURIComponent(currentUser.value)}${forceParam}`, { cache: force ? 'no-store' : 'default' });
+                        if (!response.ok) throw new Error('today接口异常');
                         const apiData = await response.json();
+                        lastDataFetchAt = Date.now();
                         let tPrincipal = 0; let tPrincipalForRate = 0; let tCost = 0; let tToday = 0; let d = new Date();
                         let todaySlash = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
                         let todayDash = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -1119,13 +1227,19 @@
                         const runChart = () => renderChart(apiData);
                         if ('requestIdleCallback' in window) requestIdleCallback(runChart, { timeout: 800 });
                         else requestAnimationFrame(runChart);
-                    } catch (e) { isLoading.value = false; }
+                    } catch (e) {
+                        isLoading.value = false;
+                        if (!silent) showToast("🌐 数据刷新失败", "error");
+                    } finally {
+                        isFetchingData = false;
+                    }
                 };
 
                 const handleResize = () => { if (chartInstance.value) chartInstance.value.resize(); };
                 let lastChartDataHash = '';
-                const renderChart = (apiData) => {
+                const renderChart = async (apiData) => {
                     if (!chartRef.value) return;
+                    try { await ensureEcharts(); } catch (e) { return; }
                     const currentHash = JSON.stringify(apiData.map(f => ({ code: f.code, data: f.data?.slice(-5) })));
                     if (currentHash === lastChartDataHash) { return; } lastChartDataHash = currentHash;
                     if (!chartInstance.value) { chartInstance.value = echarts.init(chartRef.value, 'dark'); window.addEventListener('resize', handleResize); }
@@ -1172,11 +1286,11 @@
                 const debounce = (fn, delay) => { let t = null; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); }; };
                 const debouncedFetchData = debounce(fetchData, 500);
 
-                const handleVisibilityChange = () => { if (document.visibilityState === 'visible') { updateRadarMode(); debouncedFetchData(); } };
+                const handleVisibilityChange = () => { if (document.visibilityState === 'visible') { updateRadarMode(); } };
 
-                const initDashboard = () => { nextTick(() => { updateRadarMode(); setTimeout(() => { fetchData(); timer = setInterval(() => { updateRadarMode(); let d = new Date(); let time = d.getHours() * 100 + d.getMinutes(); if (!(d.getDay() === 0 || d.getDay() === 6) && time >= 925 && time <= 1605) fetchData(); }, 15000); }, 300); }); };
+                const initDashboard = () => { nextTick(() => { updateRadarMode(); setTimeout(() => { fetchData({ force: false }); }, 120); }); };
 
-                onMounted(() => { if (currentUser.value) { isLoggedIn.value = true; initDashboard(); } document.addEventListener('visibilitychange', handleVisibilityChange); });
+                onMounted(() => { if (currentUser.value) { isLoggedIn.value = true; initDashboard(); } document.addEventListener('visibilitychange', handleVisibilityChange); window.addEventListener('touchstart', onPullStart, { passive: true }); window.addEventListener('touchmove', onPullMove, { passive: false }); window.addEventListener('touchend', onPullEnd, { passive: true }); });
 
                 const todayStr = new Date(new Date().getTime() + 8 * 3600 * 1000).toISOString().split('T')[0];
                 const addModal = reactive({ show: false, code: '', name: '', amount: '', rawDate: todayStr, timeSlot: 'before', currentAmount: 0, currentCost: 0 });
@@ -1186,16 +1300,16 @@
 
                 const openAddModal = (fund) => { addModal.show = true; addModal.code = fund.code; addModal.name = fund.name; addModal.amount = ''; addModal.currentAmount = fund.amount; addModal.currentCost = fund.cost > 0 ? fund.cost : '未设置'; const now = new Date(); addModal.rawDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`; addModal.timeSlot = now.getHours() >= 15 ? 'after' : 'before'; };
 
-                const handleAddPosition = async () => { if (!addModal.amount) return showToast("请输入加仓金额", "error"); const tradeDate = calculateTradeDate(addModal.rawDate, addModal.timeSlot); const fd = new FormData(); fd.append('username', currentUser.value); fd.append('code', addModal.code); fd.append('addAmount', addModal.amount); fd.append('tradeDate', tradeDate); try { const res = await fetch(API_BASE + '/api/Fund/add-position', { method: 'POST', body: fd }); const result = await res.json(); if (res.ok) { showToast(result.msg, "success"); addModal.show = false; fetchData(); } else showToast(result.msg || "加仓失败", "error"); } catch (e) { showToast("网络异常", "error"); } };
+                const handleAddPosition = async () => { if (!addModal.amount) return showToast("请输入加仓金额", "error"); const tradeDate = calculateTradeDate(addModal.rawDate, addModal.timeSlot); const fd = new FormData(); fd.append('username', currentUser.value); fd.append('code', addModal.code); fd.append('addAmount', addModal.amount); fd.append('tradeDate', tradeDate); try { const res = await fetch(API_BASE + '/api/Fund/add-position', { method: 'POST', body: fd }); const result = await res.json(); if (res.ok) { showToast(result.msg, "success"); addModal.show = false; fetchData({ force: true, silent: true }); } else showToast(result.msg || "加仓失败", "error"); } catch (e) { showToast("网络异常", "error"); } };
 
                 const openReduceModal = (fund) => { reduceModal.show = true; reduceModal.code = fund.code; reduceModal.name = fund.name; reduceModal.shares = ''; reduceModal.amount = ''; reduceModal.currentAmount = fund.amount; reduceModal.currentShares = fund.shares || 0; const now = new Date(); reduceModal.rawDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`; reduceModal.timeSlot = now.getHours() >= 15 ? 'after' : 'before'; };
 
-                const handleReducePosition = async () => { if (!reduceModal.shares || !reduceModal.rawDate) return showToast("情报不完整，请检查份额或日期", "error"); const tradeDate = calculateTradeDate(reduceModal.rawDate, reduceModal.timeSlot); const fd = new FormData(); fd.append('username', currentUser.value); fd.append('code', reduceModal.code); fd.append('reduceShares', reduceModal.shares); fd.append('reduceAmount', reduceModal.amount || 0); fd.append('tradeDate', tradeDate); try { const res = await fetch(API_BASE + '/api/Fund/reduce-position', { method: 'POST', body: fd }); const result = await res.json(); if (res.ok) { showToast(result.msg || "结转成功", "success"); reduceModal.show = false; fetchData(); } else showToast(result.msg || "核算失败", "error"); } catch (e) { showToast("网络异常", "error"); } };
+                const handleReducePosition = async () => { if (!reduceModal.shares || !reduceModal.rawDate) return showToast("情报不完整，请检查份额或日期", "error"); const tradeDate = calculateTradeDate(reduceModal.rawDate, reduceModal.timeSlot); const fd = new FormData(); fd.append('username', currentUser.value); fd.append('code', reduceModal.code); fd.append('reduceShares', reduceModal.shares); fd.append('reduceAmount', reduceModal.amount || 0); fd.append('tradeDate', tradeDate); try { const res = await fetch(API_BASE + '/api/Fund/reduce-position', { method: 'POST', body: fd }); const result = await res.json(); if (res.ok) { showToast(result.msg || "结转成功", "success"); reduceModal.show = false; fetchData({ force: true, silent: true }); } else showToast(result.msg || "核算失败", "error"); } catch (e) { showToast("网络异常", "error"); } };
 
-                onUnmounted(() => { if (timer) clearInterval(timer); window.removeEventListener('resize', handleResize); document.removeEventListener('visibilitychange', handleVisibilityChange); if (chartInstance.value) chartInstance.value.dispose(); });
+                onUnmounted(() => { if (timer) clearInterval(timer); window.removeEventListener('resize', handleResize); document.removeEventListener('visibilitychange', handleVisibilityChange); window.removeEventListener('touchstart', onPullStart); window.removeEventListener('touchmove', onPullMove); window.removeEventListener('touchend', onPullEnd); if (chartInstance.value) chartInstance.value.dispose(); });
 
                 return {
-                    toasts, isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight,
+                    toasts, isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight, pullRefresh, refreshNow,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
                     handleLogin, handleRegister, handleLogout, handleAddFund, handleDeleteFund, triggerUpload, handleFileUpload,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,

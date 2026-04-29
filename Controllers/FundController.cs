@@ -809,14 +809,18 @@ namespace 估值助手.Controllers
             }
         }
         [HttpGet("today")]
-        public async Task<IActionResult> GetTodayData([FromQuery] string username)
+        public async Task<IActionResult> GetTodayData([FromQuery] string username, [FromQuery] bool force = false)
         {
             if (string.IsNullOrEmpty(username)) return Unauthorized("请提供指挥官代号");
 
             try
             {
                 string cacheKey = $"Tactical_TodayData_{username}_{ChinaDateDash()}";
-                if (_cache.TryGetValue(cacheKey, out object cachedResult))
+                if (force)
+                {
+                    _cache.Remove(cacheKey);
+                }
+                else if (_cache.TryGetValue(cacheKey, out object cachedResult))
                 {
                     return Ok(cachedResult);
                 }
