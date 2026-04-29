@@ -1215,7 +1215,29 @@
 
         createApp({
             setup() {
-                const API_BASE = 'https://guzhi.21212121.xyz';
+                const API_BASE_DEFAULT = 'https://guzhi.21212121.xyz';
+                const normalizeApiBase = (v) => (v || '').trim().replace(/\/$/, '');
+                const getApiBaseCandidates = () => {
+                    const list = [
+                        normalizeApiBase(localStorage.getItem('fund_api_base')),
+                        (location.protocol === 'http:' || location.protocol === 'https:') ? normalizeApiBase(location.origin) : '',
+                        API_BASE_DEFAULT
+                    ].filter(Boolean);
+                    return [...new Set(list)];
+                };
+                let API_BASE = getApiBaseCandidates()[0] || API_BASE_DEFAULT;
+                const rememberApiBase = (base) => { API_BASE = base; try { localStorage.setItem('fund_api_base', base); } catch(e) {} };
+                const apiFetch = async (path, options = {}) => {
+                    let lastError = null;
+                    for (const base of getApiBaseCandidates()) {
+                        try {
+                            const res = await fetch(base + path, options);
+                            if (res.status !== 404 && res.status !== 405) { rememberApiBase(base); return res; }
+                            lastError = new Error('HTTP ' + res.status + ' @ ' + base);
+                        } catch (e) { lastError = e; }
+                    }
+                    throw lastError || new Error('API unavailable');
+                };
                 const toasts = ref([]); let toastId = 0;
                 const expandedSectors = ref(new Set());
 
@@ -1525,19 +1547,54 @@
                 const handleLogout = () => { localStorage.removeItem('fund_username'); showProfileModal.value = false; location.reload(); };
                 const triggerUpload = () => { document.getElementById('ocrInput').click(); };
                 const triggerAvatarUpload = () => { document.getElementById('avatarInput')?.click(); };
+                const blobToDataUrl = (blob) => new Promise((resolve, reject) => {
+                    const r = new FileReader();
+                    r.onload = () => resolve(r.result);
+                    r.onerror = reject;
+                    r.readAsDataURL(blob);
+                });
+
                 const clearAvatar = async () => {
                     if (!currentUser.value) return;
-                    const fd = new FormData(); fd.append('username', currentUser.value);
-                    try {
-                        let res = await fetch(API_BASE + '/api/auth/avatar/clear-v2', { method: 'POST', body: fd });
-                        if (res.status === 404 || res.status === 405) {
-                            const fd2 = new FormData(); fd2.append('username', currentUser.value);
-                            res = await fetch(API_BASE + '/api/auth/avatar/clear', { method: 'POST', body: fd2 });
-                        }
-                        if (res.ok) { userAvatar.value = ''; showToast('头像已清除', 'success'); }
-                        else showToast('清除失败', 'error');
-                    } catch(e) { showToast('网络异常', 'error'); }
+                    const endpoints = ['/api/auth/avatar/clear-v3', '/api/auth/avatar/clear-v2', '/api/auth/avatar/clear'];
+                    for (const ep of endpoints) {
+                        try {
+                            const fd = new FormData(); fd.append('username', currentUser.value);
+                            const res = await apiFetch(ep, { method: 'POST', body: fd });
+                            if (res.ok) { userAvatar.value = ''; showToast('头像已清除', 'success'); return; }
+                        } catch(e) {}
+                    }
+                    showToast('清除失败：头像接口未部署或被网关拦截', 'error');
                 };
+
+                const saveAvatarBlob = async (blob) => {
+                    const fileEndpoints = ['/api/auth/avatar-file-v3', '/api/auth/avatar-file-v2', '/api/auth/avatar-file'];
+                    let lastMsg = '';
+                    for (const ep of fileEndpoints) {
+                        try {
+                            const fd = new FormData();
+                            fd.append('username', currentUser.value);
+                            fd.append('avatarFile', blob, 'avatar.jpg');
+                            const res = await apiFetch(ep, { method: 'POST', body: fd });
+                            if (res.ok) return await res.json();
+                            lastMsg = await res.text().catch(() => '');
+                        } catch(e) { lastMsg = e && e.message ? e.message : String(e); }
+                    }
+
+                    // 兜底：部分面板/网关会拦截 multipart，但允许 application/json。
+                    const dataUrl = await blobToDataUrl(blob);
+                    try {
+                        const res = await apiFetch('/api/auth/avatar-json-v3', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: currentUser.value, avatarDataUrl: dataUrl })
+                        });
+                        if (res.ok) return await res.json();
+                        lastMsg = await res.text().catch(() => lastMsg);
+                    } catch(e) { lastMsg = e && e.message ? e.message : lastMsg; }
+                    throw new Error(lastMsg || '头像接口未部署');
+                };
+
                 const handleAvatarUpload = (event) => {
                     const file = event.target.files && event.target.files[0];
                     if (!file || !currentUser.value) return;
@@ -1555,26 +1612,15 @@
                             ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
                             canvas.toBlob(async (blob) => {
                                 if (!blob) { showToast('头像压缩失败', 'error'); event.target.value = ''; return; }
-                                const fd = new FormData();
-                                fd.append('username', currentUser.value);
-                                fd.append('avatarFile', blob, 'avatar.jpg');
                                 try {
-                                    let res = await fetch(API_BASE + '/api/auth/avatar-file-v2', { method: 'POST', body: fd });
-                                    if (res.status === 404 || res.status === 405) {
-                                        const fd2 = new FormData();
-                                        fd2.append('username', currentUser.value);
-                                        fd2.append('avatarFile', blob, 'avatar.jpg');
-                                        res = await fetch(API_BASE + '/api/auth/avatar-file', { method: 'POST', body: fd2 });
-                                    }
-                                    if (res.ok) { const saved = await res.json(); userAvatar.value = saved.avatarDataUrl || ''; showToast('头像已更新', 'success'); }
-                                    else {
-                                        let msg = '头像保存失败';
-                                        try { msg = await res.text(); } catch(e){}
-                                        if (res.status === 404) msg = '后端头像接口未部署：请同步 Program.cs/AuthController.cs/User.cs 并重启后端';
-                                        showToast(msg, 'error');
-                                    }
-                                } catch(e) { showToast('网络异常：头像接口未部署或被网关拦截', 'error'); }
-                                event.target.value = '';
+                                    const saved = await saveAvatarBlob(blob);
+                                    userAvatar.value = saved.avatarDataUrl || '';
+                                    showToast('头像已更新', 'success');
+                                } catch(e) {
+                                    showToast('头像保存失败：' + (e && e.message ? e.message : '请确认已部署 AuthController.cs 并重启后端'), 'error');
+                                } finally {
+                                    event.target.value = '';
+                                }
                             }, 'image/jpeg', 0.72);
                         };
                         img.src = e.target.result;
@@ -1608,61 +1654,80 @@
                     try { const res = await fetch(API_BASE + '/api/Fund/update-details', { method: 'POST', body: fd }); if (res.ok) { showToast("✅ 补给完成", "success"); editForm.show = false; fetchData({ force: true, silent: true }); } } catch (e) { showToast("🌐 异常", "error"); }
                 };
 
+                const applySectorPayload = (data) => {
+                    sectorTopList.value = data.top || [];
+                    sectorBottomList.value = data.bottom || [];
+                    sectorSource.value = data.source || '';
+                    sectorUpdatedAt.value = data.updatedAt || '';
+                    sectorCache = { top: sectorTopList.value, bottom: sectorBottomList.value, source: sectorSource.value, updatedAt: sectorUpdatedAt.value };
+                    sectorCacheTime = Date.now();
+                };
+                const readJsonCache = (key, maxAgeMs) => {
+                    try {
+                        const raw = localStorage.getItem(key);
+                        if (!raw) return null;
+                        const box = JSON.parse(raw);
+                        if (!box || !box.data || (Date.now() - (box.time || 0)) > maxAgeMs) return null;
+                        return box.data;
+                    } catch(e) { return null; }
+                };
+                const writeJsonCache = (key, data) => {
+                    try { localStorage.setItem(key, JSON.stringify({ time: Date.now(), data })); } catch(e) {}
+                };
+
                 let sectorCache = null; let sectorCacheTime = 0; const SECTOR_CACHE_DURATION = 180000;
                 const fetchSectors = async (force = false, openModal = true) => {
                     const now = Date.now();
                     if (!force && sectorCache && (now - sectorCacheTime) < SECTOR_CACHE_DURATION) {
-                        sectorTopList.value = sectorCache.top;
-                        sectorBottomList.value = sectorCache.bottom;
-                        sectorSource.value = sectorCache.source || '';
-                        sectorUpdatedAt.value = sectorCache.updatedAt || '';
+                        applySectorPayload(sectorCache);
                         if (openModal) showSectorRadar.value = true;
                         return;
                     }
+                    if (!force && sectorTopList.value.length === 0) {
+                        const cached = readJsonCache('sector_fast_cache_v1', 30 * 60 * 1000);
+                        if (cached) applySectorPayload(cached);
+                    }
                     if (openModal) showSectorRadar.value = true;
-                    isSectorLoading.value = true;
+                    isSectorLoading.value = sectorTopList.value.length === 0;
                     expandedSectors.value = new Set();
                     try {
                         const res = await fetch(`${API_BASE}/api/fund/sectors${force ? '?force=true' : ''}`);
                         if (!res.ok) throw new Error(await res.text());
                         const data = await res.json();
-                        sectorTopList.value = data.top || [];
-                        sectorBottomList.value = data.bottom || [];
-                        sectorSource.value = data.source || '';
-                        sectorUpdatedAt.value = data.updatedAt || '';
-                        sectorCache = {
-                            top: sectorTopList.value,
-                            bottom: sectorBottomList.value,
-                            source: sectorSource.value,
-                            updatedAt: sectorUpdatedAt.value
-                        };
-                        sectorCacheTime = now;
+                        applySectorPayload(data);
+                        writeJsonCache('sector_fast_cache_v1', data);
                     } catch (e) {
-                        showToast("🚨 板块雷达连接失败", "error");
+                        if (sectorTopList.value.length === 0) showToast('🚨 板块雷达连接失败', 'error');
                     } finally {
                         isSectorLoading.value = false;
                     }
                 };
 
-
-
                 let capitalCacheTime = 0;
+                const applyCapitalPayload = (data) => {
+                    capitalFlowRows.value = data.rows || [];
+                    capitalFlowInRows.value = data.inflow || (data.rows || []).filter(x => (x.mainNet || 0) > 0).sort((a,b)=>(b.mainNet||0)-(a.mainNet||0));
+                    capitalFlowOutRows.value = data.outflow || (data.rows || []).filter(x => (x.mainNet || 0) < 0).sort((a,b)=>(a.mainNet||0)-(b.mainNet||0));
+                    capitalFlowSource.value = data.source || '';
+                    capitalFlowUpdatedAt.value = data.updatedAt || '';
+                    capitalCacheTime = Date.now();
+                };
                 const fetchCapitalFlow = async (force = false) => {
                     const now = Date.now();
-                    if (!force && capitalFlowRows.value.length > 0 && (now - capitalCacheTime) < 120000) return;
-                    isCapitalLoading.value = true;
+                    if (!force && capitalFlowRows.value.length > 0 && (now - capitalCacheTime) < 180000) return;
+                    if (!force && capitalFlowRows.value.length === 0) {
+                        const cached = readJsonCache('capital_flow_cache_v1', 20 * 60 * 1000);
+                        if (cached) applyCapitalPayload(cached);
+                    }
+                    isCapitalLoading.value = capitalFlowRows.value.length === 0;
                     try {
                         const res = await fetch(`${API_BASE}/api/fund/capital-flow?limit=40${force ? '&force=true' : ''}`);
                         if (!res.ok) throw new Error(await res.text());
                         const data = await res.json();
-                        capitalFlowRows.value = data.rows || [];
-                        capitalFlowInRows.value = data.inflow || (data.rows || []).filter(x => (x.mainNet || 0) > 0).sort((a,b)=>(b.mainNet||0)-(a.mainNet||0));
-                        capitalFlowOutRows.value = data.outflow || (data.rows || []).filter(x => (x.mainNet || 0) < 0).sort((a,b)=>(a.mainNet||0)-(b.mainNet||0));
-                        capitalFlowSource.value = data.source || '';
-                        capitalFlowUpdatedAt.value = data.updatedAt || '';
-                        capitalCacheTime = now;
+                        applyCapitalPayload(data);
+                        writeJsonCache('capital_flow_cache_v1', data);
                     } catch(e) {
-                        showToast('主力资金流获取失败', 'error');
+                        if (capitalFlowRows.value.length === 0) showToast('主力资金流获取失败', 'error');
                     } finally {
                         isCapitalLoading.value = false;
                     }
@@ -1989,10 +2054,9 @@
                 const fetchUserProfile = async () => {
                     if (!currentUser.value) return;
                     try {
-                        let res = await fetch(API_BASE + '/api/auth/profile-v2?username=' + encodeURIComponent(currentUser.value));
-                        if (res.status === 404 || res.status === 405) {
-                            res = await fetch(API_BASE + '/api/auth/profile?username=' + encodeURIComponent(currentUser.value));
-                        }
+                        let res = await apiFetch('/api/auth/profile-v3?username=' + encodeURIComponent(currentUser.value));
+                        if (!res.ok) res = await apiFetch('/api/auth/profile-v2?username=' + encodeURIComponent(currentUser.value));
+                        if (!res.ok) res = await apiFetch('/api/auth/profile?username=' + encodeURIComponent(currentUser.value));
                         if (res.ok) { const data = await res.json(); userAvatar.value = data.avatarDataUrl || ''; }
                     } catch(e) { }
                 };
