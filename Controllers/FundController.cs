@@ -161,6 +161,106 @@ namespace 估值助手.Controllers
             }
         }
 
+
+        private static double GetDailyBaseAmount(MyFundConfig fund, string settleDate)
+        {
+            double pending = GetPendingTradeAmount(fund, settleDate);
+
+            // 已完成真实净值清算时，HoldAmount 已经包含当日收益。
+            // 今日收益率分母必须回到清算前有效基数，否则总收益率会被“已结算后的市值”稀释。
+            if (fund.LastSettledDate == settleDate)
+            {
+                return Math.Max(0, Math.Round(fund.HoldAmount - pending - fund.LastSettledProfit, 4));
+            }
+
+            return GetEffectiveBaseAmount(fund, settleDate);
+        }
+
+        private static double GetRecordRateForToday(FundData? record)
+        {
+            if (record == null) return 0;
+            return Math.Abs(record.ActualRate) > 0.000001 ? record.ActualRate : record.EstimatedRate;
+        }
+
+        private static List<DailyArchive> BuildArchiveRowsFromCurrentHoldings(string username, DateTime date, List<MyFundConfig> funds, List<FundData> todayRecords)
+        {
+            string dateDash = date.ToString("yyyy-MM-dd");
+            var latestRecordDict = todayRecords
+                .GroupBy(r => r.FundCode)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).First());
+
+            var rows = new List<DailyArchive>();
+            double totalCost = 0;
+            double totalRealized = 0;
+            double totalDailyProfit = 0;
+            double totalDailyBase = 0;
+            double totalCurrentAssets = 0;
+
+            foreach (var fund in funds)
+            {
+                latestRecordDict.TryGetValue(fund.FundCode, out var record);
+
+                double cost = fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount;
+                double baseAmount = GetDailyBaseAmount(fund, dateDash);
+                double dailyRate = fund.LastSettledDate == dateDash ? fund.LastSettledRate : GetRecordRateForToday(record);
+                double dailyProfit = fund.LastSettledDate == dateDash
+                    ? fund.LastSettledProfit
+                    : Math.Round(baseAmount * (dailyRate / 100.0), 2);
+
+                double currentAssets = fund.LastSettledDate == dateDash
+                    ? fund.HoldAmount
+                    : Math.Round(fund.HoldAmount + dailyProfit, 2);
+
+                double totalProfit = currentAssets - cost + fund.RealizedProfit;
+                double totalRate = cost > 0 ? totalProfit / cost * 100.0 : 0;
+
+                rows.Add(new DailyArchive
+                {
+                    Username = username,
+                    FundCode = fund.FundCode,
+                    FundName = fund.FundName,
+                    RecordDate = date,
+                    Assets = Math.Round(currentAssets, 2),
+                    DailyProfit = Math.Round(dailyProfit, 2),
+                    DailyRate = Math.Round(dailyRate, 2),
+                    TotalProfit = Math.Round(totalProfit, 2),
+                    TotalRate = Math.Round(totalRate, 2)
+                });
+
+                totalCost += cost;
+                totalRealized += fund.RealizedProfit;
+                totalDailyProfit += dailyProfit;
+                totalDailyBase += baseAmount;
+                totalCurrentAssets += currentAssets;
+            }
+
+            double totalDailyRate = totalDailyBase > 0 ? totalDailyProfit / totalDailyBase * 100.0 : 0;
+            double totalCampProfit = totalCurrentAssets - totalCost + totalRealized;
+            double totalCampRate = totalCost > 0 ? totalCampProfit / totalCost * 100.0 : 0;
+
+            rows.Add(new DailyArchive
+            {
+                Username = username,
+                FundCode = "TOTAL",
+                FundName = "总持仓",
+                RecordDate = date,
+                Assets = Math.Round(totalCurrentAssets, 2),
+                DailyProfit = Math.Round(totalDailyProfit, 2),
+                DailyRate = Math.Round(totalDailyRate, 2),
+                TotalProfit = Math.Round(totalCampProfit, 2),
+                TotalRate = Math.Round(totalCampRate, 2)
+            });
+
+            return rows;
+        }
+
+        private async Task UpsertTodayArchivesFromCurrentHoldingsAsync(string username, DateTime today, List<MyFundConfig> funds, List<FundData> todayRecords)
+        {
+            if (funds.Count == 0) return;
+            var rows = BuildArchiveRowsFromCurrentHoldings(username, today, funds, todayRecords);
+            await UpsertDailyArchivesAsync(username, today, rows);
+        }
+
         private async Task<List<FundInfoCache>> GetAllFundsAsync()
         {
             if (_globalFundCache != null && _exactMatchDict != null && _globalFundCache.Count > 0) return _globalFundCache;
@@ -714,8 +814,19 @@ namespace 估值助手.Controllers
                     }
                 }
 
+                if (count > 0)
+                {
+                    var settleDate = ChinaNow().Date;
+                    var fundCodes = funds.Select(f => f.FundCode).Distinct().ToList();
+                    var todayRecords = await _context.FundRecords
+                        .Where(r => r.FetchTime >= settleDate && fundCodes.Contains(r.FundCode))
+                        .ToListAsync();
+                    await UpsertTodayArchivesFromCurrentHoldingsAsync(username, settleDate, funds, todayRecords);
+                }
+
                 await _context.SaveChangesAsync();
-                return Ok($"已清算 {count} 只基金！");
+                ClearTodayCache(username);
+                return Ok($"已清算 {count} 只基金，并已同步今日收益档案！");
             }
             catch (Exception ex)
             {
@@ -753,8 +864,23 @@ namespace 估值助手.Controllers
                     catch { continue; }
                 }
 
+                if (successCount > 0)
+                {
+                    var settleDate = ChinaNow().Date;
+                    var codesForToday = allFunds.Select(f => f.FundCode).Distinct().ToList();
+                    var todayRecords = await _context.FundRecords
+                        .Where(r => r.FetchTime >= settleDate && codesForToday.Contains(r.FundCode))
+                        .ToListAsync();
+
+                    foreach (var group in allFunds.GroupBy(f => f.Username))
+                    {
+                        await UpsertTodayArchivesFromCurrentHoldingsAsync(group.Key, settleDate, group.ToList(), todayRecords);
+                        ClearTodayCache(group.Key);
+                    }
+                }
+
                 await _context.SaveChangesAsync();
-                return Ok($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] 🌙 夜间自动清算执行完毕！成功更新 {successCount} 只。");
+                return Ok($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] 🌙 夜间自动清算执行完毕！成功更新 {successCount} 只，并已同步今日收益档案。");
             }
             catch (Exception ex)
             {
@@ -986,6 +1112,14 @@ namespace 估值助手.Controllers
                 });
 
                 var finalResult = result.OrderByDescending(x => x.amount).ToList();
+
+                // 真实净值一出现，后端立即修正“今日总持仓 + 单只基金”档案。
+                // 这样不再依赖前端 save-archive，也能覆盖旧版本写坏的 TOTAL 记录。
+                if (myFunds.Any(f => f.LastSettledDate == todayDash))
+                {
+                    await UpsertTodayArchivesFromCurrentHoldingsAsync(username, today, myFunds, todayRecords);
+                    await _context.SaveChangesAsync();
+                }
 
                 // ✅ 优化后（60秒缓存，减少数据库压力）
                 var cacheOptions = new MemoryCacheEntryOptions()
@@ -1576,12 +1710,14 @@ namespace 估值助手.Controllers
                             .FirstOrDefaultAsync();
 
                         // 算钱逻辑 (基础粗略版)
-                        double dailyRate = todayRecord?.ActualRate > 0 ? todayRecord.ActualRate : (todayRecord?.EstimatedRate ?? 0);
+                        double dailyRate = todayRecord != null && Math.Abs(todayRecord.ActualRate) > 0.000001
+                            ? todayRecord.ActualRate
+                            : (todayRecord?.EstimatedRate ?? 0);
 
                         // ==========================================
                         // 🚀 核心补丁：后端必须像前端一样，精准剥离今日新军！
                         // 绝对禁止未确认的资金参与今日收益结算，掐断虚假印钞！
-                        double baseAmount = GetEffectiveBaseAmount(fund, todayStrDash);
+                        double baseAmount = GetDailyBaseAmount(fund, todayStrDash);
                         totalDailyBase += baseAmount;
                         double dailyProfit = fund.LastSettledDate == todayStrDash
                             ? fund.LastSettledProfit

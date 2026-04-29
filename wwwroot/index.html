@@ -1215,12 +1215,18 @@
                         totalRate.value = tCost > 0 ? ((currentTotalAssets - tCost + tRealized) / tCost * 100) : 0;
 
                         // 真实净值确认后，自动重写一次今日档案。
-                        // 修复旧版本导致的：TOTAL 已存在但金额不对、单只基金今日记录缺失。
-                        const realArchiveKey = `real_archive_${currentUser.value}_${todayDash}`;
-                        if (fundsList.value.some(f => f.isSettled) && localStorage.getItem(realArchiveKey) !== '1') {
+                        // 用“已确认基金代码+真实收益/涨跌幅”的指纹判断，后续更多基金确认时会再次覆盖。
+                        // 不再使用旧的 real_archive 固定锁，避免旧版本写坏 TOTAL 后无法修正。
+                        const settledFingerprint = fundsList.value
+                            .filter(f => f.isSettled)
+                            .map(f => `${f.code}:${f.lastSettledProfit || f.actualExactProfit || 0}:${f.lastSettledRate || f.actualRate || 0}`)
+                            .sort()
+                            .join('|');
+                        const realArchiveKey = `real_archive_v4_${currentUser.value}_${todayDash}`;
+                        if (settledFingerprint && localStorage.getItem(realArchiveKey) !== settledFingerprint) {
                             try {
                                 await saveDailyArchive(true);
-                                localStorage.setItem(realArchiveKey, '1');
+                                localStorage.setItem(realArchiveKey, settledFingerprint);
                             } catch (e) { }
                         }
 
