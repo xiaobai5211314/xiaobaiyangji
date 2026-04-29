@@ -485,6 +485,66 @@
             .news-title { font-size: 18px; }
             .news-summary { font-size: 14px; }
         }
+
+
+        /* ===== 四页式移动底栏与页面骨架 ===== */
+        .app-page { padding-bottom: 78px; animation: pageFade .18s ease-out; }
+        @keyframes pageFade { from { opacity: .55; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        .page-shell { margin: 15px; padding: 16px; }
+        .page-topbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin: 15px; padding: 14px 16px; }
+        .page-title { font-size: 22px; font-weight: 900; color:#f8fafc; display:flex; align-items:center; gap:8px; }
+        .page-subtitle { font-size: 12px; color:#94a3b8; margin-top: 4px; }
+        .bottom-tabbar { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); width: min(560px, calc(100vw - 22px)); z-index: 900; display:grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 7px; border-radius: 24px; background: rgba(15,23,42,.86); border: 1px solid rgba(148,163,184,.22); box-shadow: 0 16px 45px rgba(0,0,0,.45); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+        .bottom-tab { border:0; border-radius:18px; background: transparent; color:#94a3b8; height:48px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-weight:800; font-size:12px; cursor:pointer; transition: all .16s ease; }
+        .bottom-tab .tab-icon { font-size:18px; line-height:18px; }
+        .bottom-tab.active { background: linear-gradient(135deg, rgba(59,130,246,.92), rgba(99,102,241,.92)); color:#fff; box-shadow: 0 8px 20px rgba(59,130,246,.35); }
+        .bottom-tab:active { transform: scale(.97); }
+        .mini-action-grid { display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap:10px; }
+        .mini-action-grid .btn { justify-content:center; margin:0!important; border-radius:16px; min-height:42px; padding:8px 10px!important; }
+        .sector-page-layout { display:grid; grid-template-columns: minmax(0, .95fr) minmax(320px, .75fr); gap:15px; margin:0 15px 15px; }
+        .sector-table-head,.sector-row { display:grid; grid-template-columns: 1.35fr .7fr .65fr .55fr; gap:8px; align-items:center; }
+        .sector-table-head { color:#94a3b8; font-size:12px; padding:8px 6px; border-bottom:1px solid rgba(255,255,255,.08); }
+        .sector-row { padding:13px 6px; border-bottom:1px solid rgba(255,255,255,.06); cursor:pointer; border-radius:10px; }
+        .sector-row:hover { background: rgba(255,255,255,.04); }
+        .news-page-layout { margin:0 15px 15px; display:grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .42fr); gap:15px; }
+        .news-page-list { max-height: calc(100vh - 190px); overflow:auto; padding-right:6px; }
+        .quick-holding-card { padding:12px; border-radius:14px; background:rgba(15,23,42,.45); border:1px solid rgba(255,255,255,.08); margin-bottom:10px; cursor:pointer; }
+        .quick-holding-card:hover { background:rgba(30,41,59,.75); }
+        .analysis-grid { display:grid; grid-template-columns: minmax(0, .95fr) minmax(320px, .75fr); gap:15px; margin:0 15px 15px; }
+        .analysis-toolbar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+        .analysis-toolbar input,.analysis-toolbar select { background:rgba(15,23,42,.65); border:1px solid rgba(148,163,184,.22); color:#e2e8f0; padding:10px 12px; border-radius:14px; outline:none; }
+        .calendar-grid { display:grid; grid-template-columns: repeat(7, 1fr); gap:6px; }
+        .calendar-week { color:#94a3b8; font-size:12px; text-align:center; padding:6px 0; }
+        .calendar-day { min-height:64px; border-radius:12px; padding:8px 6px; background:rgba(15,23,42,.42); border:1px solid rgba(255,255,255,.06); cursor:pointer; display:flex; flex-direction:column; gap:4px; }
+        .calendar-day.empty { background:transparent; border:none; cursor:default; }
+        .calendar-day.active { outline:2px solid rgba(96,165,250,.9); }
+        .calendar-day.positive { background:rgba(239,68,68,.16); }
+        .calendar-day.negative { background:rgba(16,185,129,.16); }
+        .calendar-date { color:#cbd5e1; font-size:12px; font-weight:800; }
+        .calendar-profit { font-family:'Courier New', monospace; font-size:13px; font-weight:900; }
+        .profit-list-row { display:grid; grid-template-columns: 26px 1fr .8fr; gap:10px; align-items:center; padding:11px 0; border-bottom:1px dashed rgba(255,255,255,.08); }
+        .rank-badge { width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(96,165,250,.18);color:#93c5fd;font-weight:900;font-size:12px; }
+        @media screen and (max-width: 768px) {
+            body { padding-bottom: 76px; }
+            .app-page { padding-bottom: 84px; }
+            .page-topbar { margin: 10px 12px; padding: 13px 14px; border-radius: 20px; }
+            .page-title { font-size: 20px; }
+            .bottom-tabbar { bottom: 8px; width: calc(100vw - 18px); border-radius: 20px; padding: 6px; gap: 4px; }
+            .bottom-tab { height: 44px; border-radius: 15px; font-size: 11px; }
+            .bottom-tab .tab-icon { font-size: 17px; }
+            .mini-action-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+            .sector-page-layout,.news-page-layout,.analysis-grid { grid-template-columns: 1fr; margin:0 12px 12px; }
+            .news-page-list { max-height:none; overflow:visible; }
+            .sector-table-head,.sector-row { grid-template-columns: 1.35fr .7fr .55fr; }
+            .sector-table-head span:nth-child(3), .sector-row > span:nth-child(3) { display:none; }
+            .calendar-grid { gap:4px; }
+            .calendar-day { min-height:52px; padding:6px 4px; }
+            .calendar-profit { font-size:11px; }
+            .header { margin-top:10px; }
+            .control-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); gap:10px; }
+            .control-panel .btn { min-height:44px; font-size:14px; }
+        }
+
     </style>
 </head>
 <body>
@@ -509,6 +569,7 @@
         </div>
 
         <div v-else>
+            <div v-show="activePage === 'home'" class="app-page home-page">
             <div class="header glass-panel">
                 <div class="logo-text">🚀 估值助手 ({{ currentUser }})</div>
                 <div class="control-panel">
@@ -521,8 +582,8 @@
                         📷 {{ isUploading ? '📡 解析中...' : '智能截图导入' }}
                     </button>
 
-                    <button class="btn" @click="fetchSectors" style="margin-left: 10px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none;">🎯 板块雷达</button>
-                    <button class="btn" @click="openNewsPanel" style="margin-left: 10px; background: linear-gradient(135deg, #38bdf8, #2563eb); border: none;">📰 资讯雷达</button>
+                    <button class="btn" @click="switchPage('sector')" style="margin-left: 10px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none;">🎯 板块雷达</button>
+                    <button class="btn" @click="switchPage('news')" style="margin-left: 10px; background: linear-gradient(135deg, #38bdf8, #2563eb); border: none;">📰 资讯雷达</button>
                     <button class="btn btn-success" @click="fetchGlobalIndices" style="margin-left: 10px;">🌍 全球大盘</button>
                     <button class="btn" @click="refreshNow(true)" :disabled="pullRefresh.loading" style="margin-left: 10px; background: rgba(56,189,248,0.15); border-color: rgba(56,189,248,0.35); color: #7dd3fc;">🔄 {{ pullRefresh.loading ? '刷新中' : '刷新' }}</button>
                     <button class="btn btn-danger" @click="handleLogout" style="margin-left: 10px;">🚪 登出</button>
@@ -665,6 +726,39 @@
             </div>
 
             <div v-show="!isLoading" id="chart-container" class="glass-panel" ref="chartRef"></div>
+            </div>
+
+            <div v-show="activePage === 'sector'" class="app-page">
+                <div class="page-topbar glass-panel">
+                    <div><div class="page-title">📈 行情 / 板块基金</div><div class="page-subtitle">{{ sectorSource || '板块基金池 · 实时估值均值' }} · {{ sectorUpdatedAt || '待更新' }}</div></div>
+                    <div class="mini-action-grid" style="grid-template-columns:repeat(2,minmax(0,1fr));min-width:180px;"><button class="btn" @click="fetchSectors(true, false)">🔄 刷新</button><button class="btn" @click="fetchGlobalIndices">🌍 大盘</button></div>
+                </div>
+                <div class="sector-page-layout">
+                    <div class="glass-panel" style="padding:16px;">
+                        <div style="display:flex;gap:10px;margin-bottom:12px;"><button @click="sectorMode='top'" :class="['btn', sectorMode==='top' ? 'btn-danger' : '']" style="flex:1;justify-content:center;border-radius:14px;">🔥 领涨</button><button @click="sectorMode='bottom'" :class="['btn', sectorMode==='bottom' ? 'btn-success' : '']" style="flex:1;justify-content:center;border-radius:14px;">❄️ 领跌</button></div>
+                        <div v-if="isSectorLoading" style="color:#94a3b8;text-align:center;padding:50px 0;">📡 正在扫描板块基金池...</div>
+                        <div v-else><div class="sector-table-head"><span>板块名称</span><span style="text-align:right;">涨跌幅</span><span style="text-align:right;">方向</span><span style="text-align:right;">基金数</span></div>
+                            <div v-for="(item,index) in (sectorMode==='top' ? sectorTopList : sectorBottomList)" :key="item.key || item.name" class="sector-row" @click="fetchSectorDetails(item)">
+                                <div style="display:flex;align-items:center;gap:10px;min-width:0;"><span :style="{color: sectorMode==='top' ? '#ef4444' : '#10b981',fontSize:'13px',fontWeight:'bold',width:'22px'}">{{ index + 1 }}</span><div style="display:flex;flex-direction:column;min-width:0;"><span style="color:#f8fafc;font-weight:bold;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.name }}</span><span style="font-size:11px;color:#64748b;">已更新 · {{ item.fundCount || item.quotedCount || 0 }}只基金</span></div></div>
+                                <span :style="{textAlign:'right',color:item.rate>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New',fontSize:'18px'}">{{ item.rate>0?'+':'' }}{{ item.rate }}%</span><span :style="{textAlign:'right',color:item.rate>=0?'#ff4d4f':'#10b981',fontWeight:'bold'}">{{ item.rate>=0?'连涨':'连跌' }}</span><span style="text-align:right;color:#cbd5e1;font-weight:bold;">{{ item.fundCount || item.quotedCount || 0 }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">🎯 持仓对应板块</div><div class="page-subtitle">用持仓基金主题看对应赛道强弱</div><div style="margin-top:12px;"><div v-for="fund in fundsList" :key="'sector-hold-'+fund.code" class="quick-holding-card" @click="switchPage('news'); newsMode='holding'; fetchNews('holding', true);"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><div style="min-width:0;"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ fund.name }}</div><div style="color:#64748b;font-size:11px;font-family:monospace;">{{ fund.code }}</div></div><div :style="{color:fund.currentRate>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New'}">{{ fund.currentRate>0?'+':'' }}{{ fund.currentRate }}%</div></div></div></div></div>
+                </div>
+            </div>
+
+            <div v-show="activePage === 'news'" class="app-page">
+                <div class="page-topbar glass-panel"><div><div class="page-title">📰 资讯</div><div class="page-subtitle">{{ newsSource || '东方财富7x24快讯' }} · {{ newsUpdatedAt || '待更新' }}</div></div><div class="analysis-toolbar"><label style="font-size:12px;color:#cbd5e1;"><input type="checkbox" v-model="newsOnlyImportant" @change="fetchNews(newsMode, true)"> 只看重要</label><button class="btn" @click="fetchNews(newsMode, true)">🔄 刷新</button></div></div>
+                <div class="news-page-layout"><div class="glass-panel" style="padding:16px;"><div class="news-tabs" style="margin-bottom:12px;"><button :class="['news-tab', newsMode==='global'?'active':'']" @click="switchNewsMode('global')">7x24快讯</button><button :class="['news-tab', newsMode==='holding'?'active':'']" @click="switchNewsMode('holding')">持仓资讯</button></div><div class="news-toolbar" style="border-radius:14px;margin-bottom:12px;"><span>{{ newsMode === 'holding' ? '只显示和你持仓基金主题相关的消息' : '全市场财经快讯时间线' }}</span></div><div v-if="isNewsLoading" class="news-empty">📡 正在同步资讯...</div><div v-else-if="newsList.length === 0" class="news-empty">暂无匹配资讯</div><div v-else class="news-list news-page-list"><template v-for="group in groupedNews" :key="group.date"><div class="news-date">{{ group.date }}</div><div v-for="item in group.items" :key="item.id + item.showTime" :class="['news-item', item.sentiment]"><div class="news-line"></div><div class="news-dot"></div><div class="news-card" @click="openNewsItem(item)"><div class="news-time">{{ item.timeText }}</div><div class="news-title">{{ item.title }}</div><div v-if="item.summary && item.summary !== item.title" class="news-summary">{{ item.summary }}</div><div class="news-badges"><span v-if="item.important" class="news-badge good">重要</span><span v-if="item.matchedFundName" class="news-badge">{{ item.matchedFundName }}</span><span :class="['news-badge', item.sentiment==='positive'?'good':(item.sentiment==='negative'?'bad':'neutral') ]">{{ item.sentiment==='positive'?'偏利好':(item.sentiment==='negative'?'偏利空':'中性') }} · {{ item.impactScore }}分</span><span v-for="tag in (item.tags || []).slice(0,3)" :key="tag" class="news-badge neutral">{{ tag }}</span></div></div></div></template></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">🧩 持仓资讯入口</div><div class="page-subtitle">点基金可切到持仓资讯并按主题匹配</div><div style="margin-top:12px;"><div v-for="fund in fundsList" :key="'news-hold-'+fund.code" class="quick-holding-card" @click="newsMode='holding'; fetchNews('holding', true);"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ fund.name }}</div><div style="display:flex;justify-content:space-between;margin-top:6px;color:#94a3b8;font-size:12px;"><span>{{ fund.code }}</span><span>{{ fund.currentRate>0?'+':'' }}{{ fund.currentRate }}%</span></div></div></div></div></div>
+            </div>
+
+            <div v-show="activePage === 'analysis'" class="app-page">
+                <div class="page-topbar glass-panel"><div><div class="page-title">📊 盈亏分析</div><div class="page-subtitle">当日盈亏明细、月历、盈利/亏损排行</div></div><div class="analysis-toolbar"><input type="month" v-model="analysisMonth" @change="fetchAnalysis(true)"><select v-model="analysisViewMode"><option value="profit">金额</option><option value="rate">收益率</option></select><button class="btn" @click="fetchAnalysis(true)">🔄</button></div></div>
+                <div class="analysis-grid"><div class="glass-panel" style="padding:16px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;"><div><div class="page-title" style="font-size:18px;">盈亏日历</div><div class="page-subtitle">{{ analysisMonth }} 月累计：<span :style="{color:analysisMonthTotal>=0?'#ff4d4f':'#10b981',fontWeight:'900'}">{{ analysisMonthTotal>=0?'+':'' }}{{ analysisMonthTotal.toFixed(2) }}</span></div></div><button class="btn btn-primary" @click="selectedAnalysisDate = todayDashStr">今天</button></div><div class="calendar-grid"><div v-for="w in ['一','二','三','四','五','六','日']" :key="w" class="calendar-week">{{ w }}</div><div v-for="day in analysisCalendarDays" :key="day.key" :class="['calendar-day', day.empty?'empty':'', day.profit>0?'positive':(day.profit<0?'negative':''), selectedAnalysisDate===day.date?'active':'']" @click="!day.empty && (selectedAnalysisDate = day.date)"><template v-if="!day.empty"><div class="calendar-date">{{ day.day }}</div><div class="calendar-profit" :style="{color:day.profit>=0?'#ff4d4f':'#10b981'}">{{ day.hasRecord ? ((day.profit>0?'+':'') + (analysisViewMode==='rate' ? day.rate.toFixed(2)+'%' : day.profit.toFixed(2))) : '—' }}</div></template></div></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">当日盈亏明细</div><div class="page-subtitle">{{ selectedAnalysisDate || '请选择日期' }}</div><div style="margin-top:12px;"><div v-if="analysisLoading" class="news-empty">📡 正在读取收益档案...</div><div v-else-if="selectedDayFundRecords.length===0" class="news-empty">当天暂无明细</div><div v-else><div v-for="(item,index) in selectedDayFundRecords" :key="item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="min-width:0;"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.fundName }}</div><div style="color:#64748b;font-size:11px;font-family:monospace;">{{ item.fundCode }} · 市值 {{ Number(item.assets || 0).toFixed(2) }}</div></div><div :style="{textAlign:'right',color:item.dailyProfit>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New'}">{{ item.dailyProfit>0?'+':'' }}{{ Number(item.dailyProfit||0).toFixed(2) }}<br><span style="font-size:12px;">{{ item.dailyRate>0?'+':'' }}{{ Number(item.dailyRate||0).toFixed(2) }}%</span></div></div></div></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">盈利 TOP5</div><div v-for="(item,index) in analysisProfitTop" :key="'p'+item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="color:#f8fafc;font-weight:800;">{{ item.fundName }}</div><div style="text-align:right;color:#ff4d4f;font-weight:900;">+{{ Number(item.dailyProfit||0).toFixed(2) }}</div></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">亏损 TOP5</div><div v-for="(item,index) in analysisLossTop" :key="'l'+item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="color:#f8fafc;font-weight:800;">{{ item.fundName }}</div><div style="text-align:right;color:#10b981;font-weight:900;">{{ Number(item.dailyProfit||0).toFixed(2) }}</div></div></div></div>
+            </div>
+
+            <div class="bottom-tabbar" v-if="isLoggedIn"><button :class="['bottom-tab', activePage==='home'?'active':'']" @click="switchPage('home')"><span class="tab-icon">🛡️</span><span>持仓</span></button><button :class="['bottom-tab', activePage==='sector'?'active':'']" @click="switchPage('sector')"><span class="tab-icon">📈</span><span>板块</span></button><button :class="['bottom-tab', activePage==='news'?'active':'']" @click="switchPage('news')"><span class="tab-icon">📰</span><span>资讯</span></button><button :class="['bottom-tab', activePage==='analysis'?'active':'']" @click="switchPage('analysis')"><span class="tab-icon">📊</span><span>盈亏</span></button></div>
 
             <div v-if="showPrivacyModal" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 5000;" @click.self="showPrivacyModal = false">
                 <div style="background: #1e293b; width: 85%; max-width: 320px; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.5);">
@@ -1020,6 +1114,15 @@
                 const isUploading = ref(false);
                 const pullRefresh = reactive({ startY: 0, distance: 0, active: false, show: false, loading: false });
 
+                const activePage = ref('home');
+                const todayDashStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
+                const analysisMonth = ref(todayDashStr.slice(0, 7));
+                const selectedAnalysisDate = ref(todayDashStr);
+                const analysisViewMode = ref('profit');
+                const analysisLoading = ref(false);
+                const analysisRecords = ref([]);
+
+
                 const savedMode = localStorage.getItem('privacy_mode');
                 const privacyMode = ref(savedMode !== null ? Number(savedMode) : 2);
                 const showPrivacyModal = ref(false);
@@ -1056,6 +1159,33 @@
                     }
                     return Array.from(map.entries()).map(([date, items]) => ({ date, items }));
                 });
+
+
+                const analysisTotalRecords = computed(() => analysisRecords.value.filter(r => r.fundCode === 'TOTAL'));
+                const selectedDayFundRecords = computed(() => analysisRecords.value.filter(r => r.fundCode !== 'TOTAL' && String(r.recordDate || '').slice(0,10) === selectedAnalysisDate.value).sort((a,b) => Math.abs(Number(b.dailyProfit||0)) - Math.abs(Number(a.dailyProfit||0))));
+                const analysisMonthTotal = computed(() => analysisTotalRecords.value.filter(r => String(r.recordDate || '').slice(0,7) === analysisMonth.value).reduce((sum,r) => sum + Number(r.dailyProfit || 0), 0));
+                const analysisCalendarDays = computed(() => {
+                    const [y,m] = analysisMonth.value.split('-').map(Number);
+                    if (!y || !m) return [];
+                    const first = new Date(y, m-1, 1);
+                    const days = new Date(y, m, 0).getDate();
+                    const offset = (first.getDay() + 6) % 7;
+                    const totalMap = new Map();
+                    for (const r of analysisTotalRecords.value) {
+                        const d = String(r.recordDate || '').slice(0,10);
+                        if (d.slice(0,7) === analysisMonth.value) totalMap.set(d, r);
+                    }
+                    const arr = [];
+                    for (let i=0; i<offset; i++) arr.push({ key:'e'+i, empty:true });
+                    for (let day=1; day<=days; day++) {
+                        const date = `${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                        const rec = totalMap.get(date);
+                        arr.push({ key:date, empty:false, day, date, hasRecord:!!rec, profit:Number(rec?.dailyProfit || 0), rate:Number(rec?.dailyRate || 0) });
+                    }
+                    return arr;
+                });
+                const analysisProfitTop = computed(() => selectedDayFundRecords.value.filter(r => Number(r.dailyProfit||0) > 0).slice(0,5));
+                const analysisLossTop = computed(() => selectedDayFundRecords.value.filter(r => Number(r.dailyProfit||0) < 0).sort((a,b)=>Number(a.dailyProfit||0)-Number(b.dailyProfit||0)).slice(0,5));
 
                 const historyModal = reactive({ show: false, isLoading: false, name: '', data: [] });
                 const archiveModal = reactive({ show: false, isLoading: false, targetName: '', data: [] });
@@ -1256,17 +1386,17 @@
                 };
 
                 let sectorCache = null; let sectorCacheTime = 0; const SECTOR_CACHE_DURATION = 180000;
-                const fetchSectors = async (force = false) => {
+                const fetchSectors = async (force = false, openModal = true) => {
                     const now = Date.now();
                     if (!force && sectorCache && (now - sectorCacheTime) < SECTOR_CACHE_DURATION) {
                         sectorTopList.value = sectorCache.top;
                         sectorBottomList.value = sectorCache.bottom;
                         sectorSource.value = sectorCache.source || '';
                         sectorUpdatedAt.value = sectorCache.updatedAt || '';
-                        showSectorRadar.value = true;
+                        if (openModal) showSectorRadar.value = true;
                         return;
                     }
-                    showSectorRadar.value = true;
+                    if (openModal) showSectorRadar.value = true;
                     isSectorLoading.value = true;
                     expandedSectors.value = new Set();
                     try {
@@ -1384,6 +1514,36 @@
                     }
                 };
 
+
+                const fetchAnalysis = async (force = false) => {
+                    if (!currentUser.value) return;
+                    if (analysisRecords.value.length > 0 && !force) return;
+                    analysisLoading.value = true;
+                    try {
+                        const url = `${API_BASE}/api/fund/get-archives?username=${encodeURIComponent(currentUser.value)}&limit=500&_t=${Date.now()}`;
+                        const res = await fetch(url, { cache: 'no-store' });
+                        if (!res.ok) throw new Error(await res.text());
+                        analysisRecords.value = await res.json();
+                        const monthRecords = analysisTotalRecords.value.filter(r => String(r.recordDate || '').slice(0,7) === analysisMonth.value);
+                        if (monthRecords.length > 0 && !monthRecords.some(r => String(r.recordDate || '').slice(0,10) === selectedAnalysisDate.value)) {
+                            selectedAnalysisDate.value = String(monthRecords[0].recordDate || '').slice(0,10);
+                        }
+                    } catch (e) {
+                        showToast('📊 盈亏档案读取失败', 'error');
+                    } finally {
+                        analysisLoading.value = false;
+                    }
+                };
+
+                const switchPage = async (page) => {
+                    activePage.value = page;
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    if (page === 'sector') await fetchSectors(false, false);
+                    if (page === 'news') await fetchNews(newsMode.value, newsList.value.length === 0);
+                    if (page === 'analysis') await fetchAnalysis(false);
+                    if (page === 'home') nextTick(() => { if (chartInstance.value) chartInstance.value.resize(); });
+                };
+
                 const fetchData = async (options = {}) => {
                     if (!currentUser.value) return;
                     if (isFetchingData) return;
@@ -1494,7 +1654,7 @@
                 const handleResize = () => { if (chartInstance.value) chartInstance.value.resize(); };
                 let lastChartDataHash = '';
                 const renderChart = async (apiData) => {
-                    if (!chartRef.value) return;
+                    if (!chartRef.value || activePage.value !== 'home') return;
                     try { await ensureEcharts(); } catch (e) { return; }
                     const currentHash = JSON.stringify(apiData.map(f => ({ code: f.code, data: f.data?.slice(-5) })));
                     if (currentHash === lastChartDataHash) { return; } lastChartDataHash = currentHash;
@@ -1565,7 +1725,7 @@
                 onUnmounted(() => { if (timer) clearInterval(timer); window.removeEventListener('resize', handleResize); document.removeEventListener('visibilitychange', handleVisibilityChange); window.removeEventListener('touchstart', onPullStart); window.removeEventListener('touchmove', onPullMove); window.removeEventListener('touchend', onPullEnd); if (chartInstance.value) chartInstance.value.dispose(); });
 
                 return {
-                    toasts, isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight, pullRefresh, refreshNow,
+                    toasts, isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, activePage, switchPage,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
                     handleLogin, handleRegister, handleLogout, handleAddFund, handleDeleteFund, triggerUpload, handleFileUpload,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
@@ -1573,6 +1733,7 @@
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, isDetailsLoading, expandedSectors, toggleSector,
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
+                    analysisMonth, selectedAnalysisDate, analysisViewMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, analysisProfitTop, analysisLossTop, analysisMonthTotal, fetchAnalysis, todayDashStr,
                     globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, saveDailyArchive, ocrModal,
                     reduceModal, openReduceModal, handleReducePosition, addModal, openAddModal, handleAddPosition
                 };
