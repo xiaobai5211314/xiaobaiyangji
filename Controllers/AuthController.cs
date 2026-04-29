@@ -101,5 +101,39 @@ namespace 估值助手.Controllers
             await _context.SaveChangesAsync();
             return Ok(new { success = true });
         }
+
+        public class AvatarJsonRequest
+        {
+            public string Username { get; set; } = string.Empty;
+            public string AvatarDataUrl { get; set; } = string.Empty;
+        }
+
+        [HttpGet("profile-v3")]
+        public async Task<IActionResult> ProfileV3([FromQuery] string username) => await Profile(username);
+
+        [HttpPost("avatar-file-v3")]
+        [RequestSizeLimit(3_000_000)]
+        public async Task<IActionResult> SaveAvatarFileV3([FromForm] string username, [FromForm] IFormFile avatarFile)
+            => await SaveAvatarFile(username, avatarFile);
+
+        [HttpPost("avatar-json-v3")]
+        [RequestSizeLimit(2_000_000)]
+        public async Task<IActionResult> SaveAvatarJsonV3([FromBody] AvatarJsonRequest req)
+        {
+            var username = req?.Username ?? string.Empty;
+            var avatarDataUrl = req?.AvatarDataUrl ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(username)) return BadRequest("缺少账号");
+            if (string.IsNullOrWhiteSpace(avatarDataUrl)) return BadRequest("头像不能为空");
+            if (!avatarDataUrl.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase)) return BadRequest("头像格式不正确");
+            if (avatarDataUrl.Length > 1_200_000) return BadRequest("头像过大，请换一张更小的图片");
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
+            if (user == null) return NotFound("账号不存在");
+            user.AvatarDataUrl = avatarDataUrl;
+            await _context.SaveChangesAsync();
+            return Ok(new { success = true, avatarDataUrl = user.AvatarDataUrl });
+        }
+
+        [HttpPost("avatar/clear-v3")]
+        public async Task<IActionResult> ClearAvatarV3([FromForm] string username) => await ClearAvatar(username);
     }
 }
