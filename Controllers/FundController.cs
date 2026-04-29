@@ -1901,6 +1901,333 @@ namespace 估值助手.Controllers
         }
 
 
+
+        private sealed class NewsItemDto
+        {
+            public string Id { get; init; } = string.Empty;
+            public string Title { get; init; } = string.Empty;
+            public string Summary { get; init; } = string.Empty;
+            public string ShowTime { get; init; } = string.Empty;
+            public string TimeText { get; init; } = string.Empty;
+            public string DateText { get; init; } = string.Empty;
+            public string Source { get; init; } = "东方财富7x24";
+            public string Url { get; init; } = string.Empty;
+            public bool Important { get; init; }
+            public string Sentiment { get; init; } = "neutral";
+            public int ImpactScore { get; init; }
+            public string? MatchedFundCode { get; init; }
+            public string? MatchedFundName { get; init; }
+            public string[] Tags { get; init; } = Array.Empty<string>();
+            public long Sort { get; init; }
+        }
+
+        private static readonly string[] ImportantNewsKeywords = new[]
+        {
+            "突发", "重磅", "重大", "国务院", "国常会", "发改委", "工信部", "商务部", "财政部", "央行", "证监会", "交易所",
+            "降息", "加息", "利率", "降准", "CPI", "PPI", "GDP", "PMI", "非农", "美联储", "鲍威尔", "特朗普", "关税",
+            "制裁", "冲突", "战争", "油轮", "原油", "黄金", "稀土", "锂", "半导体", "人工智能", "地产", "政策", "收储", "限购", "补贴", "财报", "业绩", "订单"
+        };
+
+        private static readonly string[] PositiveNewsKeywords = new[]
+        {
+            "上涨", "涨", "走高", "新高", "增长", "上调", "突破", "利好", "扩产", "订单", "补贴", "降息", "降准", "回购", "增持", "放松", "优化", "超预期", "批准", "支持", "刺激"
+        };
+
+        private static readonly string[] NegativeNewsKeywords = new[]
+        {
+            "下跌", "跌", "走低", "下降", "下滑", "下调", "亏损", "制裁", "禁令", "关税", "调查", "处罚", "暂停", "限制", "拒绝", "战争", "冲突", "爆炸", "违约", "不及预期"
+        };
+
+        private static string StripJsonp(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return "{}";
+            var match = Regex.Match(text, @"^[^(]*\((.*)\)\s*;?\s*$", RegexOptions.Singleline);
+            return match.Success ? match.Groups[1].Value : text;
+        }
+
+        private static string ToDateText(DateTime dt) => dt.ToString("MM月dd日 dddd", new System.Globalization.CultureInfo("zh-CN"));
+        private static string ToTimeText(DateTime dt) => dt.ToString("HH:mm");
+
+        private static string ClassifySentiment(string text)
+        {
+            int pos = PositiveNewsKeywords.Count(k => text.Contains(k, StringComparison.OrdinalIgnoreCase));
+            int neg = NegativeNewsKeywords.Count(k => text.Contains(k, StringComparison.OrdinalIgnoreCase));
+            if (pos > neg) return "positive";
+            if (neg > pos) return "negative";
+            return "neutral";
+        }
+
+        private static int EstimateImpactScore(string text, bool important, int matchScore)
+        {
+            int score = important ? 3 : 1;
+            if (text.Contains("突发") || text.Contains("重磅") || text.Contains("重大")) score += 2;
+            if (text.Contains("国务院") || text.Contains("国常会") || text.Contains("央行") || text.Contains("证监会") || text.Contains("美联储")) score += 1;
+            if (text.Contains("涨停") || text.Contains("跌停") || text.Contains("暴涨") || text.Contains("暴跌")) score += 1;
+            if (matchScore >= 60) score += 1;
+            return Math.Clamp(score, 0, 5);
+        }
+
+        private async Task<List<NewsItemDto>> FetchEastMoneyFastNewsAsync(int limit)
+        {
+            limit = Math.Clamp(limit, 20, 120);
+            long ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            string callback = $"jQuery3510_{ts}";
+            string url = $"https://np-weblist.eastmoney.com/comm/web/getFastNewsList?client=web&biz=web_724&fastColumn=102&sortEnd=&pageSize={limit}&req_trace={ts}&_={ts + 1}&callback={callback}";
+
+            using var handler = new HttpClientHandler
+            {
+                ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
+            };
+            using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(8) };
+            client.DefaultRequestVersion = new Version(1, 1);
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
+            client.DefaultRequestHeaders.Add("Referer", "https://kuaixun.eastmoney.com/");
+            client.DefaultRequestHeaders.Add("Accept", "*/*");
+
+            string body = await client.GetStringAsync(url);
+            string json = StripJsonp(body);
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            var list = root.GetProperty("data").GetProperty("fastNewsList");
+            var result = new List<NewsItemDto>();
+
+            foreach (var item in list.EnumerateArray())
+            {
+                string id = item.TryGetProperty("code", out var codeProp) ? codeProp.GetString() ?? Guid.NewGuid().ToString("N") : Guid.NewGuid().ToString("N");
+                string title = item.TryGetProperty("title", out var titleProp) ? titleProp.GetString() ?? "" : "";
+                string summary = item.TryGetProperty("summary", out var summaryProp) ? summaryProp.GetString() ?? title : title;
+                string showTime = item.TryGetProperty("showTime", out var timeProp) ? timeProp.GetString() ?? "" : "";
+                long sort = 0;
+                if (item.TryGetProperty("realSort", out var sortProp)) long.TryParse(sortProp.GetString(), out sort);
+                int titleColor = 0;
+                if (item.TryGetProperty("titleColor", out var colorProp) && colorProp.ValueKind == JsonValueKind.Number) titleColor = colorProp.GetInt32();
+
+                var stockCodes = new List<string>();
+                if (item.TryGetProperty("stockList", out var stockProp) && stockProp.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var s in stockProp.EnumerateArray())
+                    {
+                        var sv = s.GetString();
+                        if (!string.IsNullOrWhiteSpace(sv)) stockCodes.Add(sv);
+                    }
+                }
+
+                DateTime dt = ChinaNow();
+                DateTime.TryParse(showTime, out dt);
+                string text = title + " " + summary;
+                bool important = titleColor != 0 || ImportantNewsKeywords.Any(k => text.Contains(k, StringComparison.OrdinalIgnoreCase));
+                string sentiment = ClassifySentiment(text);
+
+                result.Add(new NewsItemDto
+                {
+                    Id = id,
+                    Title = string.IsNullOrWhiteSpace(title) ? summary : title,
+                    Summary = summary,
+                    ShowTime = string.IsNullOrWhiteSpace(showTime) ? dt.ToString("yyyy-MM-dd HH:mm:ss") : showTime,
+                    DateText = ToDateText(dt),
+                    TimeText = ToTimeText(dt),
+                    Source = "东方财富7x24",
+                    Url = id.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? id : $"https://finance.eastmoney.com/a/{id}.html",
+                    Important = important,
+                    Sentiment = sentiment,
+                    ImpactScore = EstimateImpactScore(text, important, 0),
+                    Tags = stockCodes.ToArray(),
+                    Sort = sort == 0 ? new DateTimeOffset(dt).ToUnixTimeMilliseconds() : sort
+                });
+            }
+
+            return result.OrderByDescending(x => x.Sort).ToList();
+        }
+
+        private static readonly Dictionary<string, string[]> SectorKeywordMap = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["黄金"] = new[] { "黄金", "金价", "上海金", "伦敦金", "贵金属", "央行购金" },
+            ["半导体"] = new[] { "半导体", "芯片", "集成电路", "先进制程", "光刻", "晶圆", "封测", "存储" },
+            ["人工智能"] = new[] { "人工智能", "AI", "大模型", "算力", "机器人", "数据中心", "云计算" },
+            ["科技"] = new[] { "科技", "互联网", "软件", "数字经济", "信创", "计算机" },
+            ["新能源"] = new[] { "新能源", "光伏", "储能", "锂电", "固态电池", "风电", "电动车", "新能源汽车" },
+            ["地产"] = new[] { "地产", "房地产", "楼市", "住房", "房贷", "深圳", "限购", "收储" },
+            ["医药"] = new[] { "医药", "创新药", "医疗", "生物", "CRO", "疫苗", "医保", "器械" },
+            ["军工"] = new[] { "军工", "国防", "航空", "航天", "导弹", "卫星", "无人机" },
+            ["银行"] = new[] { "银行", "息差", "信贷", "贷款", "存款", "不良率" },
+            ["证券"] = new[] { "券商", "证券", "资本市场", "两融", "并购重组", "IPO" },
+            ["有色"] = new[] { "有色", "铜", "铝", "锂", "稀土", "钨", "钼", "矿", "金属" },
+            ["油气"] = new[] { "原油", "石油", "油气", "OPEC", "WTI", "布伦特", "天然气" },
+            ["消费"] = new[] { "消费", "白酒", "食品", "饮料", "家电", "旅游", "零售" },
+            ["农业"] = new[] { "农业", "农产品", "粮食", "养殖", "猪肉", "种业", "牧渔" },
+            ["债券"] = new[] { "债券", "国债", "利率债", "信用债", "收益率", "转债" },
+            ["港股"] = new[] { "港股", "恒生", "南向", "香港", "中概股" },
+            ["美股"] = new[] { "美股", "纳斯达克", "标普", "道指", "英伟达", "苹果", "微软" }
+        };
+
+        private static HashSet<string> BuildFundKeywords(MyFundConfig fund)
+        {
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(fund.FundCode)) set.Add(fund.FundCode);
+            var name = fund.FundName ?? string.Empty;
+            string clean = NormalizeFundName(name)
+                .Replace("ETF", "")
+                .Replace("联接", "")
+                .Replace("指数", "")
+                .Replace("增强", "")
+                .Replace("混合", "")
+                .Replace("股票", "")
+                .Replace("债券", "")
+                .Replace("基金", "")
+                .Replace("C", "")
+                .Replace("A", "");
+
+            string[] commonPrefixes = { "天弘", "华富", "国泰", "招商", "南方", "易方达", "博时", "工银瑞信", "中银", "华夏", "嘉实", "建信", "鹏华", "广发", "富国", "银华", "汇添富", "前海开源", "国投瑞银" };
+            foreach (var prefix in commonPrefixes)
+            {
+                if (clean.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) clean = clean[prefix.Length..];
+            }
+
+            if (clean.Length >= 2) set.Add(clean);
+            foreach (Match m in Regex.Matches(name, @"[\u4e00-\u9fa5A-Za-z0-9]{2,}"))
+            {
+                string token = m.Value.Trim();
+                if (token.Length >= 2 && !new[] { "联接", "指数", "基金", "混合", "股票", "债券", "增强", "发起", "定开" }.Contains(token)) set.Add(token);
+            }
+
+            foreach (var kv in SectorKeywordMap)
+            {
+                if (kv.Value.Any(k => name.Contains(k, StringComparison.OrdinalIgnoreCase) || clean.Contains(k, StringComparison.OrdinalIgnoreCase)))
+                {
+                    foreach (var k in kv.Value) set.Add(k);
+                    set.Add(kv.Key);
+                }
+            }
+
+            foreach (var def in SectorDefinitions)
+            {
+                if (def.Include.Any(k => name.Contains(k, StringComparison.OrdinalIgnoreCase)))
+                {
+                    set.Add(def.Name);
+                    foreach (var k in def.Include) set.Add(k);
+                }
+            }
+            return set;
+        }
+
+        private static (int score, string[] tags) ScoreNewsForFund(NewsItemDto news, MyFundConfig fund)
+        {
+            var keywords = BuildFundKeywords(fund);
+            var text = (news.Title + " " + news.Summary + " " + string.Join(" ", news.Tags)).ToUpperInvariant();
+            var hit = new List<string>();
+            int score = 0;
+
+            if (!string.IsNullOrWhiteSpace(fund.FundCode) && text.Contains(fund.FundCode.ToUpperInvariant()))
+            {
+                score += 100;
+                hit.Add(fund.FundCode);
+            }
+
+            foreach (var kw in keywords)
+            {
+                if (kw.Length < 2) continue;
+                if (text.Contains(kw.ToUpperInvariant()))
+                {
+                    score += Math.Min(30, kw.Length * 4);
+                    hit.Add(kw);
+                }
+            }
+
+            return (score, hit.Distinct(StringComparer.OrdinalIgnoreCase).Take(5).ToArray());
+        }
+
+        [HttpGet("news")]
+        public async Task<IActionResult> GetNews([FromQuery] string? username, [FromQuery] string mode = "global", [FromQuery] bool important = false, [FromQuery] int limit = 80, [FromQuery] bool force = false)
+        {
+            limit = Math.Clamp(limit, 20, 120);
+            mode = string.IsNullOrWhiteSpace(mode) ? "global" : mode.Trim().ToLowerInvariant();
+            string cacheKey = $"NewsV3_{mode}_{username}_{important}_{limit}";
+            if (!force && _cache.TryGetValue(cacheKey, out object cached)) return Ok(cached);
+
+            try
+            {
+                var allNews = await FetchEastMoneyFastNewsAsync(mode == "holding" ? Math.Max(limit * 3, 120) : limit);
+                List<NewsItemDto> finalList;
+
+                if (mode == "holding")
+                {
+                    if (string.IsNullOrWhiteSpace(username)) return Unauthorized("请提供指挥官代号");
+                    var funds = await _context.MyFunds.AsNoTracking().Where(f => f.Username == username).ToListAsync();
+                    var matched = new List<NewsItemDto>();
+
+                    foreach (var news in allNews)
+                    {
+                        MyFundConfig? bestFund = null;
+                        int bestScore = 0;
+                        string[] bestTags = Array.Empty<string>();
+                        foreach (var fund in funds)
+                        {
+                            var score = ScoreNewsForFund(news, fund);
+                            if (score.score > bestScore)
+                            {
+                                bestScore = score.score;
+                                bestFund = fund;
+                                bestTags = score.tags;
+                            }
+                        }
+
+                        if (bestFund != null && bestScore >= 16)
+                        {
+                            string text = news.Title + " " + news.Summary;
+                            bool isImportant = news.Important || bestScore >= 60;
+                            if (important && !isImportant) continue;
+                            matched.Add(new NewsItemDto
+                            {
+                                Id = news.Id,
+                                Title = news.Title,
+                                Summary = news.Summary,
+                                ShowTime = news.ShowTime,
+                                TimeText = news.TimeText,
+                                DateText = news.DateText,
+                                Source = news.Source,
+                                Url = news.Url,
+                                Important = isImportant,
+                                Sentiment = news.Sentiment,
+                                ImpactScore = EstimateImpactScore(text, isImportant, bestScore),
+                                MatchedFundCode = bestFund.FundCode,
+                                MatchedFundName = bestFund.FundName,
+                                Tags = bestTags,
+                                Sort = news.Sort
+                            });
+                        }
+                    }
+
+                    finalList = matched.OrderByDescending(n => n.Important).ThenByDescending(n => n.Sort).Take(limit).ToList();
+                }
+                else
+                {
+                    finalList = allNews.Where(n => !important || n.Important).Take(limit).ToList();
+                }
+
+                var payload = new
+                {
+                    mode,
+                    source = "东方财富7x24快讯",
+                    updatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
+                    count = finalList.Count,
+                    items = finalList
+                };
+                _cache.Set(cacheKey, payload, TimeSpan.FromSeconds(mode == "holding" ? 90 : 45));
+                return Ok(payload);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"资讯雷达故障: {ex.Message}");
+            }
+        }
+
+        [HttpGet("holding-news")]
+        public async Task<IActionResult> GetHoldingNews([FromQuery] string username, [FromQuery] bool important = false, [FromQuery] int limit = 80, [FromQuery] bool force = false)
+        {
+            return await GetNews(username, "holding", important, limit, force);
+        }
+
+
         [HttpPost("save-archive")]
         public async Task<IActionResult> SaveArchive([FromBody] ArchiveRequest req)
         {
