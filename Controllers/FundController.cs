@@ -1571,236 +1571,335 @@ namespace 估值助手.Controllers
             return Ok(resultLog);
         }
 
-        [HttpGet("sectors")]
-        public async Task<IActionResult> GetSectors()
+        private sealed class SectorDefinition
         {
-            string sectorCacheKey = "SectorData";
-            if (_cache.TryGetValue(sectorCacheKey, out object cachedSectors))
-                return Ok(cachedSectors);
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            public string Key { get; init; } = string.Empty;
+            public string Name { get; init; } = string.Empty;
+            public string[] Include { get; init; } = Array.Empty<string>();
+            public string[] Exclude { get; init; } = Array.Empty<string>();
+        }
+
+        private sealed class SectorFundQuote
+        {
+            public string Code { get; init; } = string.Empty;
+            public string Name { get; init; } = string.Empty;
+            public double Rate { get; init; }
+            public double? MonthRate { get; init; }
+            public bool HasQuote { get; init; }
+            public string UpdatedAt { get; init; } = string.Empty;
+        }
+
+        private sealed class SectorSummaryDto
+        {
+            public string Key { get; init; } = string.Empty;
+            public string Name { get; init; } = string.Empty;
+            public double Rate { get; init; }
+            public int FundCount { get; init; }
+            public int QuotedCount { get; init; }
+            public int StreakDays { get; init; }
+            public int HoldingRank { get; init; }
+            public string UpdatedAt { get; init; } = string.Empty;
+            public List<SectorFundQuote> PreviewFunds { get; init; } = new();
+        }
+
+        private static readonly IReadOnlyList<SectorDefinition> SectorDefinitions = new List<SectorDefinition>
+        {
+            new() { Key = "gold", Name = "黄金", Include = new[] { "黄金", "上海金", "黄金ETF", "黄金基金" }, Exclude = new[] { "黄金股" } },
+            new() { Key = "gold_stock", Name = "黄金股", Include = new[] { "黄金股", "有色金属", "贵金属" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "lithium", Name = "锂矿", Include = new[] { "锂", "锂矿", "锂电", "电池" }, Exclude = new[] { "货币", "债" } },
+            new() { Key = "rare_earth", Name = "稀土永磁", Include = new[] { "稀土", "永磁", "稀有金属" }, Exclude = new[] { "债" } },
+            new() { Key = "new_energy", Name = "新能源", Include = new[] { "新能源", "新能源车", "电动车", "电池", "碳中和" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "solid_battery", Name = "固态电池", Include = new[] { "固态电池", "电池", "锂电" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "storage", Name = "储能", Include = new[] { "储能", "电力设备", "新能源" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "nonferrous", Name = "有色金属", Include = new[] { "有色", "有色金属", "金属", "资源", "矿业" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "gem", Name = "创业板", Include = new[] { "创业板", "创业", "创业成长" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "steel", Name = "钢铁", Include = new[] { "钢铁" }, Exclude = Array.Empty<string>() },
+            new() { Key = "agri", Name = "农林牧渔", Include = new[] { "农业", "畜牧", "养殖", "农林牧渔", "粮食" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "media_game", Name = "传媒游戏", Include = new[] { "传媒", "游戏", "动漫", "影视", "文化", "娱乐" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "grid", Name = "电网设备", Include = new[] { "电网", "电力设备", "电力", "智能电网" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "home_appliance", Name = "家用电器", Include = new[] { "家电", "家用电器", "白色家电" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "pv", Name = "光伏", Include = new[] { "光伏", "太阳能", "新能源" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "double_innovation", Name = "双创50", Include = new[] { "双创", "科创创业", "科创50", "创业板" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "food_beverage", Name = "食品饮料", Include = new[] { "食品", "饮料", "白酒", "消费" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "innovative_drug", Name = "创新药", Include = new[] { "创新药", "医药", "生物医药", "港股通医药" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "oversea_medicine", Name = "海外医药", Include = new[] { "海外医药", "全球医药", "港股通医药", "恒生医疗", "中概互联医疗" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "medicine", Name = "医药", Include = new[] { "医药", "医疗", "生物", "药", "中药", "疫苗", "CRO" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "healthcare", Name = "医疗", Include = new[] { "医疗", "医药", "器械", "医美", "生物" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "nuclear", Name = "可控核聚变", Include = new[] { "核", "核电", "高端装备", "军工" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "semiconductor", Name = "半导体", Include = new[] { "半导体", "芯片", "集成电路", "科创芯片" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "semi_material", Name = "半导体材料设备", Include = new[] { "半导体材料", "半导体设备", "芯片设备", "芯片材料", "集成电路" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "bank", Name = "银行", Include = new[] { "银行" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "military", Name = "军工", Include = new[] { "军工", "国防", "航天", "航空", "高端装备" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "sp500", Name = "标普", Include = new[] { "标普", "S&P", "SP500", "美国500" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "asia_pacific", Name = "亚太", Include = new[] { "亚太", "日本", "越南", "印度", "东南亚" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "bond", Name = "债基", Include = new[] { "债", "债券", "纯债", "信用债", "中短债" }, Exclude = new[] { "可转债", "转债" } },
+            new() { Key = "convertible_bond", Name = "可转债", Include = new[] { "可转债", "转债" }, Exclude = Array.Empty<string>() },
+            new() { Key = "mixed_bond", Name = "混债", Include = new[] { "混债", "二级债", "一级债", "固收+", "固收加" }, Exclude = Array.Empty<string>() },
+            new() { Key = "money", Name = "货币基金", Include = new[] { "货币", "现金", "添利", "余额", "天天理财" }, Exclude = new[] { "股票", "混合" } },
+            new() { Key = "real_estate", Name = "地产", Include = new[] { "地产", "房地产", "沪深300地产", "地产等权" }, Exclude = new[] { "债", "货币" } }
+        };
+
+        private static bool ContainsAny(string text, IEnumerable<string> words)
+        {
+            foreach (var word in words)
+            {
+                if (!string.IsNullOrWhiteSpace(word) && text.Contains(word, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+
+        private static int ScoreFundForSector(string fundName, SectorDefinition def)
+        {
+            var name = fundName ?? string.Empty;
+            int score = 0;
+            if (name.Contains(def.Name, StringComparison.OrdinalIgnoreCase)) score += 80;
+            foreach (var kw in def.Include)
+            {
+                if (name.Contains(kw, StringComparison.OrdinalIgnoreCase)) score += Math.Min(40, kw.Length * 8);
+            }
+            if (name.Contains("ETF", StringComparison.OrdinalIgnoreCase)) score += 25;
+            if (name.Contains("联接", StringComparison.OrdinalIgnoreCase)) score += 20;
+            if (name.Contains("指数", StringComparison.OrdinalIgnoreCase)) score += 15;
+            if (name.Contains("C", StringComparison.OrdinalIgnoreCase)) score += 3;
+            if (name.Contains("货币", StringComparison.OrdinalIgnoreCase) && def.Key != "money") score -= 200;
+            if (name.Contains("债", StringComparison.OrdinalIgnoreCase) && def.Key != "bond" && def.Key != "convertible_bond" && def.Key != "mixed_bond") score -= 120;
+            return score;
+        }
+
+        private static SectorDefinition ResolveSector(string keyOrName)
+        {
+            var clean = (keyOrName ?? string.Empty).Trim();
+            return SectorDefinitions.FirstOrDefault(s => s.Key.Equals(clean, StringComparison.OrdinalIgnoreCase) || s.Name.Equals(clean, StringComparison.OrdinalIgnoreCase))
+                   ?? SectorDefinitions.FirstOrDefault(s => clean.Contains(s.Name, StringComparison.OrdinalIgnoreCase))
+                   ?? new SectorDefinition { Key = clean, Name = clean, Include = new[] { clean }, Exclude = Array.Empty<string>() };
+        }
+
+        private static List<FundInfoCache> MatchFundsBySector(IEnumerable<FundInfoCache> allFunds, SectorDefinition def, int limit)
+        {
+            return allFunds
+                .Where(f => !string.IsNullOrWhiteSpace(f.Code) && !string.IsNullOrWhiteSpace(f.Name))
+                .Where(f => ContainsAny(f.Name, def.Include) && !ContainsAny(f.Name, def.Exclude))
+                .Select(f => new { Fund = f, Score = ScoreFundForSector(f.Name, def) })
+                .Where(x => x.Score > 0)
+                .OrderByDescending(x => x.Score)
+                .ThenBy(x => x.Fund.Name.Length)
+                .Take(limit)
+                .Select(x => x.Fund)
+                .ToList();
+        }
+
+        private static async Task<SectorFundQuote> FetchFundQuoteAsync(HttpClient client, FundInfoCache fund, bool withMonthRate = false)
+        {
+            double rate = 0;
+            bool hasQuote = false;
+            string updatedAt = string.Empty;
             try
             {
-                // 🚀 四向暴击雷达！绝不遗漏跌幅榜！
-                var urls = new[]
+                string gzUrl = $"http://fundgz.1234567.com.cn/js/{fund.Code}.js?rt={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+                string gzRes = await client.GetStringAsync(gzUrl);
+                var match = Regex.Match(gzRes, @"jsonpgz\((.*?)\);");
+                if (match.Success)
                 {
-                    "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=50&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3",
-                    "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=50&po=0&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2&fields=f12,f14,f3",
-                    "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=50&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:3&fields=f12,f14,f3",
-                    "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=50&po=0&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:3&fields=f12,f14,f3"
-                };
-                var tasks = urls.Select(url => client.GetStringAsync(url)).ToArray();
-                await Task.WhenAll(tasks);
-
-                var list = new List<dynamic>();
-                foreach (var task in tasks)
-                {
-                    using var doc = System.Text.Json.JsonDocument.Parse(task.Result);
-                    if (doc.RootElement.TryGetProperty("data", out var dataObj) && dataObj.ValueKind != System.Text.Json.JsonValueKind.Null)
+                    using var doc = JsonDocument.Parse(match.Groups[1].Value);
+                    var root = doc.RootElement;
+                    if (root.TryGetProperty("gszzl", out var gszzl) && double.TryParse(gszzl.GetString(), out var parsedRate))
                     {
-                        if (dataObj.TryGetProperty("diff", out var diffArray) && diffArray.ValueKind == System.Text.Json.JsonValueKind.Array)
-                        {
-                            foreach (var item in diffArray.EnumerateArray())
-                            {
-                                if (item.TryGetProperty("f3", out var f3Element) && f3Element.ValueKind == System.Text.Json.JsonValueKind.Number)
-                                {
-                                    string name = item.GetProperty("f14").GetString() ?? "";
-                                    if (name.Contains("昨日") || name.Contains("ST") || name.Contains("退市") || name.EndsWith("股") || name.Length > 6) continue;
-                                    name = name.Replace("概念", "");
-                                    list.Add(new
-                                    {
-                                        code = item.GetProperty("f12").GetString(),
-                                        name = name,
-                                        rate = f3Element.GetDouble()
-                                    });
-                                }
-                            }
-                        }
+                        rate = Math.Round(parsedRate, 2);
+                        hasQuote = true;
+                    }
+                    if (root.TryGetProperty("gztime", out var timeProp)) updatedAt = timeProp.GetString() ?? string.Empty;
+                    if (root.TryGetProperty("name", out var nameProp) && !string.IsNullOrWhiteSpace(nameProp.GetString()))
+                    {
+                        fund.Name = nameProp.GetString()!;
                     }
                 }
+            }
+            catch
+            {
+                hasQuote = false;
+            }
 
-                var distinctSorted = list.GroupBy(x => x.name)
-                                         .Select(g => g.First())
-                                         .OrderByDescending(x => (double)x.rate)
-                                         .ToList();
-                var top20 = distinctSorted.Take(20).ToList();
-                var bottom20 = distinctSorted.TakeLast(20).OrderBy(x => (double)x.rate).ToList();
+            double? monthRate = null;
+            if (withMonthRate)
+            {
+                monthRate = await FetchFundMonthRateAsync(client, fund.Code);
+            }
 
-                return Ok(new { top = top20, bottom = bottom20 });
+            return new SectorFundQuote
+            {
+                Code = fund.Code,
+                Name = fund.Name,
+                Rate = rate,
+                MonthRate = monthRate,
+                HasQuote = hasQuote,
+                UpdatedAt = updatedAt
+            };
+        }
+
+        private static async Task<double?> FetchFundMonthRateAsync(HttpClient client, string code)
+        {
+            try
+            {
+                string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize=28";
+                using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                req.Headers.Referrer = new Uri("http://fundf10.eastmoney.com/");
+                var res = await client.SendAsync(req);
+                if (!res.IsSuccessStatusCode) return null;
+                string body = await res.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(body);
+                if (!doc.RootElement.TryGetProperty("Data", out var data)) return null;
+                if (!data.TryGetProperty("LSJZList", out var list) || list.GetArrayLength() < 2) return null;
+
+                var latest = list[0];
+                var oldest = list[list.GetArrayLength() - 1];
+                if (double.TryParse(latest.GetProperty("DWJZ").GetString(), out double latestNav) &&
+                    double.TryParse(oldest.GetProperty("DWJZ").GetString(), out double oldestNav) && oldestNav > 0)
+                {
+                    return Math.Round((latestNav - oldestNav) / oldestNav * 100.0, 2);
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private async Task<List<SectorFundQuote>> BuildSectorQuotesAsync(SectorDefinition def, int fundLimit, bool withMonthRate)
+        {
+            var allFunds = await GetAllFundsAsync();
+            var matched = MatchFundsBySector(allFunds, def, fundLimit);
+            if (matched.Count == 0) return new List<SectorFundQuote>();
+
+            using var handler = new HttpClientHandler
+            {
+                ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
+            };
+            using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(withMonthRate ? 8 : 5) };
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
+            client.DefaultRequestVersion = new Version(1, 1);
+
+            using var limiter = new SemaphoreSlim(8);
+            var tasks = matched.Select(async fund =>
+            {
+                await limiter.WaitAsync();
+                try { return await FetchFundQuoteAsync(client, fund, withMonthRate); }
+                finally { limiter.Release(); }
+            }).ToArray();
+
+            var quotes = await Task.WhenAll(tasks);
+            return quotes
+                .Where(q => !string.IsNullOrWhiteSpace(q.Code))
+                .OrderByDescending(q => q.Rate)
+                .ThenBy(q => q.Name)
+                .ToList();
+        }
+
+        [HttpGet("sectors")]
+        public async Task<IActionResult> GetSectors([FromQuery] bool force = false)
+        {
+            string sectorCacheKey = "FundSectorRadarV5";
+            if (!force && _cache.TryGetValue(sectorCacheKey, out object cachedSectors)) return Ok(cachedSectors);
+
+            try
+            {
+                var allFunds = await GetAllFundsAsync();
+                using var handler = new HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
+                };
+                using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(6) };
+                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
+                client.DefaultRequestVersion = new Version(1, 1);
+
+                var summaries = new List<SectorSummaryDto>();
+                int rank = 1;
+                foreach (var def in SectorDefinitions)
+                {
+                    var matched = MatchFundsBySector(allFunds, def, 22);
+                    if (matched.Count == 0) continue;
+
+                    using var limiter = new SemaphoreSlim(8);
+                    var quoteTasks = matched.Take(18).Select(async fund =>
+                    {
+                        await limiter.WaitAsync();
+                        try { return await FetchFundQuoteAsync(client, fund, false); }
+                        finally { limiter.Release(); }
+                    });
+                    var quotes = (await Task.WhenAll(quoteTasks)).Where(q => q.HasQuote).ToList();
+                    if (quotes.Count == 0) continue;
+
+                    double avgRate = Math.Round(quotes.Average(q => q.Rate), 2);
+                    summaries.Add(new SectorSummaryDto
+                    {
+                        Key = def.Key,
+                        Name = def.Name,
+                        Rate = avgRate,
+                        FundCount = matched.Count,
+                        QuotedCount = quotes.Count,
+                        StreakDays = avgRate > 0.005 ? 1 : (avgRate < -0.005 ? -1 : 0),
+                        HoldingRank = rank++,
+                        UpdatedAt = quotes.Select(q => q.UpdatedAt).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t)) ?? ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
+                        PreviewFunds = quotes.OrderByDescending(q => q.Rate).Take(3).ToList()
+                    });
+                }
+
+                var ordered = summaries.OrderByDescending(s => s.Rate).ToList();
+                var payload = new
+                {
+                    source = "东方财富/天天基金估算 + 本地基金名称主题归类",
+                    updatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
+                    top = ordered.Take(30).ToList(),
+                    bottom = ordered.OrderBy(s => s.Rate).Take(30).ToList(),
+                    all = ordered
+                };
+
+                _cache.Set(sectorCacheKey, payload, TimeSpan.FromMinutes(3));
+                return Ok(payload);
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"雷达故障: {ex.Message}");
+                return StatusCode(500, $"板块基金雷达故障: {ex.Message}");
             }
         }
 
         [HttpGet("sector-details")]
         public async Task<IActionResult> GetSectorDetails([FromQuery] string secCode)
         {
-            if (string.IsNullOrEmpty(secCode)) return BadRequest("缺少板块雷达识别码");
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-            try
-            {
-                string url = $"http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=6&po=1&np=1&fltt=2&invt=2&fid=f3&fs=b:{secCode}&fields=f12,f14,f3";
-                string response = await client.GetStringAsync(url);
-                using var doc = System.Text.Json.JsonDocument.Parse(response);
-                var dataProp = doc.RootElement.GetProperty("data");
-                if (dataProp.ValueKind == System.Text.Json.JsonValueKind.Null) return Ok(new List<dynamic>());
-
-                var diffArray = dataProp.GetProperty("diff").EnumerateArray();
-                var list = new List<dynamic>();
-                foreach (var item in diffArray)
-                {
-                    if (item.TryGetProperty("f3", out var f3Element) && f3Element.ValueKind == System.Text.Json.JsonValueKind.Number)
-                    {
-                        list.Add(new
-                        {
-                            code = item.GetProperty("f12").GetString(),
-                            name = item.GetProperty("f14").GetString(),
-                            rate = f3Element.GetDouble()
-                        });
-                    }
-                }
-                return Ok(list);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, $"X光机故障: {ex.Message}");
-            }
+            // 兼容旧前端：secCode 现在既可以传板块 key，也可以传板块名。
+            if (string.IsNullOrWhiteSpace(secCode)) return BadRequest("缺少板块识别码");
+            return await GetSectorFunds(secCode, 20, false);
         }
 
         [HttpGet("sector-funds")]
-        public async Task<IActionResult> GetSectorFunds([FromQuery] string sectorName)
+        public async Task<IActionResult> GetSectorFunds([FromQuery] string sectorName, [FromQuery] int limit = 20, [FromQuery] bool force = false)
         {
-            if (string.IsNullOrEmpty(sectorName)) return BadRequest("缺少板块名称");
-            // 1. 基础清理
-            string keyword = sectorName.Replace("概念", "").Replace("板块", "");
-            // 2. 🚀 升级版：超级语义映射引擎 (把你截图里的冷门概念都接管了)
-            if (keyword.Contains("蛋白") || keyword.Contains("CRO") || keyword.Contains("药") || keyword.Contains("单抗") || keyword.Contains("肝炎") || keyword.Contains("阿兹海默") || keyword.Contains("医疗") || keyword.Contains("医美") || keyword.Contains("生物"))
-                keyword = "医药";
-            else if (keyword.Contains("CPO") || keyword.Contains("光通信") || keyword.Contains("算力") || keyword.Contains("服务器") || keyword.Contains("宽带") || keyword.Contains("脑机") || keyword.Contains("F5G")) // 新增 F5G
-                keyword = "通信";
-            else if (keyword.Contains("低空经济") || keyword.Contains("飞行") || keyword.Contains("卫星") || keyword.Contains("航天"))
-                keyword = "军工";
-            else if (keyword.Contains("电池") || keyword.Contains("锂") || keyword.Contains("钠") || keyword.Contains("储能") || keyword.Contains("光伏") || keyword.Contains("逆变器")) // 新增 锂电池相关
-                keyword = "新能源";
-            else if (keyword.Contains("半导体") || keyword.Contains("光刻") || keyword.Contains("封装") || keyword.Contains("芯片"))
-                keyword = "半导体";
-            else if (keyword.Contains("苹果") || keyword.Contains("华为") || keyword.Contains("消费电子") || keyword.Contains("面板") || keyword.Contains("元器件"))
-                keyword = "电子";
-            else if (keyword.Contains("汽车") || keyword.Contains("整车"))
-                keyword = "汽车";
-            else if (keyword.Contains("游戏") || keyword.Contains("传媒") || keyword.Contains("短剧") || keyword.Contains("影视") || keyword.Contains("文字") || keyword.Contains("娱乐")) // 新增 文字媒体、娱乐用品
-                keyword = "传媒";
-            else if (keyword.Contains("AI") || keyword.Contains("大模型") || keyword.Contains("数据") || keyword.Contains("软件") || keyword.Contains("大科技"))
-                keyword = "人工智能";
-            else if (keyword.Contains("双创"))
-                keyword = "科创创业";
-            // 修复双创50
-            else if (keyword.Contains("券商") || keyword.Contains("证券") || keyword.Contains("保险"))
-                keyword = "证券";
-            else
-            {
-                // 通用后缀剔除兜底
-                string[] suffixes = { "制造", "外包", "服务", "设备", "商业", "制剂", "用品", "耗材", "制品", "工程", "产业", "概念", "加工", "管材" };
-                foreach (var suffix in suffixes)
-                {
-                    if (keyword.EndsWith(suffix) && keyword.Length > suffix.Length)
-                    {
-                        keyword = keyword.Substring(0, keyword.Length - suffix.Length);
-                        break;
-                    }
-                }
-                if (keyword.Length >= 4) keyword = keyword.Substring(0, 2);
-            }
-
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-            var resultList = new List<dynamic>();
+            if (string.IsNullOrWhiteSpace(sectorName)) return BadRequest("缺少板块名称");
+            limit = Math.Clamp(limit, 5, 40);
+            var def = ResolveSector(sectorName);
+            string cacheKey = $"SectorFundsV5_{def.Key}_{limit}";
+            if (!force && _cache.TryGetValue(cacheKey, out object cached)) return Ok(cached);
 
             try
             {
-                // 去天天基金搜索
-                string searchUrl = $"http://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?m=1&key={Uri.EscapeDataString(keyword)}";
-                string searchRes = await client.GetStringAsync(searchUrl);
-
-                using var doc = System.Text.Json.JsonDocument.Parse(searchRes);
-                var datas = doc.RootElement.GetProperty("Datas");
-                if (datas.ValueKind != System.Text.Json.JsonValueKind.Null && datas.GetArrayLength() > 0)
+                var quotes = await BuildSectorQuotesAsync(def, limit, withMonthRate: true);
+                var available = quotes.Where(q => q.HasQuote).ToList();
+                double avgRate = available.Count > 0 ? Math.Round(available.Average(q => q.Rate), 2) : 0;
+                var payload = new
                 {
-                    var fundCodes = new List<string>();
-                    var fundDict = new Dictionary<string, string>();
-
-                    // 优先找 ETF/指数/联接基金
-                    foreach (var item in datas.EnumerateArray())
-                    {
-                        if (item.TryGetProperty("CATEGORYDESC", out var cat) && cat.GetString() != "基金") continue;
-                        string fCode = item.GetProperty("CODE").GetString();
-                        string fName = item.GetProperty("NAME").GetString();
-
-                        if ((fName.Contains("ETF") || fName.Contains("联接") || fName.Contains("指数")) && !fundDict.ContainsKey(fCode))
-                        {
-                            fundCodes.Add(fCode);
-                            fundDict[fCode] = fName;
-                            if (fundCodes.Count >= 6) break;
-                        }
-                    }
-
-                    // 凑不够的话拿主动基金顶上
-                    if (fundCodes.Count < 6)
-                    {
-                        foreach (var item in datas.EnumerateArray())
-                        {
-                            if (item.TryGetProperty("CATEGORYDESC", out var cat) && cat.GetString() != "基金") continue;
-                            string fCode = item.GetProperty("CODE").GetString();
-                            string fName = item.GetProperty("NAME").GetString();
-
-                            if (!fundDict.ContainsKey(fCode))
-                            {
-                                fundCodes.Add(fCode);
-                                fundDict[fCode] = fName;
-                                if (fundCodes.Count >= 6) break;
-                            }
-                        }
-                    }
-
-                    // 🚀 核心修复：即使天天基金的估值接口挂了，也把基金返回！
-                    var tasks = fundCodes.Select(async code =>
-                    {
-                        double finalRate = 0.0;
-                        try
-                        {
-                            string gzUrl = $"http://fundgz.1234567.com.cn/js/{code}.js?rt={DateTime.Now.Ticks}";
-                            string gzRes = await client.GetStringAsync(gzUrl);
-                            var match = System.Text.RegularExpressions.Regex.Match(gzRes, @"\""gszzl\"":\""([^\""]+)\""");
-                            if (match.Success && double.TryParse(match.Groups[1].Value, out double rate))
-                            {
-                                finalRate = rate;
-                            }
-                        }
-                        catch
-                        {
-                            // 接口炸了不抛异常，生吞，保底 rate 为 0
-                        }
-
-                        // 不管有没有查到实时净值，只要搜到了这只基金，就强行返回它！
-                        return new { code = code, name = fundDict[code], rate = finalRate };
-                    });
-
-                    var results = await Task.WhenAll(tasks);
-                    foreach (var res in results)
-                    {
-                        if (res != null) resultList.Add(res);
-                    }
-                }
-
-                // 排序：涨的多的在前面
-                resultList = resultList.OrderByDescending(x => (double)x.GetType().GetProperty("rate").GetValue(x)).ToList();
-                return Ok(resultList);
+                    key = def.Key,
+                    name = def.Name,
+                    rate = avgRate,
+                    fundCount = quotes.Count,
+                    updatedAt = available.Select(q => q.UpdatedAt).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t)) ?? ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
+                    funds = quotes.OrderByDescending(q => q.Rate).ToList()
+                };
+                _cache.Set(cacheKey, payload, TimeSpan.FromMinutes(3));
+                return Ok(payload);
             }
             catch (Exception ex)
             {
                 return StatusCode(500, $"找基失败: {ex.Message}");
             }
         }
+
 
         [HttpPost("save-archive")]
         public async Task<IActionResult> SaveArchive([FromBody] ArchiveRequest req)
