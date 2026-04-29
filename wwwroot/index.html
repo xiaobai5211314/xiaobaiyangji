@@ -607,6 +607,34 @@
             .profit-list-row > div:last-child { padding-right: 14px; min-width: 96px; }
             .capital-row { grid-template-columns: minmax(0, 1.15fr) .75fr .7fr; }
         }
+
+        /* 本轮：资金流只在板块页展示 + 数字统一微软雅黑等宽数字 */
+        .capital-flow-panel { margin: 15px; padding: 16px; }
+        .capital-two-col { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:12px; }
+        .capital-box { background: rgba(15,23,42,.28); border:1px solid rgba(255,255,255,.07); border-radius:16px; padding:12px; min-width:0; }
+        .capital-box-title { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; color:#f8fafc; font-weight:900; font-size:15px; }
+        .capital-row { display:grid; grid-template-columns: minmax(0, 1.08fr) .82fr .66fr; gap:8px; align-items:center; padding:10px 4px; border-bottom:1px solid rgba(255,255,255,.06); }
+        .capital-row:last-child { border-bottom:0; }
+        .capital-head { color:#94a3b8; font-size:12px; }
+        .capital-name { color:#f8fafc; font-weight:900; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .capital-sub { color:#64748b; font-size:11px; margin-top:3px; }
+        .capital-value { text-align:right; font-weight:900; font-size:14px; white-space:nowrap; }
+        .num-font, .capital-value, .metric-value, .number-display, .calendar-profit, .profit-list-row > div:last-child, .sector-row span, .news-time {
+            font-family: "Microsoft YaHei", "微软雅黑", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+            font-variant-numeric: tabular-nums;
+            font-feature-settings: "tnum" 1;
+        }
+        @media screen and (max-width: 768px) {
+            .capital-flow-panel { margin: 12px 8px calc(86px + env(safe-area-inset-bottom)); padding: 14px; }
+            .capital-two-col { grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px; }
+            .capital-box { padding:10px 8px; border-radius:14px; }
+            .capital-box-title { font-size:13px; }
+            .capital-row { grid-template-columns: minmax(0, 1fr); gap:3px; padding:9px 2px; }
+            .capital-row.capital-head { display:none; }
+            .capital-value { text-align:left; font-size:13px; }
+            .capital-sub { font-size:10px; }
+        }
+
     </style>
 </head>
 <body>
@@ -805,26 +833,39 @@
                     </div>
                     <div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">🎯 持仓对应板块</div><div class="page-subtitle">用持仓基金主题看对应赛道强弱</div><div style="margin-top:12px;"><div v-for="fund in fundsList" :key="'sector-hold-'+fund.code" class="quick-holding-card" @click="switchPage('news'); newsMode='holding'; fetchNews('holding', true);"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><div style="min-width:0;"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ fund.name }}</div><div style="color:#64748b;font-size:11px;font-family:monospace;">{{ fund.code }}</div></div><div :style="{color:fund.currentRate>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New'}">{{ fund.currentRate>0?'+':'' }}{{ fund.currentRate }}%</div></div></div></div></div>
                 </div>
-            </div>
 
                 <div class="glass-panel capital-flow-panel">
-                    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;">
                         <div>
-                            <div class="page-title" style="font-size:18px;">💧 主力资金流入</div>
+                            <div class="page-title" style="font-size:18px;">💧 主力资金</div>
                             <div class="page-subtitle">{{ capitalFlowSource || '东方财富板块资金流向' }} · {{ capitalFlowUpdatedAt || '待更新' }}</div>
                         </div>
                         <button class="btn" @click="fetchCapitalFlow(true)">🔄</button>
                     </div>
                     <div v-if="isCapitalLoading" class="news-empty">📡 正在同步主力资金...</div>
-                    <div v-else>
-                        <div class="capital-row capital-head"><span>板块</span><span class="capital-value">主力净流入</span><span class="capital-value">净占比</span></div>
-                        <div v-for="item in capitalFlowRows.slice(0, 30)" :key="item.code" class="capital-row">
-                            <div style="min-width:0;"><div class="capital-name">{{ item.name }}</div><div class="capital-sub">涨跌 {{ item.rate > 0 ? '+' : '' }}{{ item.rate }}%</div></div>
-                            <div class="capital-value" :style="{color:item.mainNet>=0?'#ff4d4f':'#10b981'}">{{ item.mainNetText }}</div>
-                            <div class="capital-value" :style="{color:item.mainRatio>=0?'#ff4d4f':'#10b981'}">{{ item.mainRatio > 0 ? '+' : '' }}{{ item.mainRatio }}%</div>
+                    <div v-else class="capital-two-col">
+                        <div class="capital-box">
+                            <div class="capital-box-title"><span>🔴 主力流入</span><span style="color:#94a3b8;font-size:11px;">TOP {{ capitalFlowInRows.length }}</span></div>
+                            <div class="capital-row capital-head"><span>板块</span><span class="capital-value">净流入</span><span class="capital-value">净占比</span></div>
+                            <div v-for="item in capitalFlowInRows.slice(0, 12)" :key="'in-'+item.code" class="capital-row">
+                                <div style="min-width:0;"><div class="capital-name">{{ item.name }}</div><div class="capital-sub">涨跌 {{ item.rate > 0 ? '+' : '' }}{{ item.rate }}%</div></div>
+                                <div class="capital-value" style="color:#ff4d4f;">{{ item.mainNetText }}</div>
+                                <div class="capital-value" :style="{color:item.mainRatio>=0?'#ff4d4f':'#10b981'}">{{ item.mainRatio > 0 ? '+' : '' }}{{ item.mainRatio }}%</div>
+                            </div>
+                        </div>
+                        <div class="capital-box">
+                            <div class="capital-box-title"><span>🟢 主力流出</span><span style="color:#94a3b8;font-size:11px;">TOP {{ capitalFlowOutRows.length }}</span></div>
+                            <div class="capital-row capital-head"><span>板块</span><span class="capital-value">净流出</span><span class="capital-value">净占比</span></div>
+                            <div v-for="item in capitalFlowOutRows.slice(0, 12)" :key="'out-'+item.code" class="capital-row">
+                                <div style="min-width:0;"><div class="capital-name">{{ item.name }}</div><div class="capital-sub">涨跌 {{ item.rate > 0 ? '+' : '' }}{{ item.rate }}%</div></div>
+                                <div class="capital-value" style="color:#10b981;">{{ item.mainNetText }}</div>
+                                <div class="capital-value" :style="{color:item.mainRatio>=0?'#ff4d4f':'#10b981'}">{{ item.mainRatio > 0 ? '+' : '' }}{{ item.mainRatio }}%</div>
+                            </div>
                         </div>
                     </div>
                 </div>
+            </div>
+
             <div v-show="activePage === 'news'" class="app-page">
                 <div class="page-topbar glass-panel"><div><div class="page-title">📰 资讯</div><div class="page-subtitle">{{ newsSource || '东方财富7x24快讯' }} · {{ newsUpdatedAt || '待更新' }}</div></div><div class="analysis-toolbar"><label style="font-size:12px;color:#cbd5e1;"><input type="checkbox" v-model="newsOnlyImportant" @change="fetchNews(newsMode, true)"> 只看重要</label><button class="btn" @click="fetchNews(newsMode, true)">🔄 刷新</button></div></div>
                 <div class="news-page-layout"><div class="glass-panel" style="padding:16px;"><div class="news-tabs" style="margin-bottom:12px;"><button :class="['news-tab', newsMode==='global'?'active':'']" @click="switchNewsMode('global')">7x24快讯</button><button :class="['news-tab', newsMode==='holding'?'active':'']" @click="switchNewsMode('holding')">持仓资讯</button></div><div class="news-toolbar" style="border-radius:14px;margin-bottom:12px;"><span>{{ newsMode === 'holding' ? '只显示和你持仓基金主题相关的消息' : '全市场财经快讯时间线' }}</span></div><div v-if="isNewsLoading" class="news-empty">📡 正在同步资讯...</div><div v-else-if="newsList.length === 0" class="news-empty">暂无匹配资讯</div><div v-else class="news-list news-page-list"><template v-for="group in groupedNews" :key="group.date"><div class="news-date">{{ group.date }}</div><div v-for="item in group.items" :key="item.id + item.showTime" :class="['news-item', item.sentiment]"><div class="news-line"></div><div class="news-dot"></div><div class="news-card" @click="openNewsItem(item)"><div class="news-time">{{ item.timeText }}</div><div class="news-title">{{ item.title }}</div><div v-if="item.summary && item.summary !== item.title" class="news-summary">{{ item.summary }}</div><div class="news-badges"><span v-if="item.important" class="news-badge good">重要</span><span v-if="item.matchedFundName" class="news-badge">{{ item.matchedFundName }}</span><span :class="['news-badge', item.sentiment==='positive'?'good':(item.sentiment==='negative'?'bad':'neutral') ]">{{ item.sentiment==='positive'?'偏利好':(item.sentiment==='negative'?'偏利空':'中性') }} · {{ item.impactScore }}分</span><span v-for="tag in (item.tags || []).slice(0,3)" :key="tag" class="news-badge neutral">{{ tag }}</span></div></div></div></template></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">🧩 持仓资讯入口</div><div class="page-subtitle">点基金可切到持仓资讯并按主题匹配</div><div style="margin-top:12px;"><div v-for="fund in fundsList" :key="'news-hold-'+fund.code" class="quick-holding-card" @click="newsMode='holding'; fetchNews('holding', true);"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ fund.name }}</div><div style="display:flex;justify-content:space-between;margin-top:6px;color:#94a3b8;font-size:12px;"><span>{{ fund.code }}</span><span>{{ fund.currentRate>0?'+':'' }}{{ fund.currentRate }}%</span></div></div></div></div></div>
@@ -1233,6 +1274,8 @@
                 const sectorSource = ref('');
                 const sectorUpdatedAt = ref('');
                 const capitalFlowRows = ref([]);
+                const capitalFlowInRows = ref([]);
+                const capitalFlowOutRows = ref([]);
                 const capitalFlowSource = ref('');
                 const capitalFlowUpdatedAt = ref('');
                 const isCapitalLoading = ref(false);
@@ -1498,14 +1541,18 @@
                             const sx = (img.width - minSide) / 2;
                             const sy = (img.height - minSide) / 2;
                             ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
-                            const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
-                            const fd = new FormData(); fd.append('username', currentUser.value); fd.append('avatarDataUrl', dataUrl);
-                            try {
-                                const res = await fetch(API_BASE + '/api/auth/avatar', { method: 'POST', body: fd });
-                                if (res.ok) { const saved = await res.json(); userAvatar.value = saved.avatarDataUrl || dataUrl; showToast('头像已更新', 'success'); }
-                                else showToast(await res.text() || '头像保存失败', 'error');
-                            } catch(e) { showToast('网络异常', 'error'); }
-                            event.target.value = '';
+                            canvas.toBlob(async (blob) => {
+                                if (!blob) { showToast('头像压缩失败', 'error'); event.target.value = ''; return; }
+                                const fd = new FormData();
+                                fd.append('username', currentUser.value);
+                                fd.append('avatarFile', blob, 'avatar.jpg');
+                                try {
+                                    const res = await fetch(API_BASE + '/api/auth/avatar-file', { method: 'POST', body: fd });
+                                    if (res.ok) { const saved = await res.json(); userAvatar.value = saved.avatarDataUrl || ''; showToast('头像已更新', 'success'); }
+                                    else showToast(await res.text() || '头像保存失败', 'error');
+                                } catch(e) { showToast('网络异常：头像接口未部署或被网关拦截', 'error'); }
+                                event.target.value = '';
+                            }, 'image/jpeg', 0.72);
                         };
                         img.src = e.target.result;
                     };
@@ -1586,6 +1633,8 @@
                         if (!res.ok) throw new Error(await res.text());
                         const data = await res.json();
                         capitalFlowRows.value = data.rows || [];
+                        capitalFlowInRows.value = data.inflow || (data.rows || []).filter(x => (x.mainNet || 0) > 0).sort((a,b)=>(b.mainNet||0)-(a.mainNet||0));
+                        capitalFlowOutRows.value = data.outflow || (data.rows || []).filter(x => (x.mainNet || 0) < 0).sort((a,b)=>(a.mainNet||0)-(b.mainNet||0));
                         capitalFlowSource.value = data.source || '';
                         capitalFlowUpdatedAt.value = data.updatedAt || '';
                         capitalCacheTime = now;
@@ -1945,7 +1994,7 @@
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
                     handleLogin, handleRegister, handleLogout, handleAddFund, handleDeleteFund, triggerUpload, handleFileUpload, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
-                    sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowSource, capitalFlowUpdatedAt, isCapitalLoading, fetchCapitalFlow,
+                    sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, isCapitalLoading, fetchCapitalFlow,
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, isDetailsLoading, expandedSectors, toggleSector,
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
