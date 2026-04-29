@@ -1480,15 +1480,23 @@
                     reader.onload = function (e) {
                         const img = new Image(); img.src = e.target.result;
                         img.onload = function () {
-                            const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
+                            const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d', { willReadFrequently: false });
                             let targetWidth = img.width; let targetHeight = img.height;
-                            if (targetWidth > 800) { targetHeight = Math.round(targetHeight * (800 / targetWidth)); targetWidth = 800; }
-                            canvas.width = targetWidth; canvas.height = targetHeight; ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
-                            canvas.toBlob(blob => successCallback(new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", { type: 'image/jpeg' })), 'image/jpeg', 0.5);
+                            // OCR 导入必须保留小数点、负号和基金名称小字。旧版 800px/0.5 会把支付宝持仓截图压糊。
+                            // 这里改成高清压缩：长边最多 1800，质量 0.9，速度和准确率更均衡。
+                            const maxSide = 1800;
+                            if (Math.max(targetWidth, targetHeight) > maxSide) {
+                                const scale = maxSide / Math.max(targetWidth, targetHeight);
+                                targetWidth = Math.round(targetWidth * scale);
+                                targetHeight = Math.round(targetHeight * scale);
+                            }
+                            canvas.width = targetWidth; canvas.height = targetHeight;
+                            ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                            ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+                            canvas.toBlob(blob => successCallback(new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", { type: 'image/jpeg' })), 'image/jpeg', 0.9);
                         };
                     };
                 };
-
                 const handleRegister = async () => {
                     if (!loginForm.username || !loginForm.password) return showToast("为空！", "error");
                     let fd = new FormData(); fd.append('username', loginForm.username); fd.append('password', loginForm.password);
@@ -1521,7 +1529,11 @@
                     if (!currentUser.value) return;
                     const fd = new FormData(); fd.append('username', currentUser.value);
                     try {
-                        const res = await fetch(API_BASE + '/api/auth/avatar/clear', { method: 'POST', body: fd });
+                        let res = await fetch(API_BASE + '/api/auth/avatar/clear-v2', { method: 'POST', body: fd });
+                        if (res.status === 404 || res.status === 405) {
+                            const fd2 = new FormData(); fd2.append('username', currentUser.value);
+                            res = await fetch(API_BASE + '/api/auth/avatar/clear', { method: 'POST', body: fd2 });
+                        }
                         if (res.ok) { userAvatar.value = ''; showToast('头像已清除', 'success'); }
                         else showToast('清除失败', 'error');
                     } catch(e) { showToast('网络异常', 'error'); }
@@ -1547,9 +1559,20 @@
                                 fd.append('username', currentUser.value);
                                 fd.append('avatarFile', blob, 'avatar.jpg');
                                 try {
-                                    const res = await fetch(API_BASE + '/api/auth/avatar-file', { method: 'POST', body: fd });
+                                    let res = await fetch(API_BASE + '/api/auth/avatar-file-v2', { method: 'POST', body: fd });
+                                    if (res.status === 404 || res.status === 405) {
+                                        const fd2 = new FormData();
+                                        fd2.append('username', currentUser.value);
+                                        fd2.append('avatarFile', blob, 'avatar.jpg');
+                                        res = await fetch(API_BASE + '/api/auth/avatar-file', { method: 'POST', body: fd2 });
+                                    }
                                     if (res.ok) { const saved = await res.json(); userAvatar.value = saved.avatarDataUrl || ''; showToast('头像已更新', 'success'); }
-                                    else showToast(await res.text() || '头像保存失败', 'error');
+                                    else {
+                                        let msg = '头像保存失败';
+                                        try { msg = await res.text(); } catch(e){}
+                                        if (res.status === 404) msg = '后端头像接口未部署：请同步 Program.cs/AuthController.cs/User.cs 并重启后端';
+                                        showToast(msg, 'error');
+                                    }
                                 } catch(e) { showToast('网络异常：头像接口未部署或被网关拦截', 'error'); }
                                 event.target.value = '';
                             }, 'image/jpeg', 0.72);
@@ -1966,7 +1989,10 @@
                 const fetchUserProfile = async () => {
                     if (!currentUser.value) return;
                     try {
-                        const res = await fetch(API_BASE + '/api/auth/profile?username=' + encodeURIComponent(currentUser.value));
+                        let res = await fetch(API_BASE + '/api/auth/profile-v2?username=' + encodeURIComponent(currentUser.value));
+                        if (res.status === 404 || res.status === 405) {
+                            res = await fetch(API_BASE + '/api/auth/profile?username=' + encodeURIComponent(currentUser.value));
+                        }
                         if (res.ok) { const data = await res.json(); userAvatar.value = data.avatarDataUrl || ''; }
                     } catch(e) { }
                 };
