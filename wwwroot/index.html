@@ -435,6 +435,7 @@
 
                     <button class="btn" @click="fetchSectors" style="margin-left: 10px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none;">🎯 板块雷达</button>
                     <button class="btn btn-success" @click="fetchGlobalIndices" style="margin-left: 10px;">🌍 全球大盘</button>
+                    <button class="btn" @click="refreshNow(true)" :disabled="pullRefresh.loading" style="margin-left: 10px; background: rgba(56,189,248,0.15); border-color: rgba(56,189,248,0.35); color: #7dd3fc;">🔄 {{ pullRefresh.loading ? '刷新中' : '刷新' }}</button>
                     <button class="btn btn-danger" @click="handleLogout" style="margin-left: 10px;">🚪 登出</button>
                 </div>
             </div>

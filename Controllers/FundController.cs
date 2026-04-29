@@ -862,25 +862,9 @@ namespace 估值助手.Controllers
                     .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).Take(3).ToList());
 
 
-                // 🌟 猎隼侦察兵启动：下午 17:00 后刺探真实净值
-                var realRateDict = new Dictionary<string, double>();
-                var exactProfitDict = new Dictionary<string, double>(); // 新增物理利润字典
-
-                if (localTime.Hour >= 17)
-                {
-                    var realRateTasks = myFunds.Select(async config =>
-                    {
-                        double effectiveShares = GetEffectiveShares(config, todayDash);
-                        var res = await GetTodayRealRateAsync(config.FundCode, todayDash, effectiveShares);
-                        return new { code = config.FundCode, rate = res.rate, exactProfit = res.exactProfit };
-                    });
-                    var realRateResults = await Task.WhenAll(realRateTasks);
-                    foreach (var res in realRateResults)
-                    {
-                        if (res.rate.HasValue) realRateDict[res.code] = res.rate.Value;
-                        if (res.exactProfit.HasValue) exactProfitDict[res.code] = res.exactProfit.Value; // 截获物理利润
-                    }
-                }
+                // ⚡ 首屏性能优化：today 接口不再发起任何外部净值 HTTP 请求。
+                // 真实净值由 NavSettlementService 后台结算后写入 MyFunds.LastSettled* 字段。
+                // 这样 App/Web 打开和下拉刷新只访问本机数据库，避免东方财富接口抖动拖慢用户请求。
 
 
                 var result = myFunds.Select(config =>
@@ -917,13 +901,10 @@ namespace 估值助手.Controllers
                         dataPoints.Add(new object[] { todayStr + " 09:30:00", 0 });
                     }
 
-                    // 是否已截获真实净值
-                    // 是否已截获真实净值
-                    bool isSettled = realRateDict.ContainsKey(config.FundCode);
-                    double? actualRate = isSettled ? realRateDict[config.FundCode] : null;
-
-                    // 🚀 新增这一行：尝试提取绝对物理利润
-                    double? actualExactProfit = exactProfitDict.ContainsKey(config.FundCode) ? exactProfitDict[config.FundCode] : null;
+                    // 是否已完成今日真实净值清算。只读本地字段，不在 today 请求里访问外部接口。
+                    bool isSettled = config.LastSettledDate == todayDash;
+                    double? actualRate = isSettled ? config.LastSettledRate : null;
+                    double? actualExactProfit = isSettled ? config.LastSettledProfit : null;
 
                     // FundController.cs 中 GetTodayData 方法内部
                     return new
