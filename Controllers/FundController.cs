@@ -1805,71 +1805,112 @@ namespace 估值助手.Controllers
                 .ToList();
         }
 
+        private static int TryGetLocalSectorFundCount(string sectorName)
+        {
+            try
+            {
+                var cache = _globalFundCache;
+                if (cache == null || cache.Count == 0) return 0;
+                var def = ResolveSector(sectorName);
+                return MatchFundsBySector(cache, def, 80).Count;
+            }
+            catch { return 0; }
+        }
+
+        private async Task<List<SectorSummaryDto>> FetchEastMoneySectorRateRowsAsync(HttpClient client, int po, int limit)
+        {
+            long ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            // 东方财富板块行情：m:90+t:2 行业板块 + m:90+t:3 概念板块；f3 为涨跌幅。
+            string url = $"https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz={limit}&po={po}&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2,m:90+t:3&fields=f12,f14,f3&_={ts}";
+            string body = await client.GetStringAsync(url);
+            using var doc = JsonDocument.Parse(body);
+            if (!doc.RootElement.TryGetProperty("data", out var data) || !data.TryGetProperty("diff", out var diff))
+                return new List<SectorSummaryDto>();
+
+            var rows = new List<SectorSummaryDto>();
+            int rank = 1;
+            foreach (var item in diff.EnumerateArray())
+            {
+                string code = item.TryGetProperty("f12", out var f12) ? f12.GetString() ?? "" : "";
+                string name = item.TryGetProperty("f14", out var f14) ? f14.GetString() ?? "" : "";
+                double rate = item.TryGetProperty("f3", out var f3) && f3.ValueKind == JsonValueKind.Number ? f3.GetDouble() : 0;
+                if (string.IsNullOrWhiteSpace(name)) continue;
+                int count = TryGetLocalSectorFundCount(name);
+                rows.Add(new SectorSummaryDto
+                {
+                    Key = string.IsNullOrWhiteSpace(code) ? name : code,
+                    Name = name,
+                    Rate = Math.Round(rate, 2),
+                    FundCount = count,
+                    QuotedCount = count,
+                    StreakDays = rate > 0.005 ? 1 : (rate < -0.005 ? -1 : 0),
+                    HoldingRank = rank++,
+                    UpdatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
+                    PreviewFunds = new List<SectorFundQuote>()
+                });
+            }
+            return rows;
+        }
+
         [HttpGet("sectors")]
         public async Task<IActionResult> GetSectors([FromQuery] bool force = false)
         {
-            string sectorCacheKey = "FundSectorRadarV5";
+            string sectorCacheKey = "FundSectorRadarFastV1";
             if (!force && _cache.TryGetValue(sectorCacheKey, out object cachedSectors)) return Ok(cachedSectors);
 
             try
             {
-                var allFunds = await GetAllFundsAsync();
                 using var handler = new HttpClientHandler
                 {
                     ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
                 };
-                using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(6) };
-                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
+                using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(4) };
                 client.DefaultRequestVersion = new Version(1, 1);
+                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
+                client.DefaultRequestHeaders.Add("Referer", "https://quote.eastmoney.com/center/boardlist.html");
 
-                var summaries = new List<SectorSummaryDto>();
-                int rank = 1;
-                foreach (var def in SectorDefinitions)
-                {
-                    var matched = MatchFundsBySector(allFunds, def, 22);
-                    if (matched.Count == 0) continue;
+                // 旧版会扫描几十个主题、再请求数百只基金估值，冷启动会卡 5-6 秒。
+                // 新版板块页首屏先走东方财富板块行情接口，两次请求并发完成；点进板块时再按基金池细查。
+                var topTask = FetchEastMoneySectorRateRowsAsync(client, po: 1, limit: 50);
+                var bottomTask = FetchEastMoneySectorRateRowsAsync(client, po: 0, limit: 50);
+                await Task.WhenAll(topTask, bottomTask);
 
-                    using var limiter = new SemaphoreSlim(8);
-                    var quoteTasks = matched.Take(18).Select(async fund =>
-                    {
-                        await limiter.WaitAsync();
-                        try { return await FetchFundQuoteAsync(client, fund, false); }
-                        finally { limiter.Release(); }
-                    });
-                    var quotes = (await Task.WhenAll(quoteTasks)).Where(q => q.HasQuote).ToList();
-                    if (quotes.Count == 0) continue;
+                var top = topTask.Result
+                    .Where(x => x.Rate >= -100 && x.Rate <= 100)
+                    .GroupBy(x => x.Key)
+                    .Select(g => g.First())
+                    .OrderByDescending(x => x.Rate)
+                    .Take(30)
+                    .ToList();
+                var bottom = bottomTask.Result
+                    .Where(x => x.Rate >= -100 && x.Rate <= 100)
+                    .GroupBy(x => x.Key)
+                    .Select(g => g.First())
+                    .OrderBy(x => x.Rate)
+                    .Take(30)
+                    .ToList();
 
-                    double avgRate = Math.Round(quotes.Average(q => q.Rate), 2);
-                    summaries.Add(new SectorSummaryDto
-                    {
-                        Key = def.Key,
-                        Name = def.Name,
-                        Rate = avgRate,
-                        FundCount = matched.Count,
-                        QuotedCount = quotes.Count,
-                        StreakDays = avgRate > 0.005 ? 1 : (avgRate < -0.005 ? -1 : 0),
-                        HoldingRank = rank++,
-                        UpdatedAt = quotes.Select(q => q.UpdatedAt).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t)) ?? ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
-                        PreviewFunds = quotes.OrderByDescending(q => q.Rate).Take(3).ToList()
-                    });
-                }
+                var all = top.Concat(bottom)
+                    .GroupBy(x => x.Key)
+                    .Select(g => g.OrderByDescending(x => Math.Abs(x.Rate)).First())
+                    .OrderByDescending(x => x.Rate)
+                    .ToList();
 
-                var ordered = summaries.OrderByDescending(s => s.Rate).ToList();
                 var payload = new
                 {
-                    source = "东方财富/天天基金估算 + 本地基金名称主题归类",
+                    source = "东方财富板块行情极速接口",
                     updatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
-                    top = ordered.Take(30).ToList(),
-                    bottom = ordered.OrderBy(s => s.Rate).Take(30).ToList(),
-                    all = ordered
+                    top,
+                    bottom,
+                    all
                 };
 
-                _cache.Set(sectorCacheKey, payload, TimeSpan.FromMinutes(3));
+                _cache.Set(sectorCacheKey, payload, TimeSpan.FromMinutes(2));
                 return Ok(payload);
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"板块基金雷达故障: {ex.Message}");
+                return StatusCode(500, $"板块行情获取失败: {ex.Message}");
             }
         }
 
@@ -1885,23 +1926,25 @@ namespace 估值助手.Controllers
         public async Task<IActionResult> GetCapitalFlow([FromQuery] bool force = false, [FromQuery] int limit = 30)
         {
             limit = Math.Clamp(limit, 10, 80);
-            string cacheKey = $"CapitalFlowV2_{limit}";
+            string cacheKey = $"CapitalFlowFastV1_{limit}";
             if (!force && _cache.TryGetValue(cacheKey, out object cached)) return Ok(cached);
 
             try
             {
+                using var handler = new HttpClientHandler { ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true };
+                using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(4) };
+                client.DefaultRequestVersion = new Version(1, 1);
+                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
+                client.DefaultRequestHeaders.Add("Referer", "https://data.eastmoney.com/bkzj/");
+
                 async Task<List<CapitalFlowRowDto>> FetchRowsAsync(int po)
                 {
                     long ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                     string url = $"https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz={limit}&po={po}&np=1&fltt=2&invt=2&fid=f62&fs=m:90+t:2,m:90+t:3&fields=f12,f14,f3,f62,f184,f66,f72&_={ts}";
-                    using var handler = new HttpClientHandler { ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true };
-                    using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(6) };
-                    client.DefaultRequestVersion = new Version(1, 1);
-                    client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
-                    client.DefaultRequestHeaders.Add("Referer", "https://data.eastmoney.com/bkzj/");
                     string body = await client.GetStringAsync(url);
                     using var doc = JsonDocument.Parse(body);
-                    var list = doc.RootElement.GetProperty("data").GetProperty("diff");
+                    if (!doc.RootElement.TryGetProperty("data", out var data) || !data.TryGetProperty("diff", out var list))
+                        return new List<CapitalFlowRowDto>();
                     var result = new List<CapitalFlowRowDto>();
                     foreach (var item in list.EnumerateArray())
                     {
@@ -1928,8 +1971,12 @@ namespace 估值助手.Controllers
                     return result;
                 }
 
-                var inflow = (await FetchRowsAsync(1)).OrderByDescending(x => x.MainNet).Take(limit).ToList();
-                var outflow = (await FetchRowsAsync(0)).OrderBy(x => x.MainNet).Take(limit).ToList();
+                var inflowTask = FetchRowsAsync(1);
+                var outflowTask = FetchRowsAsync(0);
+                await Task.WhenAll(inflowTask, outflowTask);
+
+                var inflow = inflowTask.Result.OrderByDescending(x => x.MainNet).Take(limit).ToList();
+                var outflow = outflowTask.Result.OrderBy(x => x.MainNet).Take(limit).ToList();
                 var rows = inflow.Concat(outflow)
                     .GroupBy(x => x.Code)
                     .Select(g => g.OrderByDescending(x => Math.Abs(x.MainNet)).First())
@@ -1937,7 +1984,7 @@ namespace 估值助手.Controllers
                     .ToList();
 
                 var payload = new { source = "东方财富数据中心-板块资金流向", updatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), rows, inflow, outflow };
-                _cache.Set(cacheKey, payload, TimeSpan.FromMinutes(2));
+                _cache.Set(cacheKey, payload, TimeSpan.FromMinutes(3));
                 return Ok(payload);
             }
             catch (Exception ex)
