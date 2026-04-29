@@ -38,6 +38,11 @@ namespace 估值助手.Models
                 .HasIndex(a => new { a.Username, a.RecordDate, a.FundCode })
                 .HasDatabaseName("IX_DailyArchive_User_Date_Code");
 
+            modelBuilder.Entity<DailyArchive>()
+                .HasIndex(a => new { a.Username, a.FundCode, a.RecordDate })
+                .HasDatabaseName("IX_DailyArchive_User_Code_Date");
+
+
             modelBuilder.Entity<User>()
                 .HasIndex(u => u.Username)
                 .IsUnique()

@@ -930,10 +930,11 @@
                 const fetchMyArchives = async (targetCode, targetName) => {
                     archiveModal.show = true; archiveModal.isLoading = true; archiveModal.targetName = targetName; archiveModal.data = [];
                     try {
-                        const res = await fetch(`${API_BASE}/api/fund/get-archives?username=${encodeURIComponent(currentUser.value)}`);
+                        // 只取目标基金/总持仓的档案，避免每次点击都把所有历史记录拖回前端。
+                        const url = `${API_BASE}/api/fund/get-archives?username=${encodeURIComponent(currentUser.value)}&fundCode=${encodeURIComponent(targetCode)}&limit=120&_t=${Date.now()}`;
+                        const res = await fetch(url, { cache: 'no-store' });
                         if (res.ok) {
-                            const records = await res.json();
-                            archiveModal.data = records.filter(r => r.fundCode === targetCode).sort((a, b) => new Date(b.recordDate) - new Date(a.recordDate));
+                            archiveModal.data = await res.json();
                         }
                     } catch (e) { showToast("🌐 档案馆断线", "error"); } finally { archiveModal.isLoading = false; }
                 };
@@ -1212,6 +1213,16 @@
                         const currentTotalAssets = fundsList.value.reduce((sum, f) => sum + (parseFloat(f.todayAmount || f.amount) || 0), 0);
                         totalProfit.value = currentTotalAssets - tCost + tRealized;
                         totalRate.value = tCost > 0 ? ((currentTotalAssets - tCost + tRealized) / tCost * 100) : 0;
+
+                        // 真实净值确认后，自动重写一次今日档案。
+                        // 修复旧版本导致的：TOTAL 已存在但金额不对、单只基金今日记录缺失。
+                        const realArchiveKey = `real_archive_${currentUser.value}_${todayDash}`;
+                        if (fundsList.value.some(f => f.isSettled) && localStorage.getItem(realArchiveKey) !== '1') {
+                            try {
+                                await saveDailyArchive(true);
+                                localStorage.setItem(realArchiveKey, '1');
+                            } catch (e) { }
+                        }
 
                         if (!window.hasAutoSavedToday && !isNight.value && fundsList.value.length > 0) {
                             const now = new Date(); const hour = now.getHours(); const isAfter15 = hour >= 15;

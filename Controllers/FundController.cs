@@ -108,6 +108,59 @@ namespace 估值助手.Controllers
             _cache.Remove($"Tactical_TodayData_{username}_{ChinaDateDash()}");
         }
 
+
+        private static void CopyArchiveValues(DailyArchive target, DailyArchive source)
+        {
+            target.FundName = string.IsNullOrWhiteSpace(source.FundName) ? target.FundName : source.FundName;
+            target.Assets = Math.Round(source.Assets, 2);
+            target.DailyProfit = Math.Round(source.DailyProfit, 2);
+            target.DailyRate = Math.Round(source.DailyRate, 2);
+            target.TotalProfit = Math.Round(source.TotalProfit, 2);
+            target.TotalRate = Math.Round(source.TotalRate, 2);
+        }
+
+        private async Task UpsertDailyArchivesAsync(string username, DateTime date, IEnumerable<DailyArchive> incoming)
+        {
+            var normalizedIncoming = incoming
+                .Where(x => !string.IsNullOrWhiteSpace(x.FundCode))
+                .GroupBy(x => x.FundCode)
+                .Select(g => g.Last())
+                .ToList();
+
+            var codes = normalizedIncoming.Select(x => x.FundCode).ToList();
+            var existing = await _context.DailyArchives
+                .Where(a => a.Username == username && a.RecordDate == date && codes.Contains(a.FundCode))
+                .ToListAsync();
+
+            var duplicateGroups = existing.GroupBy(x => x.FundCode).Where(g => g.Count() > 1).ToList();
+            foreach (var group in duplicateGroups)
+            {
+                var keep = group.OrderByDescending(x => x.Id).First();
+                var remove = group.Where(x => x.Id != keep.Id).ToList();
+                if (remove.Count > 0) _context.DailyArchives.RemoveRange(remove);
+            }
+
+            var existingDict = existing
+                .GroupBy(x => x.FundCode)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Id).First());
+
+            foreach (var item in normalizedIncoming)
+            {
+                item.Username = username;
+                item.RecordDate = date;
+
+                if (existingDict.TryGetValue(item.FundCode, out var old))
+                {
+                    CopyArchiveValues(old, item);
+                    _context.DailyArchives.Update(old);
+                }
+                else
+                {
+                    _context.DailyArchives.Add(item);
+                }
+            }
+        }
+
         private async Task<List<FundInfoCache>> GetAllFundsAsync()
         {
             if (_globalFundCache != null && _exactMatchDict != null && _globalFundCache.Count > 0) return _globalFundCache;
@@ -1427,42 +1480,38 @@ namespace 估值助手.Controllers
         [HttpPost("save-archive")]
         public async Task<IActionResult> SaveArchive([FromBody] ArchiveRequest req)
         {
-            if (string.IsNullOrEmpty(req.Username)) return Unauthorized();
+            if (req == null || string.IsNullOrWhiteSpace(req.Username)) return Unauthorized();
+
             try
             {
-                // 🚀 修复 1：找回丢失的 date 变量声明
                 var date = DateTime.Parse(req.DateStr).Date;
-                var oldRecords = await _context.DailyArchives
-                    .Where(a => a.Username == req.Username && a.RecordDate == date)
-                    .ToListAsync();
-                if (oldRecords.Any())
-                {
-                    // 检查是否已有真实数据
-                    bool hasRealData = oldRecords.Any(r => r.FundCode == "TOTAL" && r.DailyRate != 0);
-                    if (hasRealData)
-                        return Ok("✅ 今日真实收益已存在，无需重复封存！");
-                    // 有真实数据直接返回
+                var incoming = new List<DailyArchive>();
 
-                    _context.DailyArchives.RemoveRange(oldRecords);
-                    // 估值数据删掉
+                if (req.Total != null)
+                {
+                    req.Total.FundCode = "TOTAL";
+                    req.Total.FundName = string.IsNullOrWhiteSpace(req.Total.FundName) ? "总持仓" : req.Total.FundName;
+                    incoming.Add(req.Total);
                 }
 
-                // 🚀 修复 2：找回丢失的“封存新收益”核心逻辑！
-                req.Total.RecordDate = date;
-                req.Total.FundCode = "TOTAL";
-                req.Total.Username = req.Username;
-                _context.DailyArchives.Add(req.Total);
-
-                foreach (var f in req.Funds)
+                if (req.Funds != null)
                 {
-                    f.RecordDate = date;
-                    f.Username = req.Username;
-                    _context.DailyArchives.Add(f);
+                    foreach (var f in req.Funds)
+                    {
+                        if (string.IsNullOrWhiteSpace(f.FundCode)) continue;
+                        incoming.Add(f);
+                    }
                 }
 
+                if (incoming.Count == 0) return BadRequest("封存数据为空");
+
+                // 核心修复：不要因为 TOTAL 已存在就直接 return。
+                // 旧逻辑会导致“总持仓有今日记录，但单只基金今日记录缺失”，也会保留已写坏的 TOTAL 金额。
+                await UpsertDailyArchivesAsync(req.Username, date, incoming);
                 await _context.SaveChangesAsync();
-                // 🚀 修复 3：补上方法末尾的返回值，彻底消灭 CS0161 报错！
-                return Ok("✅ 今日收益已永久封存！");
+                ClearTodayCache(req.Username);
+
+                return Ok($"✅ 已写入/修正 {incoming.Count} 条收益档案");
             }
             catch (Exception ex)
             {
@@ -1636,12 +1685,25 @@ namespace 估值助手.Controllers
         }
 
         [HttpGet("get-archives")]
-        public async Task<IActionResult> GetArchives([FromQuery] string username)
+        public async Task<IActionResult> GetArchives([FromQuery] string username, [FromQuery] string? fundCode = null, [FromQuery] int limit = 120)
         {
-            var records = await _context.DailyArchives
+            if (string.IsNullOrWhiteSpace(username)) return Unauthorized("缺少账号");
+            if (limit <= 0) limit = 120;
+            if (limit > 500) limit = 500;
+
+            var query = _context.DailyArchives
                 .AsNoTracking()
-                .Where(a => a.Username == username)
-                .OrderBy(a => a.RecordDate)
+                .Where(a => a.Username == username);
+
+            if (!string.IsNullOrWhiteSpace(fundCode))
+            {
+                query = query.Where(a => a.FundCode == fundCode);
+            }
+
+            var records = await query
+                .OrderByDescending(a => a.RecordDate)
+                .ThenByDescending(a => a.Id)
+                .Take(limit)
                 .Select(a => new
                 {
                     fundCode = a.FundCode,
@@ -1654,6 +1716,7 @@ namespace 估值助手.Controllers
                     totalRate = a.TotalRate
                 })
                 .ToListAsync();
+
             return Ok(records);
         }
 
