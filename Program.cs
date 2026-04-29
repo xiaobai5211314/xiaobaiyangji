@@ -113,6 +113,57 @@ app.UseStaticFiles(new StaticFileOptions
     }
 });
 
+
+// 头像 v2 最小 API 端点：用于规避旧服务器 Controller 路由未同步导致的 404。
+// 注意：这些端点使用不同 URL，不会和 AuthController 的旧端点冲突。
+app.MapGet("/api/auth/profile-v2", async (string username, AppDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(username)) return Results.BadRequest("缺少账号");
+    var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Username == username);
+    if (user == null) return Results.NotFound("账号不存在");
+    return Results.Ok(new { username = user.Username, avatarDataUrl = user.AvatarDataUrl ?? "" });
+});
+
+app.MapPost("/api/auth/avatar-file-v2", async (HttpRequest request, AppDbContext db) =>
+{
+    if (!request.HasFormContentType) return Results.BadRequest("请使用 multipart/form-data 上传");
+    var form = await request.ReadFormAsync();
+    var username = form["username"].ToString();
+    var file = form.Files["avatarFile"];
+
+    if (string.IsNullOrWhiteSpace(username)) return Results.BadRequest("缺少账号");
+    if (file == null || file.Length == 0) return Results.BadRequest("头像不能为空");
+    if (file.Length > 2_000_000) return Results.BadRequest("头像文件过大，请换一张更小的图片");
+    if (string.IsNullOrWhiteSpace(file.ContentType) || !file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        return Results.BadRequest("头像格式不正确");
+
+    var user = await db.Users.FirstOrDefaultAsync(u => u.Username == username);
+    if (user == null) return Results.NotFound("账号不存在");
+
+    await using var ms = new MemoryStream();
+    await file.CopyToAsync(ms);
+    var bytes = ms.ToArray();
+    var mime = string.IsNullOrWhiteSpace(file.ContentType) ? "image/jpeg" : file.ContentType;
+    var dataUrl = $"data:{mime};base64,{Convert.ToBase64String(bytes)}";
+    if (dataUrl.Length > 1_200_000) return Results.BadRequest("头像保存后过大，请换一张更小的图片");
+
+    user.AvatarDataUrl = dataUrl;
+    await db.SaveChangesAsync();
+    return Results.Ok(new { success = true, avatarDataUrl = user.AvatarDataUrl });
+});
+
+app.MapPost("/api/auth/avatar/clear-v2", async (HttpRequest request, AppDbContext db) =>
+{
+    var form = await request.ReadFormAsync();
+    var username = form["username"].ToString();
+    if (string.IsNullOrWhiteSpace(username)) return Results.BadRequest("缺少账号");
+    var user = await db.Users.FirstOrDefaultAsync(u => u.Username == username);
+    if (user == null) return Results.NotFound("账号不存在");
+    user.AvatarDataUrl = string.Empty;
+    await db.SaveChangesAsync();
+    return Results.Ok(new { success = true });
+});
+
 app.MapControllers();
 app.MapGet("/", () => Results.Redirect("/index.html"));
 
