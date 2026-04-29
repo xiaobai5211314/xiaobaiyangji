@@ -1238,6 +1238,27 @@
                     }
                     throw lastError || new Error('API unavailable');
                 };
+
+                // 登录/注册专用：App 清除数据后 fund_api_base 会丢失，可能先打到错误域名或旧后端。
+                // 普通 apiFetch 遇到 400 会直接返回；这里会继续尝试所有 API 候选，直到有一个登录成功。
+                const authFetch = async (path, formData) => {
+                    let lastResponse = null;
+                    let lastError = null;
+                    for (const base of getApiBaseCandidates()) {
+                        try {
+                            const fd = new FormData();
+                            for (const [k, v] of formData.entries()) fd.append(k, v);
+                            const res = await fetch(base + path, { method: 'POST', body: fd, cache: 'no-store' });
+                            if (res.ok) { rememberApiBase(base); return res; }
+                            if (res.status !== 404 && res.status !== 405) lastResponse = res;
+                        } catch (e) {
+                            lastError = e;
+                        }
+                    }
+                    if (lastResponse) return lastResponse;
+                    throw lastError || new Error('API unavailable');
+                };
+
                 const toasts = ref([]); let toastId = 0;
                 const expandedSectors = ref(new Set());
 
@@ -1520,26 +1541,35 @@
                     };
                 };
                 const handleRegister = async () => {
-                    if (!loginForm.username || !loginForm.password) return showToast("为空！", "error");
-                    let fd = new FormData(); fd.append('username', loginForm.username); fd.append('password', loginForm.password);
-                    try { const res = await fetch(API_BASE + '/api/auth/register', { method: 'POST', body: fd }); if (res.ok) showToast("✅ 注册成功", "success"); else showToast("❌ 注册失败", "error"); } catch (e) { showToast("🌐 网络异常", "error"); }
+                    const username = (loginForm.username || '').trim();
+                    const password = loginForm.password || '';
+                    if (!username || !password) return showToast("为空！", "error");
+                    let fd = new FormData(); fd.append('username', username); fd.append('password', password);
+                    try {
+                        const res = await authFetch('/api/auth/register', fd);
+                        if (res.ok) showToast("✅ 注册成功", "success");
+                        else showToast(await res.text() || "❌ 注册失败", "error");
+                    } catch (e) { showToast("🌐 网络异常", "error"); }
                 };
 
                 const handleLogin = async () => {
-                    if (!loginForm.username || !loginForm.password) return showToast("为空！", "error");
-                    let fd = new FormData(); fd.append('username', loginForm.username); fd.append('password', loginForm.password);
+                    const username = (loginForm.username || '').trim();
+                    const password = loginForm.password || '';
+                    if (!username || !password) return showToast("为空！", "error");
+                    let fd = new FormData(); fd.append('username', username); fd.append('password', password);
                     try {
-                        const res = await fetch(API_BASE + '/api/auth/login', { method: 'POST', body: fd });
+                        const res = await authFetch('/api/auth/login', fd);
                         if (res.ok) {
                             const data = await res.json();
-                            localStorage.setItem('fund_username', loginForm.username);
-                            currentUser.value = loginForm.username;
+                            localStorage.setItem('fund_username', username);
+                            currentUser.value = username;
                             userAvatar.value = data.avatarDataUrl || '';
                             isLoggedIn.value = true;
                             showToast("接入成功", "success");
                             initDashboard();
                         } else {
-                            showToast("❌ 密码错误", "error");
+                            const msg = await res.text();
+                            showToast(msg || "❌ 密码错误", "error");
                         }
                     } catch (error) { showToast("🌐 登录失败", "error"); }
                 };
