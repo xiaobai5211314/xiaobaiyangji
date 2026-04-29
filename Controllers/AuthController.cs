@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 using System.Text;
@@ -60,6 +61,32 @@ namespace 估值助手.Controllers
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
             if (user == null) return NotFound("账号不存在");
             user.AvatarDataUrl = avatarDataUrl;
+            await _context.SaveChangesAsync();
+            return Ok(new { success = true, avatarDataUrl = user.AvatarDataUrl });
+        }
+
+
+        [HttpPost("avatar-file")]
+        [RequestSizeLimit(3_000_000)]
+        public async Task<IActionResult> SaveAvatarFile([FromForm] string username, [FromForm] IFormFile avatarFile)
+        {
+            if (string.IsNullOrWhiteSpace(username)) return BadRequest("缺少账号");
+            if (avatarFile == null || avatarFile.Length == 0) return BadRequest("头像不能为空");
+            if (avatarFile.Length > 2_000_000) return BadRequest("头像文件过大，请换一张更小的图片");
+            if (string.IsNullOrWhiteSpace(avatarFile.ContentType) || !avatarFile.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                return BadRequest("头像格式不正确");
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
+            if (user == null) return NotFound("账号不存在");
+
+            await using var ms = new MemoryStream();
+            await avatarFile.CopyToAsync(ms);
+            var bytes = ms.ToArray();
+            var mime = string.IsNullOrWhiteSpace(avatarFile.ContentType) ? "image/jpeg" : avatarFile.ContentType;
+            var dataUrl = $"data:{mime};base64,{Convert.ToBase64String(bytes)}";
+            if (dataUrl.Length > 1_200_000) return BadRequest("头像保存后过大，请换一张更小的图片");
+
+            user.AvatarDataUrl = dataUrl;
             await _context.SaveChangesAsync();
             return Ok(new { success = true, avatarDataUrl = user.AvatarDataUrl });
         }
