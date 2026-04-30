@@ -1201,30 +1201,6 @@
             grid-template-columns: 1fr;
         }
 
-        .home-quick-actions.avatar-import-action {
-            display: flex;
-            grid-template-columns: none;
-            align-items: center;
-            gap: 14px;
-            margin-top: 0;
-        }
-
-            .home-quick-actions.avatar-import-action .home-ocr-main {
-                flex: 1 1 auto;
-                min-width: 0;
-            }
-
-        .import-avatar-btn {
-            width: 56px;
-            height: 56px;
-            flex: 0 0 56px;
-            margin: 0;
-        }
-
-        .home-profile-hint {
-            display: none !important;
-        }
-
         .home-refresh-icon {
             display: none !important;
         }
@@ -1306,16 +1282,6 @@
 
             .home-ocr-main {
                 min-height: 52px;
-            }
-
-            .home-quick-actions.avatar-import-action {
-                gap: 10px;
-            }
-
-            .import-avatar-btn {
-                width: 48px;
-                height: 48px;
-                flex-basis: 48px;
             }
 
             .analysis-grid {
@@ -1481,13 +1447,18 @@
         <div v-else>
             <div v-show="activePage === 'home'" class="app-page home-page">
                 <div class="home-hero-clean glass-panel">
+                    <div class="home-identity-row">
+                        <div class="home-identity-left">
+                            <button class="user-avatar-btn" @click="showProfileModal = true" title="个人信息">
+                                <img v-if="userAvatar" :src="userAvatar" alt="头像">
+                                <span v-else class="user-avatar-fallback">{{ currentUser ? currentUser.slice(0,1).toUpperCase() : '我' }}</span>
+                            </button>
+                            <div class="home-subtitle home-profile-hint">点击头像设置头像 / 退出登录</div>
+                        </div>
+                    </div>
                     <input type="file" id="ocrInput" accept="image/*" style="display: none;" @change="handleFileUpload">
                     <input type="file" id="avatarInput" accept="image/*" style="display: none;" @change="handleAvatarUpload">
-                    <div class="home-quick-actions avatar-import-action">
-                        <button class="user-avatar-btn import-avatar-btn" @click="showProfileModal = true" title="头像">
-                            <img v-if="userAvatar" :src="userAvatar" alt="头像">
-                            <span v-else class="user-avatar-fallback">{{ currentUser ? currentUser.slice(0,1).toUpperCase() : '我' }}</span>
-                        </button>
+                    <div class="home-quick-actions one-action">
                         <button class="btn home-ocr-main" @click="triggerUpload" :disabled="isUploading">
                             📷 {{ isUploading ? '解析中...' : '智能截图导入持仓' }}
                         </button>
@@ -1647,7 +1618,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">🎯 持仓对应板块</div><div class="page-subtitle">用持仓基金主题看对应赛道强弱</div><div style="margin-top:12px;"><div v-for="fund in fundsList" :key="'sector-hold-'+fund.code" class="quick-holding-card" @click="switchPage('news'); newsMode='holding'; fetchNews('holding', true);"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><div style="min-width:0;"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ fund.name }}</div><div style="color:#64748b;font-size:11px;font-family:monospace;">{{ fund.code }}</div></div><div :style="{color:fund.currentRate>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New'}">{{ fund.currentRate>0?'+':'' }}{{ fund.currentRate }}%</div></div></div></div></div>
+                    <div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">🎯 持仓对应板块</div><div class="page-subtitle">用持仓基金主题看对应赛道强弱</div><div style="margin-top:12px;"><div v-for="fund in fundsList" :key="'sector-hold-'+fund.code" class="quick-holding-card" @click="switchPage('news'); newsMode='holding'; fetchNews('holding', false);"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><div style="min-width:0;"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ fund.name }}</div><div style="color:#64748b;font-size:11px;font-family:monospace;">{{ fund.code }}</div></div><div :style="{color:fund.currentRate>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New'}">{{ fund.currentRate>0?'+':'' }}{{ fund.currentRate }}%</div></div></div></div></div>
                 </div>
 
                 <div class="glass-panel capital-flow-panel">
@@ -1684,32 +1655,20 @@
 
             <div v-show="activePage === 'news'" class="app-page">
                 <div class="page-topbar glass-panel"><div><div class="page-title">📰 资讯</div><div class="page-subtitle">{{ newsSource || '东方财富7x24快讯' }} · {{ newsUpdatedAt || '待更新' }}</div></div><div class="analysis-toolbar"><label style="font-size:12px;color:#cbd5e1;"><input type="checkbox" v-model="newsOnlyImportant" @change="fetchNews(newsMode, true)"> 只看重要</label><button class="btn" @click="fetchNews(newsMode, true)">🔄 刷新</button></div></div>
-                <div class="news-page-layout">
-                    <div class="glass-panel" style="padding:16px;">
-                        <div class="news-tabs" style="margin-bottom:12px;"><button :class="['news-tab', newsMode==='global'?'active':'']" @click="switchNewsMode('global')">7x24快讯</button><button :class="['news-tab', newsMode==='holding'?'active':'']" @click="switchNewsMode('holding')">持仓资讯</button></div><div class="news-toolbar" style="border-radius:14px;margin-bottom:12px;"><span>{{ newsMode === 'holding' ? '只显示和你持仓基金主题相关的消息' : '全市场财经快讯时间线' }}</span></div><div v-if="isNewsLoading" class="news-empty">📡 正在同步资讯...</div><div v-else-if="newsList.length === 0" class="news-empty">暂无匹配资讯</div><div v-else class="news-list news-page-list">
-                            <template v-for="group in groupedNews" :key="group.date">
-                                <div class="news-date">{{ group.date }}</div>
-                                <div v-for="item in group.items" :key="item.id + item.showTime" :class="['news-item', item.sentiment]"><div class="news-line"></div><div class="news-dot"></div><div class="news-card" @click="openNewsItem(item)"><div class="news-time">{{ item.timeText }}</div><div class="news-title">{{ item.title }}</div><div v-if="item.summary && item.summary !== item.title" class="news-summary">{{ item.summary }}</div><div class="news-badges"><span v-if="item.important" class="news-badge good">重要</span><span v-if="item.matchedFundName" class="news-badge">{{ item.matchedFundName }}</span><span :class="['news-badge', item.sentiment==='positive'?'good':(item.sentiment==='negative'?'bad':'neutral') ]">{{ item.sentiment==='positive'?'偏利好':(item.sentiment==='negative'?'偏利空':'中性') }} · {{ item.impactScore }}分</span><span v-for="tag in (item.tags || []).slice(0,3)" :key="tag" class="news-badge neutral">{{ tag }}</span></div></div></div>
-                            </template>
-                        </div>
-                    </div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">🧩 持仓资讯入口</div><div class="page-subtitle">点基金可切到持仓资讯并按主题匹配</div><div style="margin-top:12px;"><div v-for="fund in fundsList" :key="'news-hold-'+fund.code" class="quick-holding-card" @click="newsMode='holding'; fetchNews('holding', true);"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ fund.name }}</div><div style="display:flex;justify-content:space-between;margin-top:6px;color:#94a3b8;font-size:12px;"><span>{{ fund.code }}</span><span>{{ fund.currentRate>0?'+':'' }}{{ fund.currentRate }}%</span></div></div></div></div>
-                </div>
+                <div class="news-page-layout"><div class="glass-panel" style="padding:16px;"><div class="news-tabs" style="margin-bottom:12px;"><button :class="['news-tab', newsMode==='global'?'active':'']" @click="switchNewsMode('global')">7x24快讯</button><button :class="['news-tab', newsMode==='holding'?'active':'']" @click="switchNewsMode('holding')">持仓资讯</button></div><div class="news-toolbar" style="border-radius:14px;margin-bottom:12px;"><span>{{ newsMode === 'holding' ? '只显示和你持仓基金主题相关的消息' : '全市场财经快讯时间线' }}</span></div><div v-if="isNewsLoading" class="news-empty">📡 正在同步资讯...</div><div v-else-if="newsList.length === 0" class="news-empty">暂无匹配资讯</div><div v-else class="news-list news-page-list">
+                <template v-for="group in groupedNews" :key="group.date">
+                    <div class="news-date">{{ group.date }}</div>
+                    <div v-for="item in group.items" :key="item.id + item.showTime" :class="['news-item', item.sentiment]"><div class="news-line"></div><div class="news-dot"></div><div class="news-card" @click="openNewsItem(item)"><div class="news-time">{{ item.timeText }}</div><div class="news-title">{{ item.title }}</div><div v-if="item.summary && item.summary !== item.title" class="news-summary">{{ item.summary }}</div><div class="news-badges"><span v-if="item.important" class="news-badge good">重要</span><span v-if="item.matchedFundName" class="news-badge">{{ item.matchedFundName }}</span><span :class="['news-badge', item.sentiment==='positive'?'good':(item.sentiment==='negative'?'bad':'neutral') ]">{{ item.sentiment==='positive'?'偏利好':(item.sentiment==='negative'?'偏利空':'中性') }} · {{ item.impactScore }}分</span><span v-for="tag in (item.tags || []).slice(0,3)" :key="tag" class="news-badge neutral">{{ tag }}</span></div></div></div>
+                </template></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">🧩 持仓资讯入口</div><div class="page-subtitle">点基金可切到持仓资讯并按主题匹配</div><div style="margin-top:12px;"><div v-for="fund in fundsList" :key="'news-hold-'+fund.code" class="quick-holding-card" @click="newsMode='holding'; fetchNews('holding', false);"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ fund.name }}</div><div style="display:flex;justify-content:space-between;margin-top:6px;color:#94a3b8;font-size:12px;"><span>{{ fund.code }}</span><span>{{ fund.currentRate>0?'+':'' }}{{ fund.currentRate }}%</span></div></div></div></div></div>
             </div>
 
             <div v-show="activePage === 'analysis'" class="app-page">
                 <div class="page-topbar glass-panel"><div><div class="page-title">📊 盈亏分析</div><div class="page-subtitle">当日盈亏明细、月历、盈利/亏损排行</div></div><div class="analysis-toolbar"><input type="month" v-model="analysisMonth" @change="fetchAnalysis(true)"><select v-model="analysisViewMode"><option value="profit">金额</option><option value="rate">收益率</option></select><button class="btn" @click="fetchAnalysis(true)">🔄</button></div></div>
-                <div class="analysis-grid">
-                    <div class="glass-panel" style="padding:16px;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;"><div><div class="page-title" style="font-size:18px;">盈亏日历</div><div class="page-subtitle">{{ analysisMonth }} 月累计：<span :style="{color:analysisMonthTotal>=0?'#ff4d4f':'#10b981',fontWeight:'900'}">{{ analysisMonthTotal>=0?'+':'' }}{{ analysisMonthTotal.toFixed(2) }}</span></div></div><button class="btn btn-primary" @click="selectedAnalysisDate = todayDashStr">今天</button></div><div class="calendar-grid">
-                            <div v-for="w in ['一','二','三','四','五','六','日']" :key="w" class="calendar-week">{{ w }}</div><div v-for="day in analysisCalendarDays" :key="day.key" :class="['calendar-day', day.empty?'empty':'', day.profit>0?'positive':(day.profit<0?'negative':''), selectedAnalysisDate===day.date?'active':'']" @click="!day.empty && (selectedAnalysisDate = day.date)">
-                                <template v-if="!day.empty">
-                                    <div class="calendar-date">{{ day.day }}</div>
-                                    <div class="calendar-profit" :style="{color:day.profit>=0?'#ff4d4f':'#10b981'}">{{ day.hasRecord ? ((day.profit>0?'+':'') + (analysisViewMode==='rate' ? day.rate.toFixed(2)+'%' : day.profit.toFixed(2))) : '—' }}</div>
-                                </template>
-                            </div>
-                        </div>
-                    </div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">当日盈亏明细</div><div class="page-subtitle">{{ selectedAnalysisDate || '请选择日期' }}</div><div style="margin-top:12px;"><div v-if="analysisLoading" class="news-empty">📡 正在读取收益档案...</div><div v-else-if="selectedDayFundRecords.length===0" class="news-empty">当天暂无明细</div><div v-else><div v-for="(item,index) in selectedDayFundRecords" :key="item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="min-width:0;"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.fundName }}</div><div style="color:#64748b;font-size:11px;font-family:monospace;">{{ item.fundCode }} · 市值 {{ Number(item.assets || 0).toFixed(2) }}</div></div><div :style="{textAlign:'right',color:item.dailyProfit>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New'}">{{ item.dailyProfit>0?'+':'' }}{{ Number(item.dailyProfit||0).toFixed(2) }}<br><span style="font-size:12px;">{{ item.dailyRate>0?'+':'' }}{{ Number(item.dailyRate||0).toFixed(2) }}%</span></div></div></div></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">盈利 TOP5</div><div v-for="(item,index) in analysisProfitTop" :key="'p'+item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="color:#f8fafc;font-weight:800;">{{ item.fundName }}</div><div style="text-align:right;color:#ff4d4f;font-weight:900;">+{{ Number(item.dailyProfit||0).toFixed(2) }}</div></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">亏损 TOP5</div><div v-for="(item,index) in analysisLossTop" :key="'l'+item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="color:#f8fafc;font-weight:800;">{{ item.fundName }}</div><div style="text-align:right;color:#10b981;font-weight:900;">{{ Number(item.dailyProfit||0).toFixed(2) }}</div></div></div>
-                </div>
+                <div class="analysis-grid"><div class="glass-panel" style="padding:16px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;"><div><div class="page-title" style="font-size:18px;">盈亏日历</div><div class="page-subtitle">{{ analysisMonth }} 月累计：<span :style="{color:analysisMonthTotal>=0?'#ff4d4f':'#10b981',fontWeight:'900'}">{{ analysisMonthTotal>=0?'+':'' }}{{ analysisMonthTotal.toFixed(2) }}</span></div></div><button class="btn btn-primary" @click="selectedAnalysisDate = todayDashStr">今天</button></div><div class="calendar-grid"><div v-for="w in ['一','二','三','四','五','六','日']" :key="w" class="calendar-week">{{ w }}</div><div v-for="day in analysisCalendarDays" :key="day.key" :class="['calendar-day', day.empty?'empty':'', day.profit>0?'positive':(day.profit<0?'negative':''), selectedAnalysisDate===day.date?'active':'']" @click="!day.empty && (selectedAnalysisDate = day.date)">
+                <template v-if="!day.empty">
+                    <div class="calendar-date">{{ day.day }}</div>
+                    <div class="calendar-profit" :style="{color:day.profit>=0?'#ff4d4f':'#10b981'}">{{ day.hasRecord ? ((day.profit>0?'+':'') + (analysisViewMode==='rate' ? day.rate.toFixed(2)+'%' : day.profit.toFixed(2))) : '—' }}</div>
+                </template></div></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">当日盈亏明细</div><div class="page-subtitle">{{ selectedAnalysisDate || '请选择日期' }}</div><div style="margin-top:12px;"><div v-if="analysisLoading" class="news-empty">📡 正在读取收益档案...</div><div v-else-if="selectedDayFundRecords.length===0" class="news-empty">当天暂无明细</div><div v-else><div v-for="(item,index) in selectedDayFundRecords" :key="item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="min-width:0;"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.fundName }}</div><div style="color:#64748b;font-size:11px;font-family:monospace;">{{ item.fundCode }} · 市值 {{ Number(item.assets || 0).toFixed(2) }}</div></div><div :style="{textAlign:'right',color:item.dailyProfit>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New'}">{{ item.dailyProfit>0?'+':'' }}{{ Number(item.dailyProfit||0).toFixed(2) }}<br><span style="font-size:12px;">{{ item.dailyRate>0?'+':'' }}{{ Number(item.dailyRate||0).toFixed(2) }}%</span></div></div></div></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">盈利 TOP5</div><div v-for="(item,index) in analysisProfitTop" :key="'p'+item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="color:#f8fafc;font-weight:800;">{{ item.fundName }}</div><div style="text-align:right;color:#ff4d4f;font-weight:900;">+{{ Number(item.dailyProfit||0).toFixed(2) }}</div></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">亏损 TOP5</div><div v-for="(item,index) in analysisLossTop" :key="'l'+item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="color:#f8fafc;font-weight:800;">{{ item.fundName }}</div><div style="text-align:right;color:#10b981;font-weight:900;">{{ Number(item.dailyProfit||0).toFixed(2) }}</div></div></div></div>
             </div>
 
             <div class="bottom-tabbar" v-if="isLoggedIn"><button :class="['bottom-tab', activePage==='home'?'active':'']" @click="switchPage('home')"><span class="tab-icon">🛡️</span><span>持仓</span></button><button :class="['bottom-tab', activePage==='sector'?'active':'']" @click="switchPage('sector')"><span class="tab-icon">📈</span><span>板块</span></button><button :class="['bottom-tab', activePage==='news'?'active':'']" @click="switchPage('news')"><span class="tab-icon">📰</span><span>资讯</span></button><button :class="['bottom-tab', activePage==='analysis'?'active':'']" @click="switchPage('analysis')"><span class="tab-icon">📊</span><span>盈亏</span></button></div>
@@ -2052,36 +2011,17 @@
         createApp({
             setup() {
                 const API_BASE_DEFAULT = 'https://guzhi.21212121.xyz';
-
                 const normalizeApiBase = (v) => (v || '').trim().replace(/\/$/, '');
-
-                const isBadApiBase = (base) => {
-                    if (!base) return true;
-                    return base.includes('guzhicdn.21212121.xyz')
-                        || base.includes('localhost')
-                        || base.includes('127.0.0.1');
-                };
-
                 const getApiBaseCandidates = () => {
-                    const saved = normalizeApiBase(localStorage.getItem('fund_api_base'));
-                    const origin = normalizeApiBase(location.origin);
-
                     const list = [
-                        API_BASE_DEFAULT,
-                        !isBadApiBase(saved) ? saved : '',
-                        !isBadApiBase(origin) ? origin : ''
+                        normalizeApiBase(localStorage.getItem('fund_api_base')),
+                        (location.protocol === 'http:' || location.protocol === 'https:') ? normalizeApiBase(location.origin) : '',
+                        API_BASE_DEFAULT
                     ].filter(Boolean);
-
                     return [...new Set(list)];
                 };
-
-                let API_BASE = API_BASE_DEFAULT;
-
-                const rememberApiBase = (base) => {
-                    if (isBadApiBase(base)) return;
-                    API_BASE = base;
-                    try { localStorage.setItem('fund_api_base', base); } catch (e) { }
-                };
+                let API_BASE = getApiBaseCandidates()[0] || API_BASE_DEFAULT;
+                const rememberApiBase = (base) => { API_BASE = base; try { localStorage.setItem('fund_api_base', base); } catch (e) { } };
                 const apiFetch = async (path, options = {}) => {
                     let lastError = null;
                     for (const base of getApiBaseCandidates()) {
@@ -2204,6 +2144,26 @@
                 });
 
 
+
+
+                // 资讯秒开缓存：先显示本地旧数据，再后台刷新。
+                // 7x24 和持仓资讯分开缓存，避免切页时白屏等接口。
+                const NEWS_CACHE_DURATION = 2 * 60 * 1000;
+                let newsMemoryCache = new Map();
+                let newsWarmStarted = false;
+                const getNewsCacheKey = (mode = newsMode.value, important = newsOnlyImportant.value) => `news_cache_v2_${currentUser.value || 'guest'}_${mode}_${important ? 1 : 0}`;
+                const applyNewsPayload = (data) => {
+                    newsList.value = Array.isArray(data?.items) ? data.items : [];
+                    newsSource.value = data?.source || '东方财富7x24快讯';
+                    newsUpdatedAt.value = data?.updatedAt || '';
+                };
+                const warmNewsCache = () => {
+                    if (newsWarmStarted || !currentUser.value) return;
+                    newsWarmStarted = true;
+                    setTimeout(() => fetchNews('global', false, { background: true }), 800);
+                    setTimeout(() => fetchNews('holding', false, { background: true }), 1800);
+                };
+
                 const analysisTotalRecords = computed(() => analysisRecords.value.filter(r => r.fundCode === 'TOTAL'));
                 const selectedDayFundRecords = computed(() => analysisRecords.value.filter(r => r.fundCode !== 'TOTAL' && String(r.recordDate || '').slice(0, 10) === selectedAnalysisDate.value).sort((a, b) => Math.abs(Number(b.dailyProfit || 0)) - Math.abs(Number(a.dailyProfit || 0))));
                 const analysisMonthTotal = computed(() => analysisTotalRecords.value.filter(r => String(r.recordDate || '').slice(0, 7) === analysisMonth.value).reduce((sum, r) => sum + Number(r.dailyProfit || 0), 0));
@@ -2247,21 +2207,43 @@
                 const showGlobalIndices = ref(false);
                 const isIndicesLoading = ref(false);
 
-                const fetchNews = async (mode = newsMode.value, force = false) => {
-                    newsMode.value = mode;
-                    isNewsLoading.value = true;
+                const fetchNews = async (mode = newsMode.value, force = false, options = {}) => {
+                    const background = !!options.background;
+                    const targetMode = mode || 'global';
+                    const key = getNewsCacheKey(targetMode, newsOnlyImportant.value);
+                    const now = Date.now();
+
+                    if (!background) newsMode.value = targetMode;
+
+                    if (!force) {
+                        const mem = newsMemoryCache.get(key);
+                        if (mem && (now - mem.time) < NEWS_CACHE_DURATION) {
+                            if (!background || (activePage.value === 'news' && newsMode.value === targetMode)) applyNewsPayload(mem.data);
+                            return;
+                        }
+
+                        const disk = readJsonCache(key, 15 * 60 * 1000);
+                        if (disk) {
+                            newsMemoryCache.set(key, { time: now, data: disk });
+                            if (!background || (activePage.value === 'news' && newsMode.value === targetMode)) applyNewsPayload(disk);
+                            if (background) return;
+                        }
+                    }
+
+                    if (!background && newsList.value.length === 0) isNewsLoading.value = true;
                     try {
-                        const path = `/api/fund/news?username=${encodeURIComponent(currentUser.value)}&mode=${encodeURIComponent(mode)}&important=${newsOnlyImportant.value}&limit=90${force ? '&force=true' : ''}&_t=${Date.now()}`;
+                        const limit = targetMode === 'holding' ? 90 : 70;
+                        const path = `/api/fund/news?username=${encodeURIComponent(currentUser.value)}&mode=${encodeURIComponent(targetMode)}&important=${newsOnlyImportant.value}&limit=${limit}${force ? '&force=true' : ''}`;
                         const res = await apiFetch(path, { cache: 'no-store' });
                         if (!res.ok) throw new Error(await res.text());
                         const data = await res.json();
-                        newsList.value = data.items || [];
-                        newsSource.value = data.source || '东方财富7x24快讯';
-                        newsUpdatedAt.value = data.updatedAt || '';
+                        newsMemoryCache.set(key, { time: Date.now(), data });
+                        writeJsonCache(key, data);
+                        if (!background || (activePage.value === 'news' && newsMode.value === targetMode)) applyNewsPayload(data);
                     } catch (e) {
-                        showToast('📰 资讯同步失败', 'error');
+                        if (!background && newsList.value.length === 0) showToast('📰 资讯同步失败', 'error');
                     } finally {
-                        isNewsLoading.value = false;
+                        if (!background) isNewsLoading.value = false;
                     }
                 };
 
@@ -2358,9 +2340,7 @@
                     sectorDetailMeta.fundCount = 0;
                     sectorDetailMeta.updatedAt = '';
                     try {
-                        const res = await apiFetch(`/api/fund/sector-funds?sectorName=${encodeURIComponent(sectorKey)}&limit=24`, {
-                            cache: 'default'
-                        });
+                        const res = await fetch(`${API_BASE}/api/fund/sector-funds?sectorName=${encodeURIComponent(sectorKey)}&limit=24`);
                         if (!res.ok) throw new Error(await res.text());
                         const data = await res.json();
                         detailsTitle.value = `${data.name || sector.name || sectorKey} - 板块基金`;
@@ -2578,9 +2558,7 @@
                     isSectorLoading.value = sectorTopList.value.length === 0;
                     expandedSectors.value = new Set();
                     try {
-                        const res = await apiFetch(`/api/fund/sectors${force ? '?force=true' : ''}`, {
-                            cache: force ? 'no-store' : 'default'
-                        });
+                        const res = await fetch(`${API_BASE}/api/fund/sectors${force ? '?force=true' : ''}`);
                         if (!res.ok) throw new Error(await res.text());
                         const data = await res.json();
                         applySectorPayload(data);
@@ -2610,9 +2588,7 @@
                     }
                     isCapitalLoading.value = capitalFlowRows.value.length === 0;
                     try {
-                        const res = await apiFetch(`/api/fund/capital-flow?limit=40${force ? '&force=true' : ''}`, {
-                            cache: force ? 'no-store' : 'default'
-                        });
+                        const res = await fetch(`${API_BASE}/api/fund/capital-flow?limit=40${force ? '&force=true' : ''}`);
                         if (!res.ok) throw new Error(await res.text());
                         const data = await res.json();
                         applyCapitalPayload(data);
@@ -2771,28 +2747,13 @@
                     }
                 };
 
-                const switchPage = (page) => {
+                const switchPage = async (page) => {
                     activePage.value = page;
-                    window.scrollTo({ top: 0, behavior: 'auto' });
-
-                    if (page === 'sector') {
-                        fetchSectors(false, false);
-                        fetchCapitalFlow(false);
-                    }
-
-                    if (page === 'news') {
-                        fetchNews(newsMode.value, newsList.value.length === 0);
-                    }
-
-                    if (page === 'analysis') {
-                        fetchAnalysis(false);
-                    }
-
-                    if (page === 'home') {
-                        nextTick(() => {
-                            if (chartInstance.value) chartInstance.value.resize();
-                        });
-                    }
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    if (page === 'sector') { await fetchSectors(false, false); fetchCapitalFlow(false); }
+                    if (page === 'news') fetchNews(newsMode.value, false);
+                    if (page === 'analysis') await fetchAnalysis(false);
+                    if (page === 'home') nextTick(() => { if (chartInstance.value) chartInstance.value.resize(); });
                 };
 
                 const fetchData = async (options = {}) => {
@@ -2955,7 +2916,7 @@
 
                 const handleVisibilityChange = () => { if (document.visibilityState === 'visible') { updateRadarMode(); } };
 
-                const initDashboard = () => { nextTick(() => { updateRadarMode(); setTimeout(() => { fetchData({ force: false }); }, 120); }); };
+                const initDashboard = () => { nextTick(() => { updateRadarMode(); setTimeout(() => { fetchData({ force: false }); warmNewsCache(); }, 120); }); };
 
                 const fetchUserProfile = async () => {
                     if (!currentUser.value) return;
