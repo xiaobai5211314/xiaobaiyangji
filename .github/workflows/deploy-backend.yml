@@ -194,7 +194,7 @@ jobs:
 
           echo "======= 5. 健康检查 ======="
           OK=""
-          for i in $(seq 1 30); do
+          for i in $(seq 1 10); do
             CODE="$(curl -sS --max-time 3 -o /tmp/guzhi_health.json -w "%{http_code}" "http://127.0.0.1:${PORT}/api/fund/sectors" || true)"
             if [ "$CODE" = "200" ]; then
               OK="1"
