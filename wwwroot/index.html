@@ -1216,47 +1216,29 @@
         createApp({
             setup() {
                 const API_BASE_DEFAULT = 'https://guzhi.21212121.xyz';
+                const normalizeApiBase = (v) => (v || '').trim().replace(/\/$/, '');
+                const getApiBaseCandidates = () => {
+                    const list = [
+                        normalizeApiBase(localStorage.getItem('fund_api_base')),
+                        (location.protocol === 'http:' || location.protocol === 'https:') ? normalizeApiBase(location.origin) : '',
+                        API_BASE_DEFAULT
+                    ].filter(Boolean);
+                    return [...new Set(list)];
+                };
+                let API_BASE = getApiBaseCandidates()[0] || API_BASE_DEFAULT;
+                const rememberApiBase = (base) => { API_BASE = base; try { localStorage.setItem('fund_api_base', base); } catch(e) {} };
+                const apiFetch = async (path, options = {}) => {
+                    let lastError = null;
+                    for (const base of getApiBaseCandidates()) {
+                        try {
+                            const res = await fetch(base + path, options);
+                            if (res.status !== 404 && res.status !== 405) { rememberApiBase(base); return res; }
+                            lastError = new Error('HTTP ' + res.status + ' @ ' + base);
+                        } catch (e) { lastError = e; }
+                    }
+                    throw lastError || new Error('API unavailable');
+                };
 
-const normalizeApiBase = (v) => (v || '').trim().replace(/\/$/, '');
-
-const getApiBaseCandidates = () => {
-  const list = [
-    normalizeApiBase(localStorage.getItem('fund_api_base')),
-    API_BASE_DEFAULT
-  ].filter(Boolean);
-
-  return [...new Set(list)];
-};
-
-let API_BASE = getApiBaseCandidates()[0] || API_BASE_DEFAULT;
-
-const rememberApiBase = (base) => {
-  API_BASE = normalizeApiBase(base);
-  try {
-    localStorage.setItem('fund_api_base', API_BASE);
-  } catch (e) {}
-};
-
-const apiFetch = async (path, options = {}) => {
-  let lastError = null;
-
-  for (const base of getApiBaseCandidates()) {
-    try {
-      const res = await fetch(base + path, options);
-
-      if (res.status !== 404 && res.status !== 405 && res.status !== 403) {
-        rememberApiBase(base);
-        return res;
-      }
-
-      lastError = new Error(`HTTP ${res.status}`);
-    } catch (err) {
-      lastError = err;
-    }
-  }
-
-  throw lastError || new Error('接口请求失败');
-};
                 // 登录/注册专用：App 清除数据后 fund_api_base 会丢失，可能先打到错误域名或旧后端。
                 // 普通 apiFetch 遇到 400 会直接返回；这里会继续尝试所有 API 候选，直到有一个登录成功。
                 const authFetch = async (path, formData) => {
