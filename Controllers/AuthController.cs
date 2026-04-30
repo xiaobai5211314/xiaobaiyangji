@@ -43,19 +43,27 @@ public async Task<IActionResult> Login([FromForm] string username, [FromForm] st
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
             return BadRequest("账号和密码不能为空");
 
-        var hash = HashPassword(password);
-
         var user = await _context.Users
             .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.Username == username);
+            .Where(u => u.Username == username)
+            .Select(u => new
+            {
+                u.Username,
+                u.PasswordHash
+            })
+            .FirstOrDefaultAsync();
 
         if (user == null)
             return BadRequest("账号不存在");
 
-        if (!string.Equals(user.PasswordHash, hash, StringComparison.Ordinal))
+        if (!string.Equals(user.PasswordHash, HashPassword(password), StringComparison.Ordinal))
             return BadRequest("密码错误");
 
-        return Ok(new { success = true, username = user.Username });
+        return Ok(new
+        {
+            success = true,
+            username = user.Username
+        });
     }
     catch (Exception ex)
     {
@@ -67,7 +75,6 @@ public async Task<IActionResult> Login([FromForm] string username, [FromForm] st
         });
     }
 }
-
         [HttpGet("profile")]
         public async Task<IActionResult> Profile([FromQuery] string username)
         {
