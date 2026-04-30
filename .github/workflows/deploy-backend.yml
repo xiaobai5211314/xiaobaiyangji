@@ -59,7 +59,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          CSPROJ="$(find . -maxdepth 3 -name '*.csproj' | head -n 1)"
+          CSPROJ="$(find . -maxdepth 4 -name '*.csproj' | head -n 1)"
           if [ -z "$CSPROJ" ]; then
             echo "没找到 .csproj"
             exit 1
@@ -80,13 +80,19 @@ jobs:
             --nologo \
             -p:UseAppHost=false
 
-          if [ ! -f "./publish/估值助手.dll" ]; then
-            echo "发布目录里没有 估值助手.dll"
-            find ./publish -maxdepth 1 -name "*.dll" -print
+          MAIN_DLL="$(find ./publish -maxdepth 1 -name '*.dll' | sed 's#^./publish/##' | head -n 1)"
+          if [ -z "$MAIN_DLL" ]; then
+            echo "发布目录里没有 dll"
+            ls -lah ./publish
             exit 1
           fi
 
+          if [ ! -f "./publish/估值助手.dll" ]; then
+            echo "警告：发布目录里没有 估值助手.dll，当前 DLL：$MAIN_DLL"
+          fi
+
           tar -cf - -C ./publish . | gzip -1 > release.tar.gz
+          echo "发布包大小："
           ls -lh release.tar.gz
 
       - name: 配置 SSH
@@ -107,7 +113,7 @@ jobs:
             release.tar.gz \
             "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${REMOTE_PACKAGE}"
 
-      - name: 部署并快速健康检查
+      - name: 部署并健康检查
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -124,68 +130,93 @@ jobs:
           TMP_DIR="/home/deploy/guzhi_release_unpack"
           CONTROL_SCRIPT="/usr/local/sbin/guzhi-deploy-control"
 
-          echo "1. 解压发布包"
+          echo "======= 0. 基础检查 ======="
+          whoami
+          ls -lh "$REMOTE_PACKAGE"
+
+          if [ ! -x "$CONTROL_SCRIPT" ]; then
+            echo "缺少 $CONTROL_SCRIPT"
+            echo "先用 root 执行 server/one-time-root-setup.sh"
+            exit 1
+          fi
+
+          if ! sudo -n "$CONTROL_SCRIPT" is-active >/tmp/guzhi_service_state.txt 2>/tmp/guzhi_sudo_err.txt; then
+            echo "sudo 免密控制脚本不可用。错误："
+            cat /tmp/guzhi_sudo_err.txt || true
+            echo "先用 root 执行 server/one-time-root-setup.sh"
+            exit 1
+          fi
+          cat /tmp/guzhi_service_state.txt || true
+
+          echo "======= 1. 解压发布包 ======="
           rm -rf "$TMP_DIR"
           mkdir -p "$TMP_DIR"
           tar -xzf "$REMOTE_PACKAGE" -C "$TMP_DIR"
 
-          if [ ! -f "$TMP_DIR/估值助手.dll" ]; then
-            echo "发布包里没有 估值助手.dll"
+          if ! find "$TMP_DIR" -maxdepth 1 -name '*.dll' | grep -q .; then
+            echo "发布包里没有 dll"
+            find "$TMP_DIR" -maxdepth 1 -type f -print
+            exit 1
+          fi
+          echo "发布 DLL："
+          find "$TMP_DIR" -maxdepth 1 -name '*.dll' -printf '%f\n'
+
+          echo "======= 2. 停止服务并释放端口 ======="
+          sudo -n "$CONTROL_SCRIPT" release-port
+
+          if sudo -n "$CONTROL_SCRIPT" port-in-use; then
+            echo "端口 ${PORT} 仍被占用，部署终止"
+            sudo -n "$CONTROL_SCRIPT" port-info || true
             exit 1
           fi
 
-          echo "2. 停止服务"
-          sudo -n "$CONTROL_SCRIPT" stop 2>/dev/null || sudo -n systemctl stop "$SERVICE_NAME" || true
-
-          for i in 1 2 3 4 5 6; do
-            if ! sudo -n ss -lntp | grep -q ":${PORT}"; then
-              break
-            fi
-            sleep 0.5
-          done
-
-          if sudo -n ss -lntp | grep -q ":${PORT}"; then
-            PID="$(sudo -n ss -lntp | grep ":${PORT}" | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | head -n 1)"
-            if [ -n "$PID" ]; then
-              echo "端口仍被占用，kill $PID"
-              sudo -n kill -9 "$PID" || true
-            fi
-          fi
-
-          echo "3. 覆盖线上文件"
+          echo "======= 3. 覆盖线上文件 ======="
           mkdir -p "$APP_DIR"
           if [ ! -w "$APP_DIR" ]; then
-            echo "$APP_DIR 不可写。请先修复 deploy 用户权限。"
+            echo "$APP_DIR 不可写。请执行：chown -R deploy:deploy '$APP_DIR'"
             exit 1
           fi
 
-          # 只保留最近一次 DLL 备份，避免备份越积越多。
           if [ -f "$APP_DIR/估值助手.dll" ]; then
             cp -f "$APP_DIR/估值助手.dll" "$APP_DIR/估值助手.dll.bak"
           fi
+
           cp -a "$TMP_DIR"/. "$APP_DIR"/
+          sync
 
-          echo "4. 启动服务"
-          sudo -n "$CONTROL_SCRIPT" start 2>/dev/null || sudo -n systemctl start "$SERVICE_NAME"
+          echo "线上 DLL："
+          find "$APP_DIR" -maxdepth 1 -name '*.dll' -printf '%f %s bytes\n'
 
-          echo "5. 快速健康检查"
+          echo "======= 4. 启动服务 ======="
+          sudo -n "$CONTROL_SCRIPT" daemon-reload
+          sudo -n "$CONTROL_SCRIPT" enable
+          sudo -n "$CONTROL_SCRIPT" start
+
+          echo "======= 5. 健康检查 ======="
           OK=""
-          for i in $(seq 1 24); do
-            CODE="$(curl -sS --max-time 2 -o /tmp/guzhi_ping.json -w "%{http_code}" "http://127.0.0.1:${PORT}/api/ping" || true)"
+          for i in $(seq 1 30); do
+            CODE="$(curl -sS --max-time 3 -o /tmp/guzhi_health.json -w "%{http_code}" "http://127.0.0.1:${PORT}/api/fund/sectors" || true)"
             if [ "$CODE" = "200" ]; then
               OK="1"
-              cat /tmp/guzhi_ping.json || true
+              echo "健康检查通过：/api/fund/sectors"
+              head -c 500 /tmp/guzhi_health.json || true
               echo ""
               break
             fi
-            sleep 0.5
+            echo "第 ${i} 次等待，状态码：${CODE}"
+            sleep 1
           done
 
           if [ -z "$OK" ]; then
-            echo "服务未通过 /api/ping 健康检查，最近日志："
-            sudo -n "$CONTROL_SCRIPT" logs 120 2>/dev/null || sudo -n journalctl -u "$SERVICE_NAME" -n 120 --no-pager || true
+            echo "健康检查失败，服务状态："
+            sudo -n "$CONTROL_SCRIPT" status || true
+            echo "最近日志："
+            sudo -n "$CONTROL_SCRIPT" logs 200 || true
             exit 1
           fi
 
-          echo "部署完成"
+          echo "======= 6. 外网 API 简测 ======="
+          curl -sS --max-time 5 -I "https://guzhi.21212121.xyz/api/fund/sectors" || true
+
+          echo "======= 部署完成 ======="
           EOF_REMOTE

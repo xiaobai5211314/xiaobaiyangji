@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SERVICE_NAME="guzhi-assistant.service"
+PORT="7084"
+
+cmd="${1:-}"
+arg="${2:-}"
+
+case "$cmd" in
+  daemon-reload)
+    systemctl daemon-reload
+    ;;
+  enable)
+    systemctl enable "$SERVICE_NAME" >/dev/null
+    ;;
+  start)
+    systemctl restart "$SERVICE_NAME"
+    ;;
+  stop)
+    systemctl stop "$SERVICE_NAME" || true
+    ;;
+  restart)
+    systemctl restart "$SERVICE_NAME"
+    ;;
+  status)
+    systemctl status "$SERVICE_NAME" --no-pager
+    ;;
+  is-active)
+    systemctl is-active "$SERVICE_NAME" || true
+    ;;
+  logs)
+    journalctl -u "$SERVICE_NAME" -n "${arg:-160}" --no-pager
+    ;;
+  port-info)
+    ss -lntp | grep ":${PORT}" || true
+    ;;
+  port-in-use)
+    ss -lntp | grep -q ":${PORT}"
+    ;;
+  release-port)
+    systemctl stop "$SERVICE_NAME" || true
+    for i in $(seq 1 20); do
+      if ! ss -lntp | grep -q ":${PORT}"; then
+        exit 0
+      fi
+      sleep 0.2
+    done
+
+    pids="$(ss -lntp | grep ":${PORT}" | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | sort -u || true)"
+    if [ -n "$pids" ]; then
+      echo "kill 端口 ${PORT} 进程：$pids"
+      kill $pids || true
+      sleep 1
+    fi
+
+    if ss -lntp | grep -q ":${PORT}"; then
+      pids="$(ss -lntp | grep ":${PORT}" | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | sort -u || true)"
+      if [ -n "$pids" ]; then
+        echo "kill -9 端口 ${PORT} 进程：$pids"
+        kill -9 $pids || true
+      fi
+    fi
+    ;;
+  *)
+    echo "用法：$0 {daemon-reload|enable|start|stop|restart|status|is-active|logs|port-info|port-in-use|release-port}"
+    exit 2
+    ;;
+esac
