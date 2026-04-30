@@ -42,11 +42,25 @@ namespace 估值助手.Models
                 .HasIndex(a => new { a.Username, a.FundCode, a.RecordDate })
                 .HasDatabaseName("IX_DailyArchive_User_Code_Date");
 
+            modelBuilder.Entity<User>()
+                .HasKey(u => u.Username);
 
             modelBuilder.Entity<User>()
                 .HasIndex(u => u.Username)
                 .IsUnique()
                 .HasDatabaseName("IX_User_Username");
+
+            modelBuilder.Entity<User>()
+                .Property(u => u.Username)
+                .IsRequired();
+
+            modelBuilder.Entity<User>()
+                .Property(u => u.PasswordHash)
+                .IsRequired();
+
+            modelBuilder.Entity<User>()
+                .Property(u => u.AvatarDataUrl)
+                .IsRequired(false);
         }
     }
 }
