@@ -146,41 +146,29 @@ jobs:
           ls -lh "$TMP_DIR/估值助手.dll"
           file "$TMP_DIR/估值助手.dll" || true
 
-          echo "======= 3. 停止旧服务并强制释放端口 ======="
-          sudo -n "$CONTROL_SCRIPT" stop-clean || true
-          sudo -n systemctl stop "$SERVICE_NAME" || true
+          echo "===== 停止旧服务并释放端口 ====="
+          sudo -n pkill -f "估值助手.dll" || true
+          sudo -n pkill -f "dotnet.*估值助手.dll" || true
+
           sleep 2
 
-          for i in 1 2 3 4 5; do
-            if ! ss -lntp | grep -q ":${PORT} "; then
-              echo "端口 ${PORT} 已释放"
-              break
+          if sudo -n ss -lntp | grep -q ":7084"; then
+            echo "端口 7084 仍被占用，强制清理"
+            PID=$(sudo -n ss -lntp | grep ":7084" | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | head -n 1)
+            if [ -n "$PID" ]; then
+              sudo -n kill -9 "$PID" || true
             fi
-
-            echo "端口 ${PORT} 仍被占用，第 ${i} 次清理："
-            ss -lntp | grep ":${PORT} " || true
-            PIDS="$(ss -lntp | grep ":${PORT} " | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | sort -u || true)"
-            if [ -n "$PIDS" ]; then
-              echo "$PIDS" | xargs -r sudo -n kill -TERM || true
-            fi
-            sleep 2
-          done
-
-          if ss -lntp | grep -q ":${PORT} "; then
-            echo "端口 ${PORT} 仍未释放，执行 KILL："
-            ss -lntp | grep ":${PORT} " || true
-            PIDS="$(ss -lntp | grep ":${PORT} " | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | sort -u || true)"
-            if [ -n "$PIDS" ]; then
-              echo "$PIDS" | xargs -r sudo -n kill -KILL || true
-            fi
-            sleep 2
           fi
 
-          if ss -lntp | grep -q ":${PORT} "; then
-            echo "端口 ${PORT} 仍被占用，停止部署。"
-            ss -lntp | grep ":${PORT} " || true
+          sleep 1
+
+          if sudo -n ss -lntp | grep -q ":7084"; then
+            echo "端口 7084 仍未释放，部署终止"
+            sudo -n ss -lntp | grep ":7084" || true
             exit 1
           fi
+
+          echo "端口 7084 已释放"
 
           echo "======= 4. 备份并覆盖线上文件 ======="
           mkdir -p "$APP_DIR"
@@ -220,7 +208,6 @@ jobs:
           fi
 
           echo "======= 6. 测试接口 ======="
-
           echo "测试 today 接口..."
           TODAY_CODE="$(curl -sS -o /home/deploy/guzhi_today_check.json -w "%{http_code}" \
             "http://127.0.0.1:${PORT}/api/fund/today?username=${TEST_USER}")"
