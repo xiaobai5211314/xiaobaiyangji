@@ -33,19 +33,6 @@ namespace 估值助手.Controllers
             Timeout = 10000
         };
 
-
-        public class CapitalFlowRowDto
-        {
-            public string Code { get; set; } = string.Empty;
-            public string Name { get; set; } = string.Empty;
-            public double Rate { get; set; }
-            public double MainNet { get; set; }
-            public string MainNetText { get; set; } = string.Empty;
-            public double MainRatio { get; set; }
-            public double SuperNet { get; set; }
-            public double BigNet { get; set; }
-        }
-
         public class FundInfoCache
         {
             public string Code { get; set; }
@@ -56,326 +43,66 @@ namespace 估值助手.Controllers
         private static List<FundInfoCache> _globalFundCache = null;
         private static Dictionary<string, FundInfoCache> _exactMatchDict = null;
 
+
+        private sealed class FundSectorDefinition
+        {
+            public string Name { get; set; } = string.Empty;
+            public string[] Keywords { get; set; } = Array.Empty<string>();
+        }
+
+        private sealed class SectorFundItem
+        {
+            public string Code { get; set; } = string.Empty;
+            public string Name { get; set; } = string.Empty;
+            public double Rate { get; set; }
+        }
+
+        private sealed class SectorRowItem
+        {
+            public string Key { get; set; } = string.Empty;
+            public string Name { get; set; } = string.Empty;
+            public double Rate { get; set; }
+            public int FundCount { get; set; }
+            public int QuotedCount { get; set; }
+            public string Direction { get; set; } = string.Empty;
+        }
+
+        // 基金板块池：不再用股票概念板块直接冒充基金板块。
+        // 每个板块用基金名称关键词扫描基金池，再取基金实时估值/净值涨跌幅均值。
+        private static readonly FundSectorDefinition[] FundSectorDefinitions = new[]
+        {
+            new FundSectorDefinition { Name = "黄金", Keywords = new[] { "黄金ETF联接", "黄金ETF", "黄金", "上海金", "金ETF" } },
+            new FundSectorDefinition { Name = "白银", Keywords = new[] { "白银" } },
+            new FundSectorDefinition { Name = "有色金属", Keywords = new[] { "有色", "有色金属", "资源", "金属" } },
+            new FundSectorDefinition { Name = "稀土永磁", Keywords = new[] { "稀土", "稀土永磁", "稀有金属" } },
+            new FundSectorDefinition { Name = "锂矿", Keywords = new[] { "锂", "锂电", "锂矿", "电池" } },
+            new FundSectorDefinition { Name = "新能源", Keywords = new[] { "新能源", "新能车", "新能源汽车", "电动车" } },
+            new FundSectorDefinition { Name = "光伏", Keywords = new[] { "光伏", "太阳能", "新能源光伏" } },
+            new FundSectorDefinition { Name = "固态电池", Keywords = new[] { "电池", "锂电池", "储能", "新能源车" } },
+            new FundSectorDefinition { Name = "半导体", Keywords = new[] { "半导体", "芯片", "集成电路", "电子" } },
+            new FundSectorDefinition { Name = "人工智能", Keywords = new[] { "人工智能", "AI", "机器人", "智能", "云计算", "计算机" } },
+            new FundSectorDefinition { Name = "机器人", Keywords = new[] { "机器人", "高端制造", "智能制造" } },
+            new FundSectorDefinition { Name = "创新药", Keywords = new[] { "创新药", "医药", "生物医药", "医疗" } },
+            new FundSectorDefinition { Name = "医药", Keywords = new[] { "医药", "医疗", "生物科技", "医疗器械" } },
+            new FundSectorDefinition { Name = "证券", Keywords = new[] { "证券", "券商", "非银", "金融" } },
+            new FundSectorDefinition { Name = "银行", Keywords = new[] { "银行", "金融地产" } },
+            new FundSectorDefinition { Name = "军工", Keywords = new[] { "军工", "国防", "航天", "航空" } },
+            new FundSectorDefinition { Name = "传媒游戏", Keywords = new[] { "传媒", "游戏", "文娱", "动漫" } },
+            new FundSectorDefinition { Name = "房地产", Keywords = new[] { "房地产", "地产", "基建", "建筑" } },
+            new FundSectorDefinition { Name = "白酒消费", Keywords = new[] { "白酒", "消费", "食品饮料", "酒" } },
+            new FundSectorDefinition { Name = "农林牧渔", Keywords = new[] { "农业", "畜牧", "养殖", "农林牧渔" } },
+            new FundSectorDefinition { Name = "煤炭", Keywords = new[] { "煤炭", "能源" } },
+            new FundSectorDefinition { Name = "油气", Keywords = new[] { "油气", "石油", "原油" } },
+            new FundSectorDefinition { Name = "港股科技", Keywords = new[] { "港股科技", "恒生科技", "港股通科技" } },
+            new FundSectorDefinition { Name = "纳斯达克", Keywords = new[] { "纳斯达克", "纳指", "NASDAQ" } },
+            new FundSectorDefinition { Name = "标普500", Keywords = new[] { "标普500", "标普", "S&P" } },
+            new FundSectorDefinition { Name = "红利", Keywords = new[] { "红利", "高股息", "股息" } }
+        };
+
         public FundController(AppDbContext context, IMemoryCache cache)
         {
             _context = context;
             _cache = cache;
-        }
-
-        private static DateTime ChinaNow() => DateTime.UtcNow.AddHours(8);
-
-        private static string ChinaDateDash(DateTime? localTime = null)
-            => (localTime ?? ChinaNow()).ToString("yyyy-MM-dd");
-
-        // 同一天买入/卖出是“在途交易”，不能直接参与当日收益率分母。
-        // LastAddAmount > 0：当天加仓，收益基数要剥离这笔未确认资金。
-        // LastAddAmount < 0：当天减仓，收益基数要把卖出份额当天仍应承担的涨跌补回。
-        private static double GetEffectiveBaseAmount(MyFundConfig fund, string settleDate)
-        {
-            double baseAmount = fund.HoldAmount;
-            if (fund.LastTradeDate == settleDate)
-            {
-                baseAmount -= fund.LastAddAmount;
-            }
-            return Math.Max(0, Math.Round(baseAmount, 4));
-        }
-
-        private static double GetPendingTradeAmount(MyFundConfig fund, string settleDate)
-        {
-            return fund.LastTradeDate == settleDate ? fund.LastAddAmount : 0;
-        }
-
-        private static double GetEffectiveShares(MyFundConfig fund, string settleDate)
-        {
-            if (fund.HoldShares <= 0) return 0;
-
-            double baseAmount = GetEffectiveBaseAmount(fund, settleDate);
-            if (fund.LastTradeDate == settleDate && fund.LastAddAmount < 0 && fund.HoldAmount > 0)
-            {
-                return Math.Max(0, fund.HoldShares * (baseAmount / fund.HoldAmount));
-            }
-
-            return fund.HoldShares;
-        }
-
-        private sealed class OfficialNavSnapshot
-        {
-            public string Date { get; set; } = string.Empty;
-            public double Rate { get; set; }
-            public double? TodayNav { get; set; }
-            public double? YesterdayNav { get; set; }
-            public double? NavDiff { get; set; }
-            public string Source { get; set; } = string.Empty;
-        }
-
-        private static bool TryGetDouble(JsonElement element, string propertyName, out double value)
-        {
-            value = 0;
-            if (!element.TryGetProperty(propertyName, out var prop)) return false;
-            if (prop.ValueKind == JsonValueKind.Number) return prop.TryGetDouble(out value);
-            if (prop.ValueKind == JsonValueKind.String)
-            {
-                var text = prop.GetString();
-                if (string.IsNullOrWhiteSpace(text) || text == "--") return false;
-                return double.TryParse(text, out value);
-            }
-            return false;
-        }
-
-        private static OfficialNavSnapshot? TryBuildOfficialNavSnapshot(JsonElement dataArray, string settleDate)
-        {
-            if (dataArray.ValueKind != JsonValueKind.Array || dataArray.GetArrayLength() == 0) return null;
-
-            var latest = dataArray[0];
-            string fsrq = latest.TryGetProperty("FSRQ", out var fsrqElement) ? (fsrqElement.GetString() ?? string.Empty) : string.Empty;
-            if (fsrq != settleDate) return null;
-
-            double? apiRate = TryGetDouble(latest, "JZZZL", out var parsedRate) ? parsedRate : null;
-            double? navRate = null;
-            double? todayNav = null;
-            double? yesterdayNav = null;
-            double? navDiff = null;
-
-            if (dataArray.GetArrayLength() > 1 &&
-                TryGetDouble(latest, "DWJZ", out var navToday) &&
-                TryGetDouble(dataArray[1], "DWJZ", out var navYesterday) &&
-                navYesterday > 0)
-            {
-                todayNav = navToday;
-                yesterdayNav = navYesterday;
-                navDiff = navToday - navYesterday;
-                navRate = Math.Round(navDiff.Value / navYesterday * 100.0, 4);
-            }
-
-            double? finalRate = null;
-            string source = string.Empty;
-
-            if (navRate.HasValue && (!apiRate.HasValue ||
-                                     (Math.Abs(apiRate.Value) < 0.000001 && Math.Abs(navRate.Value) > 0.000001) ||
-                                     Math.Abs(apiRate.Value - navRate.Value) > 0.05))
-            {
-                finalRate = navRate.Value;
-                source = "DWJZ反算";
-            }
-            else if (apiRate.HasValue)
-            {
-                finalRate = apiRate.Value;
-                source = "JZZZL";
-            }
-            else if (navRate.HasValue)
-            {
-                finalRate = navRate.Value;
-                source = "DWJZ反算";
-            }
-
-            if (!finalRate.HasValue) return null;
-            if (Math.Abs(finalRate.Value) < 0.000001 && !navRate.HasValue) return null;
-
-            return new OfficialNavSnapshot
-            {
-                Date = fsrq,
-                Rate = Math.Round(finalRate.Value, 4),
-                TodayNav = todayNav,
-                YesterdayNav = yesterdayNav,
-                NavDiff = navDiff,
-                Source = source
-            };
-        }
-
-        private async Task<OfficialNavSnapshot?> FetchOfficialNavSnapshotAsync(HttpClient client, string fundCode, string settleDate)
-        {
-            long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={fundCode}&pageIndex=1&pageSize=2&_={timestamp}";
-            string res = await client.GetStringAsync(url);
-            using var doc = JsonDocument.Parse(res);
-            if (!doc.RootElement.TryGetProperty("Data", out var data) ||
-                !data.TryGetProperty("LSJZList", out var dataArray))
-            {
-                return null;
-            }
-
-            return TryBuildOfficialNavSnapshot(dataArray, settleDate);
-        }
-
-        private static bool ApplyOneDaySettlement(MyFundConfig fund, double actualRate, string settleDate, double? exactProfit = null)
-        {
-            double baseAmount = GetDailyBaseAmount(fund, settleDate);
-            double pending = GetPendingTradeAmount(fund, settleDate);
-            double settledProfit = Math.Round(exactProfit ?? (baseAmount * (actualRate / 100.0)), 2);
-            double newHoldAmount = Math.Round(baseAmount + settledProfit + pending, 2);
-
-            bool changed = fund.LastSettledDate != settleDate ||
-                           Math.Abs(fund.LastSettledRate - actualRate) > 0.0001 ||
-                           Math.Abs(fund.LastSettledProfit - settledProfit) > 0.01 ||
-                           Math.Abs(fund.HoldAmount - newHoldAmount) > 0.01;
-
-            if (!changed) return false;
-
-            fund.HoldAmount = newHoldAmount;
-            fund.LastSettledDate = settleDate;
-            fund.LastSettledProfit = settledProfit;
-            fund.LastSettledRate = Math.Round(actualRate, 4);
-            return true;
-        }
-
-        private void ClearTodayCache(string username)
-        {
-            if (string.IsNullOrWhiteSpace(username)) return;
-            _cache.Remove($"Tactical_TodayData_{username}");
-            _cache.Remove($"Tactical_TodayData_{username}_{ChinaDateDash()}");
-        }
-
-
-        private static void CopyArchiveValues(DailyArchive target, DailyArchive source)
-        {
-            target.FundName = string.IsNullOrWhiteSpace(source.FundName) ? target.FundName : source.FundName;
-            target.Assets = Math.Round(source.Assets, 2);
-            target.DailyProfit = Math.Round(source.DailyProfit, 2);
-            target.DailyRate = Math.Round(source.DailyRate, 2);
-            target.TotalProfit = Math.Round(source.TotalProfit, 2);
-            target.TotalRate = Math.Round(source.TotalRate, 2);
-        }
-
-        private async Task UpsertDailyArchivesAsync(string username, DateTime date, IEnumerable<DailyArchive> incoming)
-        {
-            var normalizedIncoming = incoming
-                .Where(x => !string.IsNullOrWhiteSpace(x.FundCode))
-                .GroupBy(x => x.FundCode)
-                .Select(g => g.Last())
-                .ToList();
-
-            var codes = normalizedIncoming.Select(x => x.FundCode).ToList();
-            var existing = await _context.DailyArchives
-                .Where(a => a.Username == username && a.RecordDate == date && codes.Contains(a.FundCode))
-                .ToListAsync();
-
-            var duplicateGroups = existing.GroupBy(x => x.FundCode).Where(g => g.Count() > 1).ToList();
-            foreach (var group in duplicateGroups)
-            {
-                var keep = group.OrderByDescending(x => x.Id).First();
-                var remove = group.Where(x => x.Id != keep.Id).ToList();
-                if (remove.Count > 0) _context.DailyArchives.RemoveRange(remove);
-            }
-
-            var existingDict = existing
-                .GroupBy(x => x.FundCode)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Id).First());
-
-            foreach (var item in normalizedIncoming)
-            {
-                item.Username = username;
-                item.RecordDate = date;
-
-                if (existingDict.TryGetValue(item.FundCode, out var old))
-                {
-                    CopyArchiveValues(old, item);
-                    _context.DailyArchives.Update(old);
-                }
-                else
-                {
-                    _context.DailyArchives.Add(item);
-                }
-            }
-        }
-
-
-        private static double GetDailyBaseAmount(MyFundConfig fund, string settleDate)
-        {
-            double pending = GetPendingTradeAmount(fund, settleDate);
-
-            // 已完成真实净值清算时，HoldAmount 已经包含当日收益。
-            // 今日收益率分母必须回到清算前有效基数，否则总收益率会被“已结算后的市值”稀释。
-            if (fund.LastSettledDate == settleDate)
-            {
-                return Math.Max(0, Math.Round(fund.HoldAmount - pending - fund.LastSettledProfit, 4));
-            }
-
-            return GetEffectiveBaseAmount(fund, settleDate);
-        }
-
-        private static double GetRecordRateForToday(FundData? record)
-        {
-            if (record == null) return 0;
-            return Math.Abs(record.ActualRate) > 0.000001 ? record.ActualRate : record.EstimatedRate;
-        }
-
-        private static List<DailyArchive> BuildArchiveRowsFromCurrentHoldings(string username, DateTime date, List<MyFundConfig> funds, List<FundData> todayRecords)
-        {
-            string dateDash = date.ToString("yyyy-MM-dd");
-            var latestRecordDict = todayRecords
-                .GroupBy(r => r.FundCode)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).First());
-
-            var rows = new List<DailyArchive>();
-            double totalCost = 0;
-            double totalRealized = 0;
-            double totalDailyProfit = 0;
-            double totalDailyBase = 0;
-            double totalCurrentAssets = 0;
-
-            foreach (var fund in funds)
-            {
-                latestRecordDict.TryGetValue(fund.FundCode, out var record);
-
-                double cost = fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount;
-                double baseAmount = GetDailyBaseAmount(fund, dateDash);
-                double dailyRate = fund.LastSettledDate == dateDash ? fund.LastSettledRate : GetRecordRateForToday(record);
-                double dailyProfit = fund.LastSettledDate == dateDash
-                    ? fund.LastSettledProfit
-                    : Math.Round(baseAmount * (dailyRate / 100.0), 2);
-
-                double currentAssets = fund.LastSettledDate == dateDash
-                    ? fund.HoldAmount
-                    : Math.Round(fund.HoldAmount + dailyProfit, 2);
-
-                double totalProfit = currentAssets - cost + fund.RealizedProfit;
-                double totalRate = cost > 0 ? totalProfit / cost * 100.0 : 0;
-
-                rows.Add(new DailyArchive
-                {
-                    Username = username,
-                    FundCode = fund.FundCode,
-                    FundName = fund.FundName,
-                    RecordDate = date,
-                    Assets = Math.Round(currentAssets, 2),
-                    DailyProfit = Math.Round(dailyProfit, 2),
-                    DailyRate = Math.Round(dailyRate, 2),
-                    TotalProfit = Math.Round(totalProfit, 2),
-                    TotalRate = Math.Round(totalRate, 2)
-                });
-
-                totalCost += cost;
-                totalRealized += fund.RealizedProfit;
-                totalDailyProfit += dailyProfit;
-                totalDailyBase += baseAmount;
-                totalCurrentAssets += currentAssets;
-            }
-
-            double totalDailyRate = totalDailyBase > 0 ? totalDailyProfit / totalDailyBase * 100.0 : 0;
-            double totalCampProfit = totalCurrentAssets - totalCost + totalRealized;
-            double totalCampRate = totalCost > 0 ? totalCampProfit / totalCost * 100.0 : 0;
-
-            rows.Add(new DailyArchive
-            {
-                Username = username,
-                FundCode = "TOTAL",
-                FundName = "总持仓",
-                RecordDate = date,
-                Assets = Math.Round(totalCurrentAssets, 2),
-                DailyProfit = Math.Round(totalDailyProfit, 2),
-                DailyRate = Math.Round(totalDailyRate, 2),
-                TotalProfit = Math.Round(totalCampProfit, 2),
-                TotalRate = Math.Round(totalCampRate, 2)
-            });
-
-            return rows;
-        }
-
-        private async Task UpsertTodayArchivesFromCurrentHoldingsAsync(string username, DateTime today, List<MyFundConfig> funds, List<FundData> todayRecords)
-        {
-            if (funds.Count == 0) return;
-            var rows = BuildArchiveRowsFromCurrentHoldings(username, today, funds, todayRecords);
-            await UpsertDailyArchivesAsync(username, today, rows);
         }
 
         private async Task<List<FundInfoCache>> GetAllFundsAsync()
@@ -532,7 +259,7 @@ namespace 估值助手.Controllers
                 {
                     using (Image image = Image.Load(inputStream))
                     {
-                        int targetMaxWidth = 1800; // OCR 高清模式：保留支付宝持仓截图小字、小数点、正负号
+                        int targetMaxWidth = 1080;
                         if (image.Width > targetMaxWidth)
                         {
                             int newHeight = (int)((double)image.Height / image.Width * targetMaxWidth);
@@ -541,7 +268,7 @@ namespace 估值助手.Controllers
                         image.Mutate(x => x.BackgroundColor(Color.White));
                         using (var outputStream = new MemoryStream())
                         {
-                            image.SaveAsJpeg(outputStream, new JpegEncoder { Quality = 90 });
+                            image.SaveAsJpeg(outputStream, new JpegEncoder { Quality = 60 });
                             finalProcessedBytes = outputStream.ToArray();
                         }
                     }
@@ -812,7 +539,7 @@ namespace 估值助手.Controllers
                 }
 
                 await _context.SaveChangesAsync();
-                ClearTodayCache(username);
+                _cache.Remove($"Tactical_TodayData_{username}");
                 return Ok($"识别完成！成功同步 {importedCount} 只。\n\n[诊断日志]\n{string.Join("\n", debugLog)}");
             }
             catch (Exception ex)
@@ -922,28 +649,17 @@ namespace 估值助手.Controllers
                     {
                         if (double.TryParse(rateList[i], out double rate))
                         {
-                            var settleDate = ChinaDateDash();
-                            if (ApplyOneDaySettlement(fund, rate, settleDate))
-                            {
-                                count++;
-                            }
+                            double todayProfit = fund.HoldAmount * (rate / 100.0);
+                            fund.HoldAmount = Math.Round(fund.HoldAmount + todayProfit, 2);
+                            fund.LastSettledDate = DateTime.UtcNow.AddHours(8).ToString("yyyy-MM-dd"); // 新增
+
+                            count++;
                         }
                     }
                 }
 
-                if (count > 0)
-                {
-                    var settleDate = ChinaNow().Date;
-                    var fundCodes = funds.Select(f => f.FundCode).Distinct().ToList();
-                    var todayRecords = await _context.FundRecords
-                        .Where(r => r.FetchTime >= settleDate && fundCodes.Contains(r.FundCode))
-                        .ToListAsync();
-                    await UpsertTodayArchivesFromCurrentHoldingsAsync(username, settleDate, funds, todayRecords);
-                }
-
                 await _context.SaveChangesAsync();
-                ClearTodayCache(username);
-                return Ok($"已清算 {count} 只基金，并已同步今日收益档案！");
+                return Ok($"已清算 {count} 只基金！");
             }
             catch (Exception ex)
             {
@@ -971,33 +687,17 @@ namespace 估值助手.Controllers
                         var match = Regex.Match(jsData, @"\""gszzl\"":\""([^\""]+)\""");
                         if (match.Success && double.TryParse(match.Groups[1].Value, out double rate))
                         {
-                            var settleDate = ChinaDateDash();
-                            if (ApplyOneDaySettlement(fund, rate, settleDate))
-                            {
-                                successCount++;
-                            }
+                            double todayProfit = fund.HoldAmount * (rate / 100.0);
+                            fund.HoldAmount = Math.Round(fund.HoldAmount + todayProfit, 2);
+                            fund.LastSettledDate = DateTime.UtcNow.AddHours(8).ToString("yyyy-MM-dd"); // 新增
+                            successCount++;
                         }
                     }
                     catch { continue; }
                 }
 
-                if (successCount > 0)
-                {
-                    var settleDate = ChinaNow().Date;
-                    var codesForToday = allFunds.Select(f => f.FundCode).Distinct().ToList();
-                    var todayRecords = await _context.FundRecords
-                        .Where(r => r.FetchTime >= settleDate && codesForToday.Contains(r.FundCode))
-                        .ToListAsync();
-
-                    foreach (var group in allFunds.GroupBy(f => f.Username))
-                    {
-                        await UpsertTodayArchivesFromCurrentHoldingsAsync(group.Key, settleDate, group.ToList(), todayRecords);
-                        ClearTodayCache(group.Key);
-                    }
-                }
-
                 await _context.SaveChangesAsync();
-                return Ok($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] 🌙 夜间自动清算执行完毕！成功更新 {successCount} 只，并已同步今日收益档案。");
+                return Ok($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] 🌙 夜间自动清算执行完毕！成功更新 {successCount} 只。");
             }
             catch (Exception ex)
             {
@@ -1105,18 +805,14 @@ namespace 估值助手.Controllers
             }
         }
         [HttpGet("today")]
-        public async Task<IActionResult> GetTodayData([FromQuery] string username, [FromQuery] bool force = false)
+        public async Task<IActionResult> GetTodayData([FromQuery] string username)
         {
             if (string.IsNullOrEmpty(username)) return Unauthorized("请提供指挥官代号");
 
             try
             {
-                string cacheKey = $"Tactical_TodayData_{username}_{ChinaDateDash()}";
-                if (force)
-                {
-                    _cache.Remove(cacheKey);
-                }
-                else if (_cache.TryGetValue(cacheKey, out object cachedResult))
+                string cacheKey = $"Tactical_TodayData_{username}";
+                if (_cache.TryGetValue(cacheKey, out object cachedResult))
                 {
                     return Ok(cachedResult);
                 }
@@ -1130,47 +826,77 @@ namespace 估值助手.Controllers
 
                 if (!myFundCodes.Any()) return Ok(new List<object>());
 
-                var localTime = ChinaNow();
+                var localTime = DateTime.UtcNow.AddHours(8);
                 var today = localTime.Date;
                 string todayStr = localTime.ToString("yyyy'/'MM'/'dd");
                 string todayDash = localTime.ToString("yyyy-MM-dd");
 
-                // 只取最近 10 天的必要数据，避免首屏把历史全表拖回内存。
-                var recentStart = today.AddDays(-10);
-                var recentRecords = await _context.FundRecords
+                var todayRecords = await
+ _context.FundRecords
+    .AsNoTracking()
+    // 添加
+    .Where(r => r.FetchTime >= today && myFundCodes.Contains(r.FundCode))
+    .OrderBy(r => r.FetchTime)
+    .ToListAsync();
+                var threeDaysAgo = today.AddDays(-3);
+                var lastRecords = await _context.FundRecords
+       .AsNoTracking()  // 添加
+       .Where(r => r.FetchTime < today && myFundCodes.Contains(r.FundCode))
+       .OrderByDescending(r => r.FetchTime)
+       .ToListAsync();
+                var sevenDaysAgo = today.AddDays(-7);
+                var allPastRecords = await _context.FundRecords
                     .AsNoTracking()
-                    .Where(r => myFundCodes.Contains(r.FundCode) && r.FetchTime >= recentStart)
-                    .OrderBy(r => r.FetchTime)
+                    .Where(r => myFundCodes.Contains(r.FundCode) && r.ActualRate != 0)
+                    .OrderByDescending(r => r.FetchTime)
                     .ToListAsync();
 
-                var todayRecords = recentRecords
-                    .Where(r => r.FetchTime >= today)
-                    .ToList();
 
-                var lastRecordDict = recentRecords
-                    .Where(r => r.FetchTime < today)
-                    .GroupBy(r => r.FundCode)
-                    .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).First());
+                // 🌟 猎隼侦察兵启动：下午 17:00 后刺探真实净值
+                var realRateDict = new Dictionary<string, double>();
+                var exactProfitDict = new Dictionary<string, double>(); // 新增物理利润字典
 
-                var pastActualDict = recentRecords
-                    .Where(r => r.ActualRate != 0)
-                    .GroupBy(r => r.FundCode)
-                    .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).Take(3).ToList());
+                if (localTime.Hour >= 17)
+                {
+                    var realRateTasks = myFunds.Select(async config =>
+                    {
+                        // 🚀 终极纠缠态补丁：用金额反推真实份额，喂给高精度算法！
+                        double baseAmount = config.HoldAmount;
+                        if (config.LastTradeDate == todayDash)
+                        {
+                            baseAmount -= config.LastAddAmount;
+                        }
+
+                        double effectiveShares = config.HoldShares;
+                        // 🚀 核心：只有【减仓】(LastAddAmount < 0) 时，份额才会被提前扣除，才需要按比例放大还原！
+                        // 加仓时新份额还没确认，原有物理份额根本没变，绝对不能缩水！
+                        if (config.LastTradeDate == todayDash && config.LastAddAmount < 0 && config.HoldAmount > 0)
+                        {
+                            effectiveShares = config.HoldShares * (baseAmount / config.HoldAmount);
+                        }
 
 
-                // ⚡ 首屏性能优化：today 接口不再发起任何外部净值 HTTP 请求。
-                // 真实净值由 NavSettlementService 后台结算后写入 MyFunds.LastSettled* 字段。
-                // 这样 App/Web 打开和下拉刷新只访问本机数据库，避免东方财富接口抖动拖慢用户请求。
+                        var res = await GetTodayRealRateAsync(config.FundCode, todayDash, effectiveShares);
+                        return new { code = config.FundCode, rate = res.rate, exactProfit = res.exactProfit };
+                    });
+                    var realRateResults = await Task.WhenAll(realRateTasks);
+                    foreach (var res in realRateResults)
+                    {
+                        if (res.rate.HasValue) realRateDict[res.code] = res.rate.Value;
+                        if (res.exactProfit.HasValue) exactProfitDict[res.code] = res.exactProfit.Value; // 截获物理利润
+                    }
+                }
 
 
                 var result = myFunds.Select(config =>
                 {
                     var fundRecords = todayRecords.Where(r => r.FundCode == config.FundCode).ToList();
-                    lastRecordDict.TryGetValue(config.FundCode, out var lastRecord);
+                    var lastRecord = lastRecords.FirstOrDefault(r => r.FundCode == config.FundCode);
 
-                    var past3DaysRecords = pastActualDict.TryGetValue(config.FundCode, out var pastList)
-                        ? pastList
-                        : new List<FundData>();
+                    var past3DaysRecords = allPastRecords
+                        .Where(r => r.FundCode == config.FundCode)
+                        .Take(3)
+                        .ToList();
 
                     double avgDiff = 0;
                     if (past3DaysRecords.Count > 0)
@@ -1197,10 +923,13 @@ namespace 估值助手.Controllers
                         dataPoints.Add(new object[] { todayStr + " 09:30:00", 0 });
                     }
 
-                    // 是否已完成今日真实净值清算。只读本地字段，不在 today 请求里访问外部接口。
-                    bool isSettled = config.LastSettledDate == todayDash;
-                    double? actualRate = isSettled ? config.LastSettledRate : null;
-                    double? actualExactProfit = isSettled ? config.LastSettledProfit : null;
+                    // 是否已截获真实净值
+                    // 是否已截获真实净值
+                    bool isSettled = realRateDict.ContainsKey(config.FundCode);
+                    double? actualRate = isSettled ? realRateDict[config.FundCode] : null;
+
+                    // 🚀 新增这一行：尝试提取绝对物理利润
+                    double? actualExactProfit = exactProfitDict.ContainsKey(config.FundCode) ? exactProfitDict[config.FundCode] : null;
 
                     // FundController.cs 中 GetTodayData 方法内部
                     return new
@@ -1213,9 +942,7 @@ namespace 估值助手.Controllers
                         realizedProfit = config.RealizedProfit,
                         lastTradeDate = config.LastTradeDate,
                         lastAddAmount = config.LastAddAmount,
-                        lastSettledDate = config.LastSettledDate,
-                        lastSettledProfit = config.LastSettledProfit,
-                        lastSettledRate = config.LastSettledRate,
+                        lastSettledDate = config.LastSettledDate, // <--- 添加这行，将结算日期传给前端
                         existingReturnRate = 0,
                         breakEvenRate = 0,
                         diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
@@ -1230,14 +957,6 @@ namespace 估值助手.Controllers
 
                 var finalResult = result.OrderByDescending(x => x.amount).ToList();
 
-                // 真实净值一出现，后端立即修正“今日总持仓 + 单只基金”档案。
-                // 这样不再依赖前端 save-archive，也能覆盖旧版本写坏的 TOTAL 记录。
-                if (myFunds.Any(f => f.LastSettledDate == todayDash))
-                {
-                    await UpsertTodayArchivesFromCurrentHoldingsAsync(username, today, myFunds, todayRecords);
-                    await _context.SaveChangesAsync();
-                }
-
                 // ✅ 优化后（60秒缓存，减少数据库压力）
                 var cacheOptions = new MemoryCacheEntryOptions()
                     .SetAbsoluteExpiration(TimeSpan.FromSeconds(60))
@@ -1249,99 +968,6 @@ namespace 估值助手.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, $"服务器当场阵亡：{ex.Message}");
-            }
-        }
-
-        [HttpPost("sync-real-nav")]
-        public async Task<IActionResult> SyncRealNav([FromForm] string username)
-        {
-            if (string.IsNullOrWhiteSpace(username)) return Unauthorized("请提供指挥官代号");
-
-            var localTime = ChinaNow();
-            string settleDate = localTime.ToString("yyyy-MM-dd");
-            DateTime today = localTime.Date;
-            DateTime tomorrow = today.AddDays(1);
-
-            try
-            {
-                var funds = await _context.MyFunds
-                    .Where(f => f.Username == username)
-                    .ToListAsync();
-
-                if (funds.Count == 0)
-                {
-                    return Ok(new { success = true, updated = 0, message = "暂无持仓" });
-                }
-
-                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
-                client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
-                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36");
-                client.DefaultRequestHeaders.Add("Accept", "application/json, text/javascript, */*; q=0.01");
-
-                int updated = 0;
-                int skipped = 0;
-                var diagnostics = new List<string>();
-
-                foreach (var group in funds.GroupBy(f => f.FundCode))
-                {
-                    var snapshot = await FetchOfficialNavSnapshotAsync(client, group.Key, settleDate);
-                    if (snapshot == null)
-                    {
-                        skipped++;
-                        diagnostics.Add($"{group.Key}: 尚未拿到可校验真实净值");
-                        continue;
-                    }
-
-                    var targetRecord = await _context.FundRecords
-                        .Where(r => r.FundCode == group.Key && r.FetchTime >= today && r.FetchTime < tomorrow)
-                        .OrderByDescending(r => r.FetchTime)
-                        .FirstOrDefaultAsync();
-
-                    if (targetRecord != null)
-                    {
-                        targetRecord.ActualRate = snapshot.Rate;
-                        targetRecord.DiffRate = Math.Round(snapshot.Rate - targetRecord.EstimatedRate, 2);
-                    }
-
-                    foreach (var fund in group)
-                    {
-                        double? exactProfit = null;
-                        if (snapshot.NavDiff.HasValue)
-                        {
-                            double effectiveShares = GetEffectiveShares(fund, settleDate);
-                            if (effectiveShares > 0) exactProfit = Math.Round(effectiveShares * snapshot.NavDiff.Value, 2);
-                        }
-
-                        if (ApplyOneDaySettlement(fund, snapshot.Rate, settleDate, exactProfit))
-                        {
-                            updated++;
-                        }
-                    }
-
-                    diagnostics.Add($"{group.Key}: {snapshot.Rate:F4}% [{snapshot.Source}]");
-                }
-
-                var todayRecords = await _context.FundRecords
-                    .Where(r => r.FetchTime >= today && r.FetchTime < tomorrow)
-                    .ToListAsync();
-
-                await UpsertTodayArchivesFromCurrentHoldingsAsync(username, today, funds, todayRecords);
-                await _context.SaveChangesAsync();
-
-                ClearTodayCache(username);
-
-                return Ok(new
-                {
-                    success = true,
-                    updated,
-                    skipped,
-                    message = $"真实净值同步完成，更新 {updated} 条持仓。",
-                    diagnostics
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, $"真实净值同步失败: {ex.Message}");
             }
         }
 
@@ -1364,25 +990,31 @@ namespace 估值助手.Controllers
                 using var doc = JsonDocument.Parse(res);
                 var dataArray = doc.RootElement.GetProperty("Data").GetProperty("LSJZList");
 
-                var snapshot = TryBuildOfficialNavSnapshot(dataArray, todayStr);
-                if (snapshot != null)
-                {
-                    double? exactProfit = null;
-                    if (shares > 0 && snapshot.NavDiff.HasValue)
-                    {
-                        exactProfit = Math.Round(shares * snapshot.NavDiff.Value, 2);
-                    }
-
-                    var result = (snapshot.Rate, exactProfit);
-                    _cache.Set(cacheKey, result, TimeSpan.FromHours(12));
-                    return result;
-                }
-
                 if (dataArray.GetArrayLength() > 0)
                 {
                     var latest = dataArray[0];
-                    if ((latest.GetProperty("FSRQ").GetString() ?? "") != todayStr)
+                    // 🚀 修复 2：必须是网络通畅且返回了数据，才判断日期
+                    if (latest.GetProperty("FSRQ").GetString() == todayStr)
                     {
+                        if (double.TryParse(latest.GetProperty("JZZZL").GetString(), out double realRate))
+                        {
+                            double? exactProfit = null;
+                            if (shares > 0 && dataArray.GetArrayLength() > 1)
+                            {
+                                if (double.TryParse(latest.GetProperty("DWJZ").GetString(), out double todayNav) &&
+                                    double.TryParse(dataArray[1].GetProperty("DWJZ").GetString(), out double yesterdayNav))
+                                {
+                                    exactProfit = Math.Round(shares * (todayNav - yesterdayNav), 2);
+                                }
+                            }
+                            var result = (realRate, exactProfit);
+                            _cache.Set(cacheKey, result, TimeSpan.FromHours(12));
+                            return result;
+                        }
+                    }
+                    else
+                    {
+                        // 🚀 修复 3：确凿证据表明官方日期还没更新，才关入小黑屋
                         _cache.Set(missKey, true, TimeSpan.FromMinutes(2));
                         return (null, null);
                     }
@@ -1426,7 +1058,7 @@ namespace 估值助手.Controllers
 
                 _context.MyFunds.Update(fund);
                 await _context.SaveChangesAsync();
-                ClearTodayCache(username);
+                _cache.Remove($"Tactical_TodayData_{username}");
 
                 return Ok(new { success = true, msg = $"加仓成功！[{tradeDate}] 注入资金: {addAmount:F2} 元" });
             }
@@ -1475,7 +1107,7 @@ namespace 估值助手.Controllers
             }
             _context.MyFunds.Update(fund);
             await _context.SaveChangesAsync();
-            ClearTodayCache(username);
+            _cache.Remove($"Tactical_TodayData_{username}");
 
             return Ok(new { success = true, msg = $"[{tradeDate}] 减仓完毕！归库利润: {profit:F2} 元" });
         }
@@ -1517,7 +1149,7 @@ namespace 估值助手.Controllers
                     }
 
                     await _context.SaveChangesAsync();
-                    ClearTodayCache(username);
+                    _cache.Remove($"Tactical_TodayData_{username}");
                     return Ok($"本金、代码与份额补给完成！");
                 }
 
@@ -1584,818 +1216,291 @@ namespace 估值助手.Controllers
             return Ok(resultLog);
         }
 
-        private sealed class SectorDefinition
-        {
-            public string Key { get; init; } = string.Empty;
-            public string Name { get; init; } = string.Empty;
-            public string[] Include { get; init; } = Array.Empty<string>();
-            public string[] Exclude { get; init; } = Array.Empty<string>();
-        }
-
-        private sealed class SectorFundQuote
-        {
-            public string Code { get; init; } = string.Empty;
-            public string Name { get; init; } = string.Empty;
-            public double Rate { get; init; }
-            public double? MonthRate { get; init; }
-            public bool HasQuote { get; init; }
-            public string UpdatedAt { get; init; } = string.Empty;
-        }
-
-        private sealed class SectorSummaryDto
-        {
-            public string Key { get; init; } = string.Empty;
-            public string Name { get; init; } = string.Empty;
-            public double Rate { get; init; }
-            public int FundCount { get; init; }
-            public int QuotedCount { get; init; }
-            public int StreakDays { get; init; }
-            public int HoldingRank { get; init; }
-            public string UpdatedAt { get; init; } = string.Empty;
-            public List<SectorFundQuote> PreviewFunds { get; init; } = new();
-        }
-
-        private static readonly IReadOnlyList<SectorDefinition> SectorDefinitions = new List<SectorDefinition>
-        {
-            new() { Key = "gold", Name = "黄金", Include = new[] { "黄金", "上海金", "黄金ETF", "黄金基金" }, Exclude = new[] { "黄金股" } },
-            new() { Key = "gold_stock", Name = "黄金股", Include = new[] { "黄金股", "有色金属", "贵金属" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "lithium", Name = "锂矿", Include = new[] { "锂", "锂矿", "锂电", "电池" }, Exclude = new[] { "货币", "债" } },
-            new() { Key = "rare_earth", Name = "稀土永磁", Include = new[] { "稀土", "永磁", "稀有金属" }, Exclude = new[] { "债" } },
-            new() { Key = "new_energy", Name = "新能源", Include = new[] { "新能源", "新能源车", "电动车", "电池", "碳中和" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "solid_battery", Name = "固态电池", Include = new[] { "固态电池", "电池", "锂电" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "storage", Name = "储能", Include = new[] { "储能", "电力设备", "新能源" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "nonferrous", Name = "有色金属", Include = new[] { "有色", "有色金属", "金属", "资源", "矿业" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "gem", Name = "创业板", Include = new[] { "创业板", "创业", "创业成长" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "steel", Name = "钢铁", Include = new[] { "钢铁" }, Exclude = Array.Empty<string>() },
-            new() { Key = "agri", Name = "农林牧渔", Include = new[] { "农业", "畜牧", "养殖", "农林牧渔", "粮食" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "media_game", Name = "传媒游戏", Include = new[] { "传媒", "游戏", "动漫", "影视", "文化", "娱乐" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "grid", Name = "电网设备", Include = new[] { "电网", "电力设备", "电力", "智能电网" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "home_appliance", Name = "家用电器", Include = new[] { "家电", "家用电器", "白色家电" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "pv", Name = "光伏", Include = new[] { "光伏", "太阳能", "新能源" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "double_innovation", Name = "双创50", Include = new[] { "双创", "科创创业", "科创50", "创业板" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "food_beverage", Name = "食品饮料", Include = new[] { "食品", "饮料", "白酒", "消费" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "innovative_drug", Name = "创新药", Include = new[] { "创新药", "医药", "生物医药", "港股通医药" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "oversea_medicine", Name = "海外医药", Include = new[] { "海外医药", "全球医药", "港股通医药", "恒生医疗", "中概互联医疗" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "medicine", Name = "医药", Include = new[] { "医药", "医疗", "生物", "药", "中药", "疫苗", "CRO" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "healthcare", Name = "医疗", Include = new[] { "医疗", "医药", "器械", "医美", "生物" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "nuclear", Name = "可控核聚变", Include = new[] { "核", "核电", "高端装备", "军工" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "semiconductor", Name = "半导体", Include = new[] { "半导体", "芯片", "集成电路", "科创芯片" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "semi_material", Name = "半导体材料设备", Include = new[] { "半导体材料", "半导体设备", "芯片设备", "芯片材料", "集成电路" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "bank", Name = "银行", Include = new[] { "银行" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "military", Name = "军工", Include = new[] { "军工", "国防", "航天", "航空", "高端装备" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "sp500", Name = "标普", Include = new[] { "标普", "S&P", "SP500", "美国500" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "asia_pacific", Name = "亚太", Include = new[] { "亚太", "日本", "越南", "印度", "东南亚" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "bond", Name = "债基", Include = new[] { "债", "债券", "纯债", "信用债", "中短债" }, Exclude = new[] { "可转债", "转债" } },
-            new() { Key = "convertible_bond", Name = "可转债", Include = new[] { "可转债", "转债" }, Exclude = Array.Empty<string>() },
-            new() { Key = "mixed_bond", Name = "混债", Include = new[] { "混债", "二级债", "一级债", "固收+", "固收加" }, Exclude = Array.Empty<string>() },
-            new() { Key = "money", Name = "货币基金", Include = new[] { "货币", "现金", "添利", "余额", "天天理财" }, Exclude = new[] { "股票", "混合" } },
-            new() { Key = "real_estate", Name = "地产", Include = new[] { "地产", "房地产", "沪深300地产", "地产等权" }, Exclude = new[] { "债", "货币" } }
-        };
-
-        private static bool ContainsAny(string text, IEnumerable<string> words)
-        {
-            foreach (var word in words)
-            {
-                if (!string.IsNullOrWhiteSpace(word) && text.Contains(word, StringComparison.OrdinalIgnoreCase)) return true;
-            }
-            return false;
-        }
-
-        private static int ScoreFundForSector(string fundName, SectorDefinition def)
-        {
-            var name = fundName ?? string.Empty;
-            int score = 0;
-            if (name.Contains(def.Name, StringComparison.OrdinalIgnoreCase)) score += 80;
-            foreach (var kw in def.Include)
-            {
-                if (name.Contains(kw, StringComparison.OrdinalIgnoreCase)) score += Math.Min(40, kw.Length * 8);
-            }
-            if (name.Contains("ETF", StringComparison.OrdinalIgnoreCase)) score += 25;
-            if (name.Contains("联接", StringComparison.OrdinalIgnoreCase)) score += 20;
-            if (name.Contains("指数", StringComparison.OrdinalIgnoreCase)) score += 15;
-            if (name.Contains("C", StringComparison.OrdinalIgnoreCase)) score += 3;
-            if (name.Contains("货币", StringComparison.OrdinalIgnoreCase) && def.Key != "money") score -= 200;
-            if (name.Contains("债", StringComparison.OrdinalIgnoreCase) && def.Key != "bond" && def.Key != "convertible_bond" && def.Key != "mixed_bond") score -= 120;
-            return score;
-        }
-
-        private static SectorDefinition ResolveSector(string keyOrName)
-        {
-            var clean = (keyOrName ?? string.Empty).Trim();
-            return SectorDefinitions.FirstOrDefault(s => s.Key.Equals(clean, StringComparison.OrdinalIgnoreCase) || s.Name.Equals(clean, StringComparison.OrdinalIgnoreCase))
-                   ?? SectorDefinitions.FirstOrDefault(s => clean.Contains(s.Name, StringComparison.OrdinalIgnoreCase))
-                   ?? new SectorDefinition { Key = clean, Name = clean, Include = new[] { clean }, Exclude = Array.Empty<string>() };
-        }
-
-        private static List<FundInfoCache> MatchFundsBySector(IEnumerable<FundInfoCache> allFunds, SectorDefinition def, int limit)
-        {
-            return allFunds
-                .Where(f => !string.IsNullOrWhiteSpace(f.Code) && !string.IsNullOrWhiteSpace(f.Name))
-                .Where(f => ContainsAny(f.Name, def.Include) && !ContainsAny(f.Name, def.Exclude))
-                .Select(f => new { Fund = f, Score = ScoreFundForSector(f.Name, def) })
-                .Where(x => x.Score > 0)
-                .OrderByDescending(x => x.Score)
-                .ThenBy(x => x.Fund.Name.Length)
-                .Take(limit)
-                .Select(x => x.Fund)
-                .ToList();
-        }
-
-        private static async Task<SectorFundQuote> FetchFundQuoteAsync(HttpClient client, FundInfoCache fund, bool withMonthRate = false)
-        {
-            double rate = 0;
-            bool hasQuote = false;
-            string updatedAt = string.Empty;
-            try
-            {
-                string gzUrl = $"http://fundgz.1234567.com.cn/js/{fund.Code}.js?rt={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
-                string gzRes = await client.GetStringAsync(gzUrl);
-                var match = Regex.Match(gzRes, @"jsonpgz\((.*?)\);");
-                if (match.Success)
-                {
-                    using var doc = JsonDocument.Parse(match.Groups[1].Value);
-                    var root = doc.RootElement;
-                    if (root.TryGetProperty("gszzl", out var gszzl) && double.TryParse(gszzl.GetString(), out var parsedRate))
-                    {
-                        rate = Math.Round(parsedRate, 2);
-                        hasQuote = true;
-                    }
-                    if (root.TryGetProperty("gztime", out var timeProp)) updatedAt = timeProp.GetString() ?? string.Empty;
-                    if (root.TryGetProperty("name", out var nameProp) && !string.IsNullOrWhiteSpace(nameProp.GetString()))
-                    {
-                        fund.Name = nameProp.GetString()!;
-                    }
-                }
-            }
-            catch
-            {
-                hasQuote = false;
-            }
-
-            double? monthRate = null;
-            if (withMonthRate)
-            {
-                monthRate = await FetchFundMonthRateAsync(client, fund.Code);
-            }
-
-            return new SectorFundQuote
-            {
-                Code = fund.Code,
-                Name = fund.Name,
-                Rate = rate,
-                MonthRate = monthRate,
-                HasQuote = hasQuote,
-                UpdatedAt = updatedAt
-            };
-        }
-
-        private static async Task<double?> FetchFundMonthRateAsync(HttpClient client, string code)
-        {
-            try
-            {
-                string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize=28";
-                using var req = new HttpRequestMessage(HttpMethod.Get, url);
-                req.Headers.Referrer = new Uri("http://fundf10.eastmoney.com/");
-                var res = await client.SendAsync(req);
-                if (!res.IsSuccessStatusCode) return null;
-                string body = await res.Content.ReadAsStringAsync();
-                using var doc = JsonDocument.Parse(body);
-                if (!doc.RootElement.TryGetProperty("Data", out var data)) return null;
-                if (!data.TryGetProperty("LSJZList", out var list) || list.GetArrayLength() < 2) return null;
-
-                var latest = list[0];
-                var oldest = list[list.GetArrayLength() - 1];
-                if (double.TryParse(latest.GetProperty("DWJZ").GetString(), out double latestNav) &&
-                    double.TryParse(oldest.GetProperty("DWJZ").GetString(), out double oldestNav) && oldestNav > 0)
-                {
-                    return Math.Round((latestNav - oldestNav) / oldestNav * 100.0, 2);
-                }
-            }
-            catch { }
-            return null;
-        }
-
-        private async Task<List<SectorFundQuote>> BuildSectorQuotesAsync(SectorDefinition def, int fundLimit, bool withMonthRate)
-        {
-            var allFunds = await GetAllFundsAsync();
-            var matched = MatchFundsBySector(allFunds, def, fundLimit);
-            if (matched.Count == 0) return new List<SectorFundQuote>();
-
-            using var handler = new HttpClientHandler
-            {
-                ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
-            };
-            using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(withMonthRate ? 8 : 5) };
-            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
-            client.DefaultRequestVersion = new Version(1, 1);
-
-            using var limiter = new SemaphoreSlim(8);
-            var tasks = matched.Select(async fund =>
-            {
-                await limiter.WaitAsync();
-                try { return await FetchFundQuoteAsync(client, fund, withMonthRate); }
-                finally { limiter.Release(); }
-            }).ToArray();
-
-            var quotes = await Task.WhenAll(tasks);
-            return quotes
-                .Where(q => !string.IsNullOrWhiteSpace(q.Code))
-                .OrderByDescending(q => q.Rate)
-                .ThenBy(q => q.Name)
-                .ToList();
-        }
-
-        private static int TryGetLocalSectorFundCount(string sectorName)
-        {
-            try
-            {
-                var cache = _globalFundCache;
-                if (cache == null || cache.Count == 0) return 0;
-                var def = ResolveSector(sectorName);
-                return MatchFundsBySector(cache, def, 80).Count;
-            }
-            catch { return 0; }
-        }
-
-        private async Task<List<SectorSummaryDto>> FetchEastMoneySectorRateRowsAsync(HttpClient client, int po, int limit)
-        {
-            long ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            // 东方财富板块行情：m:90+t:2 行业板块 + m:90+t:3 概念板块；f3 为涨跌幅。
-            string url = $"https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz={limit}&po={po}&np=1&fltt=2&invt=2&fid=f3&fs=m:90+t:2,m:90+t:3&fields=f12,f14,f3&_={ts}";
-            string body = await client.GetStringAsync(url);
-            using var doc = JsonDocument.Parse(body);
-            if (!doc.RootElement.TryGetProperty("data", out var data) || !data.TryGetProperty("diff", out var diff))
-                return new List<SectorSummaryDto>();
-
-            var rows = new List<SectorSummaryDto>();
-            int rank = 1;
-            foreach (var item in diff.EnumerateArray())
-            {
-                string code = item.TryGetProperty("f12", out var f12) ? f12.GetString() ?? "" : "";
-                string name = item.TryGetProperty("f14", out var f14) ? f14.GetString() ?? "" : "";
-                double rate = item.TryGetProperty("f3", out var f3) && f3.ValueKind == JsonValueKind.Number ? f3.GetDouble() : 0;
-                if (string.IsNullOrWhiteSpace(name)) continue;
-                int count = TryGetLocalSectorFundCount(name);
-                rows.Add(new SectorSummaryDto
-                {
-                    Key = string.IsNullOrWhiteSpace(code) ? name : code,
-                    Name = name,
-                    Rate = Math.Round(rate, 2),
-                    FundCount = count,
-                    QuotedCount = count,
-                    StreakDays = rate > 0.005 ? 1 : (rate < -0.005 ? -1 : 0),
-                    HoldingRank = rank++,
-                    UpdatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
-                    PreviewFunds = new List<SectorFundQuote>()
-                });
-            }
-            return rows;
-        }
-
         [HttpGet("sectors")]
         public async Task<IActionResult> GetSectors([FromQuery] bool force = false)
         {
-            string sectorCacheKey = "FundSectorRadarFastV1";
-            if (!force && _cache.TryGetValue(sectorCacheKey, out object cachedSectors)) return Ok(cachedSectors);
+            string cacheKey = "FundSectorDataV4";
+            if (!force && _cache.TryGetValue(cacheKey, out object cachedSectors))
+                return Ok(cachedSectors);
+
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36");
+            client.DefaultRequestHeaders.TryAddWithoutValidation("Referer", "https://fund.eastmoney.com/");
 
             try
             {
-                using var handler = new HttpClientHandler
+                var tasks = FundSectorDefinitions.Select(async def =>
                 {
-                    ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
-                };
-                using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(4) };
-                client.DefaultRequestVersion = new Version(1, 1);
-                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
-                client.DefaultRequestHeaders.Add("Referer", "https://quote.eastmoney.com/center/boardlist.html");
+                    var funds = await SearchSectorFundsAsync(client, def, 18);
+                    var validRates = funds.Where(f => Math.Abs(f.Rate) > 0.000001).Select(f => f.Rate).ToList();
+                    double avgRate = validRates.Count > 0 ? Math.Round(validRates.Average(), 2) : 0;
+                    return new SectorRowItem
+                    {
+                        Key = def.Name,
+                        Name = def.Name,
+                        Rate = avgRate,
+                        FundCount = funds.Count,
+                        QuotedCount = validRates.Count,
+                        Direction = avgRate >= 0 ? "连涨" : "连跌"
+                    };
+                }).ToArray();
 
-                // 旧版会扫描几十个主题、再请求数百只基金估值，冷启动会卡 5-6 秒。
-                // 新版板块页首屏先走东方财富板块行情接口，两次请求并发完成；点进板块时再按基金池细查。
-                var topTask = FetchEastMoneySectorRateRowsAsync(client, po: 1, limit: 50);
-                var bottomTask = FetchEastMoneySectorRateRowsAsync(client, po: 0, limit: 50);
-                await Task.WhenAll(topTask, bottomTask);
-
-                var top = topTask.Result
-                    .Where(x => x.Rate >= -100 && x.Rate <= 100)
-                    .GroupBy(x => x.Key)
+                var rows = (await Task.WhenAll(tasks))
+                    .Where(x => x.FundCount > 0)
+                    .GroupBy(x => x.Name)
                     .Select(g => g.First())
-                    .OrderByDescending(x => x.Rate)
-                    .Take(30)
-                    .ToList();
-                var bottom = bottomTask.Result
-                    .Where(x => x.Rate >= -100 && x.Rate <= 100)
-                    .GroupBy(x => x.Key)
-                    .Select(g => g.First())
-                    .OrderBy(x => x.Rate)
-                    .Take(30)
                     .ToList();
 
-                var all = top.Concat(bottom)
-                    .GroupBy(x => x.Key)
-                    .Select(g => g.OrderByDescending(x => Math.Abs(x.Rate)).First())
-                    .OrderByDescending(x => x.Rate)
-                    .ToList();
+                var top = rows.OrderByDescending(x => x.Rate).Take(30).ToList();
+                var bottom = rows.OrderBy(x => x.Rate).Take(30).ToList();
 
                 var payload = new
                 {
-                    source = "东方财富板块行情极速接口",
-                    updatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
+                    source = "基金板块池 · 基金名称主题归类 + 实时估值均值",
+                    updatedAt = DateTime.UtcNow.AddHours(8).ToString("yyyy-MM-dd HH:mm:ss"),
                     top,
-                    bottom,
-                    all
+                    bottom
                 };
 
-                _cache.Set(sectorCacheKey, payload, TimeSpan.FromMinutes(2));
-                return Ok(payload);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, $"板块行情获取失败: {ex.Message}");
-            }
-        }
-
-        private static string FormatMoneyWanYi(double value)
-        {
-            var abs = Math.Abs(value);
-            if (abs >= 100000000) return Math.Round(value / 100000000, 2) + "亿";
-            if (abs >= 10000) return Math.Round(value / 10000, 2) + "万";
-            return Math.Round(value, 0).ToString("0");
-        }
-
-        [HttpGet("capital-flow")]
-        public async Task<IActionResult> GetCapitalFlow([FromQuery] bool force = false, [FromQuery] int limit = 30)
-        {
-            limit = Math.Clamp(limit, 10, 80);
-            string cacheKey = $"CapitalFlowFastV1_{limit}";
-            if (!force && _cache.TryGetValue(cacheKey, out object cached)) return Ok(cached);
-
-            try
-            {
-                using var handler = new HttpClientHandler { ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true };
-                using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(4) };
-                client.DefaultRequestVersion = new Version(1, 1);
-                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
-                client.DefaultRequestHeaders.Add("Referer", "https://data.eastmoney.com/bkzj/");
-
-                async Task<List<CapitalFlowRowDto>> FetchRowsAsync(int po)
-                {
-                    long ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                    string url = $"https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz={limit}&po={po}&np=1&fltt=2&invt=2&fid=f62&fs=m:90+t:2,m:90+t:3&fields=f12,f14,f3,f62,f184,f66,f72&_={ts}";
-                    string body = await client.GetStringAsync(url);
-                    using var doc = JsonDocument.Parse(body);
-                    if (!doc.RootElement.TryGetProperty("data", out var data) || !data.TryGetProperty("diff", out var list))
-                        return new List<CapitalFlowRowDto>();
-                    var result = new List<CapitalFlowRowDto>();
-                    foreach (var item in list.EnumerateArray())
-                    {
-                        string code = item.TryGetProperty("f12", out var f12) ? f12.GetString() ?? "" : "";
-                        string name = item.TryGetProperty("f14", out var f14) ? f14.GetString() ?? "" : "";
-                        double rate = item.TryGetProperty("f3", out var f3) && f3.ValueKind == JsonValueKind.Number ? f3.GetDouble() : 0;
-                        double mainNet = item.TryGetProperty("f62", out var f62) && f62.ValueKind == JsonValueKind.Number ? f62.GetDouble() : 0;
-                        double mainRatio = item.TryGetProperty("f184", out var f184) && f184.ValueKind == JsonValueKind.Number ? f184.GetDouble() : 0;
-                        double superNet = item.TryGetProperty("f66", out var f66) && f66.ValueKind == JsonValueKind.Number ? f66.GetDouble() : 0;
-                        double bigNet = item.TryGetProperty("f72", out var f72) && f72.ValueKind == JsonValueKind.Number ? f72.GetDouble() : 0;
-                        if (string.IsNullOrWhiteSpace(name)) continue;
-                        result.Add(new CapitalFlowRowDto
-                        {
-                            Code = code,
-                            Name = name,
-                            Rate = Math.Round(rate, 2),
-                            MainNet = mainNet,
-                            MainNetText = FormatMoneyWanYi(mainNet),
-                            MainRatio = Math.Round(mainRatio, 2),
-                            SuperNet = superNet,
-                            BigNet = bigNet
-                        });
-                    }
-                    return result;
-                }
-
-                var inflowTask = FetchRowsAsync(1);
-                var outflowTask = FetchRowsAsync(0);
-                await Task.WhenAll(inflowTask, outflowTask);
-
-                var inflow = inflowTask.Result.OrderByDescending(x => x.MainNet).Take(limit).ToList();
-                var outflow = outflowTask.Result.OrderBy(x => x.MainNet).Take(limit).ToList();
-                var rows = inflow.Concat(outflow)
-                    .GroupBy(x => x.Code)
-                    .Select(g => g.OrderByDescending(x => Math.Abs(x.MainNet)).First())
-                    .OrderByDescending(x => x.MainNet)
-                    .ToList();
-
-                var payload = new { source = "东方财富数据中心-板块资金流向", updatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), rows, inflow, outflow };
                 _cache.Set(cacheKey, payload, TimeSpan.FromMinutes(3));
                 return Ok(payload);
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"主力资金流向获取失败: {ex.Message}");
+                return StatusCode(500, $"基金板块扫描失败: {ex.Message}");
             }
         }
 
         [HttpGet("sector-details")]
         public async Task<IActionResult> GetSectorDetails([FromQuery] string secCode)
         {
-            // 兼容旧前端：secCode 现在既可以传板块 key，也可以传板块名。
-            if (string.IsNullOrWhiteSpace(secCode)) return BadRequest("缺少板块识别码");
-            return await GetSectorFunds(secCode, 20, false);
+            if (string.IsNullOrEmpty(secCode)) return BadRequest("缺少板块雷达识别码");
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            try
+            {
+                string url = $"http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=6&po=1&np=1&fltt=2&invt=2&fid=f3&fs=b:{secCode}&fields=f12,f14,f3";
+                string response = await client.GetStringAsync(url);
+                using var doc = System.Text.Json.JsonDocument.Parse(response);
+                var dataProp = doc.RootElement.GetProperty("data");
+                if (dataProp.ValueKind == System.Text.Json.JsonValueKind.Null) return Ok(new List<dynamic>());
+
+                var diffArray = dataProp.GetProperty("diff").EnumerateArray();
+                var list = new List<dynamic>();
+                foreach (var item in diffArray)
+                {
+                    if (item.TryGetProperty("f3", out var f3Element) && f3Element.ValueKind == System.Text.Json.JsonValueKind.Number)
+                    {
+                        list.Add(new
+                        {
+                            code = item.GetProperty("f12").GetString(),
+                            name = item.GetProperty("f14").GetString(),
+                            rate = f3Element.GetDouble()
+                        });
+                    }
+                }
+                return Ok(list);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"X光机故障: {ex.Message}");
+            }
         }
 
         [HttpGet("sector-funds")]
-        public async Task<IActionResult> GetSectorFunds([FromQuery] string sectorName, [FromQuery] int limit = 20, [FromQuery] bool force = false)
+        public async Task<IActionResult> GetSectorFunds([FromQuery] string sectorName, [FromQuery] int limit = 24)
         {
             if (string.IsNullOrWhiteSpace(sectorName)) return BadRequest("缺少板块名称");
-            limit = Math.Clamp(limit, 5, 40);
-            var def = ResolveSector(sectorName);
-            string cacheKey = $"SectorFundsV5_{def.Key}_{limit}";
-            if (!force && _cache.TryGetValue(cacheKey, out object cached)) return Ok(cached);
+            limit = Math.Clamp(limit, 6, 50);
+
+            var def = ResolveFundSectorDefinition(sectorName);
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36");
+            client.DefaultRequestHeaders.TryAddWithoutValidation("Referer", "https://fund.eastmoney.com/");
 
             try
             {
-                var quotes = await BuildSectorQuotesAsync(def, limit, withMonthRate: true);
-                var available = quotes.Where(q => q.HasQuote).ToList();
-                double avgRate = available.Count > 0 ? Math.Round(available.Average(q => q.Rate), 2) : 0;
-                var payload = new
+                var funds = await SearchSectorFundsAsync(client, def, limit);
+                var validRates = funds.Where(f => Math.Abs(f.Rate) > 0.000001).Select(f => f.Rate).ToList();
+                double avgRate = validRates.Count > 0 ? Math.Round(validRates.Average(), 2) : 0;
+
+                return Ok(new
                 {
-                    key = def.Key,
+                    key = def.Name,
                     name = def.Name,
                     rate = avgRate,
-                    fundCount = quotes.Count,
-                    updatedAt = available.Select(q => q.UpdatedAt).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t)) ?? ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
-                    funds = quotes.OrderByDescending(q => q.Rate).ToList()
-                };
-                _cache.Set(cacheKey, payload, TimeSpan.FromMinutes(3));
-                return Ok(payload);
+                    fundCount = funds.Count,
+                    quotedCount = validRates.Count,
+                    updatedAt = DateTime.UtcNow.AddHours(8).ToString("yyyy-MM-dd HH:mm:ss"),
+                    funds = funds.OrderByDescending(f => f.Rate).ToList()
+                });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"找基失败: {ex.Message}");
+                return StatusCode(500, $"板块基金拉取失败: {ex.Message}");
             }
         }
 
-
-
-        private sealed class NewsItemDto
+        private static FundSectorDefinition ResolveFundSectorDefinition(string sectorName)
         {
-            public string Id { get; init; } = string.Empty;
-            public string Title { get; init; } = string.Empty;
-            public string Summary { get; init; } = string.Empty;
-            public string ShowTime { get; init; } = string.Empty;
-            public string TimeText { get; init; } = string.Empty;
-            public string DateText { get; init; } = string.Empty;
-            public string Source { get; init; } = "东方财富7x24";
-            public string Url { get; init; } = string.Empty;
-            public bool Important { get; init; }
-            public string Sentiment { get; init; } = "neutral";
-            public int ImpactScore { get; init; }
-            public string? MatchedFundCode { get; init; }
-            public string? MatchedFundName { get; init; }
-            public string[] Tags { get; init; } = Array.Empty<string>();
-            public long Sort { get; init; }
+            var key = (sectorName ?? string.Empty)
+                .Replace("概念", string.Empty)
+                .Replace("板块", string.Empty)
+                .Trim();
+
+            var exact = FundSectorDefinitions.FirstOrDefault(x => x.Name == key || x.Keywords.Any(k => key.Contains(k, StringComparison.OrdinalIgnoreCase) || k.Contains(key, StringComparison.OrdinalIgnoreCase)));
+            if (exact != null) return exact;
+
+            if (key.Contains("电池") || key.Contains("锂") || key.Contains("储能")) return FundSectorDefinitions.First(x => x.Name == "锂矿");
+            if (key.Contains("芯片") || key.Contains("半导体") || key.Contains("集成")) return FundSectorDefinitions.First(x => x.Name == "半导体");
+            if (key.Contains("AI") || key.Contains("智能") || key.Contains("算力") || key.Contains("机器人")) return FundSectorDefinitions.First(x => x.Name == "人工智能");
+            if (key.Contains("药") || key.Contains("医疗") || key.Contains("生物")) return FundSectorDefinitions.First(x => x.Name == "医药");
+            if (key.Contains("黄金") || key.Contains("金")) return FundSectorDefinitions.First(x => x.Name == "黄金");
+            if (key.Contains("地产")) return FundSectorDefinitions.First(x => x.Name == "房地产");
+
+            return new FundSectorDefinition { Name = key, Keywords = new[] { key } };
         }
 
-        private static readonly string[] ImportantNewsKeywords = new[]
+        private static async Task<List<SectorFundItem>> SearchSectorFundsAsync(HttpClient client, FundSectorDefinition def, int limit)
         {
-            "突发", "重磅", "重大", "国务院", "国常会", "发改委", "工信部", "商务部", "财政部", "央行", "证监会", "交易所",
-            "降息", "加息", "利率", "降准", "CPI", "PPI", "GDP", "PMI", "非农", "美联储", "鲍威尔", "特朗普", "关税",
-            "制裁", "冲突", "战争", "油轮", "原油", "黄金", "稀土", "锂", "半导体", "人工智能", "地产", "政策", "收储", "限购", "补贴", "财报", "业绩", "订单"
-        };
+            var dict = new Dictionary<string, string>();
 
-        private static readonly string[] PositiveNewsKeywords = new[]
-        {
-            "上涨", "涨", "走高", "新高", "增长", "上调", "突破", "利好", "扩产", "订单", "补贴", "降息", "降准", "回购", "增持", "放松", "优化", "超预期", "批准", "支持", "刺激"
-        };
-
-        private static readonly string[] NegativeNewsKeywords = new[]
-        {
-            "下跌", "跌", "走低", "下降", "下滑", "下调", "亏损", "制裁", "禁令", "关税", "调查", "处罚", "暂停", "限制", "拒绝", "战争", "冲突", "爆炸", "违约", "不及预期"
-        };
-
-        private static string StripJsonp(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text)) return "{}";
-            var match = Regex.Match(text, @"^[^(]*\((.*)\)\s*;?\s*$", RegexOptions.Singleline);
-            return match.Success ? match.Groups[1].Value : text;
-        }
-
-        private static string ToDateText(DateTime dt) => dt.ToString("MM月dd日 dddd", new System.Globalization.CultureInfo("zh-CN"));
-        private static string ToTimeText(DateTime dt) => dt.ToString("HH:mm");
-
-        private static string ClassifySentiment(string text)
-        {
-            int pos = PositiveNewsKeywords.Count(k => text.Contains(k, StringComparison.OrdinalIgnoreCase));
-            int neg = NegativeNewsKeywords.Count(k => text.Contains(k, StringComparison.OrdinalIgnoreCase));
-            if (pos > neg) return "positive";
-            if (neg > pos) return "negative";
-            return "neutral";
-        }
-
-        private static int EstimateImpactScore(string text, bool important, int matchScore)
-        {
-            int score = important ? 3 : 1;
-            if (text.Contains("突发") || text.Contains("重磅") || text.Contains("重大")) score += 2;
-            if (text.Contains("国务院") || text.Contains("国常会") || text.Contains("央行") || text.Contains("证监会") || text.Contains("美联储")) score += 1;
-            if (text.Contains("涨停") || text.Contains("跌停") || text.Contains("暴涨") || text.Contains("暴跌")) score += 1;
-            if (matchScore >= 60) score += 1;
-            return Math.Clamp(score, 0, 5);
-        }
-
-        private async Task<List<NewsItemDto>> FetchEastMoneyFastNewsAsync(int limit)
-        {
-            limit = Math.Clamp(limit, 20, 120);
-            long ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            string callback = $"jQuery3510_{ts}";
-            string url = $"https://np-weblist.eastmoney.com/comm/web/getFastNewsList?client=web&biz=web_724&fastColumn=102&sortEnd=&pageSize={limit}&req_trace={ts}&_={ts + 1}&callback={callback}";
-
-            using var handler = new HttpClientHandler
+            foreach (var keyword in def.Keywords.Where(k => !string.IsNullOrWhiteSpace(k)).Distinct().Take(5))
             {
-                ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
-            };
-            using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(8) };
-            client.DefaultRequestVersion = new Version(1, 1);
-            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
-            client.DefaultRequestHeaders.Add("Referer", "https://kuaixun.eastmoney.com/");
-            client.DefaultRequestHeaders.Add("Accept", "*/*");
-
-            string body = await client.GetStringAsync(url);
-            string json = StripJsonp(body);
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-            var list = root.GetProperty("data").GetProperty("fastNewsList");
-            var result = new List<NewsItemDto>();
-
-            foreach (var item in list.EnumerateArray())
-            {
-                string id = item.TryGetProperty("code", out var codeProp) ? codeProp.GetString() ?? Guid.NewGuid().ToString("N") : Guid.NewGuid().ToString("N");
-                string title = item.TryGetProperty("title", out var titleProp) ? titleProp.GetString() ?? "" : "";
-                string summary = item.TryGetProperty("summary", out var summaryProp) ? summaryProp.GetString() ?? title : title;
-                string showTime = item.TryGetProperty("showTime", out var timeProp) ? timeProp.GetString() ?? "" : "";
-                long sort = 0;
-                if (item.TryGetProperty("realSort", out var sortProp)) long.TryParse(sortProp.GetString(), out sort);
-                int titleColor = 0;
-                if (item.TryGetProperty("titleColor", out var colorProp) && colorProp.ValueKind == JsonValueKind.Number) titleColor = colorProp.GetInt32();
-
-                var stockCodes = new List<string>();
-                if (item.TryGetProperty("stockList", out var stockProp) && stockProp.ValueKind == JsonValueKind.Array)
+                try
                 {
-                    foreach (var s in stockProp.EnumerateArray())
+                    string url = $"http://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?m=1&key={Uri.EscapeDataString(keyword)}";
+                    string response = await client.GetStringAsync(url);
+                    using var doc = JsonDocument.Parse(response);
+                    if (!doc.RootElement.TryGetProperty("Datas", out var datas) || datas.ValueKind != JsonValueKind.Array) continue;
+
+                    var candidates = datas.EnumerateArray()
+                        .Where(x => !x.TryGetProperty("CATEGORYDESC", out var cat) || cat.GetString() == "基金")
+                        .Select(x => new
+                        {
+                            Code = x.TryGetProperty("CODE", out var codeEl) ? codeEl.GetString() ?? string.Empty : string.Empty,
+                            Name = x.TryGetProperty("NAME", out var nameEl) ? nameEl.GetString() ?? string.Empty : string.Empty
+                        })
+                        .Where(x => !string.IsNullOrWhiteSpace(x.Code) && !string.IsNullOrWhiteSpace(x.Name))
+                        .Where(x => IsLikelyFundForSector(def, x.Name))
+                        .OrderByDescending(x => FundNamePriority(x.Name, def))
+                        .Take(limit)
+                        .ToList();
+
+                    foreach (var item in candidates)
                     {
-                        var sv = s.GetString();
-                        if (!string.IsNullOrWhiteSpace(sv)) stockCodes.Add(sv);
+                        if (!dict.ContainsKey(item.Code)) dict[item.Code] = item.Name;
+                        if (dict.Count >= limit) break;
                     }
                 }
-
-                DateTime dt = ChinaNow();
-                DateTime.TryParse(showTime, out dt);
-                string text = title + " " + summary;
-                bool important = titleColor != 0 || ImportantNewsKeywords.Any(k => text.Contains(k, StringComparison.OrdinalIgnoreCase));
-                string sentiment = ClassifySentiment(text);
-
-                result.Add(new NewsItemDto
+                catch
                 {
-                    Id = id,
-                    Title = string.IsNullOrWhiteSpace(title) ? summary : title,
-                    Summary = summary,
-                    ShowTime = string.IsNullOrWhiteSpace(showTime) ? dt.ToString("yyyy-MM-dd HH:mm:ss") : showTime,
-                    DateText = ToDateText(dt),
-                    TimeText = ToTimeText(dt),
-                    Source = "东方财富7x24",
-                    Url = id.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? id : $"https://finance.eastmoney.com/a/{id}.html",
-                    Important = important,
-                    Sentiment = sentiment,
-                    ImpactScore = EstimateImpactScore(text, important, 0),
-                    Tags = stockCodes.ToArray(),
-                    Sort = sort == 0 ? new DateTimeOffset(dt).ToUnixTimeMilliseconds() : sort
-                });
+                }
+                if (dict.Count >= limit) break;
             }
 
-            return result.OrderByDescending(x => x.Sort).ToList();
+            var tasks = dict.Take(limit).Select(async kv => new SectorFundItem
+            {
+                Code = kv.Key,
+                Name = kv.Value,
+                Rate = await FetchFundRateAsync(client, kv.Key)
+            }).ToArray();
+
+            return (await Task.WhenAll(tasks)).ToList();
         }
 
-        private static readonly Dictionary<string, string[]> SectorKeywordMap = new(StringComparer.OrdinalIgnoreCase)
+        private static bool IsLikelyFundForSector(FundSectorDefinition def, string fundName)
         {
-            ["黄金"] = new[] { "黄金", "金价", "上海金", "伦敦金", "贵金属", "央行购金" },
-            ["半导体"] = new[] { "半导体", "芯片", "集成电路", "先进制程", "光刻", "晶圆", "封测", "存储" },
-            ["人工智能"] = new[] { "人工智能", "AI", "大模型", "算力", "机器人", "数据中心", "云计算" },
-            ["科技"] = new[] { "科技", "互联网", "软件", "数字经济", "信创", "计算机" },
-            ["新能源"] = new[] { "新能源", "光伏", "储能", "锂电", "固态电池", "风电", "电动车", "新能源汽车" },
-            ["地产"] = new[] { "地产", "房地产", "楼市", "住房", "房贷", "深圳", "限购", "收储" },
-            ["医药"] = new[] { "医药", "创新药", "医疗", "生物", "CRO", "疫苗", "医保", "器械" },
-            ["军工"] = new[] { "军工", "国防", "航空", "航天", "导弹", "卫星", "无人机" },
-            ["银行"] = new[] { "银行", "息差", "信贷", "贷款", "存款", "不良率" },
-            ["证券"] = new[] { "券商", "证券", "资本市场", "两融", "并购重组", "IPO" },
-            ["有色"] = new[] { "有色", "铜", "铝", "锂", "稀土", "钨", "钼", "矿", "金属" },
-            ["油气"] = new[] { "原油", "石油", "油气", "OPEC", "WTI", "布伦特", "天然气" },
-            ["消费"] = new[] { "消费", "白酒", "食品", "饮料", "家电", "旅游", "零售" },
-            ["农业"] = new[] { "农业", "农产品", "粮食", "养殖", "猪肉", "种业", "牧渔" },
-            ["债券"] = new[] { "债券", "国债", "利率债", "信用债", "收益率", "转债" },
-            ["港股"] = new[] { "港股", "恒生", "南向", "香港", "中概股" },
-            ["美股"] = new[] { "美股", "纳斯达克", "标普", "道指", "英伟达", "苹果", "微软" }
-        };
-
-        private static HashSet<string> BuildFundKeywords(MyFundConfig fund)
-        {
-            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (!string.IsNullOrWhiteSpace(fund.FundCode)) set.Add(fund.FundCode);
-            var name = fund.FundName ?? string.Empty;
-            string clean = NormalizeFundName(name)
-                .Replace("ETF", "")
-                .Replace("联接", "")
-                .Replace("指数", "")
-                .Replace("增强", "")
-                .Replace("混合", "")
-                .Replace("股票", "")
-                .Replace("债券", "")
-                .Replace("基金", "")
-                .Replace("C", "")
-                .Replace("A", "");
-
-            string[] commonPrefixes = { "天弘", "华富", "国泰", "招商", "南方", "易方达", "博时", "工银瑞信", "中银", "华夏", "嘉实", "建信", "鹏华", "广发", "富国", "银华", "汇添富", "前海开源", "国投瑞银" };
-            foreach (var prefix in commonPrefixes)
-            {
-                if (clean.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) clean = clean[prefix.Length..];
-            }
-
-            if (clean.Length >= 2) set.Add(clean);
-            foreach (Match m in Regex.Matches(name, @"[\u4e00-\u9fa5A-Za-z0-9]{2,}"))
-            {
-                string token = m.Value.Trim();
-                if (token.Length >= 2 && !new[] { "联接", "指数", "基金", "混合", "股票", "债券", "增强", "发起", "定开" }.Contains(token)) set.Add(token);
-            }
-
-            foreach (var kv in SectorKeywordMap)
-            {
-                if (kv.Value.Any(k => name.Contains(k, StringComparison.OrdinalIgnoreCase) || clean.Contains(k, StringComparison.OrdinalIgnoreCase)))
-                {
-                    foreach (var k in kv.Value) set.Add(k);
-                    set.Add(kv.Key);
-                }
-            }
-
-            foreach (var def in SectorDefinitions)
-            {
-                if (def.Include.Any(k => name.Contains(k, StringComparison.OrdinalIgnoreCase)))
-                {
-                    set.Add(def.Name);
-                    foreach (var k in def.Include) set.Add(k);
-                }
-            }
-            return set;
+            if (string.IsNullOrWhiteSpace(fundName)) return false;
+            if (fundName.Contains("货币") || fundName.Contains("债券") || fundName.Contains("纯债") || fundName.Contains("短债")) return false;
+            return def.Keywords.Any(k => fundName.Contains(k, StringComparison.OrdinalIgnoreCase)) || fundName.Contains(def.Name, StringComparison.OrdinalIgnoreCase);
         }
 
-        private static (int score, string[] tags) ScoreNewsForFund(NewsItemDto news, MyFundConfig fund)
+        private static int FundNamePriority(string fundName, FundSectorDefinition def)
         {
-            var keywords = BuildFundKeywords(fund);
-            var text = (news.Title + " " + news.Summary + " " + string.Join(" ", news.Tags)).ToUpperInvariant();
-            var hit = new List<string>();
             int score = 0;
-
-            if (!string.IsNullOrWhiteSpace(fund.FundCode) && text.Contains(fund.FundCode.ToUpperInvariant()))
-            {
-                score += 100;
-                hit.Add(fund.FundCode);
-            }
-
-            foreach (var kw in keywords)
-            {
-                if (kw.Length < 2) continue;
-                if (text.Contains(kw.ToUpperInvariant()))
-                {
-                    score += Math.Min(30, kw.Length * 4);
-                    hit.Add(kw);
-                }
-            }
-
-            return (score, hit.Distinct(StringComparer.OrdinalIgnoreCase).Take(5).ToArray());
+            if (fundName.Contains(def.Name, StringComparison.OrdinalIgnoreCase)) score += 10;
+            if (fundName.Contains("ETF")) score += 8;
+            if (fundName.Contains("联接")) score += 6;
+            if (fundName.Contains("指数")) score += 5;
+            if (fundName.EndsWith("C")) score += 2;
+            if (fundName.Contains("货币") || fundName.Contains("债券")) score -= 20;
+            return score;
         }
 
-        [HttpGet("news")]
-        public async Task<IActionResult> GetNews([FromQuery] string? username, [FromQuery] string mode = "global", [FromQuery] bool important = false, [FromQuery] int limit = 80, [FromQuery] bool force = false)
+        private static async Task<double> FetchFundRateAsync(HttpClient client, string code)
         {
-            limit = Math.Clamp(limit, 20, 120);
-            mode = string.IsNullOrWhiteSpace(mode) ? "global" : mode.Trim().ToLowerInvariant();
-            string cacheKey = $"NewsV3_{mode}_{username}_{important}_{limit}";
-            if (!force && _cache.TryGetValue(cacheKey, out object cached)) return Ok(cached);
+            try
+            {
+                string gzUrl = $"http://fundgz.1234567.com.cn/js/{code}.js?rt={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+                string gzRes = await client.GetStringAsync(gzUrl);
+                var match = Regex.Match(gzRes, "\"gszzl\":\"([^\"]+)\"");
+                if (match.Success && double.TryParse(match.Groups[1].Value, out double rate))
+                    return Math.Round(rate, 2);
+            }
+            catch
+            {
+            }
 
             try
             {
-                var allNews = await FetchEastMoneyFastNewsAsync(mode == "holding" ? Math.Max(limit * 3, 120) : limit);
-                List<NewsItemDto> finalList;
-
-                if (mode == "holding")
+                string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize=1";
+                string response = await client.GetStringAsync(url);
+                using var doc = JsonDocument.Parse(response);
+                if (doc.RootElement.TryGetProperty("Data", out var data) &&
+                    data.TryGetProperty("LSJZList", out var list) &&
+                    list.ValueKind == JsonValueKind.Array && list.GetArrayLength() > 0)
                 {
-                    if (string.IsNullOrWhiteSpace(username)) return Unauthorized("请提供指挥官代号");
-                    var funds = await _context.MyFunds.AsNoTracking().Where(f => f.Username == username).ToListAsync();
-                    var matched = new List<NewsItemDto>();
-
-                    foreach (var news in allNews)
-                    {
-                        MyFundConfig? bestFund = null;
-                        int bestScore = 0;
-                        string[] bestTags = Array.Empty<string>();
-                        foreach (var fund in funds)
-                        {
-                            var score = ScoreNewsForFund(news, fund);
-                            if (score.score > bestScore)
-                            {
-                                bestScore = score.score;
-                                bestFund = fund;
-                                bestTags = score.tags;
-                            }
-                        }
-
-                        if (bestFund != null && bestScore >= 16)
-                        {
-                            string text = news.Title + " " + news.Summary;
-                            bool isImportant = news.Important || bestScore >= 60;
-                            if (important && !isImportant) continue;
-                            matched.Add(new NewsItemDto
-                            {
-                                Id = news.Id,
-                                Title = news.Title,
-                                Summary = news.Summary,
-                                ShowTime = news.ShowTime,
-                                TimeText = news.TimeText,
-                                DateText = news.DateText,
-                                Source = news.Source,
-                                Url = news.Url,
-                                Important = isImportant,
-                                Sentiment = news.Sentiment,
-                                ImpactScore = EstimateImpactScore(text, isImportant, bestScore),
-                                MatchedFundCode = bestFund.FundCode,
-                                MatchedFundName = bestFund.FundName,
-                                Tags = bestTags,
-                                Sort = news.Sort
-                            });
-                        }
-                    }
-
-                    finalList = matched.OrderByDescending(n => n.Important).ThenByDescending(n => n.Sort).Take(limit).ToList();
+                    var latest = list[0];
+                    if (latest.TryGetProperty("JZZZL", out var rateEl) && double.TryParse(rateEl.GetString(), out double rate))
+                        return Math.Round(rate, 2);
                 }
-                else
-                {
-                    finalList = allNews.Where(n => !important || n.Important).Take(limit).ToList();
-                }
-
-                var payload = new
-                {
-                    mode,
-                    source = "东方财富7x24快讯",
-                    updatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
-                    count = finalList.Count,
-                    items = finalList
-                };
-                _cache.Set(cacheKey, payload, TimeSpan.FromSeconds(mode == "holding" ? 90 : 45));
-                return Ok(payload);
             }
-            catch (Exception ex)
+            catch
             {
-                return StatusCode(500, $"资讯雷达故障: {ex.Message}");
             }
-        }
 
-        [HttpGet("holding-news")]
-        public async Task<IActionResult> GetHoldingNews([FromQuery] string username, [FromQuery] bool important = false, [FromQuery] int limit = 80, [FromQuery] bool force = false)
-        {
-            return await GetNews(username, "holding", important, limit, force);
+            return 0;
         }
-
 
         [HttpPost("save-archive")]
         public async Task<IActionResult> SaveArchive([FromBody] ArchiveRequest req)
         {
-            if (req == null || string.IsNullOrWhiteSpace(req.Username)) return Unauthorized();
-
+            if (string.IsNullOrEmpty(req.Username)) return Unauthorized();
             try
             {
+                // 🚀 修复 1：找回丢失的 date 变量声明
                 var date = DateTime.Parse(req.DateStr).Date;
-                var incoming = new List<DailyArchive>();
-
-                if (req.Total != null)
+                var oldRecords = await _context.DailyArchives
+                    .Where(a => a.Username == req.Username && a.RecordDate == date)
+                    .ToListAsync();
+                if (oldRecords.Any())
                 {
-                    req.Total.FundCode = "TOTAL";
-                    req.Total.FundName = string.IsNullOrWhiteSpace(req.Total.FundName) ? "总持仓" : req.Total.FundName;
-                    incoming.Add(req.Total);
+                    // 检查是否已有真实数据
+                    bool hasRealData = oldRecords.Any(r => r.FundCode == "TOTAL" && r.DailyRate != 0);
+                    if (hasRealData)
+                        return Ok("✅ 今日真实收益已存在，无需重复封存！");
+                    // 有真实数据直接返回
+
+                    _context.DailyArchives.RemoveRange(oldRecords);
+                    // 估值数据删掉
                 }
 
-                if (req.Funds != null)
+                // 🚀 修复 2：找回丢失的“封存新收益”核心逻辑！
+                req.Total.RecordDate = date;
+                req.Total.FundCode = "TOTAL";
+                req.Total.Username = req.Username;
+                _context.DailyArchives.Add(req.Total);
+
+                foreach (var f in req.Funds)
                 {
-                    foreach (var f in req.Funds)
-                    {
-                        if (string.IsNullOrWhiteSpace(f.FundCode)) continue;
-                        incoming.Add(f);
-                    }
+                    f.RecordDate = date;
+                    f.Username = req.Username;
+                    _context.DailyArchives.Add(f);
                 }
 
-                if (incoming.Count == 0) return BadRequest("封存数据为空");
-
-                // 核心修复：不要因为 TOTAL 已存在就直接 return。
-                // 旧逻辑会导致“总持仓有今日记录，但单只基金今日记录缺失”，也会保留已写坏的 TOTAL 金额。
-                await UpsertDailyArchivesAsync(req.Username, date, incoming);
                 await _context.SaveChangesAsync();
-                ClearTodayCache(req.Username);
-
-                return Ok($"✅ 已写入/修正 {incoming.Count} 条收益档案");
+                // 🚀 修复 3：补上方法末尾的返回值，彻底消灭 CS0161 报错！
+                return Ok("✅ 今日收益已永久封存！");
             }
             catch (Exception ex)
             {
@@ -2408,7 +1513,7 @@ namespace 估值助手.Controllers
         {
             try
             {
-                var localTime = ChinaNow();
+                var localTime = DateTime.UtcNow.AddHours(8);
                 var today = localTime.Date;
 
                 // 周末不封存
@@ -2439,10 +1544,8 @@ namespace 估值助手.Controllers
 
                     double totalAssets = 0;
                     double totalCost = 0;
-                    double totalDailyProfit = 0; // 直接累加今日总收益，杜绝误差
-                    double totalDailyBase = 0;   // 今日收益率分母：剥离/补回在途交易后的有效基数
-                    double totalCurrentAssets = 0;
-                    double totalRealized = 0;
+                    double totalDailyProfit = 0; // 🎯 优化：直接累加今日总收益，杜绝误差
+                    double totalRealized = 0;    // 🚀 修复 1：新增总落袋利润统计容器
 
                     // 获取今天的字符串，用于判断今日加仓
                     string todayStrSlash = today.ToString("yyyy/MM/dd");
@@ -2460,60 +1563,54 @@ namespace 估值助手.Controllers
                             .FirstOrDefaultAsync();
 
                         // 算钱逻辑 (基础粗略版)
-                        double dailyRate = todayRecord != null && Math.Abs(todayRecord.ActualRate) > 0.000001
-                            ? todayRecord.ActualRate
-                            : (todayRecord?.EstimatedRate ?? 0);
+                        double dailyRate = todayRecord?.ActualRate > 0 ? todayRecord.ActualRate : (todayRecord?.EstimatedRate ?? 0);
 
                         // ==========================================
                         // 🚀 核心补丁：后端必须像前端一样，精准剥离今日新军！
                         // 绝对禁止未确认的资金参与今日收益结算，掐断虚假印钞！
-                        double baseAmount = GetDailyBaseAmount(fund, todayStrDash);
-                        totalDailyBase += baseAmount;
-                        double dailyProfit = fund.LastSettledDate == todayStrDash
-                            ? fund.LastSettledProfit
-                            : baseAmount * (dailyRate / 100.0);
+                        double baseAmount = fund.HoldAmount;
+                        if (fund.LastTradeDate == today.ToString("yyyy-MM-dd"))
+                        {
+                            baseAmount -= fund.LastAddAmount;
+                        }
+                        double dailyProfit = baseAmount * (dailyRate / 100.0);
                         // ==========================================
 
 
 
                         // 🚀 终极纠缠态补丁：用金额反推真实份额，再呼叫猎隼侦察兵！
-                        double effectiveShares = GetEffectiveShares(fund, todayStrDash);
+                        double effectiveShares = fund.HoldShares;
+                        if (fund.LastTradeDate == today.ToString("yyyy-MM-dd") && fund.LastAddAmount < 0 && fund.HoldAmount > 0)
+                        {
+                            effectiveShares = fund.HoldShares * (baseAmount / fund.HoldAmount);
+                        }
 
 
                         // 🚀 核心对齐补丁 1：高精度物理对齐！(调用猎隼侦察兵)
                         var realData = await GetTodayRealRateAsync(fund.FundCode, today.ToString("yyyy-MM-dd"), effectiveShares);
 
-                        if (fund.LastSettledDate == todayStrDash)
+                        // 1. 突击指令：只要拿到了官方真实收益率，立刻覆盖！绝对不能被物理利润的计算结果绑架
+                        if (realData.rate.HasValue)
                         {
-                            dailyRate = fund.LastSettledRate;
-                            dailyProfit = fund.LastSettledProfit;
+                            dailyRate = realData.rate.Value;
+                            dailyProfit = baseAmount * (dailyRate / 100.0); // 先用真实收益率重新算一遍保底利润
                         }
-                        else
-                        {
-                            // 1. 突击指令：只要拿到了官方真实收益率，立刻覆盖！绝对不能被物理利润的计算结果绑架
-                            if (realData.rate.HasValue)
-                            {
-                                dailyRate = realData.rate.Value;
-                                dailyProfit = baseAmount * (dailyRate / 100.0);
-                            }
 
-                            // 2. 狙击指令：如果东方财富数据完整，算出了高精度的绝对物理利润，再执行覆盖
-                            if (realData.exactProfit.HasValue)
-                            {
-                                dailyProfit = realData.exactProfit.Value;
-                            }
+                        // 2. 狙击指令：如果东方财富数据完整，算出了高精度的绝对物理利润，再执行覆盖
+                        if (realData.exactProfit.HasValue)
+                        {
+                            dailyProfit = realData.exactProfit.Value;
                         }
 
                         // 🚀 算历史总收益 (包含单只基金的落袋利润)
                         double cost = fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount;
-                        double currentAssets = fund.LastSettledDate == todayStrDash
-                            ? fund.HoldAmount
-                            : fund.HoldAmount + dailyProfit;
+                        double currentAssets = fund.HoldAmount + dailyProfit; // 当日清算后的实际最新市值
                         double totalProfit = currentAssets - cost + fund.RealizedProfit;
                         double totalRate = cost > 0 ? (totalProfit / cost * 100.0) : 0;
-                        totalCurrentAssets += currentAssets;
 
-                        // 自动归档只写 DailyArchives，不再修改 MyFunds.HoldAmount，避免和夜间清算重复滚存。
+                        // 更新最新市值到数据库
+                        fund.HoldAmount = Math.Round(currentAssets, 2);
+                        _context.MyFunds.Update(fund);
 
                         // 保存单只基金收益
                         _context.DailyArchives.Add(new DailyArchive
@@ -2522,7 +1619,7 @@ namespace 估值助手.Controllers
                             FundCode = fund.FundCode,
                             FundName = fund.FundName,
                             RecordDate = today,
-                            Assets = Math.Round(currentAssets, 2), // 单只基金市值不含落袋，与前端一致
+                            Assets = fund.HoldAmount, // 单只基金市值不含落袋，这与前端一致
                             DailyProfit = Math.Round(dailyProfit, 2),
                             DailyRate = Math.Round(dailyRate, 2),
                             TotalProfit = Math.Round(totalProfit, 2),
@@ -2532,17 +1629,18 @@ namespace 估值助手.Controllers
                         totalDailyProfit += dailyProfit;
                     }
 
-                    // 今日总收益率分母必须是当日有效持仓基数，不能用已结算后的市值重复稀释。
-                    double totalDailyRate = totalDailyBase > 0 ? (totalDailyProfit / totalDailyBase) * 100.0 : 0;
+                    // 🚀 补丁：今日总收益率的分母，必须是【纯持仓总市值(totalAssets)】！
+                    double totalDailyRate = totalAssets > 0 ? (totalDailyProfit / totalAssets) * 100.0 : 0;
 
-                    double currentTotalAssetsAfter = totalCurrentAssets;
+                    // --- 在循环后的“总阵地”核算处修改 ---
+                    double currentTotalAssetsAfter = totalAssets + totalDailyProfit;
 
                     // 🚀 核心修复：把已落袋收益加回盈亏分子
                     double totalCampProfit = currentTotalAssetsAfter - totalCost + totalRealized;
                     double totalCampRate = totalCost > 0 ? (totalCampProfit / totalCost * 100.0) : 0;
 
-                    // 总持仓市值只记录仍在持仓里的资产；落袋利润只进入累计盈亏分子。
-                    double alignedTotalAssets = currentTotalAssetsAfter;
+                    // 🚀 资产对齐：存档的 Assets 也要包含落袋现金，才能对齐前端大屏
+                    double alignedTotalAssets = totalAssets + totalRealized;
 
                     // 保存总持仓收益
                     _context.DailyArchives.Add(new DailyArchive
@@ -2571,25 +1669,11 @@ namespace 估值助手.Controllers
         }
 
         [HttpGet("get-archives")]
-        public async Task<IActionResult> GetArchives([FromQuery] string username, [FromQuery] string? fundCode = null, [FromQuery] int limit = 120)
+        public async Task<IActionResult> GetArchives([FromQuery] string username)
         {
-            if (string.IsNullOrWhiteSpace(username)) return Unauthorized("缺少账号");
-            if (limit <= 0) limit = 120;
-            if (limit > 500) limit = 500;
-
-            var query = _context.DailyArchives
-                .AsNoTracking()
-                .Where(a => a.Username == username);
-
-            if (!string.IsNullOrWhiteSpace(fundCode))
-            {
-                query = query.Where(a => a.FundCode == fundCode);
-            }
-
-            var records = await query
-                .OrderByDescending(a => a.RecordDate)
-                .ThenByDescending(a => a.Id)
-                .Take(limit)
+            var records = await _context.DailyArchives
+                .Where(a => a.Username == username)
+                .OrderBy(a => a.RecordDate)
                 .Select(a => new
                 {
                     fundCode = a.FundCode,
@@ -2602,7 +1686,6 @@ namespace 估值助手.Controllers
                     totalRate = a.TotalRate
                 })
                 .ToListAsync();
-
             return Ok(records);
         }
 

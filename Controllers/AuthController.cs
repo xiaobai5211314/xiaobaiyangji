@@ -63,7 +63,7 @@ namespace 估值助手.Controllers
                 var user = await _context.Users
                     .AsNoTracking()
                     .Where(u => u.Username == username)
-                    .Select(u => new { u.Username, u.PasswordHash })
+                    .Select(u => new { u.Username, u.PasswordHash, AvatarDataUrl = u.AvatarDataUrl ?? string.Empty })
                     .FirstOrDefaultAsync();
 
                 if (user == null)
@@ -72,7 +72,7 @@ namespace 估值助手.Controllers
                 if (!string.Equals(user.PasswordHash, passwordHash, StringComparison.Ordinal))
                     return BadRequest("密码错误");
 
-                return Ok(new { success = true, username = user.Username });
+                return Ok(new { success = true, username = user.Username, avatarDataUrl = user.AvatarDataUrl ?? string.Empty });
             }
             catch (Exception ex)
             {
