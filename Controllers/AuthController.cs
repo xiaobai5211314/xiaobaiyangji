@@ -33,13 +33,40 @@ namespace 估值助手.Controllers
         }
 
         [HttpPost("login")]
-        public async Task<IActionResult> Login([FromForm] string username, [FromForm] string password)
-        {
-            var user = await _context.Users.FindAsync(username);
-            if (user == null || user.PasswordHash != HashPassword(password)) return BadRequest("账号或密码错误");
+public async Task<IActionResult> Login([FromForm] string username, [FromForm] string password)
+{
+    try
+    {
+        username = (username ?? string.Empty).Trim();
+        password = password ?? string.Empty;
 
-            return Ok(new { success = true, username = user.Username, avatarDataUrl = user.AvatarDataUrl ?? "" });
-        }
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+            return BadRequest("账号和密码不能为空");
+
+        var hash = HashPassword(password);
+
+        var user = await _context.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Username == username);
+
+        if (user == null)
+            return BadRequest("账号不存在");
+
+        if (!string.Equals(user.PasswordHash, hash, StringComparison.Ordinal))
+            return BadRequest("密码错误");
+
+        return Ok(new { success = true, username = user.Username });
+    }
+    catch (Exception ex)
+    {
+        return StatusCode(500, new
+        {
+            error = "登录接口异常",
+            message = ex.Message,
+            inner = ex.InnerException?.Message
+        });
+    }
+}
 
         [HttpGet("profile")]
         public async Task<IActionResult> Profile([FromQuery] string username)
