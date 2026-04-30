@@ -1554,23 +1554,40 @@
                 const handleLogin = async () => {
                     const username = (loginForm.username || '').trim();
                     const password = loginForm.password || '';
-                    if (!username || !password) return showToast("为空！", "error");
-                    let fd = new FormData(); fd.append('username', username); fd.append('password', password);
+                    if (!username || !password) return showToast("请输入账号和密码", "error");
+
+                    const fd = new FormData();
+                    fd.append('username', username);
+                    fd.append('password', password);
+
                     try {
                         const res = await authFetch('/api/auth/login', fd);
-                        if (res.ok) {
-                            const data = await res.json();
-                            localStorage.setItem('fund_username', username);
-                            currentUser.value = username;
-                            userAvatar.value = data.avatarDataUrl || '';
-                            isLoggedIn.value = true;
-                            showToast("接入成功", "success");
-                            initDashboard();
-                        } else {
-                            const msg = await res.text();
-                            showToast(msg || "❌ 密码错误", "error");
+                        const text = await res.text();
+
+                        if (!res.ok) {
+                            showToast(text || "登录失败", "error");
+                            return;
                         }
-                    } catch (error) { showToast("🌐 登录失败", "error"); }
+
+                        let data = {};
+                        try { data = text ? JSON.parse(text) : {}; } catch (e) {}
+
+                        currentUser.value = data.username || username;
+                        localStorage.setItem('fund_username', currentUser.value);
+                        localStorage.setItem('currentUser', currentUser.value);
+
+                        isLoggedIn.value = true;
+
+                        // 清除 App/WebView 数据后，本地头像会消失；登录成功后强制从数据库 profile 接口恢复。
+                        userAvatar.value = '';
+                        await fetchUserProfile();
+                        await nextTick();
+
+                        initDashboard();
+                        showToast("接入成功", "success");
+                    } catch (error) {
+                        showToast("登录失败：" + (error && error.message ? error.message : "网络异常"), "error");
+                    }
                 };
 
                 const handleLogout = () => { localStorage.removeItem('fund_username'); showProfileModal.value = false; location.reload(); };
@@ -1644,6 +1661,7 @@
                                 try {
                                     const saved = await saveAvatarBlob(blob);
                                     userAvatar.value = saved.avatarDataUrl || '';
+                                    await fetchUserProfile();
                                     showToast('头像已更新', 'success');
                                 } catch(e) {
                                     showToast('头像保存失败：' + (e && e.message ? e.message : '请确认已部署 AuthController.cs 并重启后端'), 'error');
@@ -2082,15 +2100,31 @@
 
                 const fetchUserProfile = async () => {
                     if (!currentUser.value) return;
+                    const username = encodeURIComponent(currentUser.value);
                     try {
-                        let res = await apiFetch('/api/auth/profile-v3?username=' + encodeURIComponent(currentUser.value));
-                        if (!res.ok) res = await apiFetch('/api/auth/profile-v2?username=' + encodeURIComponent(currentUser.value));
-                        if (!res.ok) res = await apiFetch('/api/auth/profile?username=' + encodeURIComponent(currentUser.value));
-                        if (res.ok) { const data = await res.json(); userAvatar.value = data.avatarDataUrl || ''; }
-                    } catch(e) { }
+                        let res = await apiFetch('/api/auth/profile-v3?username=' + username, { cache: 'no-store' });
+                        if (!res.ok) res = await apiFetch('/api/auth/profile-v2?username=' + username, { cache: 'no-store' });
+                        if (!res.ok) res = await apiFetch('/api/auth/profile?username=' + username, { cache: 'no-store' });
+                        if (!res.ok) return;
+
+                        const data = await res.json();
+                        userAvatar.value = data.avatarDataUrl || '';
+                    } catch(e) {
+                        console.log('头像恢复失败', e);
+                    }
                 };
 
-                onMounted(() => { if (currentUser.value) { isLoggedIn.value = true; fetchUserProfile(); initDashboard(); } document.addEventListener('visibilitychange', handleVisibilityChange); window.addEventListener('touchstart', onPullStart, { passive: true }); window.addEventListener('touchmove', onPullMove, { passive: false }); window.addEventListener('touchend', onPullEnd, { passive: true }); });
+                onMounted(async () => {
+                    if (currentUser.value) {
+                        isLoggedIn.value = true;
+                        await fetchUserProfile();
+                        initDashboard();
+                    }
+                    document.addEventListener('visibilitychange', handleVisibilityChange);
+                    window.addEventListener('touchstart', onPullStart, { passive: true });
+                    window.addEventListener('touchmove', onPullMove, { passive: false });
+                    window.addEventListener('touchend', onPullEnd, { passive: true });
+                });
 
                 const todayStr = new Date(new Date().getTime() + 8 * 3600 * 1000).toISOString().split('T')[0];
                 const addModal = reactive({ show: false, code: '', name: '', amount: '', rawDate: todayStr, timeSlot: 'before', currentAmount: 0, currentCost: 0 });
