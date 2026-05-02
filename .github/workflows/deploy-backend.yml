@@ -3,7 +3,8 @@ name: 部署估值助手后端
 on:
   push:
     branches:
-      - master
+       - master
+       - gpt-two
     paths:
       - "**/*.cs"
       - "**/*.csproj"
