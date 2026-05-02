@@ -2071,14 +2071,21 @@
                 const API_BASE_DEFAULT = 'https://guzhi.21212121.xyz';
                 const normalizeApiBase = (v) => (v || '').trim().replace(/\/$/, '');
                 const getApiBaseCandidates = () => {
+                    const currentOrigin = (location.protocol === 'http:' || location.protocol === 'https:')
+                        ? normalizeApiBase(location.origin)
+                        : '';
+
+                    const isCdnOrigin = currentOrigin === 'https://guzhicdn.21212121.xyz';
+
                     const list = [
                         normalizeApiBase(localStorage.getItem('fund_api_base')),
-                        (location.protocol === 'http:' || location.protocol === 'https:') ? normalizeApiBase(location.origin) : '',
-                        API_BASE_DEFAULT
+                        API_BASE_DEFAULT,
+                        isCdnOrigin ? '' : currentOrigin
                     ].filter(Boolean);
+
                     return [...new Set(list)];
                 };
-                let API_BASE = getApiBaseCandidates()[0] || API_BASE_DEFAULT;
+                let API_BASE = API_BASE_DEFAULT;
                 const rememberApiBase = (base) => { API_BASE = base; try { localStorage.setItem('fund_api_base', base); } catch (e) { } };
                 const apiFetch = async (path, options = {}) => {
                     let lastError = null;
