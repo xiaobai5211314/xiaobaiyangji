@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - gpt-two
     paths:
       - 'wwwroot/index.html'
 
