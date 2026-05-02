@@ -1,33 +1,46 @@
-本轮修复：资讯 + 主力资金恢复
+# 估值助手优化版说明
 
-问题原因：
-上一包为修基金板块时，FundController.cs 替换成了精简版，保留了 /api/fund/sectors 和 /api/fund/sector-funds，但漏掉了前端正在调用的：
-- GET /api/fund/news
-- GET /api/fund/holding-news
-- GET /api/fund/capital-flow
-因此资讯页会显示“资讯同步失败”，板块页底部主力资金流入/流出为空。
+## 已完成
 
-本包处理：
-1. index.html 保留上一版：固定 API 域名 https://guzhi.21212121.xyz，并保留四页布局、数据库头像恢复、基金板块页面。
-2. FundController.cs 改为完整合并版：恢复 news / holding-news / capital-flow，同时保留基金板块扫描接口。
-3. AuthController.cs / User.cs / AppDbContext.cs 保留头像数据库恢复修复。
+- OCR 密钥从源码移除，改为 `BaiduOcr` 配置读取。
+- 登录密码改用 `PasswordHasher<User>`；老 SHA256 用户登录成功后会自动迁移到新哈希。
+- CORS 从 `AllowAnyOrigin` 改为 `AllowedOrigins` 指定域名。
+- 删除 WeatherForecast 模板文件。
+- OCR 导入拆成预览与确认：`import-ocr-preview` / `import-ocr-confirm`。
+- 启动时不再执行裸 `ALTER TABLE`，改为 `Database.Migrate()`。
+- 新增 `PortfolioSettlementService`，加仓、减仓、结算公式可独立测试。
+- `FundScraperService` 与夜间净值服务改用 `IHttpClientFactory`。
+- 新增估值可信度、回本模拟字段。
+- 新增接口：`portfolio-exposure`、`daily-report`、`news-impact-timeline`。
+- 新增 OCR 纠错学习表 `OcrCorrections`。
+- 新增 xUnit 测试项目 `估值助手.Tests`。
 
-替换路径：
-- wwwroot/index.html 或 CDN 的 index.html
-- Controllers/FundController.cs
-- Controllers/AuthController.cs
-- Models/User.cs
-- Models/AppDbContext.cs
-- Program.cs 如你当前 Program.cs 已正常，可不替换；如服务启动或 CORS 有问题再替换。
+## 配置方式
 
-部署后测试：
-curl -i "http://127.0.0.1:7084/api/fund/news?username=dabai521&mode=global&limit=5&force=true"
-curl -i "http://127.0.0.1:7084/api/fund/capital-flow?limit=10&force=true"
-curl -i "http://127.0.0.1:7084/api/fund/sectors?force=true"
+不要把 OCR 密钥写入源码。生产环境使用环境变量：
 
-如果前端仍空：
-1. 确认后端已重启。
-2. CDN 刷新 index.html。
-3. 清理旧缓存：
-localStorage.removeItem('capital_flow_cache_v1');
-localStorage.removeItem('fund_sector_fast_cache_v4');
+```bash
+export BaiduOcr__ApiKey="你的 API Key"
+export BaiduOcr__SecretKey="你的 Secret Key"
+```
+
+本地开发可以使用：
+
+```bash
+dotnet user-secrets set "BaiduOcr:ApiKey" "你的 API Key"
+dotnet user-secrets set "BaiduOcr:SecretKey" "你的 Secret Key"
+```
+
+## 迁移说明
+
+新库可以直接运行，程序启动时会执行 `Database.Migrate()`。
+
+如果你已有生产数据库且之前是 `EnsureCreated + 启动时 ALTER TABLE`，建议先备份数据库，然后创建 EF Migration baseline，避免重复创建索引。当前包内迁移适合新库或你确认迁移历史为空的环境。
+
+## 验证命令
+
+```bash
+dotnet restore 估值助手.csproj
+dotnet build 估值助手.csproj
+dotnet test 估值助手.Tests/估值助手.Tests.csproj
+```

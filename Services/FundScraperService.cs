@@ -11,12 +11,11 @@ namespace 估值助手.Services
         private readonly ILogger<FundScraperService> _logger;
         private readonly HttpClient _httpClient;
 
-        public FundScraperService(IServiceProvider serviceProvider, ILogger<FundScraperService> logger)
+        public FundScraperService(IServiceProvider serviceProvider, ILogger<FundScraperService> logger, IHttpClientFactory httpClientFactory)
         {
             _serviceProvider = serviceProvider;
             _logger = logger;
-            _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
-            _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
+            _httpClient = httpClientFactory.CreateClient("FundGz");
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)

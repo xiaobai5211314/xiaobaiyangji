@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
@@ -11,13 +12,15 @@ namespace 估值助手.Controllers
     public class AuthController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly IPasswordHasher<User> _passwordHasher;
 
-        public AuthController(AppDbContext context)
+        public AuthController(AppDbContext context, IPasswordHasher<User> passwordHasher)
         {
             _context = context;
+            _passwordHasher = passwordHasher;
         }
 
-        private static string HashPassword(string password)
+        private static string LegacySha256Hash(string password)
         {
             using var sha256 = SHA256.Create();
             var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password ?? string.Empty));
@@ -36,13 +39,14 @@ namespace 估值助手.Controllers
             if (await _context.Users.AnyAsync(u => u.Username == username))
                 return BadRequest("该账号已被注册！");
 
-            _context.Users.Add(new User
+            var user = new User
             {
                 Username = username,
-                PasswordHash = HashPassword(password),
                 AvatarDataUrl = string.Empty
-            });
+            };
+            user.PasswordHash = _passwordHasher.HashPassword(user, password);
 
+            _context.Users.Add(user);
             await _context.SaveChangesAsync();
             return Ok(new { success = true, username });
         }
@@ -58,19 +62,28 @@ namespace 估值助手.Controllers
                 if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
                     return BadRequest("账号和密码不能为空");
 
-                var passwordHash = HashPassword(password);
-
-                var user = await _context.Users
-                    .AsNoTracking()
-                    .Where(u => u.Username == username)
-                    .Select(u => new { u.Username, u.PasswordHash, AvatarDataUrl = u.AvatarDataUrl ?? string.Empty })
-                    .FirstOrDefaultAsync();
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
 
                 if (user == null)
                     return BadRequest("账号不存在");
 
-                if (!string.Equals(user.PasswordHash, passwordHash, StringComparison.Ordinal))
-                    return BadRequest("密码错误");
+                var verifyResult = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
+                if (verifyResult == PasswordVerificationResult.Failed)
+                {
+                    var legacyHash = LegacySha256Hash(password);
+                    if (!string.Equals(user.PasswordHash, legacyHash, StringComparison.Ordinal))
+                    {
+                        return BadRequest("密码错误");
+                    }
+
+                    user.PasswordHash = _passwordHasher.HashPassword(user, password);
+                    await _context.SaveChangesAsync();
+                }
+                else if (verifyResult == PasswordVerificationResult.SuccessRehashNeeded)
+                {
+                    user.PasswordHash = _passwordHasher.HashPassword(user, password);
+                    await _context.SaveChangesAsync();
+                }
 
                 return Ok(new { success = true, username = user.Username, avatarDataUrl = user.AvatarDataUrl ?? string.Empty });
             }

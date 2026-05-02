@@ -2567,7 +2567,24 @@
                     const file = event.target.files[0]; if (!file) return; isUploading.value = true;
                     compressImageBeforeUpload(file, async (compressedFile) => {
                         const formData = new FormData(); formData.append('imageFile', compressedFile);
-                        try { const response = await fetch(`${API_BASE}/api/Fund/import-ocr?username=${encodeURIComponent(currentUser.value)}`, { method: 'POST', body: formData }); if (response.ok) { ocrModal.content = await response.text(); ocrModal.show = true; fetchData({ force: true, silent: true }); } else { showToast("❌ 识别失败", "error"); } } catch (error) { showToast("🌐 网络异常", "error"); } finally { isUploading.value = false; event.target.value = ''; }
+                        try {
+                            const response = await fetch(`${API_BASE}/api/Fund/import-ocr-preview?username=${encodeURIComponent(currentUser.value)}`, { method: 'POST', body: formData });
+                            if (!response.ok) { showToast("❌ 识别失败", "error"); return; }
+                            const preview = await response.json();
+                            const rows = preview.items || [];
+                            if (rows.length === 0) { showToast("未识别到可导入持仓", "error"); return; }
+                            const detail = rows.map(x => `${x.name}(${x.code})  市值:${Number(x.holdAmount || 0).toFixed(2)}  份额:${Number(x.holdShares || 0).toFixed(2)}  匹配:${Number(x.matchScore || 0).toFixed(1)}`).join('\n');
+                            ocrModal.content = `OCR 预览：共 ${rows.length} 只\n\n${detail}\n\n确认后才会写入数据库。`;
+                            ocrModal.show = true;
+                            if (!confirm(`识别到 ${rows.length} 只基金，是否确认写入？\n\n${detail}`)) return;
+                            const confirmRes = await fetch(`${API_BASE}/api/Fund/import-ocr-confirm`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ username: currentUser.value, items: rows })
+                            });
+                            if (confirmRes.ok) { const result = await confirmRes.json(); showToast(result.message || "✅ 已确认导入", "success"); fetchData({ force: true, silent: true }); }
+                            else { showToast("❌ 确认导入失败", "error"); }
+                        } catch (error) { showToast("🌐 网络异常", "error"); } finally { isUploading.value = false; event.target.value = ''; }
                     });
                 };
 

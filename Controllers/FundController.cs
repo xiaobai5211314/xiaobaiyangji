@@ -1,4 +1,3 @@
-using Baidu.Aip.Ocr;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json.Linq;
@@ -10,6 +9,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using 估值助手.Models;
+using 估值助手.Services;
 using Color = SixLabors.ImageSharp.Color;
 using Image = SixLabors.ImageSharp.Image;
 using Microsoft.Extensions.Caching.Memory;
@@ -22,16 +22,14 @@ namespace 估值助手.Controllers
     {
         private readonly AppDbContext _context;
         private readonly IMemoryCache _cache;
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IBaiduOcrService _ocrService;
+        private readonly PortfolioSettlementService _portfolioSettlement;
 
         static FundController()
         {
             System.Net.WebRequest.DefaultWebProxy = null;
         }
-
-        private static readonly Baidu.Aip.Ocr.Ocr _baiduOcrClient = new Baidu.Aip.Ocr.Ocr("yjfCgtNuumSjxc34FDmXCv8e", "g3XGcMKX0Qsp4k4wDSbxYQoSdFPuDt0c")
-        {
-            Timeout = 10000
-        };
 
 
         public class CapitalFlowRowDto
@@ -56,10 +54,13 @@ namespace 估值助手.Controllers
         private static List<FundInfoCache> _globalFundCache = null;
         private static Dictionary<string, FundInfoCache> _exactMatchDict = null;
 
-        public FundController(AppDbContext context, IMemoryCache cache)
+        public FundController(AppDbContext context, IMemoryCache cache, IHttpClientFactory httpClientFactory, IBaiduOcrService ocrService, PortfolioSettlementService portfolioSettlement)
         {
             _context = context;
             _cache = cache;
+            _httpClientFactory = httpClientFactory;
+            _ocrService = ocrService;
+            _portfolioSettlement = portfolioSettlement;
         }
 
         private static DateTime ChinaNow() => DateTime.UtcNow.AddHours(8);
@@ -407,7 +408,7 @@ namespace 估值助手.Controllers
 
             try
             {
-                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+                var client = _httpClientFactory.CreateClient("EastMoney");
                 string jsData = await client.GetStringAsync("http://fund.eastmoney.com/js/fundcode_search.js");
 
                 int startIndex = jsData.IndexOf('[');
@@ -461,8 +462,7 @@ namespace 估值助手.Controllers
         {
             try
             {
-                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
-                client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
+                var client = _httpClientFactory.CreateClient("EastMoney");
                 string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={fundCode}&pageIndex=1&pageSize=15";
                 string res = await client.GetStringAsync(url);
                 using var doc = JsonDocument.Parse(res);
@@ -501,18 +501,92 @@ namespace 估值助手.Controllers
             return 0;
         }
 
-        [HttpPost("import-ocr")]
-        public async Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFormFile imageFile)
+        public sealed class OcrImportPreviewItem
         {
-            if (string.IsNullOrEmpty(username)) return Unauthorized("请提供指挥官代号");
+            public string OcrName { get; set; } = string.Empty;
+            public string Code { get; set; } = string.Empty;
+            public string Name { get; set; } = string.Empty;
+            public double MatchScore { get; set; }
+            public double HoldAmount { get; set; }
+            public double CostAmount { get; set; }
+            public double HoldingIncome { get; set; }
+            public double YesterdayIncome { get; set; }
+            public double HoldingRate { get; set; }
+            public double HoldShares { get; set; }
+            public string CalcMethod { get; set; } = string.Empty;
+            public string Warning { get; set; } = string.Empty;
+        }
 
+        public sealed class OcrImportPreviewResponse
+        {
+            public bool Success { get; set; }
+            public int Count { get; set; }
+            public List<OcrImportPreviewItem> Items { get; set; } = new();
+            public List<string> Diagnostics { get; set; } = new();
+        }
+
+        public sealed class OcrImportConfirmRequest
+        {
+            public string Username { get; set; } = string.Empty;
+            public List<OcrImportPreviewItem> Items { get; set; } = new();
+        }
+
+        [HttpPost("import-ocr")]
+        public Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFormFile imageFile)
+            => ImportOcrPreview(username, imageFile);
+
+        [HttpPost("import-ocr-preview")]
+        public async Task<IActionResult> ImportOcrPreview([FromQuery] string username, IFormFile imageFile)
+        {
+            if (string.IsNullOrWhiteSpace(username)) return Unauthorized("请提供指挥官代号");
+            if (imageFile == null || imageFile.Length == 0) return BadRequest("请上传持仓截图");
+
+            try
+            {
+                var preview = await BuildOcrImportPreviewAsync(username, imageFile);
+                preview.Success = true;
+                preview.Count = preview.Items.Count;
+                return Ok(preview);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"OCR 预览失败: {ex.Message}" });
+            }
+        }
+
+        [HttpPost("import-ocr-confirm")]
+        public async Task<IActionResult> ConfirmOcrImport([FromBody] OcrImportConfirmRequest request)
+        {
+            var username = (request.Username ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(username)) return Unauthorized("请提供指挥官代号");
+            if (request.Items == null || request.Items.Count == 0) return BadRequest("没有可确认导入的持仓行");
+
+            try
+            {
+                int imported = await ApplyOcrImportRowsAsync(username, request.Items);
+                await _context.SaveChangesAsync();
+                ClearTodayCache(username);
+                return Ok(new { success = true, imported, message = $"确认完成，已同步 {imported} 只基金。" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"OCR 确认导入失败: {ex.Message}" });
+            }
+        }
+
+        private async Task<OcrImportPreviewResponse> BuildOcrImportPreviewAsync(string username, IFormFile imageFile)
+        {
             var allFunds = await GetAllFundsAsync();
             var userFundDict = await _context.MyFunds
+                .AsNoTracking()
                 .Where(f => f.Username == username)
                 .ToDictionaryAsync(f => f.FundCode);
 
-            // 🚀 终极防断网装甲：将用户已有的基金强行注入比对库！
-            // 哪怕全网接口被封死，只要是买过的基金，相似度匹配绝对不会返回0！
+            var corrections = await _context.OcrCorrections
+                .AsNoTracking()
+                .Where(x => x.Username == username)
+                .ToListAsync();
+
             var robustFundPool = allFunds?.ToList() ?? new List<FundInfoCache>();
             foreach (var uf in userFundDict.Values)
             {
@@ -521,305 +595,398 @@ namespace 估值助手.Controllers
                     robustFundPool.Add(new FundInfoCache { Code = uf.FundCode, Name = uf.FundName, NormalizedName = NormalizeFundName(uf.FundName) });
                 }
             }
+            foreach (var correction in corrections)
+            {
+                if (!robustFundPool.Any(c => c.Code == correction.FundCode))
+                {
+                    robustFundPool.Add(new FundInfoCache { Code = correction.FundCode, Name = correction.FundName, NormalizedName = NormalizeFundName(correction.FundName) });
+                }
+            }
 
-            byte[] finalProcessedBytes = null;
-            List<string> debugLog = new List<string>();
+            byte[] finalProcessedBytes;
+            var diagnostics = new List<string>();
             var watch = System.Diagnostics.Stopwatch.StartNew();
 
-            try
+            using (var inputStream = imageFile.OpenReadStream())
+            using (Image image = Image.Load(inputStream))
             {
-                using (var inputStream = imageFile.OpenReadStream())
+                const int targetMaxWidth = 1080;
+                if (image.Width > targetMaxWidth)
                 {
-                    using (Image image = Image.Load(inputStream))
-                    {
-                        int targetMaxWidth = 1080;
-                        if (image.Width > targetMaxWidth)
-                        {
-                            int newHeight = (int)((double)image.Height / image.Width * targetMaxWidth);
-                            image.Mutate(x => x.Resize(targetMaxWidth, newHeight));
-                        }
-                        image.Mutate(x => x.BackgroundColor(Color.White));
-                        using (var outputStream = new MemoryStream())
-                        {
-                            image.SaveAsJpeg(outputStream, new JpegEncoder { Quality = 60 });
-                            finalProcessedBytes = outputStream.ToArray();
-                        }
-                    }
+                    int newHeight = (int)((double)image.Height / image.Width * targetMaxWidth);
+                    image.Mutate(x => x.Resize(targetMaxWidth, newHeight));
                 }
-                debugLog.Add($"⏱️ 图片压缩耗时: {watch.ElapsedMilliseconds} ms");
-                watch.Restart();
-
-                var ocrTask = Task.Run(() => _baiduOcrClient.AccurateBasic(finalProcessedBytes));
-                if (await Task.WhenAny(ocrTask, Task.Delay(15000)) != ocrTask) return StatusCode(500, $"❌ 识别超时熔断！");
-
-                var result = await ocrTask;
-                debugLog.Add($"⏱️ 百度 OCR 耗时: {watch.ElapsedMilliseconds} ms");
-
-                var texts = (result["words_result"] as JArray)?.Select(x => x["words"].ToString().Trim()).ToList() ?? new List<string>();
-                if (texts.Count == 0) return BadRequest("❌ OCR未能识别出任何文字");
-
-                int importedCount = 0;
-                string amountPattern = @"^\d[\d,]*\.\d{2}$";
-                debugLog.Add($"👁️ 视图检测: 智能混合视图 (搭载逆向推演与防污染系统)");
-
-                for (int i = 1; i < texts.Count; i++)
-                {
-                    string currentLine = texts[i].Trim();
-                    if (!Regex.IsMatch(currentLine, amountPattern)) continue;
-
-                    string namePart1 = "";
-                    for (int k = i - 1; k >= 0; k--)
-                    {
-                        string prev = texts[k].Trim();
-                        if (string.IsNullOrWhiteSpace(prev) || prev.Contains("收益") || prev.Contains("金额") || prev.Contains("份额") || prev.Contains("金选") || prev.Contains("市场解读") || prev.Contains("基金经理") || prev.Contains("阶段") || prev.Contains("趋势") || prev.Contains("去看看") || Regex.IsMatch(prev, @"^[-\d\.,%+]+$"))
-                            continue;
-                        namePart1 = prev;
-                        break;
-                    }
-                    if (string.IsNullOrEmpty(namePart1)) continue;
-
-                    double holdAmount = double.Parse(currentLine.Replace(",", ""));
-                    double holdingIncome = 0;
-                    double yesterdayIncome = 0;
-                    double holdingRate = 0;
-                    double holdShares = 0;
-                    string potentialFragment = "";
-                    List<double> signedNumbers = new List<double>();
-
-                    for (int j = 1; j <= 6 && (i + j) < texts.Count; j++)
-                    {
-                        string nextLine = texts[i + j].Trim();
-                        if (Regex.IsMatch(nextLine, @"[\u4e00-\u9fa5]{4,}") && !nextLine.Contains("金选") && !nextLine.Contains("市场解读") && !nextLine.Contains("基金经理") && !nextLine.Contains("阶段") && !nextLine.Contains("趋势") && !nextLine.Contains("去看看") && !nextLine.Contains("更新")) break;
-
-                        // 🚀 终极防排版污染：地毯式搜索百分比，无视同行其他字符
-                        var pctMatches = Regex.Matches(nextLine, @"([-+]?\d+[\.,]\d{2})\s*%");
-                        foreach (Match m in pctMatches)
-                        {
-                            holdingRate = double.Parse(m.Groups[1].Value.Replace(",", "."));
-                        }
-
-                        // 🚀 核心破解：全面捕获所有金额（包括丢失符号的残疾数字）
-                        var numMatches = Regex.Matches(nextLine, @"([-+]?\d[\d,]*\.\d{2})(?!\s*%)");
-                        foreach (Match m in numMatches)
-                        {
-                            string valStr = m.Groups[1].Value.Replace(",", "");
-                            double val = double.Parse(valStr);
-
-                            if (valStr.StartsWith("+") || valStr.StartsWith("-"))
-                            {
-                                // 带有明确符号的，绝对信任
-                                if (!signedNumbers.Contains(val)) signedNumbers.Add(val);
-                            }
-                            else
-                            {
-                                // 🚨 OCR 搞丢了弱鸡的绿色减号！我们把数字的【正、负】双重形态同时扔进候选池，让数学模型去严惩它！
-                                if (val != 0)
-                                {
-                                    if (!signedNumbers.Contains(val)) signedNumbers.Add(val);
-                                    if (!signedNumbers.Contains(-val)) signedNumbers.Add(-val);
-                                }
-                            }
-                        }
-
-
-                        if (holdShares == 0 && Regex.IsMatch(nextLine, amountPattern))
-                        {
-                            string contextText = string.Join("", texts.Skip(Math.Max(0, i - 2)).Take(j + 3));
-                            if (contextText.Contains("份额"))
-                            {
-                                double candidate = double.Parse(nextLine.Replace(",", ""));
-                                if (Math.Abs(candidate - holdAmount) > 10) holdShares = candidate;
-                            }
-                        }
-                        else if (string.IsNullOrEmpty(potentialFragment) && !Regex.IsMatch(nextLine, @"^[-\d\.,%+]+$") && !nextLine.Contains("金选") && !nextLine.Contains("市场解读") && !nextLine.Contains("更新")) { potentialFragment = nextLine; }
-                    }
-
-                    // 🚀 终极优化版：智能模糊匹配与最小偏差校验
-                    if (holdingRate != 0 && signedNumbers.Count >= 1)
-                    {
-                        double bestDiff = double.MaxValue;
-                        double bestIncome = 0;
-
-                        foreach (var num in signedNumbers)
-                        {
-                            double testCost = holdAmount - num;
-                            if (testCost <= 0) continue;
-
-                            // 用提取的盈亏反推纯数学收益率
-                            double testRate = (num / testCost) * 100;
-
-                            // 计算与支付宝表面收益率的偏差绝对值
-                            double diff = Math.Abs(testRate - holdingRate);
-
-                            // 寻找误差最小的那一个
-                            if (diff < bestDiff)
-                            {
-                                bestDiff = diff;
-                                bestIncome = num;
-                            }
-                        }
-
-                        // 只要偏差在合理范围内（放宽至 8%，足以覆盖因历史减仓/定投造成的巨大摊薄误差），就精准锁定！
-                        // 华富的 -3.68% 距离 -4.08% 只有 0.4 的偏差，完美命中！
-                        if (bestDiff < 8.0)
-                        {
-                            holdingIncome = bestIncome;
-                            yesterdayIncome = signedNumbers.FirstOrDefault(n => Math.Abs(n) != Math.Abs(bestIncome));
-
-                        }
-                    }
-
-                    // 🛡️ 兜底防御体系：如果偏差离谱到超过 8%，利用金融常识进行最后锁定
-                    if (holdingIncome == 0 && signedNumbers.Count > 0)
-                    {
-                        // 策略A：正负号一致性法则。收益率是负的（-4.08%），累计盈亏必定是负数！
-                        if (holdingRate != 0)
-                        {
-                            var matchBySign = signedNumbers.Where(n => (n > 0 && holdingRate > 0) || (n < 0 && holdingRate < 0)).ToList();
-                            if (matchBySign.Count == 1)
-                            {
-                                holdingIncome = matchBySign.First();
-                                yesterdayIncome = signedNumbers.FirstOrDefault(n => n != holdingIncome);
-                            }
-                        }
-
-                        // 策略B：绝对值碾压法则。90% 的情况下，累计总盈亏的数值大于单日盈亏
-                        if (holdingIncome == 0)
-                        {
-                            holdingIncome = signedNumbers.OrderByDescending(n => Math.Abs(n)).First();
-                            if (signedNumbers.Count > 1) yesterdayIncome = signedNumbers.FirstOrDefault(n => n != holdingIncome);
-                        }
-                    }
-
-                    string[] testNames = string.IsNullOrEmpty(potentialFragment) ? new[] { namePart1 } : new[] { namePart1, namePart1 + potentialFragment };
-                    FundInfoCache finalBestMatch = null;
-                    double finalBestScore = 0;
-
-                    foreach (var testName in testNames)
-                    {
-                        string pureChinese = Regex.Replace(testName, @"[^\u4e00-\u9fa5]", "");
-                        if (pureChinese.Length < 2) continue;
-
-                        string normalizedOcr = NormalizeFundName(testName);
-                        FundInfoCache bestMatch = null;
-                        double bestScore = 0;
-
-                        if (_exactMatchDict != null && (_exactMatchDict.TryGetValue(normalizedOcr, out var exactFund) || _exactMatchDict.TryGetValue(testName, out exactFund)))
-                        {
-                            bestMatch = exactFund; bestScore = 100.0;
-                        }
-                        else
-                        {
-                            // 使用带有本地防断网基因的 robustFundPool
-                            var candidates = robustFundPool.Where(f => f.NormalizedName.Contains(pureChinese) || pureChinese.Contains(f.NormalizedName.Substring(0, Math.Min(3, f.NormalizedName.Length))));
-                            foreach (var f in candidates)
-                            {
-                                double currentScore = CalculateSimilarity(normalizedOcr, f.NormalizedName) * 100;
-                                if (currentScore > bestScore) { bestScore = currentScore; bestMatch = f; }
-                            }
-                        }
-
-                        if (bestScore > finalBestScore) { finalBestScore = bestScore; finalBestMatch = bestMatch; }
-                    }
-
-                    string calcMethod = "识别提取";
-                    if (finalBestMatch != null && finalBestScore > 65 && holdAmount > 0)
-                    {
-                        // 🚀 核心：若未扫出份额，全面启用时空碰撞推演！
-                        if (holdShares == 0)
-                        {
-                            // 🛡️ 在途资金剥离装甲：防止推演份额时，把今天刚加仓的钱当成已确认份额！
-                            double effectiveAmountForShares = holdAmount;
-
-                            if (userFundDict.TryGetValue(finalBestMatch.Code, out var tempExist))
-                            {
-                                // 检查是否在 4 天内有过加仓操作
-                                if (DateTime.TryParse(tempExist.LastTradeDate, out DateTime ltd) && (DateTime.UtcNow.AddHours(8) - ltd).TotalDays <= 4)
-                                {
-                                    // 如果 OCR 扫出的总金额 > 在途金额，说明支付宝已将这笔钱计入总额，我们必须将它剥离出来再算份额！
-                                    if (tempExist.LastAddAmount > 0 && holdAmount > tempExist.LastAddAmount)
-                                    {
-                                        effectiveAmountForShares = holdAmount - tempExist.LastAddAmount;
-                                    }
-                                }
-                            }
-
-                            // 使用剥离了在途资金后的【纯净本金】去推演真实份额
-                            double calcShares = await DeduceSharesFromHistoryAsync(finalBestMatch.Code, effectiveAmountForShares, yesterdayIncome);
-                            if (calcShares > 0) { holdShares = calcShares; calcMethod = "AI物理推演"; }
-                        }
-                        if (userFundDict.TryGetValue(finalBestMatch.Code, out var exist))
-                        {
-                            // 🛡️ 之前的逻辑（删掉）：
-                            /*
-                            if (holdAmount >= exist.HoldAmount || exist.HoldAmount == 0)
-                            {
-                                exist.HoldAmount = holdAmount;
-                            }
-                            */
-
-                            // ==================== 🚀 终极防线装甲 ====================
-                            // 1. 在途市值保护：如果今天有未确认的加仓资金，OCR扫描到的肯定没包含这笔钱！
-                            var todayStr = DateTime.UtcNow.AddHours(8).ToString("yyyy-MM-dd");
-                            // ==================== 🚀 终极防线装甲 ====================
-                            // 1. 在途市值保护：跨越周末的物理识别！
-                            if (holdAmount > 0)
-                            {
-                                bool isRecentAdd = false;
-                                if (DateTime.TryParse(exist.LastTradeDate, out DateTime lastTradeDate))
-                                {
-                                    // 只要是最近 4 天内加的仓，都处于“在途保护期”（完美覆盖周末逻辑）
-                                    isRecentAdd = (DateTime.UtcNow.AddHours(8) - lastTradeDate).TotalDays <= 4;
-                                }
-
-                                // 如果处于保护期，且支付宝扫出来的钱比系统里少了很多（说明支付宝还没把那笔钱加上去）
-                                if (isRecentAdd && exist.LastAddAmount > 0 && (exist.HoldAmount - holdAmount) > (exist.LastAddAmount * 0.5))
-                                {
-                                    exist.HoldAmount = holdAmount + exist.LastAddAmount; // 强行加回在途援军！
-                                }
-                                else
-                                {
-                                    exist.HoldAmount = holdAmount; // 正常覆盖
-                                }
-                            }
-
-
-                            // 2. 🚀 本金铁律保护升级：强制校准！彻底解决大屏与支付宝收益率对不上的问题！
-                            if (holdingIncome != 0)
-                            {
-                                // 只要扫出了真实的累计利润，直接反推并强制覆盖本金！绝不留死角！
-                                exist.CostAmount = Math.Round(holdAmount - holdingIncome, 2);
-                            }
-
-                            // 更新推演份额（允许微调，防止误差积累）
-                            if (holdShares > 0)
-                            {
-                                if (exist.HoldShares == 0 || Math.Abs(exist.HoldShares - holdShares) > 1) exist.HoldShares = holdShares;
-                            }
-                            _context.MyFunds.Update(exist);
-                        }
-                        else
-                        {
-                            var newFund = new MyFundConfig { Username = username, FundCode = finalBestMatch.Code, FundName = finalBestMatch.Name, HoldAmount = holdAmount, CostAmount = holdingIncome != 0 ? Math.Round(holdAmount - holdingIncome, 2) : holdAmount, HoldShares = holdShares };
-                            _context.MyFunds.Add(newFund);
-                            userFundDict[newFund.FundCode] = newFund;
-                        }
-                        importedCount++;
-
-                        string sharesInfo = holdShares > 0 ? $"{holdShares:F2} ({calcMethod})" : "推演失败";
-                        debugLog.Add($"{(finalBestScore >= 99.0 ? "⚡" : "✅")} 命中: {finalBestMatch.Name} [份额: {sharesInfo}]");
-                    }
-                }
-
-                await _context.SaveChangesAsync();
-                ClearTodayCache(username);
-                return Ok($"识别完成！成功同步 {importedCount} 只。\n\n[诊断日志]\n{string.Join("\n", debugLog)}");
+                image.Mutate(x => x.BackgroundColor(Color.White));
+                using var outputStream = new MemoryStream();
+                image.SaveAsJpeg(outputStream, new JpegEncoder { Quality = 60 });
+                finalProcessedBytes = outputStream.ToArray();
             }
-            catch (Exception ex)
+
+            diagnostics.Add($"图片压缩耗时: {watch.ElapsedMilliseconds} ms");
+            watch.Restart();
+
+            var ocrTask = Task.Run(() => _ocrService.AccurateBasic(finalProcessedBytes));
+            if (await Task.WhenAny(ocrTask, Task.Delay(15000)) != ocrTask)
             {
-                return StatusCode(500, $"❌ 代码执行出现异常: {ex.Message}");
+                throw new TimeoutException("OCR 识别超时");
+            }
+
+            var result = await ocrTask;
+            diagnostics.Add($"OCR 耗时: {watch.ElapsedMilliseconds} ms");
+
+            var texts = (result["words_result"] as JArray)?.Select(x => x["words"]?.ToString().Trim() ?? string.Empty).Where(x => !string.IsNullOrWhiteSpace(x)).ToList() ?? new List<string>();
+            if (texts.Count == 0) throw new InvalidOperationException("OCR 未能识别出任何文字");
+
+            var items = new List<OcrImportPreviewItem>();
+            const string amountPattern = @"^\d[\d,]*\.\d{2}$";
+
+            for (int i = 1; i < texts.Count; i++)
+            {
+                string currentLine = texts[i].Trim();
+                if (!Regex.IsMatch(currentLine, amountPattern)) continue;
+
+                string namePart = FindPreviousFundName(texts, i);
+                if (string.IsNullOrWhiteSpace(namePart)) continue;
+
+                double holdAmount = double.Parse(currentLine.Replace(",", ""));
+                double holdingIncome = 0;
+                double yesterdayIncome = 0;
+                double holdingRate = 0;
+                double holdShares = 0;
+                string potentialFragment = string.Empty;
+                var signedNumbers = new List<double>();
+
+                for (int j = 1; j <= 6 && i + j < texts.Count; j++)
+                {
+                    string nextLine = texts[i + j].Trim();
+                    if (Regex.IsMatch(nextLine, @"[\u4e00-\u9fa5]{4,}") && !IsNoiseLine(nextLine)) break;
+
+                    foreach (Match m in Regex.Matches(nextLine, @"([-+]?\d+[\.,]\d{2})\s*%"))
+                    {
+                        holdingRate = double.Parse(m.Groups[1].Value.Replace(",", "."));
+                    }
+
+                    foreach (Match m in Regex.Matches(nextLine, @"([-+]?\d[\d,]*\.\d{2})(?!\s*%)"))
+                    {
+                        string valStr = m.Groups[1].Value.Replace(",", "");
+                        double val = double.Parse(valStr);
+                        if (valStr.StartsWith("+") || valStr.StartsWith("-"))
+                        {
+                            if (!signedNumbers.Contains(val)) signedNumbers.Add(val);
+                        }
+                        else if (val != 0)
+                        {
+                            if (!signedNumbers.Contains(val)) signedNumbers.Add(val);
+                            if (!signedNumbers.Contains(-val)) signedNumbers.Add(-val);
+                        }
+                    }
+
+                    if (holdShares == 0 && Regex.IsMatch(nextLine, amountPattern))
+                    {
+                        string contextText = string.Join("", texts.Skip(Math.Max(0, i - 2)).Take(j + 3));
+                        if (contextText.Contains("份额"))
+                        {
+                            double candidate = double.Parse(nextLine.Replace(",", ""));
+                            if (Math.Abs(candidate - holdAmount) > 10) holdShares = candidate;
+                        }
+                    }
+                    else if (string.IsNullOrEmpty(potentialFragment) && !Regex.IsMatch(nextLine, @"^[-\d\.,%+]+$") && !IsNoiseLine(nextLine))
+                    {
+                        potentialFragment = nextLine;
+                    }
+                }
+
+                SelectIncomeCandidates(holdAmount, holdingRate, signedNumbers, out holdingIncome, out yesterdayIncome);
+
+                var best = MatchOcrFund(namePart, potentialFragment, robustFundPool, corrections);
+                if (best.fund == null || best.score <= 65 || holdAmount <= 0)
+                {
+                    diagnostics.Add($"未确认: {namePart}，匹配分 {best.score:F1}");
+                    continue;
+                }
+
+                string calcMethod = "识别提取";
+                if (holdShares == 0)
+                {
+                    double effectiveAmountForShares = holdAmount;
+                    if (userFundDict.TryGetValue(best.fund.Code, out var existingFund) &&
+                        DateTime.TryParse(existingFund.LastTradeDate, out DateTime lastTradeDate) &&
+                        (ChinaNow() - lastTradeDate).TotalDays <= 4 &&
+                        existingFund.LastAddAmount > 0 && holdAmount > existingFund.LastAddAmount)
+                    {
+                        effectiveAmountForShares = holdAmount - existingFund.LastAddAmount;
+                    }
+
+                    double calcShares = await DeduceSharesFromHistoryAsync(best.fund.Code, effectiveAmountForShares, yesterdayIncome);
+                    if (calcShares > 0)
+                    {
+                        holdShares = calcShares;
+                        calcMethod = "净值推演";
+                    }
+                }
+
+                items.Add(new OcrImportPreviewItem
+                {
+                    OcrName = string.IsNullOrWhiteSpace(potentialFragment) ? namePart : namePart + potentialFragment,
+                    Code = best.fund.Code,
+                    Name = best.fund.Name,
+                    MatchScore = Math.Round(best.score, 2),
+                    HoldAmount = Math.Round(holdAmount, 2),
+                    HoldingIncome = Math.Round(holdingIncome, 2),
+                    YesterdayIncome = Math.Round(yesterdayIncome, 2),
+                    HoldingRate = Math.Round(holdingRate, 2),
+                    CostAmount = holdingIncome != 0 ? Math.Round(holdAmount - holdingIncome, 2) : holdAmount,
+                    HoldShares = Math.Round(holdShares, 2),
+                    CalcMethod = calcMethod,
+                    Warning = best.score < 80 ? "匹配分较低，建议确认基金代码" : string.Empty
+                });
+            }
+
+            return new OcrImportPreviewResponse
+            {
+                Success = true,
+                Count = items.Count,
+                Items = items,
+                Diagnostics = diagnostics
+            };
+        }
+
+        private static string FindPreviousFundName(List<string> texts, int amountIndex)
+        {
+            for (int k = amountIndex - 1; k >= 0; k--)
+            {
+                string prev = texts[k].Trim();
+                if (string.IsNullOrWhiteSpace(prev) || IsNoiseLine(prev) || Regex.IsMatch(prev, @"^[-\d\.,%+]+$")) continue;
+                return prev;
+            }
+            return string.Empty;
+        }
+
+        private static bool IsNoiseLine(string text)
+        {
+            string[] noise = { "收益", "金额", "份额", "金选", "市场解读", "基金经理", "阶段", "趋势", "去看看", "更新" };
+            return noise.Any(x => text.Contains(x, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static void SelectIncomeCandidates(
+       double holdAmount,
+       double holdingRate,
+       List<double> signedNumbers,
+       out double holdingIncome,
+       out double yesterdayIncome)
+        {
+            double selectedHoldingIncome = 0;
+            double selectedYesterdayIncome = 0;
+
+            holdingIncome = 0;
+            yesterdayIncome = 0;
+
+            if (signedNumbers.Count == 0)
+            {
+                return;
+            }
+
+            if (holdingRate != 0 && signedNumbers.Count >= 1)
+            {
+                double bestDiff = double.MaxValue;
+                double bestIncome = 0;
+
+                foreach (var num in signedNumbers)
+                {
+                    double testCost = holdAmount - num;
+                    if (testCost <= 0) continue;
+
+                    double testRate = (num / testCost) * 100;
+                    double diff = Math.Abs(testRate - holdingRate);
+
+                    if (diff < bestDiff)
+                    {
+                        bestDiff = diff;
+                        bestIncome = num;
+                    }
+                }
+
+                if (bestDiff < 8.0)
+                {
+                    selectedHoldingIncome = bestIncome;
+                    selectedYesterdayIncome = signedNumbers.FirstOrDefault(n => Math.Abs(n) != Math.Abs(selectedHoldingIncome));
+
+                    holdingIncome = selectedHoldingIncome;
+                    yesterdayIncome = selectedYesterdayIncome;
+                    return;
+                }
+            }
+
+            if (holdingRate != 0)
+            {
+                var matchBySign = signedNumbers
+                    .Where(n => (n > 0 && holdingRate > 0) || (n < 0 && holdingRate < 0))
+                    .ToList();
+
+                if (matchBySign.Count == 1)
+                {
+                    selectedHoldingIncome = matchBySign.First();
+                    selectedYesterdayIncome = signedNumbers.FirstOrDefault(n => n != selectedHoldingIncome);
+
+                    holdingIncome = selectedHoldingIncome;
+                    yesterdayIncome = selectedYesterdayIncome;
+                    return;
+                }
+            }
+
+            selectedHoldingIncome = signedNumbers
+                .OrderByDescending(n => Math.Abs(n))
+                .First();
+
+            if (signedNumbers.Count > 1)
+            {
+                selectedYesterdayIncome = signedNumbers.FirstOrDefault(n => n != selectedHoldingIncome);
+            }
+
+            holdingIncome = selectedHoldingIncome;
+            yesterdayIncome = selectedYesterdayIncome;
+        }
+        private (FundInfoCache? fund, double score) MatchOcrFund(string namePart, string potentialFragment, List<FundInfoCache> fundPool, List<OcrCorrection> corrections)
+        {
+            string[] testNames = string.IsNullOrWhiteSpace(potentialFragment) ? new[] { namePart } : new[] { namePart, namePart + potentialFragment };
+            FundInfoCache? finalBestMatch = null;
+            double finalBestScore = 0;
+
+            foreach (var testName in testNames)
+            {
+                string normalizedOcr = NormalizeFundName(testName);
+                var learned = corrections.FirstOrDefault(x => string.Equals(NormalizeFundName(x.OcrName), normalizedOcr, StringComparison.OrdinalIgnoreCase));
+                if (learned != null)
+                {
+                    return (new FundInfoCache { Code = learned.FundCode, Name = learned.FundName, NormalizedName = NormalizeFundName(learned.FundName) }, 99.5);
+                }
+
+                string pureChinese = Regex.Replace(testName, @"[^\u4e00-\u9fa5]", "");
+                if (pureChinese.Length < 2) continue;
+
+                FundInfoCache? bestMatch = null;
+                double bestScore = 0;
+
+                if (_exactMatchDict != null && (_exactMatchDict.TryGetValue(normalizedOcr, out var exactFund) || _exactMatchDict.TryGetValue(testName, out exactFund)))
+                {
+                    bestMatch = exactFund;
+                    bestScore = 100.0;
+                }
+                else
+                {
+                    var candidates = fundPool.Where(f =>
+                        !string.IsNullOrWhiteSpace(f.NormalizedName) &&
+                        (f.NormalizedName.Contains(pureChinese) || pureChinese.Contains(f.NormalizedName[..Math.Min(3, f.NormalizedName.Length)])));
+                    foreach (var f in candidates)
+                    {
+                        double currentScore = CalculateSimilarity(normalizedOcr, f.NormalizedName) * 100;
+                        if (currentScore > bestScore)
+                        {
+                            bestScore = currentScore;
+                            bestMatch = f;
+                        }
+                    }
+                }
+
+                if (bestScore > finalBestScore)
+                {
+                    finalBestScore = bestScore;
+                    finalBestMatch = bestMatch;
+                }
+            }
+
+            return (finalBestMatch, finalBestScore);
+        }
+
+        private async Task<int> ApplyOcrImportRowsAsync(string username, List<OcrImportPreviewItem> items)
+        {
+            var userFundDict = await _context.MyFunds
+                .Where(f => f.Username == username)
+                .ToDictionaryAsync(f => f.FundCode);
+
+            int imported = 0;
+            foreach (var item in items.Where(x => !string.IsNullOrWhiteSpace(x.Code) && x.HoldAmount > 0))
+            {
+                if (userFundDict.TryGetValue(item.Code, out var exist))
+                {
+                    ApplyOcrRowToExistingFund(exist, item);
+                    _context.MyFunds.Update(exist);
+                }
+                else
+                {
+                    var newFund = new MyFundConfig
+                    {
+                        Username = username,
+                        FundCode = item.Code,
+                        FundName = item.Name,
+                        HoldAmount = Math.Round(item.HoldAmount, 2),
+                        CostAmount = item.CostAmount > 0 ? Math.Round(item.CostAmount, 2) : Math.Round(item.HoldAmount, 2),
+                        HoldShares = Math.Round(item.HoldShares, 2)
+                    };
+                    _context.MyFunds.Add(newFund);
+                    userFundDict[newFund.FundCode] = newFund;
+                }
+
+                await UpsertOcrCorrectionAsync(username, item);
+                imported++;
+            }
+
+            return imported;
+        }
+
+        private static void ApplyOcrRowToExistingFund(MyFundConfig exist, OcrImportPreviewItem item)
+        {
+            if (item.HoldAmount > 0)
+            {
+                bool isRecentAdd = false;
+                if (DateTime.TryParse(exist.LastTradeDate, out DateTime lastTradeDate))
+                {
+                    isRecentAdd = (ChinaNow() - lastTradeDate).TotalDays <= 4;
+                }
+
+                if (isRecentAdd && exist.LastAddAmount > 0 && (exist.HoldAmount - item.HoldAmount) > exist.LastAddAmount * 0.5)
+                {
+                    exist.HoldAmount = Math.Round(item.HoldAmount + exist.LastAddAmount, 2);
+                }
+                else
+                {
+                    exist.HoldAmount = Math.Round(item.HoldAmount, 2);
+                }
+            }
+
+            if (item.CostAmount > 0) exist.CostAmount = Math.Round(item.CostAmount, 2);
+            if (item.HoldShares > 0 && (exist.HoldShares == 0 || Math.Abs(exist.HoldShares - item.HoldShares) > 1))
+            {
+                exist.HoldShares = Math.Round(item.HoldShares, 2);
             }
         }
+
+        private async Task UpsertOcrCorrectionAsync(string username, OcrImportPreviewItem item)
+        {
+            if (string.IsNullOrWhiteSpace(item.OcrName)) return;
+
+            string normalized = NormalizeFundName(item.OcrName);
+            var existing = await _context.OcrCorrections.FirstOrDefaultAsync(x => x.Username == username && x.OcrName == normalized);
+            if (existing == null)
+            {
+                _context.OcrCorrections.Add(new OcrCorrection
+                {
+                    Username = username,
+                    OcrName = normalized,
+                    FundCode = item.Code,
+                    FundName = item.Name,
+                    UpdatedAt = DateTime.UtcNow
+                });
+            }
+            else
+            {
+                existing.FundCode = item.Code;
+                existing.FundName = item.Name;
+                existing.UpdatedAt = DateTime.UtcNow;
+                _context.OcrCorrections.Update(existing);
+            }
+        }
+
         private string ExtractFundClass(string name)
         {
             if (Regex.IsMatch(name, @"C类?$|\(C\)$|（C）$", RegexOptions.IgnoreCase)) return "C";
@@ -866,7 +1033,7 @@ namespace 估值助手.Controllers
         public async Task<IActionResult> AddFund([FromForm] string username, [FromForm] string code, [FromForm] double amount)
         {
             if (string.IsNullOrEmpty(username)) return BadRequest("未登录");
-            using var client = new HttpClient();
+            var client = _httpClientFactory.CreateClient("FundGz");
             try
             {
                 string url = $"http://fundgz.1234567.com.cn/js/{code}.js";
@@ -959,7 +1126,7 @@ namespace 估值助手.Controllers
                 var allFunds = await _context.MyFunds.ToListAsync();
                 if (!allFunds.Any()) return Ok("当前暂无基金需要清算。");
 
-                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+                var client = _httpClientFactory.CreateClient("FundGz");
                 int successCount = 0;
 
                 foreach (var fund in allFunds)
@@ -1018,20 +1185,7 @@ namespace 估值助手.Controllers
         new { name = "道琼斯",   secid = "100.DJIA" }
     };
 
-            // 🛡️ 终极降维打击：无视证书 + 强制降级 HTTP/1.1
-            using var handler = new HttpClientHandler
-            {
-                ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
-            };
-            using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
-
-            // 🚀 绝对核心：强制使用 HTTP/1.1！专治东方财富强行挂断电话！
-            http.DefaultRequestVersion = new Version(1, 1);
-
-            http.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36");
-            http.DefaultRequestHeaders.Add("Accept", "*/*");
-            http.DefaultRequestHeaders.Add("Connection", "keep-alive");
-            http.DefaultRequestHeaders.Add("Referer", "https://quote.eastmoney.com/");
+            var http = _httpClientFactory.CreateClient("EastMoneyQuote");
 
             var tasks = indices.Select(async idx =>
             {
@@ -1202,6 +1356,18 @@ namespace 估值助手.Controllers
                     double? actualRate = isSettled ? config.LastSettledRate : null;
                     double? actualExactProfit = isSettled ? config.LastSettledProfit : null;
 
+                    double todayRateForSimulation = isSettled ? config.LastSettledRate : (dataPoints.Count > 0 ? Convert.ToDouble(dataPoints.Last()[1]) : 0);
+                    double todayBaseAmount = GetDailyBaseAmount(config, todayDash);
+                    double todayProfitPreview = isSettled ? config.LastSettledProfit : Math.Round(todayBaseAmount * todayRateForSimulation / 100.0, 2);
+                    double currentAssetsPreview = isSettled ? config.HoldAmount : Math.Round(config.HoldAmount + todayProfitPreview, 2);
+                    double costBasis = config.CostAmount > 0 ? config.CostAmount : config.HoldAmount;
+                    double totalProfitPreview = Math.Round(currentAssetsPreview - costBasis + config.RealizedProfit, 2);
+                    double existingReturnRateValue = costBasis > 0 ? Math.Round(totalProfitPreview / costBasis * 100.0, 2) : 0;
+                    double breakEvenRateValue = currentAssetsPreview > 0 && totalProfitPreview < 0 ? Math.Round(-totalProfitPreview / currentAssetsPreview * 100.0, 2) : 0;
+                    double diffAbs = lastRecord != null ? Math.Abs(lastRecord.DiffRate) : 0;
+                    int reliabilityScore = isSettled ? 100 : Math.Clamp(80 - (int)Math.Round(Math.Abs(avgDiff) * 40) - (diffAbs > 0.15 ? 10 : 0), 35, 92);
+                    string reliabilityLevel = isSettled ? "真实净值确认" : reliabilityScore >= 80 ? "估值较稳" : reliabilityScore >= 60 ? "估值需观察" : "估值偏弱";
+
                     // FundController.cs 中 GetTodayData 方法内部
                     return new
                     {
@@ -1216,8 +1382,17 @@ namespace 估值助手.Controllers
                         lastSettledDate = config.LastSettledDate,
                         lastSettledProfit = config.LastSettledProfit,
                         lastSettledRate = config.LastSettledRate,
-                        existingReturnRate = 0,
-                        breakEvenRate = 0,
+                        existingReturnRate = existingReturnRateValue,
+                        breakEvenRate = breakEvenRateValue,
+                        reliabilityScore = reliabilityScore,
+                        reliabilityLevel = reliabilityLevel,
+                        breakEvenSimulator = new[]
+                        {
+                            new { scenario = "+1%", projectedAssets = Math.Round(currentAssetsPreview * 1.01, 2), projectedProfit = Math.Round(currentAssetsPreview * 1.01 - costBasis + config.RealizedProfit, 2) },
+                            new { scenario = "+3%", projectedAssets = Math.Round(currentAssetsPreview * 1.03, 2), projectedProfit = Math.Round(currentAssetsPreview * 1.03 - costBasis + config.RealizedProfit, 2) },
+                            new { scenario = "+5%", projectedAssets = Math.Round(currentAssetsPreview * 1.05, 2), projectedProfit = Math.Round(currentAssetsPreview * 1.05 - costBasis + config.RealizedProfit, 2) },
+                            new { scenario = "-3%", projectedAssets = Math.Round(currentAssetsPreview * 0.97, 2), projectedProfit = Math.Round(currentAssetsPreview * 0.97 - costBasis + config.RealizedProfit, 2) }
+                        },
                         diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
                         calibrationOffset = Math.Round(avgDiff, 4),
                         data = dataPoints,
@@ -1273,10 +1448,7 @@ namespace 估值助手.Controllers
                     return Ok(new { success = true, updated = 0, message = "暂无持仓" });
                 }
 
-                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
-                client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
-                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36");
-                client.DefaultRequestHeaders.Add("Accept", "application/json, text/javascript, */*; q=0.01");
+                var client = _httpClientFactory.CreateClient("EastMoney");
 
                 int updated = 0;
                 int skipped = 0;
@@ -1357,8 +1529,7 @@ namespace 估值助手.Controllers
             try
             {
                 // 🚀 修复 1：5秒超时，从容应对高并发
-                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-                client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
+                var client = _httpClientFactory.CreateClient("EastMoney");
                 string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={fundCode}&pageIndex=1&pageSize=2";
                 string res = await client.GetStringAsync(url);
                 using var doc = JsonDocument.Parse(res);
@@ -1407,23 +1578,7 @@ namespace 估值助手.Controllers
                 var fund = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && f.FundCode == code);
                 if (fund == null) return BadRequest("未找到基金");
 
-                // 核心逻辑：加仓即增加本金和市值。
-                // 注意：若日期为“今天”，这笔钱产生的收益通常要明天才开始算，系统会自动在前端进行收益剥离。
-                fund.HoldAmount += addAmount;
-                fund.CostAmount += addAmount;
-
-                // 🚀 终极补丁：把加仓的时间和金额烙印在数据库里
-                if (fund.LastTradeDate == tradeDate)
-                {
-                    fund.LastAddAmount += addAmount; // 同日多次加仓累加
-                }
-                else
-                {
-                    fund.LastTradeDate = tradeDate;
-                    fund.LastAddAmount = addAmount;
-                }
-
-
+                _portfolioSettlement.AddPosition(fund, addAmount, tradeDate);
                 _context.MyFunds.Update(fund);
                 await _context.SaveChangesAsync();
                 ClearTodayCache(username);
@@ -1441,38 +1596,16 @@ namespace 估值助手.Controllers
             var fund = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && f.FundCode == code);
             if (fund == null) return BadRequest("未找到基金");
 
-            // 养基宝逻辑：如果没填卖出金额，系统利用“当前市值/总份额”算出单价，自动推演卖出总额
-            double finalReduceAmount = reduceAmount ?? 0;
-            if (finalReduceAmount == 0)
+            double profit;
+            try
             {
-                double currentUnitPrice = fund.HoldAmount / fund.HoldShares;
-                finalReduceAmount = currentUnitPrice * reduceShares;
+                profit = _portfolioSettlement.ReducePosition(fund, reduceShares, reduceAmount, tradeDate);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
             }
 
-            // 财务核算：计算这部分卖出份额的平均成本
-            double unitCost = fund.CostAmount / fund.HoldShares;
-            double soldCost = unitCost * reduceShares;
-            double profit = finalReduceAmount - soldCost;
-
-            // 物理执行：扣减份额、扣减本金、等比例扣减当前市值
-            fund.HoldShares -= reduceShares;
-            fund.CostAmount -= soldCost;
-            double unitAmount = fund.HoldAmount / (fund.HoldShares + reduceShares);
-            fund.HoldAmount -= (unitAmount * reduceShares);
-
-            // 利润封存：将变现利润锁入落袋小金库
-            fund.RealizedProfit += profit;
-            // 🚀 核心补丁：逆向记录减仓在途资金！(存入负数)
-            // 这样前端计算今日收益率时，会用“减去负数(等于加回)”的魔法，完美保住当日收益率！
-            if (fund.LastTradeDate == tradeDate)
-            {
-                fund.LastAddAmount -= finalReduceAmount; // 同日多次操作抵消/累加
-            }
-            else
-            {
-                fund.LastTradeDate = tradeDate;
-                fund.LastAddAmount = -finalReduceAmount;
-            }
             _context.MyFunds.Update(fund);
             await _context.SaveChangesAsync();
             ClearTodayCache(username);
@@ -1532,10 +1665,7 @@ namespace 估值助手.Controllers
         [HttpGet("force-settle")]
         public async Task<IActionResult> ForceSettle()
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
-            client.DefaultRequestHeaders.Add("Accept", "application/json, text/javascript, */*; q=0.01");
-            client.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
+            var client = _httpClientFactory.CreateClient("EastMoney");
             var targetFunds = await _context.MyFunds.Select(f => f.FundCode).Distinct().ToListAsync();
             var localTime = DateTime.UtcNow.AddHours(8);
             string todayStr = localTime.ToString("yyyy-MM-dd");
@@ -1781,13 +1911,7 @@ namespace 估值助手.Controllers
             var matched = MatchFundsBySector(allFunds, def, fundLimit);
             if (matched.Count == 0) return new List<SectorFundQuote>();
 
-            using var handler = new HttpClientHandler
-            {
-                ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
-            };
-            using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(withMonthRate ? 8 : 5) };
-            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
-            client.DefaultRequestVersion = new Version(1, 1);
+            var client = _httpClientFactory.CreateClient("EastMoneyQuote");
 
             using var limiter = new SemaphoreSlim(8);
             var tasks = matched.Select(async fund =>
@@ -1814,13 +1938,7 @@ namespace 估值助手.Controllers
             try
             {
                 var allFunds = await GetAllFundsAsync();
-                using var handler = new HttpClientHandler
-                {
-                    ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
-                };
-                using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(6) };
-                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
-                client.DefaultRequestVersion = new Version(1, 1);
+                var client = _httpClientFactory.CreateClient("EastMoneyQuote");
 
                 var summaries = new List<SectorSummaryDto>();
                 int rank = 1;
@@ -1894,11 +2012,7 @@ namespace 估值助手.Controllers
                 {
                     long ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                     string url = $"https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz={limit}&po={po}&np=1&fltt=2&invt=2&fid=f62&fs=m:90+t:2,m:90+t:3&fields=f12,f14,f3,f62,f184,f66,f72&_={ts}";
-                    using var handler = new HttpClientHandler { ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true };
-                    using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(6) };
-                    client.DefaultRequestVersion = new Version(1, 1);
-                    client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
-                    client.DefaultRequestHeaders.Add("Referer", "https://data.eastmoney.com/bkzj/");
+                    var client = _httpClientFactory.CreateClient("EastMoneyQuote");
                     string body = await client.GetStringAsync(url);
                     using var doc = JsonDocument.Parse(body);
                     var list = doc.RootElement.GetProperty("data").GetProperty("diff");
@@ -2060,15 +2174,7 @@ namespace 估值助手.Controllers
             string callback = $"jQuery3510_{ts}";
             string url = $"https://np-weblist.eastmoney.com/comm/web/getFastNewsList?client=web&biz=web_724&fastColumn=102&sortEnd=&pageSize={limit}&req_trace={ts}&_={ts + 1}&callback={callback}";
 
-            using var handler = new HttpClientHandler
-            {
-                ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
-            };
-            using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(8) };
-            client.DefaultRequestVersion = new Version(1, 1);
-            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
-            client.DefaultRequestHeaders.Add("Referer", "https://kuaixun.eastmoney.com/");
-            client.DefaultRequestHeaders.Add("Accept", "*/*");
+            var client = _httpClientFactory.CreateClient("EastMoneyQuote");
 
             string body = await client.GetStringAsync(url);
             string json = StripJsonp(body);
@@ -2559,14 +2665,126 @@ namespace 估值助手.Controllers
             return Ok(records);
         }
 
+        [HttpGet("portfolio-exposure")]
+        public async Task<IActionResult> GetPortfolioExposure([FromQuery] string username)
+        {
+            if (string.IsNullOrWhiteSpace(username)) return Unauthorized("缺少账号");
+
+            var funds = await _context.MyFunds.AsNoTracking().Where(f => f.Username == username).ToListAsync();
+            double total = funds.Sum(f => Math.Max(0, f.HoldAmount));
+            if (total <= 0) return Ok(new { totalAmount = 0, exposures = Array.Empty<object>() });
+
+            var exposures = SectorDefinitions.Select(def =>
+            {
+                var matched = funds.Where(f => def.Include.Any(k => f.FundName.Contains(k, StringComparison.OrdinalIgnoreCase)) &&
+                                               !def.Exclude.Any(k => f.FundName.Contains(k, StringComparison.OrdinalIgnoreCase))).ToList();
+                double amount = matched.Sum(f => Math.Max(0, f.HoldAmount));
+                return new
+                {
+                    key = def.Key,
+                    name = def.Name,
+                    amount = Math.Round(amount, 2),
+                    ratio = Math.Round(amount / total * 100.0, 2),
+                    fundCount = matched.Count,
+                    funds = matched.Select(f => new { code = f.FundCode, name = f.FundName, amount = Math.Round(f.HoldAmount, 2) }).ToList()
+                };
+            })
+            .Where(x => x.amount > 0)
+            .OrderByDescending(x => x.amount)
+            .ToList();
+
+            return Ok(new { totalAmount = Math.Round(total, 2), exposures });
+        }
+
+        [HttpGet("daily-report")]
+        public async Task<IActionResult> GetDailyReport([FromQuery] string username, [FromQuery] string? date = null)
+        {
+            if (string.IsNullOrWhiteSpace(username)) return Unauthorized("缺少账号");
+            DateTime targetDate = DateTime.TryParse(date, out var parsed) ? parsed.Date : ChinaNow().Date;
+
+            var rows = await _context.DailyArchives
+                .AsNoTracking()
+                .Where(x => x.Username == username && x.RecordDate == targetDate)
+                .ToListAsync();
+
+            var total = rows.FirstOrDefault(x => x.FundCode == "TOTAL");
+            var fundRows = rows.Where(x => x.FundCode != "TOTAL").ToList();
+            var best = fundRows.OrderByDescending(x => x.DailyProfit).FirstOrDefault();
+            var worst = fundRows.OrderBy(x => x.DailyProfit).FirstOrDefault();
+            int winCount = fundRows.Count(x => x.DailyProfit > 0);
+            int lossCount = fundRows.Count(x => x.DailyProfit < 0);
+
+            return Ok(new
+            {
+                date = targetDate.ToString("yyyy-MM-dd"),
+                hasRecord = total != null,
+                total = total == null ? null : new
+                {
+                    assets = total.Assets,
+                    dailyProfit = total.DailyProfit,
+                    dailyRate = total.DailyRate,
+                    totalProfit = total.TotalProfit,
+                    totalRate = total.TotalRate
+                },
+                bestContributor = best == null ? null : new { best.FundCode, best.FundName, best.DailyProfit, best.DailyRate },
+                worstContributor = worst == null ? null : new { worst.FundCode, worst.FundName, worst.DailyProfit, worst.DailyRate },
+                winCount,
+                lossCount,
+                summary = total == null
+                    ? "当天暂无收盘档案。"
+                    : $"今日总收益 {total.DailyProfit:+0.00;-0.00;0.00} 元，收益率 {total.DailyRate:+0.00;-0.00;0.00}%。盈利 {winCount} 只，亏损 {lossCount} 只。"
+            });
+        }
+
+        [HttpGet("news-impact-timeline")]
+        public async Task<IActionResult> GetNewsImpactTimeline([FromQuery] string username, [FromQuery] int limit = 30)
+        {
+            if (string.IsNullOrWhiteSpace(username)) return Unauthorized("缺少账号");
+            limit = Math.Clamp(limit, 10, 60);
+
+            var funds = await _context.MyFunds.AsNoTracking().Where(f => f.Username == username).ToListAsync();
+            var newsList = await FetchEastMoneyFastNewsAsync(Math.Max(limit * 3, 80));
+            var result = new List<object>();
+
+            foreach (var news in newsList)
+            {
+                var matches = funds
+                    .Select(f => new { fund = f, score = ScoreNewsForFund(news, f) })
+                    .Where(x => x.score.score >= 16)
+                    .OrderByDescending(x => x.score.score)
+                    .Take(3)
+                    .ToList();
+
+                if (matches.Count == 0) continue;
+
+                result.Add(new
+                {
+                    news.Id,
+                    news.Title,
+                    news.Summary,
+                    news.TimeText,
+                    news.DateText,
+                    news.Sentiment,
+                    news.ImpactScore,
+                    matchedFunds = matches.Select(x => new
+                    {
+                        code = x.fund.FundCode,
+                        name = x.fund.FundName,
+                        score = x.score.score,
+                        tags = x.score.tags
+                    }).ToList()
+                });
+
+                if (result.Count >= limit) break;
+            }
+
+            return Ok(result);
+        }
+
         [HttpGet("fund-holdings")]
         public async Task<IActionResult> GetFundHoldings([FromQuery] string fundCode)
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36");
-            client.DefaultRequestHeaders.Add("Accept", "application/json, text/plain, */*");
-            client.DefaultRequestHeaders.Add("Accept-Language", "zh-CN,zh;q=0.9");
-            client.DefaultRequestHeaders.Add("Host", "push2his.eastmoney.com");
+            var client = _httpClientFactory.CreateClient("EastMoney");
             try
             {
                 string positionUrl = $"https://fundmobapi.eastmoney.com/FundMNewApi/FundMNInverstPosition?FCODE={fundCode}&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0";
@@ -2610,9 +2828,7 @@ namespace 估值助手.Controllers
                     string secids = string.Join(",", secidList);
                     string quoteUrl = $"http://push2.eastmoney.com/api/qt/ulist.np/get?secids={secids}&fields=f12,f14,f3";
 
-                    using var quoteClient = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-                    quoteClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
-
+                    var quoteClient = _httpClientFactory.CreateClient("EastMoneyQuote");
                     string quoteRes = await quoteClient.GetStringAsync(quoteUrl);
                     using var quoteDoc = System.Text.Json.JsonDocument.Parse(quoteRes);
 

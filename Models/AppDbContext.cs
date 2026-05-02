@@ -8,6 +8,7 @@ namespace 估值助手.Models
         public DbSet<MyFundConfig> MyFunds { get; set; }
         public DbSet<User> Users { get; set; }
         public DbSet<DailyArchive> DailyArchives { get; set; }
+        public DbSet<OcrCorrection> OcrCorrections { get; set; }
 
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
         {
@@ -61,6 +62,27 @@ namespace 估值助手.Models
             modelBuilder.Entity<User>()
                 .Property(u => u.AvatarDataUrl)
                 .IsRequired(false);
+
+            modelBuilder.Entity<OcrCorrection>()
+                .HasIndex(x => new { x.Username, x.OcrName })
+                .IsUnique()
+                .HasDatabaseName("IX_OcrCorrection_User_OcrName");
+
+            modelBuilder.Entity<OcrCorrection>()
+                .Property(x => x.Username)
+                .IsRequired();
+
+            modelBuilder.Entity<OcrCorrection>()
+                .Property(x => x.OcrName)
+                .IsRequired();
+
+            modelBuilder.Entity<OcrCorrection>()
+                .Property(x => x.FundCode)
+                .IsRequired();
+
+            modelBuilder.Entity<OcrCorrection>()
+                .Property(x => x.FundName)
+                .IsRequired();
         }
     }
 }

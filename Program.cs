@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Net.Http.Headers;
@@ -14,11 +15,19 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
 
+var configuredOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>()
+    ?? new[]
+    {
+        "https://guzhi.21212121.xyz",
+        "http://localhost:5000",
+        "https://localhost:5001"
+    };
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    options.AddPolicy("ConfiguredOrigins", policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.WithOrigins(configuredOrigins)
               .AllowAnyMethod()
               .AllowAnyHeader();
     });
@@ -56,6 +65,38 @@ builder.Services.Configure<FormOptions>(options =>
     options.MultipartHeadersLengthLimit = 64 * 1024;
 });
 
+builder.Services.Configure<BaiduOcrOptions>(builder.Configuration.GetSection("BaiduOcr"));
+builder.Services.AddSingleton<IBaiduOcrService, BaiduOcrService>();
+builder.Services.AddScoped<PortfolioSettlementService>();
+builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+
+builder.Services.AddHttpClient("FundGz", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(6);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0");
+});
+
+builder.Services.AddHttpClient("EastMoney", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(8);
+    client.DefaultRequestVersion = new Version(1, 1);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36");
+    client.DefaultRequestHeaders.TryAddWithoutValidation("Referer", "http://fundf10.eastmoney.com/");
+    client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "application/json, text/javascript, */*; q=0.01");
+});
+
+builder.Services.AddHttpClient("EastMoneyQuote", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(8);
+    client.DefaultRequestVersion = new Version(1, 1);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36");
+    client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "*/*");
+    client.DefaultRequestHeaders.TryAddWithoutValidation("Referer", "https://quote.eastmoney.com/");
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+});
+
 builder.Services.AddMemoryCache();
 builder.Services.AddControllers()
     .AddJsonOptions(opt =>
@@ -66,34 +107,13 @@ builder.Services.AddHostedService<NavSettlementService>();
 
 var app = builder.Build();
 
-app.UseCors("AllowAll");
+app.UseCors("ConfiguredOrigins");
 app.UseResponseCompression();
 
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    dbContext.Database.EnsureCreated();
-
-    var runtimeSql = new[]
-    {
-        "ALTER TABLE MyFunds ADD COLUMN LastSettledProfit DOUBLE NOT NULL DEFAULT 0;",
-        "ALTER TABLE MyFunds ADD COLUMN LastSettledRate DOUBLE NOT NULL DEFAULT 0;",
-        "ALTER TABLE MyFunds ADD COLUMN LastTradeDate VARCHAR(20);",
-        "ALTER TABLE MyFunds ADD COLUMN LastAddAmount DOUBLE NOT NULL DEFAULT 0;",
-        "ALTER TABLE MyFunds ADD COLUMN RealizedProfit DOUBLE NOT NULL DEFAULT 0;",
-        "ALTER TABLE FundRecords ADD COLUMN ActualRate DOUBLE NOT NULL DEFAULT 0;",
-        "ALTER TABLE FundRecords ADD COLUMN DiffRate DOUBLE NOT NULL DEFAULT 0;",
-        "CREATE INDEX IX_FundRecord_Code_Time ON FundRecords (FundCode, FetchTime);",
-        "CREATE INDEX IX_DailyArchive_User_Date_Code ON DailyArchives (Username, RecordDate, FundCode);",
-        "CREATE INDEX IX_DailyArchive_User_Code_Date ON DailyArchives (Username, FundCode, RecordDate);",
-        "ALTER TABLE Users ADD COLUMN AvatarDataUrl LONGTEXT;"
-    };
-
-    foreach (var sql in runtimeSql)
-    {
-        try { dbContext.Database.ExecuteSqlRaw(sql); }
-        catch { }
-    }
+    dbContext.Database.Migrate();
 }
 
 app.UseDefaultFiles();

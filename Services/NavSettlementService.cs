@@ -12,15 +12,12 @@ namespace 估值助手.Services
         private readonly HttpClient _httpClient;
         private readonly IMemoryCache _cache;
 
-        public NavSettlementService(IServiceProvider serviceProvider, ILogger<NavSettlementService> logger, IMemoryCache cache)
+        public NavSettlementService(IServiceProvider serviceProvider, ILogger<NavSettlementService> logger, IMemoryCache cache, IHttpClientFactory httpClientFactory)
         {
             _serviceProvider = serviceProvider;
             _logger = logger;
             _cache = cache;
-            _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
-            _httpClient.DefaultRequestHeaders.Add("Referer", "http://fundf10.eastmoney.com/");
-            _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-            _httpClient.DefaultRequestHeaders.Add("Accept", "application/json, text/javascript, */*; q=0.01");
+            _httpClient = httpClientFactory.CreateClient("EastMoney");
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -325,41 +322,10 @@ namespace 估值助手.Services
             _cache.Remove($"Tactical_TodayData_{username}_{settleDate}");
         }
 
-        private async Task EnsureRuntimeColumnsAsync(AppDbContext dbContext)
-        {
-            var sqlList = new[]
-            {
-                "ALTER TABLE FundRecords ADD COLUMN ActualRate DOUBLE NOT NULL DEFAULT 0;",
-                "ALTER TABLE FundRecords ADD COLUMN DiffRate DOUBLE NOT NULL DEFAULT 0;",
-                "ALTER TABLE MyFunds ADD COLUMN LastSettledDate VARCHAR(20);",
-                "ALTER TABLE MyFunds ADD COLUMN LastSettledProfit DOUBLE NOT NULL DEFAULT 0;",
-                "ALTER TABLE MyFunds ADD COLUMN LastSettledRate DOUBLE NOT NULL DEFAULT 0;",
-                "ALTER TABLE MyFunds ADD COLUMN LastTradeDate VARCHAR(20);",
-                "ALTER TABLE MyFunds ADD COLUMN LastAddAmount DOUBLE NOT NULL DEFAULT 0;",
-                "ALTER TABLE MyFunds ADD COLUMN RealizedProfit DOUBLE NOT NULL DEFAULT 0;",
-                "CREATE INDEX IX_FundRecord_Code_Time ON FundRecords (FundCode, FetchTime);",
-                "CREATE INDEX IX_DailyArchive_User_Date_Code ON DailyArchives (Username, RecordDate, FundCode);"
-            };
-
-            foreach (var sql in sqlList)
-            {
-                try
-                {
-                    await dbContext.Database.ExecuteSqlRawAsync(sql);
-                }
-                catch
-                {
-                    // 列/索引已存在时忽略。正式生产建议改为 EF Core migration。
-                }
-            }
-        }
-
         private async Task SettleTodayNavAsync(DateTime localTime, CancellationToken stoppingToken)
         {
             using var scope = _serviceProvider.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-            await EnsureRuntimeColumnsAsync(dbContext);
 
             string settleDate = localTime.ToString("yyyy-MM-dd");
             var todayStart = localTime.Date;
