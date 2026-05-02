@@ -2985,7 +2985,7 @@
 
                 const updateRadarMode = () => { let d = new Date(); let time = d.getHours() * 100 + d.getMinutes(); isNight.value = (d.getDay() === 0 || d.getDay() === 6 || time < 925 || time > 1605); };
 
-                // ✅ 核心修复：在这里定义防抖，确保 fetchData 已经初始化！
+                // ✅ 核心修复：在这里定义防抖，确保 fetchData 已经初始化！ 
                 const debounce = (fn, delay) => { let t = null; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); }; };
                 const debouncedFetchData = debounce(fetchData, 500);
 
