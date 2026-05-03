@@ -2068,25 +2068,19 @@
 
         createApp({
             setup() {
-                const API_BASE_DEFAULT = 'https://guzhi.21212121.xyz';
-                const normalizeApiBase = (v) => (v || '').trim().replace(/\/$/, '');
-                const getApiBaseCandidates = () => {
-                    const currentOrigin = (location.protocol === 'http:' || location.protocol === 'https:')
-                        ? normalizeApiBase(location.origin)
-                        : '';
+               const API_BASE_DEFAULT = 'https://guzhi.21212121.xyz';
+const normalizeApiBase = (v) => (v || '').trim().replace(/\/+$/, '');
 
-                    const isCdnOrigin = currentOrigin === 'https://guzhicdn.21212121.xyz';
+const getApiBaseCandidates = () => [API_BASE_DEFAULT];
 
-                    const list = [
-                        normalizeApiBase(localStorage.getItem('fund_api_base')),
-                        API_BASE_DEFAULT,
-                        isCdnOrigin ? '' : currentOrigin
-                    ].filter(Boolean);
+let API_BASE = API_BASE_DEFAULT;
 
-                    return [...new Set(list)];
-                };
-                let API_BASE = API_BASE_DEFAULT;
-                const rememberApiBase = (base) => { API_BASE = base; try { localStorage.setItem('fund_api_base', base); } catch (e) { } };
+const rememberApiBase = (base) => {
+    API_BASE = API_BASE_DEFAULT;
+    try {
+        localStorage.setItem('fund_api_base', API_BASE_DEFAULT);
+    } catch (e) { }
+};
                 const apiFetch = async (path, options = {}) => {
                     let lastError = null;
                     for (const base of getApiBaseCandidates()) {
