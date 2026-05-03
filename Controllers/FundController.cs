@@ -53,7 +53,25 @@ namespace 估值助手.Controllers
 
         private static List<FundInfoCache> _globalFundCache = null;
         private static Dictionary<string, FundInfoCache> _exactMatchDict = null;
+        private static readonly SemaphoreSlim _sectorsRefreshLock = new(1, 1);
+        private static readonly SemaphoreSlim _capitalFlowRefreshLock = new(1, 1);
+        private static readonly TimeSpan _staleExternalDataTtl = TimeSpan.FromHours(6);
 
+        private static TimeSpan GetExternalDataFreshTtl()
+        {
+            var now = ChinaNow();
+            if (now.DayOfWeek == DayOfWeek.Saturday || now.DayOfWeek == DayOfWeek.Sunday)
+            {
+                return TimeSpan.FromMinutes(30);
+            }
+
+            var t = now.TimeOfDay;
+            bool isTradingTime =
+                (t >= new TimeSpan(9, 25, 0) && t <= new TimeSpan(11, 35, 0)) ||
+                (t >= new TimeSpan(12, 55, 0) && t <= new TimeSpan(15, 10, 0));
+
+            return isTradingTime ? TimeSpan.FromMinutes(2) : TimeSpan.FromMinutes(30);
+        }
         public FundController(AppDbContext context, IMemoryCache cache, IHttpClientFactory httpClientFactory, IBaiduOcrService ocrService, PortfolioSettlementService portfolioSettlement)
         {
             _context = context;
@@ -1932,65 +1950,123 @@ namespace 估值助手.Controllers
         [HttpGet("sectors")]
         public async Task<IActionResult> GetSectors([FromQuery] bool force = false)
         {
-            string sectorCacheKey = "FundSectorRadarV5";
-            if (!force && _cache.TryGetValue(sectorCacheKey, out object cachedSectors)) return Ok(cachedSectors);
+            const string freshKey = "FundSectorRadarV5";
+            const string staleKey = "FundSectorRadarV5_Stale";
+
+            if (!force && _cache.TryGetValue(freshKey, out object fresh))
+            {
+                return Ok(fresh);
+            }
+
+            if (_cache.TryGetValue(staleKey, out object stale))
+            {
+                _ = Task.Run(RefreshSectorCacheQuietlyAsync);
+                return Ok(stale);
+            }
+
+            if (!await _sectorsRefreshLock.WaitAsync(0))
+            {
+                return StatusCode(503, "板块基金雷达正在刷新，请稍后重试");
+            }
 
             try
             {
-                var allFunds = await GetAllFundsAsync();
-                var client = _httpClientFactory.CreateClient("EastMoneyQuote");
+                if (!force && _cache.TryGetValue(freshKey, out fresh)) return Ok(fresh);
+                if (_cache.TryGetValue(staleKey, out stale)) return Ok(stale);
 
-                var summaries = new List<SectorSummaryDto>();
-                int rank = 1;
-                foreach (var def in SectorDefinitions)
-                {
-                    var matched = MatchFundsBySector(allFunds, def, 22);
-                    if (matched.Count == 0) continue;
-
-                    using var limiter = new SemaphoreSlim(8);
-                    var quoteTasks = matched.Take(18).Select(async fund =>
-                    {
-                        await limiter.WaitAsync();
-                        try { return await FetchFundQuoteAsync(client, fund, false); }
-                        finally { limiter.Release(); }
-                    });
-                    var quotes = (await Task.WhenAll(quoteTasks)).Where(q => q.HasQuote).ToList();
-                    if (quotes.Count == 0) continue;
-
-                    double avgRate = Math.Round(quotes.Average(q => q.Rate), 2);
-                    summaries.Add(new SectorSummaryDto
-                    {
-                        Key = def.Key,
-                        Name = def.Name,
-                        Rate = avgRate,
-                        FundCount = matched.Count,
-                        QuotedCount = quotes.Count,
-                        StreakDays = avgRate > 0.005 ? 1 : (avgRate < -0.005 ? -1 : 0),
-                        HoldingRank = rank++,
-                        UpdatedAt = quotes.Select(q => q.UpdatedAt).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t)) ?? ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
-                        PreviewFunds = quotes.OrderByDescending(q => q.Rate).Take(3).ToList()
-                    });
-                }
-
-                var ordered = summaries.OrderByDescending(s => s.Rate).ToList();
-                var payload = new
-                {
-                    source = "东方财富/天天基金估算 + 本地基金名称主题归类",
-                    updatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
-                    top = ordered.Take(30).ToList(),
-                    bottom = ordered.OrderBy(s => s.Rate).Take(30).ToList(),
-                    all = ordered
-                };
-
-                _cache.Set(sectorCacheKey, payload, TimeSpan.FromMinutes(3));
+                var payload = await BuildSectorRadarPayloadAsync();
+                SetSectorRadarCache(payload);
                 return Ok(payload);
             }
             catch (Exception ex)
             {
                 return StatusCode(500, $"板块基金雷达故障: {ex.Message}");
             }
+            finally
+            {
+                _sectorsRefreshLock.Release();
+            }
         }
 
+        private async Task RefreshSectorCacheQuietlyAsync()
+        {
+            if (!await _sectorsRefreshLock.WaitAsync(0)) return;
+
+            try
+            {
+                var payload = await BuildSectorRadarPayloadAsync();
+                SetSectorRadarCache(payload);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[警告] 板块基金雷达后台刷新失败: {ex.Message}");
+            }
+            finally
+            {
+                _sectorsRefreshLock.Release();
+            }
+        }
+
+        private void SetSectorRadarCache(object payload)
+        {
+            _cache.Set("FundSectorRadarV5", payload, GetExternalDataFreshTtl());
+            _cache.Set("FundSectorRadarV5_Stale", payload, _staleExternalDataTtl);
+        }
+
+        private async Task<object> BuildSectorRadarPayloadAsync()
+        {
+            var allFunds = await GetAllFundsAsync();
+            using var handler = new HttpClientHandler
+            {
+                ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
+            };
+            using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(6) };
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
+            client.DefaultRequestVersion = new Version(1, 1);
+
+            var summaries = new List<SectorSummaryDto>();
+            int rank = 1;
+            foreach (var def in SectorDefinitions)
+            {
+                var matched = MatchFundsBySector(allFunds, def, 22);
+                if (matched.Count == 0) continue;
+
+                using var limiter = new SemaphoreSlim(8);
+                var quoteTasks = matched.Take(18).Select(async fund =>
+                {
+                    await limiter.WaitAsync();
+                    try { return await FetchFundQuoteAsync(client, fund, false); }
+                    finally { limiter.Release(); }
+                });
+
+                var quotes = (await Task.WhenAll(quoteTasks)).Where(q => q.HasQuote).ToList();
+                if (quotes.Count == 0) continue;
+
+                double avgRate = Math.Round(quotes.Average(q => q.Rate), 2);
+                summaries.Add(new SectorSummaryDto
+                {
+                    Key = def.Key,
+                    Name = def.Name,
+                    Rate = avgRate,
+                    FundCount = matched.Count,
+                    QuotedCount = quotes.Count,
+                    StreakDays = avgRate > 0.005 ? 1 : (avgRate < -0.005 ? -1 : 0),
+                    HoldingRank = rank++,
+                    UpdatedAt = quotes.Select(q => q.UpdatedAt).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t)) ?? ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
+                    PreviewFunds = quotes.OrderByDescending(q => q.Rate).Take(3).ToList()
+                });
+            }
+
+            var ordered = summaries.OrderByDescending(s => s.Rate).ToList();
+            return new
+            {
+                source = "东方财富/天天基金估算 + 本地基金名称主题归类",
+                updatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
+                top = ordered.Take(30).ToList(),
+                bottom = ordered.OrderBy(s => s.Rate).Take(30).ToList(),
+                all = ordered
+            };
+        }
         private static string FormatMoneyWanYi(double value)
         {
             var abs = Math.Abs(value);
@@ -2003,63 +2079,132 @@ namespace 估值助手.Controllers
         public async Task<IActionResult> GetCapitalFlow([FromQuery] bool force = false, [FromQuery] int limit = 30)
         {
             limit = Math.Clamp(limit, 10, 80);
-            string cacheKey = $"CapitalFlowV2_{limit}";
-            if (!force && _cache.TryGetValue(cacheKey, out object cached)) return Ok(cached);
+            string freshKey = $"CapitalFlowV2_{limit}";
+            string staleKey = $"CapitalFlowV2_{limit}_Stale";
+
+            if (!force && _cache.TryGetValue(freshKey, out object fresh))
+            {
+                return Ok(fresh);
+            }
+
+            if (_cache.TryGetValue(staleKey, out object stale))
+            {
+                _ = Task.Run(() => RefreshCapitalFlowCacheQuietlyAsync(limit));
+                return Ok(stale);
+            }
+
+            if (!await _capitalFlowRefreshLock.WaitAsync(0))
+            {
+                return StatusCode(503, "主力资金流向正在刷新，请稍后重试");
+            }
 
             try
             {
-                async Task<List<CapitalFlowRowDto>> FetchRowsAsync(int po)
-                {
-                    long ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                    string url = $"https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz={limit}&po={po}&np=1&fltt=2&invt=2&fid=f62&fs=m:90+t:2,m:90+t:3&fields=f12,f14,f3,f62,f184,f66,f72&_={ts}";
-                    var client = _httpClientFactory.CreateClient("EastMoneyQuote");
-                    string body = await client.GetStringAsync(url);
-                    using var doc = JsonDocument.Parse(body);
-                    var list = doc.RootElement.GetProperty("data").GetProperty("diff");
-                    var result = new List<CapitalFlowRowDto>();
-                    foreach (var item in list.EnumerateArray())
-                    {
-                        string code = item.TryGetProperty("f12", out var f12) ? f12.GetString() ?? "" : "";
-                        string name = item.TryGetProperty("f14", out var f14) ? f14.GetString() ?? "" : "";
-                        double rate = item.TryGetProperty("f3", out var f3) && f3.ValueKind == JsonValueKind.Number ? f3.GetDouble() : 0;
-                        double mainNet = item.TryGetProperty("f62", out var f62) && f62.ValueKind == JsonValueKind.Number ? f62.GetDouble() : 0;
-                        double mainRatio = item.TryGetProperty("f184", out var f184) && f184.ValueKind == JsonValueKind.Number ? f184.GetDouble() : 0;
-                        double superNet = item.TryGetProperty("f66", out var f66) && f66.ValueKind == JsonValueKind.Number ? f66.GetDouble() : 0;
-                        double bigNet = item.TryGetProperty("f72", out var f72) && f72.ValueKind == JsonValueKind.Number ? f72.GetDouble() : 0;
-                        if (string.IsNullOrWhiteSpace(name)) continue;
-                        result.Add(new CapitalFlowRowDto
-                        {
-                            Code = code,
-                            Name = name,
-                            Rate = Math.Round(rate, 2),
-                            MainNet = mainNet,
-                            MainNetText = FormatMoneyWanYi(mainNet),
-                            MainRatio = Math.Round(mainRatio, 2),
-                            SuperNet = superNet,
-                            BigNet = bigNet
-                        });
-                    }
-                    return result;
-                }
+                if (!force && _cache.TryGetValue(freshKey, out fresh)) return Ok(fresh);
+                if (_cache.TryGetValue(staleKey, out stale)) return Ok(stale);
 
-                var inflow = (await FetchRowsAsync(1)).OrderByDescending(x => x.MainNet).Take(limit).ToList();
-                var outflow = (await FetchRowsAsync(0)).OrderBy(x => x.MainNet).Take(limit).ToList();
-                var rows = inflow.Concat(outflow)
-                    .GroupBy(x => x.Code)
-                    .Select(g => g.OrderByDescending(x => Math.Abs(x.MainNet)).First())
-                    .OrderByDescending(x => x.MainNet)
-                    .ToList();
-
-                var payload = new { source = "东方财富数据中心-板块资金流向", updatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), rows, inflow, outflow };
-                _cache.Set(cacheKey, payload, TimeSpan.FromMinutes(2));
+                var payload = await BuildCapitalFlowPayloadAsync(limit);
+                SetCapitalFlowCache(limit, payload);
                 return Ok(payload);
             }
             catch (Exception ex)
             {
                 return StatusCode(500, $"主力资金流向获取失败: {ex.Message}");
             }
+            finally
+            {
+                _capitalFlowRefreshLock.Release();
+            }
         }
 
+        private async Task RefreshCapitalFlowCacheQuietlyAsync(int limit)
+        {
+            if (!await _capitalFlowRefreshLock.WaitAsync(0)) return;
+
+            try
+            {
+                var payload = await BuildCapitalFlowPayloadAsync(limit);
+                SetCapitalFlowCache(limit, payload);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[警告] 主力资金流向后台刷新失败: {ex.Message}");
+            }
+            finally
+            {
+                _capitalFlowRefreshLock.Release();
+            }
+        }
+
+        private void SetCapitalFlowCache(int limit, object payload)
+        {
+            _cache.Set($"CapitalFlowV2_{limit}", payload, GetExternalDataFreshTtl());
+            _cache.Set($"CapitalFlowV2_{limit}_Stale", payload, _staleExternalDataTtl);
+        }
+
+        private async Task<object> BuildCapitalFlowPayloadAsync(int limit)
+        {
+            async Task<List<CapitalFlowRowDto>> FetchRowsAsync(int po)
+            {
+                long ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                string url = $"https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz={limit}&po={po}&np=1&fltt=2&invt=2&fid=f62&fs=m:90+t:2,m:90+t:3&fields=f12,f14,f3,f62,f184,f66,f72&_={ts}";
+                using var handler = new HttpClientHandler { ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true };
+                using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(6) };
+                client.DefaultRequestVersion = new Version(1, 1);
+                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
+                client.DefaultRequestHeaders.Add("Referer", "https://data.eastmoney.com/bkzj/");
+
+                string body = await client.GetStringAsync(url);
+                using var doc = JsonDocument.Parse(body);
+                var list = doc.RootElement.GetProperty("data").GetProperty("diff");
+
+                var result = new List<CapitalFlowRowDto>();
+                foreach (var item in list.EnumerateArray())
+                {
+                    string code = item.TryGetProperty("f12", out var f12) ? f12.GetString() ?? "" : "";
+                    string name = item.TryGetProperty("f14", out var f14) ? f14.GetString() ?? "" : "";
+                    double rate = item.TryGetProperty("f3", out var f3) && f3.ValueKind == JsonValueKind.Number ? f3.GetDouble() : 0;
+                    double mainNet = item.TryGetProperty("f62", out var f62) && f62.ValueKind == JsonValueKind.Number ? f62.GetDouble() : 0;
+                    double mainRatio = item.TryGetProperty("f184", out var f184) && f184.ValueKind == JsonValueKind.Number ? f184.GetDouble() : 0;
+                    double superNet = item.TryGetProperty("f66", out var f66) && f66.ValueKind == JsonValueKind.Number ? f66.GetDouble() : 0;
+                    double bigNet = item.TryGetProperty("f72", out var f72) && f72.ValueKind == JsonValueKind.Number ? f72.GetDouble() : 0;
+
+                    if (string.IsNullOrWhiteSpace(name)) continue;
+
+                    result.Add(new CapitalFlowRowDto
+                    {
+                        Code = code,
+                        Name = name,
+                        Rate = Math.Round(rate, 2),
+                        MainNet = mainNet,
+                        MainNetText = FormatMoneyWanYi(mainNet),
+                        MainRatio = Math.Round(mainRatio, 2),
+                        SuperNet = superNet,
+                        BigNet = bigNet
+                    });
+                }
+
+                return result;
+            }
+
+            var inflow = (await FetchRowsAsync(1)).OrderByDescending(x => x.MainNet).Take(limit).ToList();
+            var outflow = (await FetchRowsAsync(0)).OrderBy(x => x.MainNet).Take(limit).ToList();
+
+            var rows = inflow.Concat(outflow)
+                .GroupBy(x => x.Code)
+                .Select(g => g.OrderByDescending(x => Math.Abs(x.MainNet)).First())
+                .OrderByDescending(x => x.MainNet)
+                .ToList();
+
+            return new
+            {
+                source = "东方财富数据中心-板块资金流向",
+                updatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
+                rows,
+                inflow,
+                outflow
+            };
+        }
         [HttpGet("sector-details")]
         public async Task<IActionResult> GetSectorDetails([FromQuery] string secCode)
         {
