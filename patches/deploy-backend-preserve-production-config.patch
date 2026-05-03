@@ -1,0 +1,27 @@
+--- a/.github/workflows/deploy-backend.yml
++++ b/.github/workflows/deploy-backend.yml
+@@ -153,8 +153,27 @@
+           if [ -f "$APP_DIR/估值助手.dll" ]; then
+             cp -f "$APP_DIR/估值助手.dll" "$APP_DIR/估值助手.dll.bak"
+           fi
+ 
++          CONFIG_BACKUP="/tmp/guzhi_appsettings.Production.json"
++          if [ -f "$APP_DIR/appsettings.Production.json" ]; then
++            cp -f "$APP_DIR/appsettings.Production.json" "$CONFIG_BACKUP"
++          fi
++
+           cp -a "$TMP_DIR"/. "$APP_DIR"/
++
++          if [ -f "$CONFIG_BACKUP" ]; then
++            cp -f "$CONFIG_BACKUP" "$APP_DIR/appsettings.Production.json"
++            chmod 600 "$APP_DIR/appsettings.Production.json" || true
++          fi
++
++          if [ ! -f "$APP_DIR/appsettings.Production.json" ]; then
++            echo "警告：线上缺少 appsettings.Production.json。OCR 密钥、数据库连接和 CORS 生产配置可能不可用。"
++          fi
++
+           sync
+ 
+           echo "线上 DLL："
+           find "$APP_DIR" -maxdepth 1 -name '*.dll' -printf '%f %s bytes\n'
