@@ -3439,9 +3439,10 @@
         createApp({
             setup() {
                 // 固定后端 API 域名：CDN 页面不再先试 guzhicdn 自己，避免登录和首屏请求多等一次失败重试。
+                // API_FIXED_BACKEND_ONLY_20260503
+                // 前端可以部署在 https://guzhicdn.21212121.xyz/index.html；所有后端接口强制请求 https://guzhi.21212121.xyz/api/...
                 const API_BASE_DEFAULT = 'https://guzhi.21212121.xyz';
-                let API_BASE = API_BASE_DEFAULT;
-                try { localStorage.setItem('fund_api_base', API_BASE_DEFAULT); } catch (e) { }
+                const API_BASE = API_BASE_DEFAULT;
 
                 const apiFetch = async (path, options = {}) => fetch(API_BASE + path, options);
 
@@ -3603,10 +3604,10 @@
                     newsUpdatedAt.value = data?.updatedAt || '';
                 };
                 const warmNewsCache = () => {
-                    if (newsWarmStarted || !currentUser.value) return;
-                    newsWarmStarted = true;
-                    setTimeout(() => fetchNews('global', false, { background: true }), 800);
-                    setTimeout(() => fetchNews('holding', false, { background: true }), 1800);
+                    // PERF_20260503: 首屏不再预热资讯。
+                    // 原先这里会在首页打开后后台请求 global + holding 两组资讯；
+                    // /api/fund/news 受外部资讯源影响较大，放到进入“资讯”页时再加载，避免首屏网络瀑布被拖长。
+                    return;
                 };
 
                 const analysisTotalRecords = computed(() => analysisRecords.value.filter(r => r.fundCode === 'TOTAL'));
@@ -4064,16 +4065,36 @@
                     } catch (e) { }
                 };
 
-                const saveUiState = async (key, state) => {
-                    if (!currentUser.value || !key) return;
-                    uiStateMap.value = { ...(uiStateMap.value || {}), [key]: state };
+                // PERF_20260503: ui-state 写库防抖 + 去重。
+                // 后端当前是单 key 保存接口；这里不改协议，只把短时间内重复写同一 key 合并为最后一次。
+                const uiStateSaveTimers = new Map();
+                const uiStatePendingPayloads = new Map();
+                const uiStateLastJson = new Map();
+                const flushUiState = async (key) => {
+                    const payload = uiStatePendingPayloads.get(key);
+                    if (!payload || !currentUser.value) return;
+                    uiStatePendingPayloads.delete(key);
+                    const json = JSON.stringify(payload);
+                    if (uiStateLastJson.get(key) === json) return;
                     try {
                         await apiFetch('/api/fund/ui-state', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ username: currentUser.value, key, state })
+                            body: json
                         });
+                        uiStateLastJson.set(key, json);
                     } catch (e) { }
+                };
+                const saveUiState = (key, state, options = {}) => {
+                    if (!currentUser.value || !key) return;
+                    uiStateMap.value = { ...(uiStateMap.value || {}), [key]: state };
+                    const payload = { username: currentUser.value, key, state };
+                    const json = JSON.stringify(payload);
+                    if (uiStateLastJson.get(key) === json) return;
+                    uiStatePendingPayloads.set(key, payload);
+                    clearTimeout(uiStateSaveTimers.get(key));
+                    const delayMs = Number(options.delayMs ?? 1200);
+                    uiStateSaveTimers.set(key, setTimeout(() => flushUiState(key), Math.max(0, delayMs)));
                 };
 
                 const persistAnalysisPreferences = () => saveUiState('analysis_preferences', {
@@ -4138,15 +4159,34 @@
                     } catch (e) { }
                 };
 
-                const saveInsightSnapshot = async (snapshotType, payload, snapshotDate = todayDashStr) => {
-                    if (!currentUser.value || !snapshotType) return;
+                // PERF_20260503: insight 快照写库防抖 + 去重。
+                // dashboard 刷新期间可能连续触发，保留最后一次，避免多次 preflight/POST 排队。
+                const insightSnapshotTimers = new Map();
+                const insightSnapshotPending = new Map();
+                const insightSnapshotLastJson = new Map();
+                const flushInsightSnapshot = async (key) => {
+                    const data = insightSnapshotPending.get(key);
+                    if (!data || !currentUser.value) return;
+                    insightSnapshotPending.delete(key);
+                    if (insightSnapshotLastJson.get(key) === data.json) return;
                     try {
                         await apiFetch('/api/fund/insight-snapshots', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ username: currentUser.value, snapshotType, snapshotDate, payload })
+                            body: data.json
                         });
+                        insightSnapshotLastJson.set(key, data.json);
                     } catch (e) { }
+                };
+                const saveInsightSnapshot = (snapshotType, payload, snapshotDate = todayDashStr) => {
+                    if (!currentUser.value || !snapshotType) return;
+                    const body = { username: currentUser.value, snapshotType, snapshotDate, payload };
+                    const key = `${snapshotType}_${snapshotDate}`;
+                    const json = JSON.stringify(body);
+                    if (insightSnapshotLastJson.get(key) === json) return;
+                    insightSnapshotPending.set(key, { json });
+                    clearTimeout(insightSnapshotTimers.get(key));
+                    insightSnapshotTimers.set(key, setTimeout(() => flushInsightSnapshot(key), 2000));
                 };
 
                 const calibrationRows = computed(() => {
@@ -4494,6 +4534,8 @@
                     }
                 };
                 let echartsLoadingPromise = null;
+                const ECHARTS_LOCAL_URL = '/vendor/echarts.min.js';
+                const ECHARTS_FALLBACK_URL = 'https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js';
                 const ensureEcharts = () => {
                     if (window.echarts) return Promise.resolve(window.echarts);
                     if (echartsLoadingPromise) return echartsLoadingPromise;
@@ -4504,13 +4546,21 @@
                             existing.addEventListener('error', reject, { once: true });
                             return;
                         }
-                        const script = document.createElement('script');
-                        script.id = 'lazy-echarts';
-                        script.src = 'https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js';
-                        script.async = true;
-                        script.onload = () => resolve(window.echarts);
-                        script.onerror = reject;
-                        document.body.appendChild(script);
+                        const loadScript = (src, allowFallback) => {
+                            const oldNode = document.getElementById('lazy-echarts');
+                            if (oldNode) oldNode.remove();
+                            const script = document.createElement('script');
+                            script.id = 'lazy-echarts';
+                            script.src = src;
+                            script.async = true;
+                            script.onload = () => resolve(window.echarts);
+                            script.onerror = () => {
+                                if (allowFallback) loadScript(ECHARTS_FALLBACK_URL, false);
+                                else reject(new Error('ECharts 加载失败'));
+                            };
+                            document.body.appendChild(script);
+                        };
+                        loadScript(ECHARTS_LOCAL_URL, true);
                     });
                     return echartsLoadingPromise;
                 };
@@ -4867,7 +4917,7 @@
 
                 const handleVisibilityChange = () => { if (document.visibilityState === 'visible') { updateRadarMode(); } };
 
-                const initDashboard = async () => { await loadPersistentUiState(); await loadCalibrationProfiles(); nextTick(() => { updateRadarMode(); setTimeout(() => { fetchData({ force: false }); if (assetMode.value === 'stock') loadStockDashboard(false); warmNewsCache(); }, 120); }); };
+                const initDashboard = async () => { await loadPersistentUiState(); await loadCalibrationProfiles(); nextTick(() => { updateRadarMode(); setTimeout(() => { fetchData({ force: false }); if (assetMode.value === 'stock') loadStockDashboard(false); }, 120); }); };
 
                 const fetchUserProfile = async () => {
                     if (!currentUser.value) return;
