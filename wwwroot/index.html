@@ -1742,7 +1742,6 @@
 
                             <div style="display: flex; gap: 6px; flex-shrink: 0; align-items: center;">
                                 <button @click="fetchHistory(fund.code, fund.name)" style="background: rgba(56, 189, 248, 0.2); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 12px; display: flex; align-items: center; justify-content: center;" title="查看官方档案">📈</button>
-                                <button class="fund-archive-btn" @click="fetchMyArchives(fund.code, fund.name)" title="查看专属档案">📂</button>
                                 <button @click="openRecoveryModal(fund)" style="background: rgba(251, 191, 36, 0.18); border: 1px solid rgba(251, 191, 36, 0.35); color: #fbbf24; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 12px; display:flex;align-items:center;justify-content:center;" title="回本路径模拟">🧭</button>
 
                                 <button @click="openAddModal(fund)" style="background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;" title="加仓">➕</button>
@@ -1773,6 +1772,10 @@
                         </div>
 
                         <div class="metrics-grid">
+                            <div class="metric-item">
+                                <span class="metric-label">💰 持仓本金</span>
+                                <span class="metric-value" :style="{color: privacyMode === 0 ? ((fund.cost || 0) > 0 ? '#cbd5e1' : '#eab308') : '#cbd5e1'}">{{ privacyMode === 0 ? (fund.cost > 0 ? fund.cost : '未设置') : '****' }}</span>
+                            </div>
                             <div class="metric-item" style="background: rgba(16, 185, 129, 0.1); padding: 2px; border-radius: 4px;">
                                 <span class="metric-label" style="color: #10b981;">💎 今日市值</span>
                                 <span class="metric-value" style="color: #f8fafc; font-weight: bold;">
@@ -1784,8 +1787,8 @@
                                 <span class="metric-value" :style="{color: privacyMode <= 1 ? (fund.todayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 1 ? (fund.todayProfit >= 0 ? '+' : '') + fund.todayProfit : '****' }}</span>
                             </div>
                             <div class="metric-item">
-                                <span class="metric-label">💰 持仓本金</span>
-                                <span class="metric-value" :style="{color: privacyMode === 0 ? ((fund.cost || 0) > 0 ? '#cbd5e1' : '#eab308') : '#cbd5e1'}">{{ privacyMode === 0 ? (fund.cost > 0 ? fund.cost : '未设置') : '****' }}</span>
+                                <span class="metric-label">🚀 今日收益率</span>
+                                <span class="metric-value" :style="{color: privacyMode <= 2 ? (fund.currentRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 2 ? ((fund.currentRate > 0 ? '+' : '') + fund.currentRate + '%') : '****' }}</span>
                             </div>
                             <div class="metric-item">
                                 <span class="metric-label">💰 累计盈亏</span>
@@ -1794,10 +1797,6 @@
                             <div class="metric-item">
                                 <span class="metric-label">📈 累计收益率</span>
                                 <span class="metric-value" :style="{color: privacyMode <= 2 ? (fund.existingReturnRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 2 ? fund.existingReturnRate + '%' : '****' }}</span>
-                            </div>
-                            <div class="metric-item" style="grid-column: span 3; text-align: center;">
-                                <span class="metric-label">回本涨幅</span>
-                                <span class="metric-value" :style="{color: privacyMode <= 2 ? (fund.breakEvenRate > 0 ? '#eab308' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 2 ? (fund.breakEvenRate > 0 ? fund.breakEvenRate + '%' : '✅ 盈利') : '****' }}</span>
                             </div>
                         </div>
                     </div>
@@ -1823,7 +1822,7 @@
                 </div>
                 <div class="sector-page-layout">
                     <div class="glass-panel" style="padding:16px;">
-                        <div style="display:flex;gap:10px;margin-bottom:12px;"><button @click="sectorMode='top'" :class="['btn', sectorMode==='top' ? 'btn-danger' : '']" style="flex:1;justify-content:center;border-radius:14px;">🔥 领涨</button><button @click="sectorMode='bottom'" :class="['btn', sectorMode==='bottom' ? 'btn-success' : '']" style="flex:1;justify-content:center;border-radius:14px;">❄️ 领跌</button></div>
+                        <div style="display:flex;gap:10px;margin-bottom:12px;"><button @click="sectorMode='top'" :class="['btn', sectorMode==='top' ? 'btn-danger' : '']" style="flex:1;justify-content:center;border-radius:14px;">领涨</button><button @click="sectorMode='bottom'" :class="['btn', sectorMode==='bottom' ? 'btn-success' : '']" style="flex:1;justify-content:center;border-radius:14px;">领跌</button></div>
                         <div v-if="isSectorLoading" style="color:#94a3b8;text-align:center;padding:50px 0;">📡 正在扫描板块基金池...</div>
                         <div v-else>
                             <div class="sector-table-head"><span>板块名称</span><span style="text-align:right;">涨跌幅</span><span style="text-align:right;">方向</span><span style="text-align:right;">基金数</span></div>
@@ -1853,15 +1852,15 @@
                 <div class="glass-panel capital-flow-panel">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;">
                         <div>
-                            <div class="page-title" style="font-size:18px;">💧 主力资金</div>
-                            <div class="page-subtitle">{{ capitalFlowSource || '东方财富板块资金流向' }} · {{ capitalFlowUpdatedAt || '待更新' }}</div>
+                            <div class="page-title" style="font-size:18px;">💧 行业/赛道主力资金</div>
+                            <div class="page-subtitle">{{ capitalFlowSource || '东方财富板块资金流向' }} · 已过滤指数、风格、事件标签 · {{ capitalFlowUpdatedAt || '待更新' }}</div>
                         </div>
                         <button class="btn" @click="fetchCapitalFlow(true)">🔄</button>
                     </div>
                     <div v-if="isCapitalLoading" class="news-empty">📡 正在同步主力资金...</div>
                     <div v-else class="capital-two-col">
                         <div class="capital-box">
-                            <div class="capital-box-title"><span>🔴 主力流入</span><span style="color:#94a3b8;font-size:11px;">TOP {{ capitalFlowInRows.length }}</span></div>
+                            <div class="capital-box-title"><span>🔴 行业/赛道流入</span><span style="color:#94a3b8;font-size:11px;">TOP {{ capitalFlowInRows.length }}</span></div>
                             <div class="capital-row capital-head"><span>板块</span><span class="capital-value">净流入</span><span class="capital-value">净占比</span></div>
                             <div v-for="item in capitalFlowInRows.slice(0, 12)" :key="'in-'+item.code" class="capital-row">
                                 <div style="min-width:0;"><div class="capital-name">{{ item.name }}</div><div class="capital-sub">涨跌 {{ item.rate > 0 ? '+' : '' }}{{ item.rate }}%</div></div>
@@ -1870,7 +1869,7 @@
                             </div>
                         </div>
                         <div class="capital-box">
-                            <div class="capital-box-title"><span>🟢 主力流出</span><span style="color:#94a3b8;font-size:11px;">TOP {{ capitalFlowOutRows.length }}</span></div>
+                            <div class="capital-box-title"><span>🟢 行业/赛道流出</span><span style="color:#94a3b8;font-size:11px;">TOP {{ capitalFlowOutRows.length }}</span></div>
                             <div class="capital-row capital-head"><span>板块</span><span class="capital-value">净流出</span><span class="capital-value">净占比</span></div>
                             <div v-for="item in capitalFlowOutRows.slice(0, 12)" :key="'out-'+item.code" class="capital-row">
                                 <div style="min-width:0;"><div class="capital-name">{{ item.name }}</div><div class="capital-sub">涨跌 {{ item.rate > 0 ? '+' : '' }}{{ item.rate }}%</div></div>
@@ -1894,13 +1893,12 @@
                         </div>
                     </div><div class="glass-panel" style="padding:16px;">
                         <div class="page-title" style="font-size:18px;">🧩 资讯影响时间线</div>
-                        <div class="page-subtitle">按持仓主题聚合最近资讯，标记潜在利好/利空。</div>
+                        <div class="page-subtitle">按持仓主题聚合最近资讯，标记潜在利好/利空；已隐藏原始代码标签。</div>
                         <div style="margin-top:12px;">
                             <div v-if="newsImpactSummary.length===0" class="news-empty">切到“持仓资讯”后自动生成</div>
-                            <div v-for="item in newsImpactSummary" :key="item.name" class="quick-holding-card" @click="newsMode='holding'; fetchNews('holding', false);">
+                            <div v-for="item in newsImpactSummary" :key="item.name" class="quick-holding-card">
                                 <div style="display:flex;justify-content:space-between;gap:8px;"><strong style="color:#f8fafc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.name }}</strong><span :style="{color:item.score>=0?'#ff4d4f':'#10b981',fontWeight:'900'}">{{ item.score>=0?'+':'' }}{{ item.score }}</span></div>
                                 <div style="color:#94a3b8;font-size:12px;margin-top:6px;line-height:1.45;">{{ item.latestTitle || '暂无明确匹配资讯' }}</div>
-                                <span v-for="tag in item.tags" :key="item.name+tag" class="impact-chip">{{ tag }}</span>
                             </div>
                         </div>
                     </div>
@@ -1923,7 +1921,40 @@
                                 </template>
                             </div>
                         </div>
-                    </div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">当日盈亏明细</div><div class="page-subtitle">{{ selectedAnalysisDate || '请选择日期' }}</div><div style="margin-top:12px;"><div v-if="analysisLoading" class="news-empty">📡 正在读取收益档案...</div><div v-else-if="selectedDayFundRecords.length===0" class="news-empty">当天暂无明细</div><div v-else><div v-for="(item,index) in selectedDayFundRecords" :key="item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="min-width:0;"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.fundName }}</div><div style="color:#64748b;font-size:11px;font-family:monospace;">{{ item.fundCode }} · 市值 {{ Number(item.assets || 0).toFixed(2) }}</div></div><div :style="{textAlign:'right',color:item.dailyProfit>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New'}">{{ item.dailyProfit>0?'+':'' }}{{ Number(item.dailyProfit||0).toFixed(2) }}<br><span style="font-size:12px;">{{ item.dailyRate>0?'+':'' }}{{ Number(item.dailyRate||0).toFixed(2) }}%</span></div></div></div></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">至今总盈亏明细</div><div class="page-subtitle">当前累计总盈亏 {{ totalProfit >= 0 ? '+' : '' }}{{ totalProfit.toFixed(2) }} · 按累计盈亏绝对值排序</div><div style="margin-top:12px;"><div v-if="analysisLoading" class="news-empty">📡 正在读取收益档案...</div><div v-else-if="selectedDayTotalProfitRecords.length===0" class="news-empty">暂无累计明细</div><div v-else><div v-for="(item,index) in selectedDayTotalProfitRecords" :key="'total-'+item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="min-width:0;"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.fundName }}</div><div style="color:#64748b;font-size:11px;font-family:monospace;">{{ item.fundCode }} · 市值 {{ Number(item.assets || 0).toFixed(2) }}</div></div><div :style="{textAlign:'right',color:item.totalProfit>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New'}">{{ item.totalProfit>0?'+':'' }}{{ Number(item.totalProfit||0).toFixed(2) }}<br><span style="font-size:12px;">{{ item.totalRate>0?'+':'' }}{{ Number(item.totalRate||0).toFixed(2) }}%</span></div></div></div></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">盈利 TOP5</div><div v-for="(item,index) in analysisProfitTop" :key="'p'+item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="color:#f8fafc;font-weight:800;">{{ item.fundName }}</div><div style="text-align:right;color:#ff4d4f;font-weight:900;">+{{ Number(item.dailyProfit||0).toFixed(2) }}</div></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">亏损 TOP5</div><div v-for="(item,index) in analysisLossTop" :key="'l'+item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="color:#f8fafc;font-weight:800;">{{ item.fundName }}</div><div style="text-align:right;color:#10b981;font-weight:900;">{{ Number(item.dailyProfit||0).toFixed(2) }}</div></div></div>
+                    </div><div class="glass-panel" style="padding:16px;">
+                        <div style="display:flex;gap:10px;margin-bottom:12px;">
+                            <button @click="analysisDetailMode='daily'" :class="['btn', analysisDetailMode==='daily' ? 'btn-danger' : '']" style="flex:1;justify-content:center;border-radius:14px;">当日盈亏明细</button>
+                            <button @click="analysisDetailMode='total'" :class="['btn', analysisDetailMode==='total' ? 'btn-success' : '']" style="flex:1;justify-content:center;border-radius:14px;">至今总盈亏明细</button>
+                        </div>
+                        <template v-if="analysisDetailMode==='daily'">
+                            <div class="page-subtitle">{{ selectedAnalysisDate || '请选择日期' }}</div>
+                            <div style="margin-top:12px;">
+                                <div v-if="analysisLoading" class="news-empty">📡 正在读取收益档案...</div>
+                                <div v-else-if="selectedDayFundRecords.length===0" class="news-empty">当天暂无明细</div>
+                                <div v-else>
+                                    <div v-for="(item,index) in selectedDayFundRecords" :key="item.fundCode" class="profit-list-row">
+                                        <span class="rank-badge">{{ index+1 }}</span>
+                                        <div style="min-width:0;"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.fundName }}</div><div style="color:#64748b;font-size:11px;font-family:monospace;">{{ item.fundCode }} · 市值 {{ Number(item.assets || 0).toFixed(2) }}</div></div>
+                                        <div :style="{textAlign:'right',color:item.dailyProfit>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New'}">{{ item.dailyProfit>0?'+':'' }}{{ Number(item.dailyProfit||0).toFixed(2) }}<br><span style="font-size:12px;">{{ item.dailyRate>0?'+':'' }}{{ Number(item.dailyRate||0).toFixed(2) }}%</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                        <template v-else>
+                            <div class="page-subtitle">当前累计总盈亏 {{ totalProfit >= 0 ? '+' : '' }}{{ totalProfit.toFixed(2) }} · 按累计盈亏绝对值排序</div>
+                            <div style="margin-top:12px;">
+                                <div v-if="analysisLoading" class="news-empty">📡 正在读取收益档案...</div>
+                                <div v-else-if="selectedDayTotalProfitRecords.length===0" class="news-empty">暂无累计明细</div>
+                                <div v-else>
+                                    <div v-for="(item,index) in selectedDayTotalProfitRecords" :key="'total-'+item.fundCode" class="profit-list-row">
+                                        <span class="rank-badge">{{ index+1 }}</span>
+                                        <div style="min-width:0;"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.fundName }}</div><div style="color:#64748b;font-size:11px;font-family:monospace;">{{ item.fundCode }} · 市值 {{ Number(item.assets || 0).toFixed(2) }}</div></div>
+                                        <div :style="{textAlign:'right',color:item.totalProfit>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New'}">{{ item.totalProfit>0?'+':'' }}{{ Number(item.totalProfit||0).toFixed(2) }}<br><span style="font-size:12px;">{{ item.totalRate>0?'+':'' }}{{ Number(item.totalRate||0).toFixed(2) }}%</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">盈利 TOP5</div><div v-for="(item,index) in analysisProfitTop" :key="'p'+item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="color:#f8fafc;font-weight:800;">{{ item.fundName }}</div><div style="text-align:right;color:#ff4d4f;font-weight:900;">+{{ Number(item.dailyProfit||0).toFixed(2) }}</div></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">亏损 TOP5</div><div v-for="(item,index) in analysisLossTop" :key="'l'+item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="color:#f8fafc;font-weight:800;">{{ item.fundName }}</div><div style="text-align:right;color:#10b981;font-weight:900;">{{ Number(item.dailyProfit||0).toFixed(2) }}</div></div></div>
                 </div>
             </div>
 
@@ -1960,7 +1991,6 @@
                     </div>
                     <div class="profile-actions">
                         <button class="btn profile-action-btn btn-primary" @click="triggerAvatarUpload">🖼️ 设置头像</button>
-                        <button v-if="userAvatar" class="btn profile-action-btn" @click="clearAvatar">🧹 清除头像</button>
                         <button class="btn profile-action-btn profile-logout-btn" @click="handleLogout">🚪 退出登录</button>
                         <button class="btn profile-action-btn" @click="showProfileModal = false">取消</button>
                     </div>
@@ -2087,8 +2117,8 @@
                     </div>
 
                     <div style="display:flex;gap:10px;margin-bottom:12px;">
-                        <button @click="sectorMode='top'" :class="['btn', sectorMode==='top' ? 'btn-danger' : '']" style="flex:1;justify-content:center;border-radius:14px;">🔥 领涨板块</button>
-                        <button @click="sectorMode='bottom'" :class="['btn', sectorMode==='bottom' ? 'btn-success' : '']" style="flex:1;justify-content:center;border-radius:14px;">❄️ 领跌板块</button>
+                        <button @click="sectorMode='top'" :class="['btn', sectorMode==='top' ? 'btn-danger' : '']" style="flex:1;justify-content:center;border-radius:14px;">领涨板块</button>
+                        <button @click="sectorMode='bottom'" :class="['btn', sectorMode==='bottom' ? 'btn-success' : '']" style="flex:1;justify-content:center;border-radius:14px;">领跌板块</button>
                         <button @click="fetchSectors(true)" class="btn" style="justify-content:center;border-radius:14px;">🔄</button>
                     </div>
 
@@ -2340,6 +2370,7 @@
                 const analysisMonth = ref(todayDashStr.slice(0, 7));
                 const selectedAnalysisDate = ref(todayDashStr);
                 const analysisViewMode = ref('profit');
+                const analysisDetailMode = ref('daily');
                 const analysisLoading = ref(false);
                 const analysisRecords = ref([]);
 
@@ -2926,8 +2957,10 @@
                 const isBoardFlowName = (name = '') => {
                     const text = String(name || '').trim();
                     if (!text) return false;
-                    const blocked = ['融资融券', '富时罗素', '标准普尔', 'MSCI', '沪股通', '深股通', '大盘股', 'HS300', '基金重仓', '昨日涨停', '昨日连板', '昨日触板', '证金持股', '养老金', '中字头', '上证', '深证', '北证'];
-                    return !blocked.some(k => text.includes(k));
+                    const blocked = ['融资融券', '富时罗素', '标准普尔', 'MSCI', '沪股通', '深股通', '大盘股', 'HS300', '基金重仓', '昨日涨停', '昨日连板', '昨日触板', '昨日高振幅', '昨日首板', '昨日连板', '证金持股', '养老金', '中字头', '上证', '深证', '北证', '年报预增', '央国企改革', '机构重仓', '东方财富', '龙虎榜', '融资客', '参股', '破净', '高股息', '预增', '高送转', 'ST板块', '含可转债', '同花顺', '中证500', '深成500'];
+                    if (blocked.some(k => text.includes(k))) return false;
+                    if (/^(90\.|BK|[0-9A-Za-z_.-]+$)/.test(text)) return false;
+                    return true;
                 };
                 const normalizeCapitalRows = (rows = []) => (Array.isArray(rows) ? rows : []).filter(x => isBoardFlowName(x?.name));
                 const applyCapitalPayload = (data) => {
@@ -3315,7 +3348,7 @@
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, isDetailsLoading, expandedSectors, toggleSector,
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
-                    analysisMonth, selectedAnalysisDate, analysisViewMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, analysisProfitTop, analysisLossTop, analysisMonthTotal, fetchAnalysis, todayDashStr,
+                    analysisMonth, selectedAnalysisDate, analysisViewMode, analysisDetailMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, analysisProfitTop, analysisLossTop, analysisMonthTotal, fetchAnalysis, todayDashStr,
                     dailyBattleReport, confidenceRows, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal,
                     globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, saveDailyArchive, ocrModal,
                     reduceModal, openReduceModal, handleReducePosition, addModal, openAddModal, handleAddPosition
