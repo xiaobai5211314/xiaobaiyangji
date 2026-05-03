@@ -547,6 +547,129 @@
             font-weight: 800;
         }
 
+
+        /* ===== 产品差异化：战报 / 可信度 / 回本 / 赛道暴露 ===== */
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+            margin: 0 15px 15px;
+        }
+
+        .feature-card {
+            padding: 14px;
+            border-radius: 16px;
+            background: rgba(15, 23, 42, .45);
+            border: 1px solid rgba(148, 163, 184, .16);
+        }
+
+        .feature-title {
+            color: #f8fafc;
+            font-size: 16px;
+            font-weight: 900;
+            margin-bottom: 6px;
+        }
+
+        .feature-subtitle {
+            color: #94a3b8;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .feature-big-number {
+            margin-top: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 24px;
+            font-weight: 900;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .confidence-strip {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 8px;
+            padding: 8px 10px;
+            border-radius: 12px;
+            background: rgba(15, 23, 42, .46);
+            border: 1px solid rgba(148, 163, 184, .12);
+            font-size: 12px;
+        }
+
+        .confidence-meter {
+            width: 90px;
+            height: 8px;
+            border-radius: 99px;
+            background: rgba(148, 163, 184, .25);
+            overflow: hidden;
+            flex: 0 0 auto;
+        }
+
+        .confidence-meter > span {
+            display: block;
+            height: 100%;
+            border-radius: 99px;
+            background: linear-gradient(90deg, #10b981, #60a5fa);
+        }
+
+        .exposure-row {
+            display: grid;
+            grid-template-columns: 1fr 62px 74px;
+            gap: 8px;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px dashed rgba(255,255,255,.08);
+        }
+
+        .exposure-bar {
+            height: 8px;
+            border-radius: 99px;
+            overflow: hidden;
+            background: rgba(148, 163, 184, .18);
+            margin-top: 6px;
+        }
+
+        .exposure-bar > span {
+            display: block;
+            height: 100%;
+            border-radius: 99px;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+        }
+
+        .recovery-plan-row {
+            display: grid;
+            grid-template-columns: 74px 1fr 84px;
+            gap: 10px;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px dashed rgba(255,255,255,.08);
+        }
+
+        .report-line {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            border-bottom: 1px dashed rgba(255,255,255,.06);
+            color: #cbd5e1;
+            font-size: 13px;
+        }
+
+        .impact-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            border-radius: 999px;
+            padding: 4px 8px;
+            background: rgba(59,130,246,.14);
+            color: #bfdbfe;
+            font-size: 11px;
+            font-weight: 800;
+            margin: 4px 4px 0 0;
+        }
+
         @media screen and (max-width: 768px) {
             body {
                 padding-bottom: env(safe-area-inset-bottom);
@@ -1546,6 +1669,26 @@
                     <div class="total-archive-entry"></div>
                 </div>
 
+                <div class="feature-grid">
+                    <div class="glass-panel feature-card">
+                        <div class="feature-title">🧾 今日收盘战报</div>
+                        <div class="feature-subtitle">{{ dailyBattleReport.summary }}</div>
+                        <div class="feature-big-number" :style="{color: totalTodayProfit>=0?'#ff4d4f':'#10b981'}">{{ privacyMode <= 1 ? dailyBattleReport.todayProfitText : '****' }}</div>
+                        <div class="report-line"><span>最大贡献</span><strong style="color:#ff4d4f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px;">{{ dailyBattleReport.bestName }}</strong></div>
+                        <div class="report-line"><span>最大拖累</span><strong style="color:#10b981;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px;">{{ dailyBattleReport.worstName }}</strong></div>
+                        <div class="report-line"><span>操作提示</span><strong style="color:#fbbf24;text-align:right;">{{ dailyBattleReport.actionHint }}</strong></div>
+                    </div>
+                    <div class="glass-panel feature-card">
+                        <div class="feature-title">📡 估值可信度雷达</div>
+                        <div class="feature-subtitle">根据净值确认、估算偏离、是否休市、数据新鲜度给出可读评分。</div>
+                        <div v-for="item in confidenceRows.slice(0, 4)" :key="'conf-'+item.code" class="confidence-strip">
+                            <div style="min-width:0;"><div style="font-weight:900;color:#f8fafc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px;">{{ item.name }}</div><div style="color:#94a3b8;">{{ item.reason }}</div></div>
+                            <div class="confidence-meter"><span :style="{width:item.score+'%'}"></span></div>
+                            <strong :style="{color:item.color}">{{ item.score }}</strong>
+                        </div>
+                    </div>
+                </div>
+
                 <div style="margin: 0 15px 10px 15px; display: flex; justify-content: space-between; align-items: center;">
                     <div style="font-size: 16px; font-weight: bold; color: #e2e8f0; display: flex; align-items: center; gap: 8px;">
                         🛡️ 总持仓
@@ -1574,6 +1717,7 @@
                             <div style="display: flex; gap: 6px; flex-shrink: 0; align-items: center;">
                                 <button @click="fetchHistory(fund.code, fund.name)" style="background: rgba(56, 189, 248, 0.2); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 12px; display: flex; align-items: center; justify-content: center;" title="查看官方档案">📈</button>
                                 <button class="fund-archive-btn" @click="fetchMyArchives(fund.code, fund.name)" title="查看专属档案">📂</button>
+                                <button @click="openRecoveryModal(fund)" style="background: rgba(251, 191, 36, 0.18); border: 1px solid rgba(251, 191, 36, 0.35); color: #fbbf24; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 12px; display:flex;align-items:center;justify-content:center;" title="回本路径模拟">🧭</button>
 
                                 <button @click="openAddModal(fund)" style="background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;" title="战术加仓">➕</button>
                                 <button @click="openReduceModal(fund)" style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;" title="战略减仓">➖</button>
@@ -1597,6 +1741,11 @@
                                 </span>
                             </span>
                             <span v-if="Math.abs(fund.diffRate) > 0.15 && !fund.isHoliday"><span class="radar-badge">🚨 偏离: {{ fund.diffRate }}%</span></span>
+                        </div>
+
+                        <div class="confidence-strip">
+                            <div style="min-width:0;"><strong :style="{color:getConfidence(fund).color}">可信度 {{ getConfidence(fund).score }}/100</strong><div style="color:#94a3b8;margin-top:2px;">{{ getConfidence(fund).reason }}</div></div>
+                            <div class="confidence-meter"><span :style="{width:getConfidence(fund).score+'%'}"></span></div>
                         </div>
 
                         <div class="metrics-grid">
@@ -1664,7 +1813,21 @@
                             </div>
                         </div>
                     </div>
-                    <div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">🎯 持仓对应板块</div><div class="page-subtitle">用持仓基金主题看对应赛道强弱</div><div style="margin-top:12px;"><div v-for="fund in fundsList" :key="'sector-hold-'+fund.code" class="quick-holding-card" @click="switchPage('news'); newsMode='holding'; fetchNews('holding', false);"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><div style="min-width:0;"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ fund.name }}</div><div style="color:#64748b;font-size:11px;font-family:monospace;">{{ fund.code }}</div></div><div :style="{color:fund.currentRate>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New'}">{{ fund.currentRate>0?'+':'' }}{{ fund.currentRate }}%</div></div></div></div></div>
+                    <div class="glass-panel" style="padding:16px;">
+                        <div class="page-title" style="font-size:18px;">🎯 赛道暴露 / 集中度</div>
+                        <div class="page-subtitle">按基金名称主题归类，估算持仓暴露和今日收益贡献。</div>
+                        <div style="margin-top:12px;">
+                            <div v-if="portfolioExposure.length===0" class="news-empty">暂无可分析持仓</div>
+                            <div v-for="item in portfolioExposure" :key="item.name" class="exposure-row">
+                                <div style="min-width:0;">
+                                    <div style="display:flex;justify-content:space-between;gap:8px;"><strong style="color:#f8fafc;">{{ item.name }}</strong><span style="color:#94a3b8;font-size:12px;">{{ item.count }}只</span></div>
+                                    <div class="exposure-bar"><span :style="{width:item.ratio+'%'}"></span></div>
+                                </div>
+                                <strong style="color:#93c5fd;text-align:right;">{{ item.ratio.toFixed(1) }}%</strong>
+                                <strong :style="{color:item.dailyProfit>=0?'#ff4d4f':'#10b981',textAlign:'right'}">{{ item.dailyProfit>=0?'+':'' }}{{ item.dailyProfit.toFixed(2) }}</strong>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="glass-panel capital-flow-panel">
@@ -1709,12 +1872,27 @@
                                 <div v-for="item in group.items" :key="item.id + item.showTime" :class="['news-item', item.sentiment]"><div class="news-line"></div><div class="news-dot"></div><div class="news-card" @click="openNewsItem(item)"><div class="news-time">{{ item.timeText }}</div><div class="news-title">{{ item.title }}</div><div v-if="item.summary && item.summary !== item.title" class="news-summary">{{ item.summary }}</div><div class="news-badges"><span v-if="item.important" class="news-badge good">重要</span><span v-if="item.matchedFundName" class="news-badge">{{ item.matchedFundName }}</span><span :class="['news-badge', item.sentiment==='positive'?'good':(item.sentiment==='negative'?'bad':'neutral') ]">{{ item.sentiment==='positive'?'偏利好':(item.sentiment==='negative'?'偏利空':'中性') }} · {{ item.impactScore }}分</span><span v-for="tag in (item.tags || []).slice(0,3)" :key="tag" class="news-badge neutral">{{ tag }}</span></div></div></div>
                             </template>
                         </div>
-                    </div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">🧩 持仓资讯入口</div><div class="page-subtitle">点基金可切到持仓资讯并按主题匹配</div><div style="margin-top:12px;"><div v-for="fund in fundsList" :key="'news-hold-'+fund.code" class="quick-holding-card" @click="newsMode='holding'; fetchNews('holding', false);"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ fund.name }}</div><div style="display:flex;justify-content:space-between;margin-top:6px;color:#94a3b8;font-size:12px;"><span>{{ fund.code }}</span><span>{{ fund.currentRate>0?'+':'' }}{{ fund.currentRate }}%</span></div></div></div></div>
+                    </div><div class="glass-panel" style="padding:16px;">
+                        <div class="page-title" style="font-size:18px;">🧩 资讯影响时间线</div>
+                        <div class="page-subtitle">按持仓主题聚合最近资讯，标记潜在利好/利空。</div>
+                        <div style="margin-top:12px;">
+                            <div v-if="newsImpactSummary.length===0" class="news-empty">切到“持仓资讯”后自动生成</div>
+                            <div v-for="item in newsImpactSummary" :key="item.name" class="quick-holding-card" @click="newsMode='holding'; fetchNews('holding', false);">
+                                <div style="display:flex;justify-content:space-between;gap:8px;"><strong style="color:#f8fafc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.name }}</strong><span :style="{color:item.score>=0?'#ff4d4f':'#10b981',fontWeight:'900'}">{{ item.score>=0?'+':'' }}{{ item.score }}</span></div>
+                                <div style="color:#94a3b8;font-size:12px;margin-top:6px;line-height:1.45;">{{ item.latestTitle || '暂无明确匹配资讯' }}</div>
+                                <span v-for="tag in item.tags" :key="item.name+tag" class="impact-chip">{{ tag }}</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <div v-show="activePage === 'analysis'" class="app-page">
-                <div class="page-topbar glass-panel"><div><div class="page-title">📊 盈亏分析</div><div class="page-subtitle">当日盈亏明细、月历、盈利/亏损排行</div></div><div class="analysis-toolbar"><input type="month" v-model="analysisMonth" @change="fetchAnalysis(true)"><select v-model="analysisViewMode"><option value="profit">金额</option><option value="rate">收益率</option></select><button class="btn" @click="fetchAnalysis(true)">🔄</button></div></div>
+                <div class="page-topbar glass-panel"><div><div class="page-title">📊 盈亏分析</div><div class="page-subtitle">每日战报、月历、盈利/亏损排行</div></div><div class="analysis-toolbar"><input type="month" v-model="analysisMonth" @change="fetchAnalysis(true)"><select v-model="analysisViewMode"><option value="profit">金额</option><option value="rate">收益率</option></select><button class="btn" @click="fetchAnalysis(true)">🔄</button></div></div>
+                <div class="feature-grid">
+                    <div class="glass-panel feature-card"><div class="feature-title">🧾 每日收盘战报</div><div class="feature-subtitle">{{ selectedAnalysisDate }} · {{ dailyBattleReport.summary }}</div><div class="report-line"><span>今日收益</span><strong :style="{color:totalTodayProfit>=0?'#ff4d4f':'#10b981'}">{{ dailyBattleReport.todayProfitText }}</strong></div><div class="report-line"><span>贡献核心</span><strong style="color:#ff4d4f;">{{ dailyBattleReport.bestName }}</strong></div><div class="report-line"><span>风险拖累</span><strong style="color:#10b981;">{{ dailyBattleReport.worstName }}</strong></div></div>
+                    <div class="glass-panel feature-card"><div class="feature-title">🧭 回本总览</div><div class="feature-subtitle">亏损持仓的平均回本涨幅和可执行补仓路径。</div><div v-for="fund in recoveryWatchList.slice(0,3)" :key="'rw-'+fund.code" class="report-line"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;">{{ fund.name }}</span><strong style="color:#fbbf24;">{{ fund.breakEvenRate }}%</strong></div></div>
+                </div>
                 <div class="analysis-grid">
                     <div class="glass-panel" style="padding:16px;">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;"><div><div class="page-title" style="font-size:18px;">盈亏日历</div><div class="page-subtitle">{{ analysisMonth }} 月累计：<span :style="{color:analysisMonthTotal>=0?'#ff4d4f':'#10b981',fontWeight:'900'}">{{ analysisMonthTotal>=0?'+':'' }}{{ analysisMonthTotal.toFixed(2) }}</span></div></div><button class="btn btn-primary" @click="selectedAnalysisDate = todayDashStr">今天</button></div><div class="calendar-grid">
@@ -1726,6 +1904,20 @@
                             </div>
                         </div>
                     </div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">当日盈亏明细</div><div class="page-subtitle">{{ selectedAnalysisDate || '请选择日期' }}</div><div style="margin-top:12px;"><div v-if="analysisLoading" class="news-empty">📡 正在读取收益档案...</div><div v-else-if="selectedDayFundRecords.length===0" class="news-empty">当天暂无明细</div><div v-else><div v-for="(item,index) in selectedDayFundRecords" :key="item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="min-width:0;"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.fundName }}</div><div style="color:#64748b;font-size:11px;font-family:monospace;">{{ item.fundCode }} · 市值 {{ Number(item.assets || 0).toFixed(2) }}</div></div><div :style="{textAlign:'right',color:item.dailyProfit>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New'}">{{ item.dailyProfit>0?'+':'' }}{{ Number(item.dailyProfit||0).toFixed(2) }}<br><span style="font-size:12px;">{{ item.dailyRate>0?'+':'' }}{{ Number(item.dailyRate||0).toFixed(2) }}%</span></div></div></div></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">盈利 TOP5</div><div v-for="(item,index) in analysisProfitTop" :key="'p'+item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="color:#f8fafc;font-weight:800;">{{ item.fundName }}</div><div style="text-align:right;color:#ff4d4f;font-weight:900;">+{{ Number(item.dailyProfit||0).toFixed(2) }}</div></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">亏损 TOP5</div><div v-for="(item,index) in analysisLossTop" :key="'l'+item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="color:#f8fafc;font-weight:800;">{{ item.fundName }}</div><div style="text-align:right;color:#10b981;font-weight:900;">{{ Number(item.dailyProfit||0).toFixed(2) }}</div></div></div>
+                </div>
+            </div>
+
+            <div v-if="recoveryModal.show" class="modal-mask" @click.self="recoveryModal.show=false">
+                <div class="modal-content" style="max-width:520px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><h3 style="margin:0;color:#fbbf24;">🧭 回本路径模拟器</h3><span @click="recoveryModal.show=false" style="font-size:24px;color:#94a3b8;cursor:pointer;">&times;</span></div>
+                    <div style="color:#cbd5e1;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ recoveryModal.name }}</div>
+                    <div class="feature-subtitle" style="margin:6px 0 12px;">当前亏损 {{ recoveryModal.loss.toFixed(2) }} 元，回本需要上涨 {{ recoveryModal.breakEvenRate }}%。下方为按不同补仓金额估算的新回本涨幅。</div>
+                    <div v-for="plan in recoveryPlans" :key="plan.amount" class="recovery-plan-row">
+                        <strong style="color:#93c5fd;">补 {{ plan.amount }}</strong>
+                        <div><div class="exposure-bar"><span :style="{width:Math.min(100, Math.max(5, 100-plan.newBreakEven*6))+'%'}"></span></div><div class="feature-subtitle">新成本 {{ plan.newCost.toFixed(2) }} · 新市值 {{ plan.newAssets.toFixed(2) }}</div></div>
+                        <strong :style="{color:plan.newBreakEven<=0?'#10b981':'#fbbf24',textAlign:'right'}">{{ plan.newBreakEven<=0?'已回本':plan.newBreakEven.toFixed(2)+'%' }}</strong>
+                    </div>
+                    <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:14px;" @click="recoveryModal.show=false">知道了</button>
                 </div>
             </div>
 
@@ -2068,49 +2260,17 @@
 
         createApp({
             setup() {
-               const API_BASE_DEFAULT = 'https://guzhi.21212121.xyz';
-const normalizeApiBase = (v) => (v || '').trim().replace(/\/+$/, '');
+                // 固定后端 API 域名：CDN 页面不再先试 guzhicdn 自己，避免登录和首屏请求多等一次失败重试。
+                const API_BASE_DEFAULT = 'https://guzhi.21212121.xyz';
+                let API_BASE = API_BASE_DEFAULT;
+                try { localStorage.setItem('fund_api_base', API_BASE_DEFAULT); } catch (e) { }
 
-const getApiBaseCandidates = () => [API_BASE_DEFAULT];
+                const apiFetch = async (path, options = {}) => fetch(API_BASE + path, options);
 
-let API_BASE = API_BASE_DEFAULT;
-
-const rememberApiBase = (base) => {
-    API_BASE = API_BASE_DEFAULT;
-    try {
-        localStorage.setItem('fund_api_base', API_BASE_DEFAULT);
-    } catch (e) { }
-};
-                const apiFetch = async (path, options = {}) => {
-                    let lastError = null;
-                    for (const base of getApiBaseCandidates()) {
-                        try {
-                            const res = await fetch(base + path, options);
-                            if (res.status !== 404 && res.status !== 405) { rememberApiBase(base); return res; }
-                            lastError = new Error('HTTP ' + res.status + ' @ ' + base);
-                        } catch (e) { lastError = e; }
-                    }
-                    throw lastError || new Error('API unavailable');
-                };
-
-                // 登录/注册专用：App 清除数据后 fund_api_base 会丢失，可能先打到错误域名或旧后端。
-                // 普通 apiFetch 遇到 400 会直接返回；这里会继续尝试所有 API 候选，直到有一个登录成功。
                 const authFetch = async (path, formData) => {
-                    let lastResponse = null;
-                    let lastError = null;
-                    for (const base of getApiBaseCandidates()) {
-                        try {
-                            const fd = new FormData();
-                            for (const [k, v] of formData.entries()) fd.append(k, v);
-                            const res = await fetch(base + path, { method: 'POST', body: fd, cache: 'no-store' });
-                            if (res.ok) { rememberApiBase(base); return res; }
-                            if (res.status !== 404 && res.status !== 405) lastResponse = res;
-                        } catch (e) {
-                            lastError = e;
-                        }
-                    }
-                    if (lastResponse) return lastResponse;
-                    throw lastError || new Error('API unavailable');
+                    const fd = new FormData();
+                    for (const [k, v] of formData.entries()) fd.append(k, v);
+                    return fetch(API_BASE + path, { method: 'POST', body: fd, cache: 'no-store' });
                 };
 
                 const toasts = ref([]); let toastId = 0;
@@ -2248,6 +2408,111 @@ const rememberApiBase = (base) => {
                 });
                 const analysisProfitTop = computed(() => selectedDayFundRecords.value.filter(r => Number(r.dailyProfit || 0) > 0).slice(0, 5));
                 const analysisLossTop = computed(() => selectedDayFundRecords.value.filter(r => Number(r.dailyProfit || 0) < 0).sort((a, b) => Number(a.dailyProfit || 0) - Number(b.dailyProfit || 0)).slice(0, 5));
+
+                const sectorRules = [
+                    { name: '半导体 / 芯片', words: ['半导体', '芯片', '集成电路', '电子'] },
+                    { name: 'AI / 人工智能', words: ['人工智能', 'AI', '智能', '机器人', '软件', '计算机'] },
+                    { name: '港股 / 恒生', words: ['恒生', '港股', '中概', '香港'] },
+                    { name: '新能源 / 电池', words: ['新能源', '光伏', '锂电', '电池', '碳中和'] },
+                    { name: '医药 / 医疗', words: ['医药', '医疗', '创新药', '生物'] },
+                    { name: '黄金 / 有色', words: ['黄金', '有色', '金属', '资源'] },
+                    { name: '银行 / 金融', words: ['银行', '证券', '金融', '保险'] },
+                    { name: '地产 / 基建', words: ['地产', '房地产', '基建', '工程'] },
+                    { name: '消费 / 白酒', words: ['消费', '白酒', '食品', '家电'] },
+                    { name: '债券 / 现金', words: ['债', '货币', '现金', '短融'] }
+                ];
+
+                const classifyFundSector = (fund) => {
+                    const text = `${fund?.name || ''} ${fund?.code || ''}`.toUpperCase();
+                    const hit = sectorRules.find(rule => rule.words.some(w => text.includes(w.toUpperCase())));
+                    return hit ? hit.name : '其他主题';
+                };
+
+                const getConfidence = (fund) => {
+                    let score = 62;
+                    const reasons = [];
+                    if (fund?.isSettled) { score += 28; reasons.push('净值确认'); }
+                    else if (fund?.isHoliday) { score += 8; reasons.push('休市沿用'); }
+                    else { score += 12; reasons.push('盘中估算'); }
+                    const diff = Math.abs(Number(fund?.diffRate || 0));
+                    if (diff > 0.6) { score -= 25; reasons.push('偏离较大'); }
+                    else if (diff > 0.15) { score -= 12; reasons.push('估值偏离'); }
+                    else { score += 8; reasons.push('偏离可控'); }
+                    if (Number(fund?.shares || 0) > 0) { score += 5; reasons.push('份额完整'); }
+                    score = Math.max(20, Math.min(100, Math.round(score)));
+                    const color = score >= 82 ? '#10b981' : (score >= 65 ? '#fbbf24' : '#ef4444');
+                    return { code: fund?.code || '', name: fund?.name || '', score, color, reason: reasons.slice(0, 2).join(' / ') };
+                };
+
+                const confidenceRows = computed(() => fundsList.value.map(getConfidence).sort((a, b) => a.score - b.score));
+
+                const portfolioExposure = computed(() => {
+                    const total = fundsList.value.reduce((sum, f) => sum + Number(f.todayAmount || f.amount || 0), 0);
+                    const map = new Map();
+                    for (const fund of fundsList.value) {
+                        const name = classifyFundSector(fund);
+                        const row = map.get(name) || { name, amount: 0, dailyProfit: 0, count: 0, funds: [] };
+                        row.amount += Number(fund.todayAmount || fund.amount || 0);
+                        row.dailyProfit += Number(fund.todayProfit || 0);
+                        row.count += 1;
+                        row.funds.push(fund.name);
+                        map.set(name, row);
+                    }
+                    return Array.from(map.values()).map(x => ({ ...x, ratio: total > 0 ? x.amount / total * 100 : 0 })).sort((a, b) => b.amount - a.amount);
+                });
+
+                const dailyBattleReport = computed(() => {
+                    const rows = [...fundsList.value].map(f => ({ ...f, p: Number(f.todayProfit || 0), amountNum: Number(f.todayAmount || f.amount || 0) }));
+                    const best = rows.slice().sort((a, b) => b.p - a.p)[0];
+                    const worst = rows.slice().sort((a, b) => a.p - b.p)[0];
+                    const exposure = portfolioExposure.value[0];
+                    const profit = Number(totalTodayProfit.value || 0);
+                    let actionHint = '保持观察';
+                    if (profit < 0 && worst && Math.abs(worst.p) > Math.abs(profit) * 0.5) actionHint = `重点复盘 ${worst.name}`;
+                    else if (exposure && exposure.ratio >= 45) actionHint = `${exposure.name} 集中度偏高`;
+                    else if (profit > 0) actionHint = '盈利日先看净值确认';
+                    return {
+                        summary: fundsList.value.length ? `${fundsList.value.length} 只持仓，主暴露 ${exposure?.name || '待识别'} ${exposure ? exposure.ratio.toFixed(1) : '0.0'}%。` : '暂无持仓数据。',
+                        todayProfitText: `${profit >= 0 ? '+' : ''}${profit.toFixed(2)}`,
+                        bestName: best ? `${best.name} ${best.p >= 0 ? '+' : ''}${best.p.toFixed(2)}` : '暂无',
+                        worstName: worst ? `${worst.name} ${worst.p >= 0 ? '+' : ''}${worst.p.toFixed(2)}` : '暂无',
+                        actionHint
+                    };
+                });
+
+                const newsImpactSummary = computed(() => {
+                    const map = new Map();
+                    for (const item of newsList.value) {
+                        const key = item.matchedFundName || (item.tags && item.tags[0]) || '全市场';
+                        const row = map.get(key) || { name: key, score: 0, latestTitle: '', tags: [] };
+                        const sign = item.sentiment === 'negative' ? -1 : 1;
+                        row.score += sign * Number(item.impactScore || 0);
+                        if (!row.latestTitle) row.latestTitle = item.title || item.summary || '';
+                        row.tags = Array.from(new Set([...(row.tags || []), ...(item.tags || []).slice(0, 2)])).slice(0, 4);
+                        map.set(key, row);
+                    }
+                    return Array.from(map.values()).sort((a, b) => Math.abs(b.score) - Math.abs(a.score)).slice(0, 6);
+                });
+
+                const recoveryWatchList = computed(() => fundsList.value.filter(f => Number(f.breakEvenRate || 0) > 0).sort((a, b) => Number(b.breakEvenRate || 0) - Number(a.breakEvenRate || 0)));
+                const recoveryModal = reactive({ show: false, code: '', name: '', assets: 0, cost: 0, loss: 0, breakEvenRate: 0 });
+                const openRecoveryModal = (fund) => {
+                    const assets = Number(fund.todayAmount || fund.amount || 0);
+                    const cost = Number(fund.cost || fund.amount || 0);
+                    recoveryModal.show = true;
+                    recoveryModal.code = fund.code;
+                    recoveryModal.name = fund.name;
+                    recoveryModal.assets = assets;
+                    recoveryModal.cost = cost;
+                    recoveryModal.loss = Math.max(0, cost - assets);
+                    recoveryModal.breakEvenRate = Number(fund.breakEvenRate || 0);
+                };
+                const recoveryPlans = computed(() => [100, 300, 500, 1000, 2000].map(amount => {
+                    const newAssets = recoveryModal.assets + amount;
+                    const newCost = recoveryModal.cost + amount;
+                    const newBreakEven = newAssets > 0 ? Math.max(0, (newCost / newAssets - 1) * 100) : 0;
+                    return { amount, newAssets, newCost, newBreakEven };
+                }));
 
                 const historyModal = reactive({ show: false, isLoading: false, name: '', data: [] });
                 const archiveModal = reactive({ show: false, isLoading: false, targetName: '', data: [] });
@@ -2568,24 +2833,7 @@ const rememberApiBase = (base) => {
                     const file = event.target.files[0]; if (!file) return; isUploading.value = true;
                     compressImageBeforeUpload(file, async (compressedFile) => {
                         const formData = new FormData(); formData.append('imageFile', compressedFile);
-                        try {
-                            const response = await fetch(`${API_BASE}/api/Fund/import-ocr-preview?username=${encodeURIComponent(currentUser.value)}`, { method: 'POST', body: formData });
-                            if (!response.ok) { showToast("❌ 识别失败", "error"); return; }
-                            const preview = await response.json();
-                            const rows = preview.items || [];
-                            if (rows.length === 0) { showToast("未识别到可导入持仓", "error"); return; }
-                            const detail = rows.map(x => `${x.name}(${x.code})  市值:${Number(x.holdAmount || 0).toFixed(2)}  份额:${Number(x.holdShares || 0).toFixed(2)}  匹配:${Number(x.matchScore || 0).toFixed(1)}`).join('\n');
-                            ocrModal.content = `OCR 预览：共 ${rows.length} 只\n\n${detail}\n\n确认后才会写入数据库。`;
-                            ocrModal.show = true;
-                            if (!confirm(`识别到 ${rows.length} 只基金，是否确认写入？\n\n${detail}`)) return;
-                            const confirmRes = await fetch(`${API_BASE}/api/Fund/import-ocr-confirm`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ username: currentUser.value, items: rows })
-                            });
-                            if (confirmRes.ok) { const result = await confirmRes.json(); showToast(result.message || "✅ 已确认导入", "success"); fetchData({ force: true, silent: true }); }
-                            else { showToast("❌ 确认导入失败", "error"); }
-                        } catch (error) { showToast("🌐 网络异常", "error"); } finally { isUploading.value = false; event.target.value = ''; }
+                        try { const response = await fetch(`${API_BASE}/api/Fund/import-ocr?username=${encodeURIComponent(currentUser.value)}`, { method: 'POST', body: formData }); if (response.ok) { ocrModal.content = await response.text(); ocrModal.show = true; fetchData({ force: true, silent: true }); } else { showToast("❌ 识别失败", "error"); } } catch (error) { showToast("🌐 网络异常", "error"); } finally { isUploading.value = false; event.target.value = ''; }
                     });
                 };
 
@@ -2986,7 +3234,7 @@ const rememberApiBase = (base) => {
 
                 const updateRadarMode = () => { let d = new Date(); let time = d.getHours() * 100 + d.getMinutes(); isNight.value = (d.getDay() === 0 || d.getDay() === 6 || time < 925 || time > 1605); };
 
-                // ✅ 核心修复：在这里定义防抖，确保 fetchData 已经初始化！ 
+                // ✅ 核心修复：在这里定义防抖，确保 fetchData 已经初始化！
                 const debounce = (fn, delay) => { let t = null; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); }; };
                 const debouncedFetchData = debounce(fetchData, 500);
 
@@ -3032,6 +3280,7 @@ const rememberApiBase = (base) => {
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
                     analysisMonth, selectedAnalysisDate, analysisViewMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, analysisProfitTop, analysisLossTop, analysisMonthTotal, fetchAnalysis, todayDashStr,
+                    dailyBattleReport, confidenceRows, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, recoveryPlans, openRecoveryModal,
                     globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, saveDailyArchive, ocrModal,
                     reduceModal, openReduceModal, handleReducePosition, addModal, openAddModal, handleAddPosition
                 };
