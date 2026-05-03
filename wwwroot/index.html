@@ -577,6 +577,48 @@
             line-height: 1.5;
         }
 
+
+
+        .compact-scroll-list {
+            max-height: 230px;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+
+        .compact-scroll-list::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .compact-scroll-list::-webkit-scrollbar-thumb {
+            background: rgba(96, 165, 250, .35);
+            border-radius: 99px;
+        }
+
+        .calibration-card-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 74px 82px;
+            gap: 8px;
+            align-items: center;
+            padding: 9px 0;
+            border-bottom: 1px dashed rgba(255,255,255,.08);
+            font-size: 12px;
+        }
+
+        .calibration-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2px 7px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 900;
+            background: rgba(139, 92, 246, .16);
+            color: #c4b5fd;
+            border: 1px solid rgba(139, 92, 246, .35);
+            white-space: nowrap;
+        }
+
+
         .feature-big-number {
             margin-top: 8px;
             font-family: 'Courier New', monospace;
@@ -1713,6 +1755,29 @@
                             <strong :style="{color:item.color}">{{ item.score }}</strong>
                         </div>
                     </div>
+                    <div class="glass-panel feature-card">
+                        <div class="feature-title">🧭 回本幅度榜</div>
+                        <div class="feature-subtitle">当前所有未回本持仓，按回本所需涨幅从高到低排序。</div>
+                        <div class="compact-scroll-list" style="margin-top:8px;">
+                            <div v-if="recoveryWatchList.length===0" class="feature-subtitle" style="padding:14px 0;">当前没有需要回本的持仓。</div>
+                            <div v-for="fund in recoveryWatchList" :key="'home-rw-'+fund.code" class="report-line">
+                                <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;">{{ fund.name }}</span>
+                                <strong style="color:#fbbf24;">{{ Number(fund.breakEvenRate || 0).toFixed(2) }}%</strong>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass-panel feature-card">
+                        <div class="feature-title">🤖 估值误差校准</div>
+                        <div class="feature-subtitle">滚动记录“盘中估算 vs 盘后真实净值”的误差，给下一次盘中估值加修正量。</div>
+                        <div class="compact-scroll-list" style="margin-top:8px;">
+                            <div v-if="calibrationRows.length===0" class="feature-subtitle" style="padding:14px 0;">暂无校准样本。等盘中估值和盘后净值都出现后自动积累。</div>
+                            <div v-for="row in calibrationRows.slice(0, 8)" :key="'calib-'+row.code" class="calibration-card-row">
+                                <div style="min-width:0;"><div style="font-weight:900;color:#f8fafc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ row.name }}</div><div style="color:#94a3b8;">样本 {{ row.samples }} 天 · {{ row.confidence }}可信</div></div>
+                                <span class="calibration-pill">{{ row.offset >= 0 ? '+' : '' }}{{ row.offset.toFixed(2) }}%</span>
+                                <strong :style="{color: row.lastError >= 0 ? '#ff4d4f' : '#10b981', textAlign:'right'}">{{ row.lastError >= 0 ? '+' : '' }}{{ row.lastError.toFixed(2) }}%</strong>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div style="margin: 0 15px 10px 15px; display: flex; justify-content: space-between; align-items: center;">
@@ -1769,6 +1834,11 @@
                         <div class="confidence-strip">
                             <div style="min-width:0;"><strong :style="{color:getConfidence(fund).color}">可信度 {{ getConfidence(fund).score }}/100</strong><div style="color:#94a3b8;margin-top:2px;">{{ getConfidence(fund).reason }}</div></div>
                             <div class="confidence-meter"><span :style="{width:getConfidence(fund).score+'%'}"></span></div>
+                        </div>
+
+                        <div v-if="fund.calibrationSamples > 0 || Math.abs(Number(fund.calibrationOffset || 0)) > 0" class="confidence-strip" style="border-color:rgba(139,92,246,.28);background:rgba(88,28,135,.16);">
+                            <div style="min-width:0;"><strong style="color:#c4b5fd;">估值修正 {{ fund.calibrationOffset >= 0 ? '+' : '' }}{{ Number(fund.calibrationOffset || 0).toFixed(2) }}%</strong><div style="color:#94a3b8;margin-top:2px;">{{ fund.calibrationNote || '滚动误差校准' }}</div></div>
+                            <span class="calibration-pill">{{ fund.calibrationSamples || 0 }}天</span>
                         </div>
 
                         <div class="metrics-grid">
@@ -1909,7 +1979,7 @@
                 <div class="page-topbar glass-panel"><div><div class="page-title">📊 盈亏分析</div><div class="page-subtitle">每日战报、月历、盈利/亏损排行</div></div><div class="analysis-toolbar"><input type="month" v-model="analysisMonth" @change="fetchAnalysis(true)"><select v-model="analysisViewMode"><option value="profit">金额</option><option value="rate">收益率</option></select><button class="btn" @click="fetchAnalysis(true)">🔄</button></div></div>
                 <div class="feature-grid">
                     <div class="glass-panel feature-card"><div class="feature-title">🧾 每日收盘战报</div><div class="feature-subtitle">{{ selectedAnalysisDate }} · {{ dailyBattleReport.summary }}</div><div class="report-line"><span>今日收益</span><strong :style="{color:totalTodayProfit>=0?'#ff4d4f':'#10b981'}">{{ dailyBattleReport.todayProfitText }}</strong></div><div class="report-line"><span>贡献核心</span><strong style="color:#ff4d4f;">{{ dailyBattleReport.bestName }}</strong></div><div class="report-line"><span>风险拖累</span><strong style="color:#10b981;">{{ dailyBattleReport.worstName }}</strong></div></div>
-                    <div class="glass-panel feature-card"><div class="feature-title">🧭 回本总览</div><div class="feature-subtitle">亏损持仓的平均回本涨幅和可执行补仓路径。</div><div v-for="fund in recoveryWatchList.slice(0,3)" :key="'rw-'+fund.code" class="report-line"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;">{{ fund.name }}</span><strong style="color:#fbbf24;">{{ fund.breakEvenRate }}%</strong></div></div>
+                    <div class="glass-panel feature-card"><div class="feature-title">🧭 回本总览</div><div class="feature-subtitle">全部未回本持仓，按回本所需涨幅排序。</div><div class="compact-scroll-list" style="margin-top:8px;max-height:170px;"><div v-if="recoveryWatchList.length===0" class="feature-subtitle" style="padding:10px 0;">当前没有需要回本的持仓。</div><div v-for="fund in recoveryWatchList" :key="'rw-'+fund.code" class="report-line"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;">{{ fund.name }}</span><strong style="color:#fbbf24;">{{ Number(fund.breakEvenRate || 0).toFixed(2) }}%</strong></div></div></div>
                 </div>
                 <div class="analysis-grid">
                     <div class="glass-panel" style="padding:16px;">
@@ -2656,6 +2726,64 @@
                     } catch (e) { showToast("🌐 档案馆断线", "error"); } finally { archiveModal.isLoading = false; }
                 };
 
+
+                const getCalibrationStorageKey = () => `fund_valuation_calibration_v1_${currentUser.value || 'guest'}`;
+                const loadCalibrationState = () => {
+                    try {
+                        return JSON.parse(localStorage.getItem(getCalibrationStorageKey()) || '{}') || {};
+                    } catch (e) { return {}; }
+                };
+                const saveCalibrationState = (state) => {
+                    try { localStorage.setItem(getCalibrationStorageKey(), JSON.stringify(state || {})); } catch (e) { }
+                };
+                const getCalibrationProfileByCode = (code) => {
+                    const state = loadCalibrationState();
+                    const row = state[code] || { samples: [], estimates: {} };
+                    const samples = Array.isArray(row.samples) ? row.samples.slice(-5) : [];
+                    const weighted = samples.reduce((acc, s, idx) => {
+                        const w = idx + 1;
+                        acc.sum += Number(s.error || 0) * w;
+                        acc.weight += w;
+                        return acc;
+                    }, { sum: 0, weight: 0 });
+                    const offset = weighted.weight > 0 ? Math.max(-3, Math.min(3, weighted.sum / weighted.weight)) : 0;
+                    const last = samples[samples.length - 1];
+                    const confidence = samples.length >= 5 ? '高' : (samples.length >= 3 ? '中' : '低');
+                    return { offset, samples: samples.length, lastError: Number(last?.error || 0), confidence };
+                };
+                const rememberIntradayEstimate = (fund, dateText, rawRate) => {
+                    if (!fund?.code || !dateText || !Number.isFinite(Number(rawRate))) return;
+                    const state = loadCalibrationState();
+                    const row = state[fund.code] || { name: fund.name || '', samples: [], estimates: {} };
+                    row.name = fund.name || row.name || fund.code;
+                    row.estimates = row.estimates || {};
+                    row.estimates[dateText] = { rate: Number(rawRate), time: Date.now() };
+                    state[fund.code] = row;
+                    saveCalibrationState(state);
+                };
+                const settleCalibrationSample = (fund, dateText, actualRate) => {
+                    if (!fund?.code || !dateText || !Number.isFinite(Number(actualRate))) return;
+                    const state = loadCalibrationState();
+                    const row = state[fund.code] || { name: fund.name || '', samples: [], estimates: {} };
+                    const estimate = row.estimates?.[dateText];
+                    if (!estimate || !Number.isFinite(Number(estimate.rate))) return;
+                    const estimatedRate = Number(estimate.rate);
+                    const error = Number(actualRate) - estimatedRate;
+                    row.samples = (Array.isArray(row.samples) ? row.samples : []).filter(s => s.date !== dateText);
+                    row.samples.push({ date: dateText, estimatedRate, actualRate: Number(actualRate), error });
+                    row.samples = row.samples.slice(-8);
+                    delete row.estimates[dateText];
+                    row.name = fund.name || row.name || fund.code;
+                    state[fund.code] = row;
+                    saveCalibrationState(state);
+                };
+                const calibrationRows = computed(() => {
+                    return fundsList.value.map(f => {
+                        const profile = getCalibrationProfileByCode(f.code);
+                        return { code: f.code, name: f.name, ...profile };
+                    }).filter(x => x.samples > 0 || Math.abs(x.offset) > 0.001).sort((a, b) => Math.abs(b.offset) - Math.abs(a.offset));
+                });
+
                 const saveDailyArchive = async (silent = false) => {
                     if (!silent && !confirm("💾 确定要将大屏当前的数据作为【今日最终收益】永久封存吗？")) return;
                     let d = new Date();
@@ -3170,6 +3298,29 @@
                         apiData.forEach(fund => {
                             if (fund.isSettled) { fund.currentRate = fund.actualRate; fund.isHoliday = false; if (fund.data.length > 0 && String(fund.data[fund.data.length - 1][0]).includes("15:00:00")) { fund.data[fund.data.length - 1][1] = fund.actualRate; } else { fund.data.push([`${todaySlash} 15:00:00`, fund.actualRate]); } } else if (isWeekend || currentMinutes < 565) { fund.currentRate = 0; fund.isHoliday = true; } else if (fund.data && fund.data.length > 0) { let lastDataTime = String(fund.data[fund.data.length - 1][0]); let hasTodayDate = lastDataTime.includes(todaySlash) || lastDataTime.includes(todayDash); let isPast935 = (d.getHours() > 9) || (d.getHours() === 9 && d.getMinutes() >= 35); if (hasTodayDate && !(isPast935 && fund.data.length <= 2)) { fund.currentRate = fund.data[fund.data.length - 1][1]; fund.isHoliday = false; } else { fund.currentRate = 0; fund.isHoliday = true; } } else { fund.currentRate = 0; fund.isHoliday = true; }
 
+                            const rawCurrentRate = Number(fund.currentRate || 0);
+                            if (fund.isSettled) {
+                                settleCalibrationSample(fund, todayDash, Number(fund.actualRate ?? fund.lastSettledRate ?? fund.currentRate ?? 0));
+                            }
+                            const calibrationProfile = getCalibrationProfileByCode(fund.code);
+                            fund.rawCurrentRate = rawCurrentRate;
+                            fund.calibrationOffset = Number(calibrationProfile.offset.toFixed(2));
+                            fund.calibrationSamples = calibrationProfile.samples;
+                            fund.calibrationLastError = Number(calibrationProfile.lastError.toFixed(2));
+                            fund.calibrationConfidence = calibrationProfile.confidence;
+                            if (!fund.isSettled && !fund.isHoliday && calibrationProfile.samples >= 1) {
+                                fund.currentRate = Number((rawCurrentRate + calibrationProfile.offset).toFixed(2));
+                                fund.calibrationNote = `原估 ${rawCurrentRate >= 0 ? '+' : ''}${rawCurrentRate.toFixed(2)}% · ${calibrationProfile.samples}天样本${calibrationProfile.confidence}可信`;
+                                rememberIntradayEstimate(fund, todayDash, rawCurrentRate);
+                            } else if (!fund.isSettled && !fund.isHoliday) {
+                                fund.calibrationNote = '正在积累盘中估值样本';
+                                rememberIntradayEstimate(fund, todayDash, rawCurrentRate);
+                            } else if (fund.isSettled && calibrationProfile.samples > 0) {
+                                fund.calibrationNote = `盘后已校准 · 最近误差 ${calibrationProfile.lastError >= 0 ? '+' : ''}${calibrationProfile.lastError.toFixed(2)}%`;
+                            } else {
+                                fund.calibrationNote = '';
+                            }
+
                             let isUnconfirmed = fund.lastTradeDate && (fund.lastTradeDate >= todayDash);
                             let todayAddAmount = isUnconfirmed ? (Number(fund.lastAddAmount) || 0) : 0;
                             let isAlreadySettled = (fund.lastSettledDate === todayDash);
@@ -3349,7 +3500,7 @@
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
                     analysisMonth, selectedAnalysisDate, analysisViewMode, analysisDetailMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, analysisProfitTop, analysisLossTop, analysisMonthTotal, fetchAnalysis, todayDashStr,
-                    dailyBattleReport, confidenceRows, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal,
+                    dailyBattleReport, confidenceRows, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, calibrationRows,
                     globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, saveDailyArchive, ocrModal,
                     reduceModal, openReduceModal, handleReducePosition, addModal, openAddModal, handleAddPosition
                 };
