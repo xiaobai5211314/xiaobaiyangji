@@ -15,9 +15,18 @@ namespace 估值助手.Services
         string Action,
         string Note);
 
+    public record StockOcrTextBlock(string Text, int Left, int Top, int Width, int Height)
+    {
+        public int Right => Left + Width;
+        public int Bottom => Top + Height;
+        public decimal CenterX => Left + Width / 2m;
+        public decimal CenterY => Top + Height / 2m;
+    }
+
     public sealed class StockOcrParserService
     {
-        private readonly record struct NumberToken(string Raw, decimal Value, bool IsPercent, bool HasExplicitSign);
+        private readonly record struct NumberToken(string Raw, decimal Value, bool IsPercent, bool HasExplicitSign, decimal CenterX, decimal CenterY, int Left, int Top);
+        private readonly record struct FieldAnchor(string Key, decimal CenterX, int Top);
 
         private static readonly Regex CodeRegex = new(@"(?<!\d)([0-9]{6})(?!\d)", RegexOptions.Compiled);
         private static readonly Regex NumberRegex = new(@"[-+]?\d+(?:,\d{3})*(?:\.\d+)?%?", RegexOptions.Compiled);
@@ -43,6 +52,23 @@ namespace 估值助手.Services
             "分时", "五日", "日K", "周K", "月K", "年K", "成交量", "相关基金"
         };
 
+        public IReadOnlyList<StockOcrCandidate> Parse(IReadOnlyList<StockOcrTextBlock> blocks)
+        {
+            var cleaned = blocks
+                .Select(x => x with { Text = NormalizeText(x.Text) })
+                .Where(x => !string.IsNullOrWhiteSpace(x.Text))
+                .OrderBy(x => x.Top)
+                .ThenBy(x => x.Left)
+                .ToList();
+
+            if (cleaned.Count == 0) return Array.Empty<StockOcrCandidate>();
+
+            var positioned = ParsePositionedHoldingBlock(cleaned);
+            if (positioned.Count > 0) return positioned;
+
+            return Parse(cleaned.Select(x => x.Text).ToList());
+        }
+
         public IReadOnlyList<StockOcrCandidate> Parse(IReadOnlyList<string> words)
         {
             var cleaned = words
@@ -55,8 +81,175 @@ namespace 估值助手.Services
             var result = ParseCodeCandidates(cleaned);
             if (result.Count > 0) return result;
 
-            // 券商截图经常不露股票代码，只露股票名称。此时必须限制在“持仓股”表格区域，避免把券商名、按钮、逆回购等 UI 文案当股票。
             return ParseNameCandidatesFromHoldingBlock(cleaned);
+        }
+
+        private static IReadOnlyList<StockOcrCandidate> ParsePositionedHoldingBlock(IReadOnlyList<StockOcrTextBlock> blocks)
+        {
+            var start = blocks.FirstOrDefault(x => HoldingAnchors.Any(anchor => x.Text.Contains(anchor)));
+            if (start == null) return Array.Empty<StockOcrCandidate>();
+
+            var endTop = blocks
+                .Where(x => x.Top > start.Top && BlockEndAnchors.Any(anchor => x.Text.Contains(anchor)))
+                .Select(x => (int?)x.Top)
+                .FirstOrDefault() ?? int.MaxValue;
+
+            var area = blocks
+                .Where(x => x.Top > start.Top && x.Top < endTop)
+                .OrderBy(x => x.Top)
+                .ThenBy(x => x.Left)
+                .ToList();
+
+            if (area.Count == 0) return Array.Empty<StockOcrCandidate>();
+
+            var anchors = BuildColumnAnchors(area);
+            var nameBlocks = area
+                .Where(x => IsLikelyStockName(x.Text))
+                .Where(x => !IsFieldLabel(x.Text))
+                .OrderBy(x => x.Top)
+                .ThenBy(x => x.Left)
+                .ToList();
+
+            if (nameBlocks.Count == 0) return Array.Empty<StockOcrCandidate>();
+
+            var result = new List<StockOcrCandidate>();
+            var seen = new HashSet<string>();
+
+            for (var i = 0; i < nameBlocks.Count; i++)
+            {
+                var nameBlock = nameBlocks[i];
+                if (!seen.Add(nameBlock.Text)) continue;
+
+                var nextTop = i + 1 < nameBlocks.Count ? nameBlocks[i + 1].Top : endTop;
+                var rowBottom = Math.Min(nextTop - 2, nameBlock.Top + Math.Max(160, nameBlock.Height * 10));
+                var row = area
+                    .Where(x => x.Top >= nameBlock.Top - Math.Max(8, nameBlock.Height) && x.Top <= rowBottom)
+                    .OrderBy(x => x.Top)
+                    .ThenBy(x => x.Left)
+                    .ToList();
+
+                var candidate = BuildCandidateFromPositionedRow(nameBlock, row, anchors);
+                if (candidate == null) continue;
+
+                result.Add(candidate);
+                if (result.Count >= 8) break;
+            }
+
+            return result;
+        }
+
+        private static List<FieldAnchor> BuildColumnAnchors(IReadOnlyList<StockOcrTextBlock> area)
+        {
+            var anchors = new List<FieldAnchor>();
+            AddAnchor("marketValue", x => x.Text.Contains("市值") && !x.Text.Contains("总市值"));
+            AddAnchor("profit", x => x.Text == "盈亏" || x.Text.Contains("浮动盈亏") || x.Text.Contains("持有收益"));
+            AddAnchor("shares", x => x.Text.Contains("持仓/可用") || (x.Text.Contains("持仓") && x.Text.Contains("可用")));
+            AddAnchor("costPrice", x => x.Text.Contains("成本/现价") || (x.Text.Contains("成本") && x.Text.Contains("现价")));
+            AddAnchor("todayProfit", x => x.Text.Contains("当日盈亏") || x.Text.Contains("当日参考盈亏"));
+
+            return anchors
+                .GroupBy(x => x.Key)
+                .Select(g => g.OrderBy(x => x.Top).First())
+                .ToList();
+
+            void AddAnchor(string key, Func<StockOcrTextBlock, bool> predicate)
+            {
+                var hit = area
+                    .Where(predicate)
+                    .OrderBy(x => x.Top)
+                    .ThenBy(x => x.Left)
+                    .FirstOrDefault();
+                if (hit != null) anchors.Add(new FieldAnchor(key, hit.CenterX, hit.Top));
+            }
+        }
+
+        private static StockOcrCandidate? BuildCandidateFromPositionedRow(StockOcrTextBlock nameBlock, IReadOnlyList<StockOcrTextBlock> row, IReadOnlyList<FieldAnchor> anchors)
+        {
+            var code = row.Select(x => CodeRegex.Match(x.Text)).FirstOrDefault(x => x.Success)?.Groups[1].Value ?? string.Empty;
+            var tokens = ExtractNumberTokens(row).OrderBy(x => x.Top).ThenBy(x => x.Left).ToList();
+            if (tokens.Count == 0) return null;
+
+            var byColumn = GroupTokensByColumn(tokens, anchors);
+
+            decimal? marketValue = FirstMoney(byColumn.GetValueOrDefault("marketValue"));
+            decimal? floatingProfit = FirstSignedMoney(byColumn.GetValueOrDefault("profit"));
+            decimal? floatingProfitRate = FirstPercent(byColumn.GetValueOrDefault("profit"));
+            decimal? shares = FirstShare(byColumn.GetValueOrDefault("shares"));
+            decimal? costPrice = FirstPrice(byColumn.GetValueOrDefault("costPrice"));
+
+            if (!marketValue.HasValue) marketValue = GuessMarketValue(tokens.Select(x => x.Raw));
+            if (!shares.HasValue) shares = GuessShares(tokens.Select(x => x.Raw));
+
+            var costColumn = byColumn.GetValueOrDefault("costPrice") ?? new List<NumberToken>();
+            var priceCandidates = costColumn.Where(x => IsLikelyPrice(x.Value)).OrderBy(x => x.Top).ThenBy(x => x.Left).ToList();
+            if (!costPrice.HasValue && priceCandidates.Count > 0) costPrice = priceCandidates[0].Value;
+
+            if (!costPrice.HasValue && shares.HasValue && marketValue.HasValue && shares.Value > 0)
+            {
+                var currentPrice = Math.Round(marketValue.Value / shares.Value, 4);
+                var rowPrices = tokens.Where(x => IsLikelyPrice(x.Value)).Select(x => x.Value).Distinct().ToList();
+                costPrice = rowPrices
+                    .Where(x => x >= currentPrice || Math.Abs(x - currentPrice) > 0.0001m)
+                    .OrderByDescending(x => x)
+                    .FirstOrDefaultOrNull();
+            }
+
+            decimal? costAmount = shares.HasValue && costPrice.HasValue
+                ? Math.Round(shares.Value * costPrice.Value, 2)
+                : null;
+
+            if (!floatingProfit.HasValue && marketValue.HasValue && costAmount.HasValue)
+            {
+                floatingProfit = Math.Round(marketValue.Value - costAmount.Value, 2);
+            }
+
+            if (!floatingProfitRate.HasValue && floatingProfit.HasValue && costAmount.HasValue && costAmount.Value > 0)
+            {
+                floatingProfitRate = Math.Round(floatingProfit.Value / costAmount.Value * 100m, 4);
+            }
+
+            if (!HasUsefulHoldingValues(shares, costPrice, marketValue, floatingProfit, floatingProfitRate))
+            {
+                return null;
+            }
+
+            return new StockOcrCandidate(
+                StockCode: code,
+                StockName: nameBlock.Text,
+                RecognizedName: nameBlock.Text,
+                Shares: shares,
+                CostPrice: costPrice,
+                CostAmount: costAmount,
+                MarketValue: marketValue,
+                FloatingProfit: floatingProfit,
+                FloatingProfitRate: floatingProfitRate,
+                Action: shares.GetValueOrDefault() > 0 || marketValue.GetValueOrDefault() > 0 ? "holding" : "watch",
+                Note: anchors.Count > 0 ? "按 OCR 坐标列解析：市值/盈亏/持仓/成本价" : "按 OCR 坐标邻近区域解析");
+        }
+
+        private static Dictionary<string, List<NumberToken>> GroupTokensByColumn(IReadOnlyList<NumberToken> tokens, IReadOnlyList<FieldAnchor> anchors)
+        {
+            var result = anchors.ToDictionary(x => x.Key, _ => new List<NumberToken>());
+            if (anchors.Count == 0) return result;
+
+            var xs = anchors.Select(x => x.CenterX).OrderBy(x => x).ToList();
+            var minGap = xs.Zip(xs.Skip(1), (a, b) => Math.Abs(b - a)).DefaultIfEmpty(160).Min();
+            var tolerance = Math.Max(55m, minGap * 0.55m);
+
+            foreach (var token in tokens)
+            {
+                var nearest = anchors
+                    .Select(anchor => new { Anchor = anchor, Distance = Math.Abs(token.CenterX - anchor.CenterX) })
+                    .OrderBy(x => x.Distance)
+                    .First();
+
+                if (nearest.Distance <= tolerance)
+                {
+                    result[nearest.Anchor.Key].Add(token);
+                }
+            }
+
+            return result;
         }
 
         private static List<StockOcrCandidate> ParseCodeCandidates(IReadOnlyList<string> cleaned)
@@ -172,7 +365,6 @@ namespace 估值助手.Services
             var priceStart = sharesIndex >= 0 ? sharesIndex + 1 : 0;
             if (sharesIndex >= 0 && sharesIndex + 1 < tokens.Count && tokens[sharesIndex + 1].Value == tokens[sharesIndex].Value)
             {
-                // 券商截图经常是“持仓/可用”两列，例如 600 / 600；成本价在这两个数量后面。
                 priceStart = sharesIndex + 2;
             }
 
@@ -211,9 +403,81 @@ namespace 估值助手.Services
                         Raw: raw,
                         Value: value.Value,
                         IsPercent: raw.EndsWith('%'),
-                        HasExplicitSign: raw.StartsWith('+') || raw.StartsWith('-'));
+                        HasExplicitSign: raw.StartsWith('+') || raw.StartsWith('-'),
+                        CenterX: 0,
+                        CenterY: 0,
+                        Left: 0,
+                        Top: 0);
                 }
             }
+        }
+
+        private static IEnumerable<NumberToken> ExtractNumberTokens(IEnumerable<StockOcrTextBlock> blocks)
+        {
+            foreach (var block in blocks)
+            {
+                foreach (Match match in NumberRegex.Matches(block.Text))
+                {
+                    var raw = match.Value;
+                    var value = ParsePlainNumber(raw);
+                    if (!value.HasValue) continue;
+
+                    yield return new NumberToken(
+                        Raw: raw,
+                        Value: value.Value,
+                        IsPercent: raw.EndsWith('%'),
+                        HasExplicitSign: raw.StartsWith('+') || raw.StartsWith('-'),
+                        CenterX: block.CenterX,
+                        CenterY: block.CenterY,
+                        Left: block.Left,
+                        Top: block.Top);
+                }
+            }
+        }
+
+        private static decimal? FirstMoney(IEnumerable<NumberToken>? tokens)
+        {
+            return tokens?
+                .Where(x => !x.IsPercent && Math.Abs(x.Value) >= 0.01m && Math.Abs(x.Value) < 1000000000)
+                .OrderBy(x => x.Top).ThenBy(x => x.Left)
+                .Select(x => (decimal?)x.Value)
+                .FirstOrDefault();
+        }
+
+        private static decimal? FirstSignedMoney(IEnumerable<NumberToken>? tokens)
+        {
+            return tokens?
+                .Where(x => !x.IsPercent && x.HasExplicitSign && Math.Abs(x.Value) >= 0.01m && Math.Abs(x.Value) < 100000000)
+                .OrderBy(x => x.Top).ThenBy(x => x.Left)
+                .Select(x => (decimal?)x.Value)
+                .FirstOrDefault();
+        }
+
+        private static decimal? FirstPercent(IEnumerable<NumberToken>? tokens)
+        {
+            return tokens?
+                .Where(x => x.IsPercent && Math.Abs(x.Value) < 1000)
+                .OrderBy(x => x.Top).ThenBy(x => x.Left)
+                .Select(x => (decimal?)x.Value)
+                .FirstOrDefault();
+        }
+
+        private static decimal? FirstShare(IEnumerable<NumberToken>? tokens)
+        {
+            return tokens?
+                .Where(x => IsLikelyShareCount(x.Value))
+                .OrderBy(x => x.Top).ThenBy(x => x.Left)
+                .Select(x => (decimal?)x.Value)
+                .FirstOrDefault();
+        }
+
+        private static decimal? FirstPrice(IEnumerable<NumberToken>? tokens)
+        {
+            return tokens?
+                .Where(x => IsLikelyPrice(x.Value))
+                .OrderBy(x => x.Top).ThenBy(x => x.Left)
+                .Select(x => (decimal?)x.Value)
+                .FirstOrDefault();
         }
 
         private static bool IsLikelyShareCount(decimal value)
@@ -224,6 +488,15 @@ namespace 估值助手.Services
         private static bool IsLikelyPrice(decimal value)
         {
             return value > 0 && value < 10000 && value % 1 != 0;
+        }
+
+        private static bool HasUsefulHoldingValues(decimal? shares, decimal? costPrice, decimal? marketValue, decimal? floatingProfit, decimal? floatingProfitRate)
+        {
+            return shares.GetValueOrDefault() > 0 ||
+                   marketValue.GetValueOrDefault() > 0 ||
+                   costPrice.GetValueOrDefault() > 0 ||
+                   floatingProfit.HasValue ||
+                   floatingProfitRate.HasValue;
         }
 
         private static string GuessName(IEnumerable<string> window, string code)
@@ -246,6 +519,11 @@ namespace 估值助手.Services
             if (text.All(c => c is >= 'A' and <= 'Z' or >= 'a' and <= 'z')) return false;
             if (text.Count(char.IsDigit) > 0 && !text.Any(IsChinese)) return false;
             return true;
+        }
+
+        private static bool IsFieldLabel(string text)
+        {
+            return text.Contains("市值") || text.Contains("盈亏") || text.Contains("持仓") || text.Contains("可用") || text.Contains("成本") || text.Contains("现价");
         }
 
         private static bool HasHoldingNumericEvidence(IReadOnlyList<string> numbers)
@@ -272,7 +550,7 @@ namespace 估值助手.Services
             return numbers.Select(ParsePlainNumber)
                 .Where(x => x.HasValue && x.Value > 0 && x.Value < 10000 && x.Value % 1 != 0)
                 .Select(x => x!.Value)
-                .OrderBy(x => x)
+                .OrderByDescending(x => x)
                 .FirstOrDefaultOrNull();
         }
 

@@ -160,7 +160,7 @@ namespace 估值助手.Controllers
             JObject result;
             try
             {
-                result = _ocr.AccurateBasic(ms.ToArray());
+                result = await _ocr.AccurateWithLocationAsync(ms.ToArray(), cancellationToken);
             }
             catch (Exception ex)
             {
@@ -168,17 +168,22 @@ namespace 估值助手.Controllers
                 return StatusCode(500, new { success = false, message = ex.Message });
             }
 
-            var words = result["words_result"]?
-                .Select(x => x?["words"]?.ToString() ?? string.Empty)
-                .Where(x => !string.IsNullOrWhiteSpace(x))
-                .ToList() ?? new List<string>();
+            var blocks = result["words_result"]?
+                .Select(ToStockOcrTextBlock)
+                .Where(x => x != null && !string.IsNullOrWhiteSpace(x.Text))
+                .Cast<StockOcrTextBlock>()
+                .ToList() ?? new List<StockOcrTextBlock>();
+            var words = blocks.Select(x => x.Text).Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
 
-            var candidates = await ResolveNameOnlyCandidatesAsync(_parser.Parse(words), cancellationToken);
+            var candidates = blocks.Any(x => x.Width > 0 && x.Height > 0)
+                ? _parser.Parse(blocks)
+                : _parser.Parse(words);
             var diagnostics = new List<string>
             {
                 $"OCR 文本行数：{words.Count}",
+                $"OCR 坐标行数：{blocks.Count(x => x.Width > 0 && x.Height > 0)}",
                 $"识别候选：{candidates.Count}",
-                "股票 OCR 已限制在持仓表格区域；无代码时会尝试按名称搜索补代码。"
+                "股票持仓 OCR：优先使用 location 坐标按表格列解析市值、盈亏、持仓、成本价。"
             };
 
             var batch = new StockOcrImportBatch
@@ -267,51 +272,6 @@ namespace 估值助手.Controllers
             return Ok(new { success = true, saved });
         }
 
-
-        private async Task<IReadOnlyList<StockOcrCandidate>> ResolveNameOnlyCandidatesAsync(IReadOnlyList<StockOcrCandidate> candidates, CancellationToken cancellationToken)
-        {
-            var resolved = new List<StockOcrCandidate>();
-            foreach (var candidate in candidates)
-            {
-                if (!string.IsNullOrWhiteSpace(candidate.StockCode) || string.IsNullOrWhiteSpace(candidate.StockName))
-                {
-                    resolved.Add(candidate);
-                    continue;
-                }
-
-                try
-                {
-                    var matches = await _quotes.SearchAsync(candidate.StockName, cancellationToken);
-                    var best = matches.FirstOrDefault(x => IsNameMatch(candidate.StockName, x.Name)) ?? matches.FirstOrDefault();
-                    if (best != null)
-                    {
-                        resolved.Add(candidate with
-                        {
-                            StockCode = best.Code,
-                            StockName = best.Name,
-                            Note = $"已按名称匹配代码 {best.Code}，请确认后写库"
-                        });
-                        continue;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "股票 OCR 名称补代码失败：{Name}", candidate.StockName);
-                }
-
-                resolved.Add(candidate);
-            }
-            return resolved;
-        }
-
-        private static bool IsNameMatch(string recognizedName, string quoteName)
-        {
-            static string Clean(string value) => new string((value ?? string.Empty).Where(c => char.IsLetterOrDigit(c) || (c >= '一' && c <= '龥')).ToArray());
-            var a = Clean(recognizedName);
-            var b = Clean(quoteName);
-            return a.Length > 0 && b.Length > 0 && (a == b || a.Contains(b) || b.Contains(a));
-        }
-
         private async Task UpsertWatchAsync(string username, string code, string market, string name, CancellationToken cancellationToken)
         {
             var watch = await _context.StockWatchItems.FirstOrDefaultAsync(x => x.Username == username && x.StockCode == code, cancellationToken);
@@ -375,6 +335,25 @@ namespace 估值助手.Controllers
                 changeRate = quote?.ChangeRate ?? 0,
                 quoteTime = quote?.QuoteTime.ToString("yyyy-MM-dd HH:mm:ss")
             };
+        }
+
+
+        private static StockOcrTextBlock? ToStockOcrTextBlock(JToken? token)
+        {
+            var text = token?["words"]?.ToString() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(text)) return null;
+            var loc = token?["location"];
+            return new StockOcrTextBlock(
+                text,
+                ToInt(loc?["left"]),
+                ToInt(loc?["top"]),
+                ToInt(loc?["width"]),
+                ToInt(loc?["height"]));
+        }
+
+        private static int ToInt(JToken? token)
+        {
+            return int.TryParse(token?.ToString(), out var value) ? value : 0;
         }
 
         private static string? NormalizeUser(string username)
