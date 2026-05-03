@@ -13,6 +13,12 @@ namespace 估值助手.Models
         public DbSet<UserUiState> UserUiStates { get; set; }
         public DbSet<UserInsightSnapshot> UserInsightSnapshots { get; set; }
         public DbSet<OcrCorrection> OcrCorrections { get; set; }
+        public DbSet<StockHolding> StockHoldings { get; set; }
+        public DbSet<StockWatchItem> StockWatchItems { get; set; }
+        public DbSet<StockOcrImportBatch> StockOcrImportBatches { get; set; }
+        public DbSet<StockOcrImportItem> StockOcrImportItems { get; set; }
+        public DbSet<StockQuoteSnapshot> StockQuoteSnapshots { get; set; }
+        public DbSet<StockKLineCache> StockKLineCaches { get; set; }
 
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
         {
@@ -87,10 +93,11 @@ namespace 估值助手.Models
             modelBuilder.Entity<OcrCorrection>()
                 .Property(x => x.FundName)
                 .IsRequired();
+
             modelBuilder.Entity<FundValuationEstimate>()
-    .HasIndex(x => new { x.Username, x.FundCode, x.TradeDate })
-    .IsUnique()
-    .HasDatabaseName("IX_FundValuationEstimate_User_Code_Date");
+                .HasIndex(x => new { x.Username, x.FundCode, x.TradeDate })
+                .IsUnique()
+                .HasDatabaseName("IX_FundValuationEstimate_User_Code_Date");
 
             modelBuilder.Entity<FundValuationEstimate>()
                 .HasIndex(x => new { x.Username, x.TradeDate })
@@ -114,6 +121,39 @@ namespace 估值助手.Models
                 .HasIndex(x => new { x.Username, x.SnapshotType, x.SnapshotDate })
                 .IsUnique()
                 .HasDatabaseName("IX_UserInsightSnapshot_User_Type_Date");
+
+            modelBuilder.Entity<StockHolding>()
+                .HasIndex(x => new { x.Username, x.StockCode })
+                .IsUnique()
+                .HasDatabaseName("IX_StockHolding_User_Code");
+
+            modelBuilder.Entity<StockHolding>()
+                .HasIndex(x => x.Username)
+                .HasDatabaseName("IX_StockHolding_User");
+
+            modelBuilder.Entity<StockWatchItem>()
+                .HasIndex(x => new { x.Username, x.StockCode })
+                .IsUnique()
+                .HasDatabaseName("IX_StockWatch_User_Code");
+
+            modelBuilder.Entity<StockOcrImportBatch>()
+                .HasIndex(x => new { x.Username, x.CreatedAt })
+                .HasDatabaseName("IX_StockOcrBatch_User_Created");
+
+            modelBuilder.Entity<StockOcrImportItem>()
+                .HasOne(x => x.Batch)
+                .WithMany(x => x.Items)
+                .HasForeignKey(x => x.BatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<StockQuoteSnapshot>()
+                .HasIndex(x => new { x.StockCode, x.QuoteTime })
+                .HasDatabaseName("IX_StockQuote_Code_Time");
+
+            modelBuilder.Entity<StockKLineCache>()
+                .HasIndex(x => new { x.StockCode, x.Period })
+                .IsUnique()
+                .HasDatabaseName("IX_StockKLine_Code_Period");
         }
     }
 }

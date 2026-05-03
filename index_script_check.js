@@ -1,3 +1,4 @@
+
         const { createApp, ref, reactive, onMounted, onUnmounted, nextTick, shallowRef, watch, computed } = Vue;
 
         createApp({
@@ -62,6 +63,25 @@
                 const analysisRecords = ref([]);
                 const uiStateMap = ref({});
                 const calibrationProfileMap = ref({});
+
+                const assetMode = ref(localStorage.getItem('asset_mode') || 'fund');
+                const stockHoldings = ref([]);
+                const stockWatchList = ref([]);
+                const stockSearchKeyword = ref('');
+                const stockSearchResults = ref([]);
+                const stockOcrLoading = ref(false);
+                const stockOcrPreview = reactive({ show: false, batchId: 0, items: [] });
+                const selectedStock = reactive({ code: '', market: '', name: '', price: 0, changeRate: 0 });
+                const stockKlinePeriod = ref('minute');
+                const stockKlinePeriods = [
+                    { value: 'minute', label: '分K' },
+                    { value: 'hour', label: '时K' },
+                    { value: 'day', label: '日K' },
+                    { value: 'month', label: '月K' },
+                    { value: 'year', label: '年K' }
+                ];
+                const stockChartRef = ref(null);
+                const stockChartInstance = shallowRef(null);
 
 
                 const savedMode = localStorage.getItem('privacy_mode');
@@ -262,6 +282,154 @@
                     const newBreakEven = amount > 0 && newAssets > 0 ? Math.max(0, (newCost / newAssets - 1) * 100) : recoveryModal.breakEvenRate;
                     return { amount, newAssets, newCost, newBreakEven };
                 });
+
+                const setAssetMode = (mode) => {
+                    assetMode.value = mode;
+                    localStorage.setItem('asset_mode', mode);
+                    saveUiState('asset_mode', { value: mode });
+                    if (mode === 'stock') nextTick(() => { loadStockDashboard(false); renderStockChart([]); });
+                };
+
+                const triggerStockOcr = () => document.getElementById('stockOcrInput')?.click();
+
+                const loadStockDashboard = async (force = false) => {
+                    if (!currentUser.value) return;
+                    try {
+                        const res = await apiFetch(`/api/stock/dashboard?username=${encodeURIComponent(currentUser.value)}`, { cache: 'no-store' });
+                        const data = await res.json();
+                        if (!res.ok || !data.success) throw new Error(data.message || '股票数据读取失败');
+                        stockHoldings.value = data.holdings || [];
+                        stockWatchList.value = data.watchList || [];
+                        if (!selectedStock.code) {
+                            const first = stockHoldings.value[0] || stockWatchList.value[0];
+                            if (first) openStockDetail(first);
+                        }
+                        if (force) showToast('股票数据已刷新', 'success');
+                    } catch (e) {
+                        if (force) showToast(e.message || '股票数据读取失败', 'error');
+                    }
+                };
+
+                const searchStocks = async () => {
+                    const keyword = stockSearchKeyword.value.trim();
+                    if (!keyword) return showToast('请输入股票代码或名称', 'error');
+                    try {
+                        const res = await apiFetch(`/api/stock/search?keyword=${encodeURIComponent(keyword)}`, { cache: 'no-store' });
+                        const data = await res.json();
+                        if (!res.ok || !data.success) throw new Error(data.message || '查询失败');
+                        stockSearchResults.value = data.items || [];
+                        if (!stockSearchResults.value.length) showToast('没有匹配股票', 'info');
+                    } catch (e) { showToast(e.message || '股票查询失败', 'error'); }
+                };
+
+                const addStockWatch = async (s) => {
+                    if (!s?.code) return;
+                    try {
+                        const res = await apiFetch('/api/stock/watch', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: currentUser.value, stockCode: s.code, stockName: s.name })
+                        });
+                        const data = await res.json();
+                        if (!res.ok || !data.success) throw new Error(data.message || '加入自选失败');
+                        showToast('已加入自选', 'success');
+                        await loadStockDashboard(false);
+                    } catch (e) { showToast(e.message || '加入自选失败', 'error'); }
+                };
+
+                const openStockHoldingEditor = async (s) => {
+                    const shares = Number(prompt(`输入 ${s.name} 持股数量`, '100') || 0);
+                    if (shares <= 0) return;
+                    const costPrice = Number(prompt(`输入 ${s.name} 成本价`, String(s.price || '')) || 0);
+                    if (costPrice <= 0) return;
+                    try {
+                        const res = await apiFetch('/api/stock/holding', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: currentUser.value, stockCode: s.code, stockName: s.name, shares, costPrice, costAmount: shares * costPrice })
+                        });
+                        const data = await res.json();
+                        if (!res.ok || !data.success) throw new Error(data.message || '保存持仓失败');
+                        showToast('股票持仓已保存', 'success');
+                        await loadStockDashboard(false);
+                    } catch (e) { showToast(e.message || '保存持仓失败', 'error'); }
+                };
+
+                const deleteStockHolding = async (s) => {
+                    if (!confirm(`删除股票持仓：${s.name}？`)) return;
+                    const res = await apiFetch(`/api/stock/holding?username=${encodeURIComponent(currentUser.value)}&code=${encodeURIComponent(s.code)}`, { method: 'DELETE' });
+                    if (res.ok) { showToast('已删除股票持仓', 'success'); await loadStockDashboard(false); }
+                };
+
+                const deleteStockWatch = async (s) => {
+                    const res = await apiFetch(`/api/stock/watch?username=${encodeURIComponent(currentUser.value)}&code=${encodeURIComponent(s.code)}`, { method: 'DELETE' });
+                    if (res.ok) { showToast('已移除自选', 'success'); await loadStockDashboard(false); }
+                };
+
+                const openStockDetail = async (s) => {
+                    Object.assign(selectedStock, { code: s.code, market: s.market || '', name: s.name || '', price: Number(s.price || 0), changeRate: Number(s.changeRate || 0) });
+                    await fetchStockKlines();
+                };
+
+                const switchStockKline = async (period) => {
+                    stockKlinePeriod.value = period;
+                    await fetchStockKlines();
+                };
+
+                const fetchStockKlines = async () => {
+                    if (!selectedStock.code) { renderStockChart([]); return; }
+                    try {
+                        const res = await apiFetch(`/api/stock/klines?code=${encodeURIComponent(selectedStock.code)}&period=${encodeURIComponent(stockKlinePeriod.value)}`, { cache: 'no-store' });
+                        const data = await res.json();
+                        renderStockChart(data.items || []);
+                    } catch (e) { showToast('走势读取失败', 'error'); }
+                };
+
+                const renderStockChart = (rows) => {
+                    if (!stockChartRef.value || !window.echarts) return;
+                    if (!stockChartInstance.value) stockChartInstance.value = echarts.init(stockChartRef.value);
+                    const data = (rows || []).map(x => [x.time, Number(x.close || 0), Number(x.open || 0), Number(x.low || 0), Number(x.high || 0)]);
+                    stockChartInstance.value.setOption({
+                        backgroundColor: 'transparent',
+                        tooltip: { trigger: 'axis', backgroundColor: 'rgba(15,23,42,.92)', borderColor: '#334155', textStyle: { color: '#f8fafc' } },
+                        grid: { left: 42, right: 20, top: 28, bottom: 36 },
+                        xAxis: { type: 'category', data: data.map(x => x[0]), axisLabel: { color: '#94a3b8' } },
+                        yAxis: { scale: true, axisLabel: { color: '#94a3b8' }, splitLine: { lineStyle: { color: 'rgba(148,163,184,.14)' } } },
+                        series: [{ name: selectedStock.name || '走势', type: 'candlestick', data: data.map(x => [x[2], x[1], x[3], x[4]]) }]
+                    }, true);
+                };
+
+                const handleStockOcrUpload = async (event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    if (!file) return;
+                    stockOcrLoading.value = true;
+                    try {
+                        const fd = new FormData();
+                        fd.append('username', currentUser.value);
+                        fd.append('image', file);
+                        const res = await apiFetch('/api/stock/import-ocr-preview', { method: 'POST', body: fd });
+                        const data = await res.json();
+                        if (!res.ok || !data.success) throw new Error(data.message || '股票 OCR 失败');
+                        stockOcrPreview.show = true;
+                        stockOcrPreview.batchId = data.batchId;
+                        stockOcrPreview.items = (data.items || []).map(x => ({ ...x, action: x.action || 'holding' }));
+                        showToast(`识别到 ${stockOcrPreview.items.length} 条股票候选`, 'success');
+                    } catch (e) { showToast(e.message || '股票 OCR 失败', 'error'); }
+                    finally { stockOcrLoading.value = false; }
+                };
+
+                const confirmStockOcr = async () => {
+                    try {
+                        const res = await apiFetch('/api/stock/import-ocr-confirm', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: currentUser.value, batchId: stockOcrPreview.batchId, items: stockOcrPreview.items })
+                        });
+                        const data = await res.json();
+                        if (!res.ok || !data.success) throw new Error(data.message || '写库失败');
+                        stockOcrPreview.show = false;
+                        showToast(`已写入 ${data.saved} 条股票数据`, 'success');
+                        await loadStockDashboard(false);
+                    } catch (e) { showToast(e.message || '股票 OCR 确认失败', 'error'); }
+                };
 
                 const historyModal = reactive({ show: false, isLoading: false, name: '', data: [] });
                 const archiveModal = reactive({ show: false, isLoading: false, targetName: '', data: [] });
@@ -1161,7 +1329,7 @@
 
                 const handleVisibilityChange = () => { if (document.visibilityState === 'visible') { updateRadarMode(); } };
 
-                const initDashboard = async () => { await loadPersistentUiState(); await loadCalibrationProfiles(); nextTick(() => { updateRadarMode(); setTimeout(() => { fetchData({ force: false }); warmNewsCache(); }, 120); }); };
+                const initDashboard = async () => { await loadPersistentUiState(); await loadCalibrationProfiles(); nextTick(() => { updateRadarMode(); setTimeout(() => { fetchData({ force: false }); if (assetMode.value === 'stock') loadStockDashboard(false); warmNewsCache(); }, 120); }); };
 
                 const fetchUserProfile = async () => {
                     if (!currentUser.value) return;
@@ -1194,7 +1362,7 @@
 
                 const handleReducePosition = async () => { if (!reduceModal.shares || !reduceModal.rawDate) return showToast("情报不完整，请检查份额或日期", "error"); const tradeDate = calculateTradeDate(reduceModal.rawDate, reduceModal.timeSlot); const fd = new FormData(); fd.append('username', currentUser.value); fd.append('code', reduceModal.code); fd.append('reduceShares', reduceModal.shares); fd.append('reduceAmount', reduceModal.amount || 0); fd.append('tradeDate', tradeDate); try { const res = await fetch(API_BASE + '/api/Fund/reduce-position', { method: 'POST', body: fd }); const result = await res.json(); if (res.ok) { showToast(result.msg || "结转成功", "success"); reduceModal.show = false; fetchData({ force: true, silent: true }); } else showToast(result.msg || "核算失败", "error"); } catch (e) { showToast("网络异常", "error"); } };
 
-                onUnmounted(() => { if (timer) clearInterval(timer); window.removeEventListener('resize', handleResize); document.removeEventListener('visibilitychange', handleVisibilityChange); window.removeEventListener('touchstart', onPullStart); window.removeEventListener('touchmove', onPullMove); window.removeEventListener('touchend', onPullEnd); if (chartInstance.value) chartInstance.value.dispose(); });
+                onUnmounted(() => { if (timer) clearInterval(timer); window.removeEventListener('resize', handleResize); document.removeEventListener('visibilitychange', handleVisibilityChange); window.removeEventListener('touchstart', onPullStart); window.removeEventListener('touchmove', onPullMove); window.removeEventListener('touchend', onPullEnd); if (chartInstance.value) chartInstance.value.dispose(); if (stockChartInstance.value) stockChartInstance.value.dispose(); });
 
                 return {
                     toasts, isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, activePage, switchPage, showProfileModal, userAvatar,
@@ -1206,9 +1374,10 @@
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
                     analysisMonth, selectedAnalysisDate, analysisViewMode, analysisDetailMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, analysisProfitTop, analysisLossTop, analysisMonthTotal, fetchAnalysis, todayDashStr,
-                    dailyBattleReport, confidenceRows, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, calibrationRows,
+                    assetMode, setAssetMode, stockHoldings, stockWatchList, stockSearchKeyword, stockSearchResults, stockOcrLoading, stockOcrPreview, selectedStock, stockKlinePeriod, stockKlinePeriods, stockChartRef, triggerStockOcr, handleStockOcrUpload, confirmStockOcr, loadStockDashboard, searchStocks, addStockWatch, openStockHoldingEditor, deleteStockHolding, deleteStockWatch, openStockDetail, switchStockKline, dailyBattleReport, confidenceRows, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, calibrationRows,
                     globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, saveDailyArchive, ocrModal,
                     reduceModal, openReduceModal, handleReducePosition, addModal, openAddModal, handleAddPosition
                 };
             }
         }).mount('#app');
+    

@@ -738,6 +738,128 @@
             margin: 4px 4px 0 0;
         }
 
+
+        /* ===== 股票持仓 / 自选 / 行情模块 ===== */
+        .asset-mode-switch {
+            margin: 0 15px 12px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            padding: 8px;
+            border-radius: 18px;
+            background: rgba(15, 23, 42, .52);
+            border: 1px solid rgba(148, 163, 184, .16);
+        }
+        .asset-mode-btn {
+            border: 0;
+            border-radius: 14px;
+            min-height: 42px;
+            color: #cbd5e1;
+            background: rgba(255,255,255,.08);
+            font-weight: 900;
+            cursor: pointer;
+        }
+        .asset-mode-btn.active {
+            color: #fff;
+            background: linear-gradient(135deg, #3b82f6, #6366f1);
+            box-shadow: 0 8px 22px rgba(59, 130, 246, .26);
+        }
+        .stock-dashboard-grid {
+            margin: 0 15px 15px;
+            display: grid;
+            grid-template-columns: minmax(0, .9fr) minmax(320px, 1fr);
+            gap: 14px;
+        }
+        .stock-toolbar {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto auto auto;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .stock-search-input {
+            border: 1px solid rgba(96,165,250,.32);
+            background: rgba(15,23,42,.72);
+            color: #f8fafc;
+            border-radius: 14px;
+            min-height: 42px;
+            padding: 0 12px;
+            outline: none;
+            font-weight: 800;
+            min-width: 0;
+        }
+        .stock-card {
+            padding: 12px;
+            border-radius: 16px;
+            background: rgba(15,23,42,.45);
+            border: 1px solid rgba(148,163,184,.14);
+            margin-bottom: 10px;
+        }
+        .stock-row-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            align-items: flex-start;
+        }
+        .stock-code-chip {
+            display: inline-flex;
+            padding: 2px 7px;
+            border-radius: 6px;
+            background: rgba(0,0,0,.26);
+            color: #94a3b8;
+            font-family: monospace;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+        .stock-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .stock-metric {
+            border-radius: 12px;
+            background: rgba(0,0,0,.18);
+            padding: 8px;
+            min-width: 0;
+        }
+        .stock-metric .label { color:#94a3b8; font-size:11px; }
+        .stock-metric .value { margin-top:3px; font-weight:900; font-family:'Courier New', monospace; color:#f8fafc; }
+        .stock-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+        .stock-actions .btn { min-height:34px; border-radius:12px; padding:6px 10px !important; font-size:12px; }
+        .stock-search-results { margin-top: 10px; }
+        .stock-detail-card { min-height: 430px; }
+        .stock-kline-tabs {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0,1fr));
+            gap: 8px;
+            margin: 12px 0;
+        }
+        .stock-kline-tab {
+            border: 0;
+            border-radius: 12px;
+            min-height: 36px;
+            background: rgba(255,255,255,.08);
+            color: #94a3b8;
+            font-weight: 900;
+            cursor: pointer;
+        }
+        .stock-kline-tab.active { background: linear-gradient(135deg,#10b981,#3b82f6); color:#fff; }
+        .stock-chart-box { height: 320px; border-radius:16px; background: rgba(0,0,0,.16); }
+        .stock-ocr-preview-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 92px 82px;
+            gap: 8px;
+            align-items: center;
+            border-bottom: 1px dashed rgba(255,255,255,.08);
+            padding: 10px 0;
+        }
+        @media screen and (max-width: 900px) {
+            .stock-dashboard-grid { grid-template-columns: 1fr; }
+            .stock-toolbar { grid-template-columns: 1fr 1fr; }
+            .stock-search-input { grid-column: 1 / 3; }
+        }
+
         @media screen and (max-width: 768px) {
             body {
                 padding-bottom: env(safe-area-inset-bottom);
@@ -1087,6 +1209,128 @@
             font-size: 12px;
         }
 
+
+        /* ===== 股票持仓 / 自选 / 行情模块 ===== */
+        .asset-mode-switch {
+            margin: 0 15px 12px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            padding: 8px;
+            border-radius: 18px;
+            background: rgba(15, 23, 42, .52);
+            border: 1px solid rgba(148, 163, 184, .16);
+        }
+        .asset-mode-btn {
+            border: 0;
+            border-radius: 14px;
+            min-height: 42px;
+            color: #cbd5e1;
+            background: rgba(255,255,255,.08);
+            font-weight: 900;
+            cursor: pointer;
+        }
+        .asset-mode-btn.active {
+            color: #fff;
+            background: linear-gradient(135deg, #3b82f6, #6366f1);
+            box-shadow: 0 8px 22px rgba(59, 130, 246, .26);
+        }
+        .stock-dashboard-grid {
+            margin: 0 15px 15px;
+            display: grid;
+            grid-template-columns: minmax(0, .9fr) minmax(320px, 1fr);
+            gap: 14px;
+        }
+        .stock-toolbar {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto auto auto;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .stock-search-input {
+            border: 1px solid rgba(96,165,250,.32);
+            background: rgba(15,23,42,.72);
+            color: #f8fafc;
+            border-radius: 14px;
+            min-height: 42px;
+            padding: 0 12px;
+            outline: none;
+            font-weight: 800;
+            min-width: 0;
+        }
+        .stock-card {
+            padding: 12px;
+            border-radius: 16px;
+            background: rgba(15,23,42,.45);
+            border: 1px solid rgba(148,163,184,.14);
+            margin-bottom: 10px;
+        }
+        .stock-row-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            align-items: flex-start;
+        }
+        .stock-code-chip {
+            display: inline-flex;
+            padding: 2px 7px;
+            border-radius: 6px;
+            background: rgba(0,0,0,.26);
+            color: #94a3b8;
+            font-family: monospace;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+        .stock-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .stock-metric {
+            border-radius: 12px;
+            background: rgba(0,0,0,.18);
+            padding: 8px;
+            min-width: 0;
+        }
+        .stock-metric .label { color:#94a3b8; font-size:11px; }
+        .stock-metric .value { margin-top:3px; font-weight:900; font-family:'Courier New', monospace; color:#f8fafc; }
+        .stock-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+        .stock-actions .btn { min-height:34px; border-radius:12px; padding:6px 10px !important; font-size:12px; }
+        .stock-search-results { margin-top: 10px; }
+        .stock-detail-card { min-height: 430px; }
+        .stock-kline-tabs {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0,1fr));
+            gap: 8px;
+            margin: 12px 0;
+        }
+        .stock-kline-tab {
+            border: 0;
+            border-radius: 12px;
+            min-height: 36px;
+            background: rgba(255,255,255,.08);
+            color: #94a3b8;
+            font-weight: 900;
+            cursor: pointer;
+        }
+        .stock-kline-tab.active { background: linear-gradient(135deg,#10b981,#3b82f6); color:#fff; }
+        .stock-chart-box { height: 320px; border-radius:16px; background: rgba(0,0,0,.16); }
+        .stock-ocr-preview-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 92px 82px;
+            gap: 8px;
+            align-items: center;
+            border-bottom: 1px dashed rgba(255,255,255,.08);
+            padding: 10px 0;
+        }
+        @media screen and (max-width: 900px) {
+            .stock-dashboard-grid { grid-template-columns: 1fr; }
+            .stock-toolbar { grid-template-columns: 1fr 1fr; }
+            .stock-search-input { grid-column: 1 / 3; }
+        }
+
         @media screen and (max-width: 768px) {
             body {
                 padding-bottom: 76px;
@@ -1338,6 +1582,128 @@
             display: none !important;
         }
 
+
+        /* ===== 股票持仓 / 自选 / 行情模块 ===== */
+        .asset-mode-switch {
+            margin: 0 15px 12px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            padding: 8px;
+            border-radius: 18px;
+            background: rgba(15, 23, 42, .52);
+            border: 1px solid rgba(148, 163, 184, .16);
+        }
+        .asset-mode-btn {
+            border: 0;
+            border-radius: 14px;
+            min-height: 42px;
+            color: #cbd5e1;
+            background: rgba(255,255,255,.08);
+            font-weight: 900;
+            cursor: pointer;
+        }
+        .asset-mode-btn.active {
+            color: #fff;
+            background: linear-gradient(135deg, #3b82f6, #6366f1);
+            box-shadow: 0 8px 22px rgba(59, 130, 246, .26);
+        }
+        .stock-dashboard-grid {
+            margin: 0 15px 15px;
+            display: grid;
+            grid-template-columns: minmax(0, .9fr) minmax(320px, 1fr);
+            gap: 14px;
+        }
+        .stock-toolbar {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto auto auto;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .stock-search-input {
+            border: 1px solid rgba(96,165,250,.32);
+            background: rgba(15,23,42,.72);
+            color: #f8fafc;
+            border-radius: 14px;
+            min-height: 42px;
+            padding: 0 12px;
+            outline: none;
+            font-weight: 800;
+            min-width: 0;
+        }
+        .stock-card {
+            padding: 12px;
+            border-radius: 16px;
+            background: rgba(15,23,42,.45);
+            border: 1px solid rgba(148,163,184,.14);
+            margin-bottom: 10px;
+        }
+        .stock-row-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            align-items: flex-start;
+        }
+        .stock-code-chip {
+            display: inline-flex;
+            padding: 2px 7px;
+            border-radius: 6px;
+            background: rgba(0,0,0,.26);
+            color: #94a3b8;
+            font-family: monospace;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+        .stock-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .stock-metric {
+            border-radius: 12px;
+            background: rgba(0,0,0,.18);
+            padding: 8px;
+            min-width: 0;
+        }
+        .stock-metric .label { color:#94a3b8; font-size:11px; }
+        .stock-metric .value { margin-top:3px; font-weight:900; font-family:'Courier New', monospace; color:#f8fafc; }
+        .stock-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+        .stock-actions .btn { min-height:34px; border-radius:12px; padding:6px 10px !important; font-size:12px; }
+        .stock-search-results { margin-top: 10px; }
+        .stock-detail-card { min-height: 430px; }
+        .stock-kline-tabs {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0,1fr));
+            gap: 8px;
+            margin: 12px 0;
+        }
+        .stock-kline-tab {
+            border: 0;
+            border-radius: 12px;
+            min-height: 36px;
+            background: rgba(255,255,255,.08);
+            color: #94a3b8;
+            font-weight: 900;
+            cursor: pointer;
+        }
+        .stock-kline-tab.active { background: linear-gradient(135deg,#10b981,#3b82f6); color:#fff; }
+        .stock-chart-box { height: 320px; border-radius:16px; background: rgba(0,0,0,.16); }
+        .stock-ocr-preview-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 92px 82px;
+            gap: 8px;
+            align-items: center;
+            border-bottom: 1px dashed rgba(255,255,255,.08);
+            padding: 10px 0;
+        }
+        @media screen and (max-width: 900px) {
+            .stock-dashboard-grid { grid-template-columns: 1fr; }
+            .stock-toolbar { grid-template-columns: 1fr 1fr; }
+            .stock-search-input { grid-column: 1 / 3; }
+        }
+
         @media screen and (max-width: 768px) {
             .home-hero-clean {
                 margin: 12px;
@@ -1457,6 +1823,128 @@
             }
         }
 
+
+        /* ===== 股票持仓 / 自选 / 行情模块 ===== */
+        .asset-mode-switch {
+            margin: 0 15px 12px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            padding: 8px;
+            border-radius: 18px;
+            background: rgba(15, 23, 42, .52);
+            border: 1px solid rgba(148, 163, 184, .16);
+        }
+        .asset-mode-btn {
+            border: 0;
+            border-radius: 14px;
+            min-height: 42px;
+            color: #cbd5e1;
+            background: rgba(255,255,255,.08);
+            font-weight: 900;
+            cursor: pointer;
+        }
+        .asset-mode-btn.active {
+            color: #fff;
+            background: linear-gradient(135deg, #3b82f6, #6366f1);
+            box-shadow: 0 8px 22px rgba(59, 130, 246, .26);
+        }
+        .stock-dashboard-grid {
+            margin: 0 15px 15px;
+            display: grid;
+            grid-template-columns: minmax(0, .9fr) minmax(320px, 1fr);
+            gap: 14px;
+        }
+        .stock-toolbar {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto auto auto;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .stock-search-input {
+            border: 1px solid rgba(96,165,250,.32);
+            background: rgba(15,23,42,.72);
+            color: #f8fafc;
+            border-radius: 14px;
+            min-height: 42px;
+            padding: 0 12px;
+            outline: none;
+            font-weight: 800;
+            min-width: 0;
+        }
+        .stock-card {
+            padding: 12px;
+            border-radius: 16px;
+            background: rgba(15,23,42,.45);
+            border: 1px solid rgba(148,163,184,.14);
+            margin-bottom: 10px;
+        }
+        .stock-row-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            align-items: flex-start;
+        }
+        .stock-code-chip {
+            display: inline-flex;
+            padding: 2px 7px;
+            border-radius: 6px;
+            background: rgba(0,0,0,.26);
+            color: #94a3b8;
+            font-family: monospace;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+        .stock-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .stock-metric {
+            border-radius: 12px;
+            background: rgba(0,0,0,.18);
+            padding: 8px;
+            min-width: 0;
+        }
+        .stock-metric .label { color:#94a3b8; font-size:11px; }
+        .stock-metric .value { margin-top:3px; font-weight:900; font-family:'Courier New', monospace; color:#f8fafc; }
+        .stock-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+        .stock-actions .btn { min-height:34px; border-radius:12px; padding:6px 10px !important; font-size:12px; }
+        .stock-search-results { margin-top: 10px; }
+        .stock-detail-card { min-height: 430px; }
+        .stock-kline-tabs {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0,1fr));
+            gap: 8px;
+            margin: 12px 0;
+        }
+        .stock-kline-tab {
+            border: 0;
+            border-radius: 12px;
+            min-height: 36px;
+            background: rgba(255,255,255,.08);
+            color: #94a3b8;
+            font-weight: 900;
+            cursor: pointer;
+        }
+        .stock-kline-tab.active { background: linear-gradient(135deg,#10b981,#3b82f6); color:#fff; }
+        .stock-chart-box { height: 320px; border-radius:16px; background: rgba(0,0,0,.16); }
+        .stock-ocr-preview-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 92px 82px;
+            gap: 8px;
+            align-items: center;
+            border-bottom: 1px dashed rgba(255,255,255,.08);
+            padding: 10px 0;
+        }
+        @media screen and (max-width: 900px) {
+            .stock-dashboard-grid { grid-template-columns: 1fr; }
+            .stock-toolbar { grid-template-columns: 1fr 1fr; }
+            .stock-search-input { grid-column: 1 / 3; }
+        }
+
         @media screen and (max-width: 768px) {
             .home-hero-clean {
                 padding: 16px;
@@ -1568,6 +2056,128 @@
             font-feature-settings: "tnum" 1;
         }
 
+
+        /* ===== 股票持仓 / 自选 / 行情模块 ===== */
+        .asset-mode-switch {
+            margin: 0 15px 12px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            padding: 8px;
+            border-radius: 18px;
+            background: rgba(15, 23, 42, .52);
+            border: 1px solid rgba(148, 163, 184, .16);
+        }
+        .asset-mode-btn {
+            border: 0;
+            border-radius: 14px;
+            min-height: 42px;
+            color: #cbd5e1;
+            background: rgba(255,255,255,.08);
+            font-weight: 900;
+            cursor: pointer;
+        }
+        .asset-mode-btn.active {
+            color: #fff;
+            background: linear-gradient(135deg, #3b82f6, #6366f1);
+            box-shadow: 0 8px 22px rgba(59, 130, 246, .26);
+        }
+        .stock-dashboard-grid {
+            margin: 0 15px 15px;
+            display: grid;
+            grid-template-columns: minmax(0, .9fr) minmax(320px, 1fr);
+            gap: 14px;
+        }
+        .stock-toolbar {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto auto auto;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .stock-search-input {
+            border: 1px solid rgba(96,165,250,.32);
+            background: rgba(15,23,42,.72);
+            color: #f8fafc;
+            border-radius: 14px;
+            min-height: 42px;
+            padding: 0 12px;
+            outline: none;
+            font-weight: 800;
+            min-width: 0;
+        }
+        .stock-card {
+            padding: 12px;
+            border-radius: 16px;
+            background: rgba(15,23,42,.45);
+            border: 1px solid rgba(148,163,184,.14);
+            margin-bottom: 10px;
+        }
+        .stock-row-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            align-items: flex-start;
+        }
+        .stock-code-chip {
+            display: inline-flex;
+            padding: 2px 7px;
+            border-radius: 6px;
+            background: rgba(0,0,0,.26);
+            color: #94a3b8;
+            font-family: monospace;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+        .stock-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .stock-metric {
+            border-radius: 12px;
+            background: rgba(0,0,0,.18);
+            padding: 8px;
+            min-width: 0;
+        }
+        .stock-metric .label { color:#94a3b8; font-size:11px; }
+        .stock-metric .value { margin-top:3px; font-weight:900; font-family:'Courier New', monospace; color:#f8fafc; }
+        .stock-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+        .stock-actions .btn { min-height:34px; border-radius:12px; padding:6px 10px !important; font-size:12px; }
+        .stock-search-results { margin-top: 10px; }
+        .stock-detail-card { min-height: 430px; }
+        .stock-kline-tabs {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0,1fr));
+            gap: 8px;
+            margin: 12px 0;
+        }
+        .stock-kline-tab {
+            border: 0;
+            border-radius: 12px;
+            min-height: 36px;
+            background: rgba(255,255,255,.08);
+            color: #94a3b8;
+            font-weight: 900;
+            cursor: pointer;
+        }
+        .stock-kline-tab.active { background: linear-gradient(135deg,#10b981,#3b82f6); color:#fff; }
+        .stock-chart-box { height: 320px; border-radius:16px; background: rgba(0,0,0,.16); }
+        .stock-ocr-preview-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 92px 82px;
+            gap: 8px;
+            align-items: center;
+            border-bottom: 1px dashed rgba(255,255,255,.08);
+            padding: 10px 0;
+        }
+        @media screen and (max-width: 900px) {
+            .stock-dashboard-grid { grid-template-columns: 1fr; }
+            .stock-toolbar { grid-template-columns: 1fr 1fr; }
+            .stock-search-input { grid-column: 1 / 3; }
+        }
+
         @media screen and (max-width: 768px) {
             .capital-flow-panel {
                 margin: 12px 8px calc(86px + env(safe-area-inset-bottom));
@@ -1639,6 +2249,128 @@
                 border-radius: 999px;
             }
 
+
+        /* ===== 股票持仓 / 自选 / 行情模块 ===== */
+        .asset-mode-switch {
+            margin: 0 15px 12px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            padding: 8px;
+            border-radius: 18px;
+            background: rgba(15, 23, 42, .52);
+            border: 1px solid rgba(148, 163, 184, .16);
+        }
+        .asset-mode-btn {
+            border: 0;
+            border-radius: 14px;
+            min-height: 42px;
+            color: #cbd5e1;
+            background: rgba(255,255,255,.08);
+            font-weight: 900;
+            cursor: pointer;
+        }
+        .asset-mode-btn.active {
+            color: #fff;
+            background: linear-gradient(135deg, #3b82f6, #6366f1);
+            box-shadow: 0 8px 22px rgba(59, 130, 246, .26);
+        }
+        .stock-dashboard-grid {
+            margin: 0 15px 15px;
+            display: grid;
+            grid-template-columns: minmax(0, .9fr) minmax(320px, 1fr);
+            gap: 14px;
+        }
+        .stock-toolbar {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto auto auto;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .stock-search-input {
+            border: 1px solid rgba(96,165,250,.32);
+            background: rgba(15,23,42,.72);
+            color: #f8fafc;
+            border-radius: 14px;
+            min-height: 42px;
+            padding: 0 12px;
+            outline: none;
+            font-weight: 800;
+            min-width: 0;
+        }
+        .stock-card {
+            padding: 12px;
+            border-radius: 16px;
+            background: rgba(15,23,42,.45);
+            border: 1px solid rgba(148,163,184,.14);
+            margin-bottom: 10px;
+        }
+        .stock-row-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            align-items: flex-start;
+        }
+        .stock-code-chip {
+            display: inline-flex;
+            padding: 2px 7px;
+            border-radius: 6px;
+            background: rgba(0,0,0,.26);
+            color: #94a3b8;
+            font-family: monospace;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+        .stock-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .stock-metric {
+            border-radius: 12px;
+            background: rgba(0,0,0,.18);
+            padding: 8px;
+            min-width: 0;
+        }
+        .stock-metric .label { color:#94a3b8; font-size:11px; }
+        .stock-metric .value { margin-top:3px; font-weight:900; font-family:'Courier New', monospace; color:#f8fafc; }
+        .stock-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+        .stock-actions .btn { min-height:34px; border-radius:12px; padding:6px 10px !important; font-size:12px; }
+        .stock-search-results { margin-top: 10px; }
+        .stock-detail-card { min-height: 430px; }
+        .stock-kline-tabs {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0,1fr));
+            gap: 8px;
+            margin: 12px 0;
+        }
+        .stock-kline-tab {
+            border: 0;
+            border-radius: 12px;
+            min-height: 36px;
+            background: rgba(255,255,255,.08);
+            color: #94a3b8;
+            font-weight: 900;
+            cursor: pointer;
+        }
+        .stock-kline-tab.active { background: linear-gradient(135deg,#10b981,#3b82f6); color:#fff; }
+        .stock-chart-box { height: 320px; border-radius:16px; background: rgba(0,0,0,.16); }
+        .stock-ocr-preview-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 92px 82px;
+            gap: 8px;
+            align-items: center;
+            border-bottom: 1px dashed rgba(255,255,255,.08);
+            padding: 10px 0;
+        }
+        @media screen and (max-width: 900px) {
+            .stock-dashboard-grid { grid-template-columns: 1fr; }
+            .stock-toolbar { grid-template-columns: 1fr 1fr; }
+            .stock-search-input { grid-column: 1 / 3; }
+        }
+
         @media screen and (max-width: 768px) {
             .home-hero-clean {
                 margin: 10px 8px;
@@ -1688,6 +2420,7 @@
             <div v-show="activePage === 'home'" class="app-page home-page">
                 <div class="home-hero-clean glass-panel">
                     <input type="file" id="ocrInput" accept="image/*" style="display: none;" @change="handleFileUpload">
+                    <input type="file" id="stockOcrInput" accept="image/*" style="display: none;" @change="handleStockOcrUpload">
                     <input type="file" id="avatarInput" accept="image/*" style="display: none;" @change="handleAvatarUpload">
 
                     <div class="home-quick-actions avatar-import-action">
@@ -1702,7 +2435,83 @@
                     </div>
                 </div>
 
-                <div class="glass-panel total-panel" style="margin: 0 15px 15px 15px; padding: 20px 30px; display: flex; justify-content: space-around; align-items: center; flex-wrap: wrap; row-gap: 15px;">
+                <div class="asset-mode-switch">
+                    <button :class="['asset-mode-btn', assetMode==='fund'?'active':'']" @click="setAssetMode('fund')">🧾 基金</button>
+                    <button :class="['asset-mode-btn', assetMode==='stock'?'active':'']" @click="setAssetMode('stock')">📈 股票</button>
+                </div>
+
+                <div v-show="assetMode === 'stock'" class="stock-dashboard-grid">
+                    <div class="glass-panel feature-card">
+                        <div class="feature-title">📈 股票持仓 / 自选</div>
+                        <div class="feature-subtitle">OCR 同花顺/券商持仓图，或搜索代码加入自选；持仓、自选、OCR 预览都会写入数据库。</div>
+                        <div class="stock-toolbar">
+                            <input class="stock-search-input" v-model="stockSearchKeyword" @keyup.enter="searchStocks" placeholder="输入股票代码或名称，如 000001 / 平安银行">
+                            <button class="btn btn-primary" @click="searchStocks">查询</button>
+                            <button class="btn btn-ocr" @click="triggerStockOcr" :disabled="stockOcrLoading">{{ stockOcrLoading ? '识别中...' : 'OCR持仓' }}</button>
+                            <button class="btn" @click="loadStockDashboard(true)">刷新</button>
+                        </div>
+
+                        <div v-if="stockSearchResults.length" class="stock-search-results">
+                            <div v-for="s in stockSearchResults" :key="'sr-'+s.code" class="stock-card">
+                                <div class="stock-row-head">
+                                    <div><strong>{{ s.name }}</strong><div class="stock-code-chip">{{ s.market }} {{ s.code }}</div></div>
+                                    <div class="stock-actions" style="margin-top:0;">
+                                        <button class="btn" @click="addStockWatch(s)">加自选</button>
+                                        <button class="btn btn-primary" @click="openStockDetail(s)">走势</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="stockOcrPreview.show" class="stock-card" style="border-color:rgba(139,92,246,.35);">
+                            <div class="stock-row-head"><strong>OCR 预览确认</strong><span class="stock-code-chip">批次 {{ stockOcrPreview.batchId }}</span></div>
+                            <div v-for="item in stockOcrPreview.items" :key="'op-'+item.id" class="stock-ocr-preview-row">
+                                <div style="min-width:0;"><strong>{{ item.stockName || item.recognizedName }}</strong><div class="stock-code-chip">{{ item.stockCode || '待补代码' }} · {{ item.note }}</div></div>
+                                <input class="stock-search-input" style="min-height:34px;" v-model="item.stockCode" placeholder="代码">
+                                <select class="stock-search-input" style="min-height:34px;" v-model="item.action"><option value="holding">持仓</option><option value="watch">自选</option></select>
+                            </div>
+                            <div class="stock-actions"><button class="btn btn-primary" @click="confirmStockOcr">确认写库</button><button class="btn" @click="stockOcrPreview.show=false">取消</button></div>
+                        </div>
+
+                        <div class="feature-title" style="font-size:17px;margin-top:14px;">持有股票</div>
+                        <div v-if="stockHoldings.length===0" class="feature-subtitle" style="padding:14px 0;">暂无股票持仓，可 OCR 导入或手动搜索后录入。</div>
+                        <div v-for="s in stockHoldings" :key="'h-'+s.code" class="stock-card">
+                            <div class="stock-row-head">
+                                <div><strong>{{ s.name }}</strong><div class="stock-code-chip">{{ s.market }} {{ s.code }}</div></div>
+                                <div :style="{color:Number(s.changeRate)>=0?'#ff4d4f':'#10b981',fontWeight:'900',textAlign:'right'}">{{ Number(s.price||0).toFixed(2) }}<br>{{ Number(s.changeRate)>=0?'+':'' }}{{ Number(s.changeRate||0).toFixed(2) }}%</div>
+                            </div>
+                            <div class="stock-metrics">
+                                <div class="stock-metric"><div class="label">持股</div><div class="value">{{ Number(s.shares||0).toFixed(0) }}</div></div>
+                                <div class="stock-metric"><div class="label">市值</div><div class="value">{{ Number(s.marketValue||0).toFixed(2) }}</div></div>
+                                <div class="stock-metric"><div class="label">持有收益</div><div class="value" :style="{color:Number(s.totalProfit)>=0?'#ff4d4f':'#10b981'}">{{ Number(s.totalProfit)>=0?'+':'' }}{{ Number(s.totalProfit||0).toFixed(2) }}</div></div>
+                            </div>
+                            <div class="stock-actions"><button class="btn btn-primary" @click="openStockDetail(s)">走势</button><button class="btn" @click="addStockWatch(s)">加自选</button><button class="btn btn-danger" @click="deleteStockHolding(s)">删除</button></div>
+                        </div>
+
+                        <div class="feature-title" style="font-size:17px;margin-top:14px;">自选股票</div>
+                        <div v-for="s in stockWatchList" :key="'w-'+s.code" class="stock-card">
+                            <div class="stock-row-head">
+                                <div><strong>{{ s.name }}</strong><div class="stock-code-chip">{{ s.market }} {{ s.code }}</div></div>
+                                <div :style="{color:Number(s.changeRate)>=0?'#ff4d4f':'#10b981',fontWeight:'900',textAlign:'right'}">{{ Number(s.price||0).toFixed(2) }}<br>{{ Number(s.changeRate)>=0?'+':'' }}{{ Number(s.changeRate||0).toFixed(2) }}%</div>
+                            </div>
+                            <div class="stock-actions"><button class="btn btn-primary" @click="openStockDetail(s)">走势</button><button class="btn" @click="openStockHoldingEditor(s)">转持有</button><button class="btn btn-danger" @click="deleteStockWatch(s)">移除</button></div>
+                        </div>
+                    </div>
+
+                    <div class="glass-panel feature-card stock-detail-card">
+                        <div class="stock-row-head">
+                            <div><div class="feature-title">{{ selectedStock.name || '股票走势' }}</div><div class="feature-subtitle">{{ selectedStock.code ? selectedStock.market + ' ' + selectedStock.code : '选择持仓、自选或搜索结果查看走势' }}</div></div>
+                            <div v-if="selectedStock.code" :style="{color:Number(selectedStock.changeRate)>=0?'#ff4d4f':'#10b981',fontWeight:'900',textAlign:'right'}">{{ Number(selectedStock.price||0).toFixed(2) }}<br>{{ Number(selectedStock.changeRate)>=0?'+':'' }}{{ Number(selectedStock.changeRate||0).toFixed(2) }}%</div>
+                        </div>
+                        <div class="stock-kline-tabs">
+                            <button v-for="p in stockKlinePeriods" :key="p.value" :class="['stock-kline-tab', stockKlinePeriod===p.value?'active':'']" @click="switchStockKline(p.value)">{{ p.label }}</button>
+                        </div>
+                        <div ref="stockChartRef" class="stock-chart-box"></div>
+                        <div class="feature-subtitle" style="margin-top:10px;">行情数据来自公开网页接口，仅作持仓跟踪与自选观察；交易决策以券商客户端和交易所正式披露为准。</div>
+                    </div>
+                </div>
+
+                <div v-show="assetMode === 'fund'" class="glass-panel total-panel" style="margin: 0 15px 15px 15px; padding: 20px 30px; display: flex; justify-content: space-around; align-items: center; flex-wrap: wrap; row-gap: 15px;">
                     <div style="text-align: center;">
                         <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">⏱️ 系统雷达</div>
                         <div :style="{ fontSize: '18px', fontWeight: '900', color: isNight ? '#10b981' : '#f59e0b', margin: '5px 0' }">
@@ -1737,7 +2546,7 @@
                     <div class="total-archive-entry"></div>
                 </div>
 
-                <div class="feature-grid">
+                <div v-show="assetMode === 'fund'" class="feature-grid">
                     <div class="glass-panel feature-card">
                         <div class="feature-title">🧾 今日收盘战报</div>
                         <div class="feature-subtitle">{{ dailyBattleReport.summary }}</div>
@@ -1780,14 +2589,14 @@
                     </div>
                 </div>
 
-                <div style="margin: 0 15px 10px 15px; display: flex; justify-content: space-between; align-items: center;">
+                <div v-show="assetMode === 'fund'" style="margin: 0 15px 10px 15px; display: flex; justify-content: space-between; align-items: center;">
                     <div style="font-size: 16px; font-weight: bold; color: #e2e8f0; display: flex; align-items: center; gap: 8px;">
                         🛡️ 总持仓
                         <span style="font-size: 12px; font-weight: normal; color: #94a3b8;">(共 {{ fundsList.length }} 支)</span>
                     </div>
                 </div>
 
-                <div class="fund-list-container">
+                <div v-show="assetMode === 'fund'" class="fund-list-container">
                     <div v-for="fund in fundsList" :key="fund.code" class="glass-panel fund-card">
                         <div style="display: flex; justify-content: space-between; align-items: start;">
                             <span style="font-weight: bold; color: #fff; font-size: 15px; max-width: 80%; display: flex; flex-direction: column;">
@@ -1873,7 +2682,7 @@
                     <span v-if="fundsList.length === 0 && !isLoading" style="color:#64748b; font-size:13px; width: 100%; text-align: center; padding: 20px;">暂无持仓，请手动添加代码，或点击上方「📷 智能截图导入」自动扫描</span>
                 </div>
 
-                <div v-show="isLoading" class="glass-panel" style="height: calc(100vh - 280px); margin: 15px; display: flex; flex-direction: column; padding: 20px; box-sizing: border-box; gap: 20px;">
+                <div v-show="assetMode === 'fund' && isLoading" class="glass-panel" style="height: calc(100vh - 280px); margin: 15px; display: flex; flex-direction: column; padding: 20px; box-sizing: border-box; gap: 20px;">
                     <div class="skeleton-box" style="width: 30%; height: 30px;"></div>
                     <div class="skeleton-box" style="width: 100%; height: 2px;"></div>
                     <div style="display: flex; gap: 20px; height: 100%;">
@@ -1882,7 +2691,7 @@
                     </div>
                 </div>
 
-                <div v-show="!isLoading" id="chart-container" class="glass-panel" ref="chartRef"></div>
+                <div v-show="assetMode === 'fund' && !isLoading" id="chart-container" class="glass-panel" ref="chartRef"></div>
             </div>
 
             <div v-show="activePage === 'sector'" class="app-page">
@@ -2446,6 +3255,25 @@
                 const uiStateMap = ref({});
                 const calibrationProfileMap = ref({});
 
+                const assetMode = ref(localStorage.getItem('asset_mode') || 'fund');
+                const stockHoldings = ref([]);
+                const stockWatchList = ref([]);
+                const stockSearchKeyword = ref('');
+                const stockSearchResults = ref([]);
+                const stockOcrLoading = ref(false);
+                const stockOcrPreview = reactive({ show: false, batchId: 0, items: [] });
+                const selectedStock = reactive({ code: '', market: '', name: '', price: 0, changeRate: 0 });
+                const stockKlinePeriod = ref('minute');
+                const stockKlinePeriods = [
+                    { value: 'minute', label: '分K' },
+                    { value: 'hour', label: '时K' },
+                    { value: 'day', label: '日K' },
+                    { value: 'month', label: '月K' },
+                    { value: 'year', label: '年K' }
+                ];
+                const stockChartRef = ref(null);
+                const stockChartInstance = shallowRef(null);
+
 
                 const savedMode = localStorage.getItem('privacy_mode');
                 const privacyMode = ref(savedMode !== null ? Number(savedMode) : 2);
@@ -2645,6 +3473,154 @@
                     const newBreakEven = amount > 0 && newAssets > 0 ? Math.max(0, (newCost / newAssets - 1) * 100) : recoveryModal.breakEvenRate;
                     return { amount, newAssets, newCost, newBreakEven };
                 });
+
+                const setAssetMode = (mode) => {
+                    assetMode.value = mode;
+                    localStorage.setItem('asset_mode', mode);
+                    saveUiState('asset_mode', { value: mode });
+                    if (mode === 'stock') nextTick(() => { loadStockDashboard(false); renderStockChart([]); });
+                };
+
+                const triggerStockOcr = () => document.getElementById('stockOcrInput')?.click();
+
+                const loadStockDashboard = async (force = false) => {
+                    if (!currentUser.value) return;
+                    try {
+                        const res = await apiFetch(`/api/stock/dashboard?username=${encodeURIComponent(currentUser.value)}`, { cache: 'no-store' });
+                        const data = await res.json();
+                        if (!res.ok || !data.success) throw new Error(data.message || '股票数据读取失败');
+                        stockHoldings.value = data.holdings || [];
+                        stockWatchList.value = data.watchList || [];
+                        if (!selectedStock.code) {
+                            const first = stockHoldings.value[0] || stockWatchList.value[0];
+                            if (first) openStockDetail(first);
+                        }
+                        if (force) showToast('股票数据已刷新', 'success');
+                    } catch (e) {
+                        if (force) showToast(e.message || '股票数据读取失败', 'error');
+                    }
+                };
+
+                const searchStocks = async () => {
+                    const keyword = stockSearchKeyword.value.trim();
+                    if (!keyword) return showToast('请输入股票代码或名称', 'error');
+                    try {
+                        const res = await apiFetch(`/api/stock/search?keyword=${encodeURIComponent(keyword)}`, { cache: 'no-store' });
+                        const data = await res.json();
+                        if (!res.ok || !data.success) throw new Error(data.message || '查询失败');
+                        stockSearchResults.value = data.items || [];
+                        if (!stockSearchResults.value.length) showToast('没有匹配股票', 'info');
+                    } catch (e) { showToast(e.message || '股票查询失败', 'error'); }
+                };
+
+                const addStockWatch = async (s) => {
+                    if (!s?.code) return;
+                    try {
+                        const res = await apiFetch('/api/stock/watch', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: currentUser.value, stockCode: s.code, stockName: s.name })
+                        });
+                        const data = await res.json();
+                        if (!res.ok || !data.success) throw new Error(data.message || '加入自选失败');
+                        showToast('已加入自选', 'success');
+                        await loadStockDashboard(false);
+                    } catch (e) { showToast(e.message || '加入自选失败', 'error'); }
+                };
+
+                const openStockHoldingEditor = async (s) => {
+                    const shares = Number(prompt(`输入 ${s.name} 持股数量`, '100') || 0);
+                    if (shares <= 0) return;
+                    const costPrice = Number(prompt(`输入 ${s.name} 成本价`, String(s.price || '')) || 0);
+                    if (costPrice <= 0) return;
+                    try {
+                        const res = await apiFetch('/api/stock/holding', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: currentUser.value, stockCode: s.code, stockName: s.name, shares, costPrice, costAmount: shares * costPrice })
+                        });
+                        const data = await res.json();
+                        if (!res.ok || !data.success) throw new Error(data.message || '保存持仓失败');
+                        showToast('股票持仓已保存', 'success');
+                        await loadStockDashboard(false);
+                    } catch (e) { showToast(e.message || '保存持仓失败', 'error'); }
+                };
+
+                const deleteStockHolding = async (s) => {
+                    if (!confirm(`删除股票持仓：${s.name}？`)) return;
+                    const res = await apiFetch(`/api/stock/holding?username=${encodeURIComponent(currentUser.value)}&code=${encodeURIComponent(s.code)}`, { method: 'DELETE' });
+                    if (res.ok) { showToast('已删除股票持仓', 'success'); await loadStockDashboard(false); }
+                };
+
+                const deleteStockWatch = async (s) => {
+                    const res = await apiFetch(`/api/stock/watch?username=${encodeURIComponent(currentUser.value)}&code=${encodeURIComponent(s.code)}`, { method: 'DELETE' });
+                    if (res.ok) { showToast('已移除自选', 'success'); await loadStockDashboard(false); }
+                };
+
+                const openStockDetail = async (s) => {
+                    Object.assign(selectedStock, { code: s.code, market: s.market || '', name: s.name || '', price: Number(s.price || 0), changeRate: Number(s.changeRate || 0) });
+                    await fetchStockKlines();
+                };
+
+                const switchStockKline = async (period) => {
+                    stockKlinePeriod.value = period;
+                    await fetchStockKlines();
+                };
+
+                const fetchStockKlines = async () => {
+                    if (!selectedStock.code) { renderStockChart([]); return; }
+                    try {
+                        const res = await apiFetch(`/api/stock/klines?code=${encodeURIComponent(selectedStock.code)}&period=${encodeURIComponent(stockKlinePeriod.value)}`, { cache: 'no-store' });
+                        const data = await res.json();
+                        renderStockChart(data.items || []);
+                    } catch (e) { showToast('走势读取失败', 'error'); }
+                };
+
+                const renderStockChart = (rows) => {
+                    if (!stockChartRef.value || !window.echarts) return;
+                    if (!stockChartInstance.value) stockChartInstance.value = echarts.init(stockChartRef.value);
+                    const data = (rows || []).map(x => [x.time, Number(x.close || 0), Number(x.open || 0), Number(x.low || 0), Number(x.high || 0)]);
+                    stockChartInstance.value.setOption({
+                        backgroundColor: 'transparent',
+                        tooltip: { trigger: 'axis', backgroundColor: 'rgba(15,23,42,.92)', borderColor: '#334155', textStyle: { color: '#f8fafc' } },
+                        grid: { left: 42, right: 20, top: 28, bottom: 36 },
+                        xAxis: { type: 'category', data: data.map(x => x[0]), axisLabel: { color: '#94a3b8' } },
+                        yAxis: { scale: true, axisLabel: { color: '#94a3b8' }, splitLine: { lineStyle: { color: 'rgba(148,163,184,.14)' } } },
+                        series: [{ name: selectedStock.name || '走势', type: 'candlestick', data: data.map(x => [x[2], x[1], x[3], x[4]]) }]
+                    }, true);
+                };
+
+                const handleStockOcrUpload = async (event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    if (!file) return;
+                    stockOcrLoading.value = true;
+                    try {
+                        const fd = new FormData();
+                        fd.append('username', currentUser.value);
+                        fd.append('image', file);
+                        const res = await apiFetch('/api/stock/import-ocr-preview', { method: 'POST', body: fd });
+                        const data = await res.json();
+                        if (!res.ok || !data.success) throw new Error(data.message || '股票 OCR 失败');
+                        stockOcrPreview.show = true;
+                        stockOcrPreview.batchId = data.batchId;
+                        stockOcrPreview.items = (data.items || []).map(x => ({ ...x, action: x.action || 'holding' }));
+                        showToast(`识别到 ${stockOcrPreview.items.length} 条股票候选`, 'success');
+                    } catch (e) { showToast(e.message || '股票 OCR 失败', 'error'); }
+                    finally { stockOcrLoading.value = false; }
+                };
+
+                const confirmStockOcr = async () => {
+                    try {
+                        const res = await apiFetch('/api/stock/import-ocr-confirm', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: currentUser.value, batchId: stockOcrPreview.batchId, items: stockOcrPreview.items })
+                        });
+                        const data = await res.json();
+                        if (!res.ok || !data.success) throw new Error(data.message || '写库失败');
+                        stockOcrPreview.show = false;
+                        showToast(`已写入 ${data.saved} 条股票数据`, 'success');
+                        await loadStockDashboard(false);
+                    } catch (e) { showToast(e.message || '股票 OCR 确认失败', 'error'); }
+                };
 
                 const historyModal = reactive({ show: false, isLoading: false, name: '', data: [] });
                 const archiveModal = reactive({ show: false, isLoading: false, targetName: '', data: [] });
@@ -3544,7 +4520,7 @@
 
                 const handleVisibilityChange = () => { if (document.visibilityState === 'visible') { updateRadarMode(); } };
 
-                const initDashboard = async () => { await loadPersistentUiState(); await loadCalibrationProfiles(); nextTick(() => { updateRadarMode(); setTimeout(() => { fetchData({ force: false }); warmNewsCache(); }, 120); }); };
+                const initDashboard = async () => { await loadPersistentUiState(); await loadCalibrationProfiles(); nextTick(() => { updateRadarMode(); setTimeout(() => { fetchData({ force: false }); if (assetMode.value === 'stock') loadStockDashboard(false); warmNewsCache(); }, 120); }); };
 
                 const fetchUserProfile = async () => {
                     if (!currentUser.value) return;
@@ -3577,7 +4553,7 @@
 
                 const handleReducePosition = async () => { if (!reduceModal.shares || !reduceModal.rawDate) return showToast("情报不完整，请检查份额或日期", "error"); const tradeDate = calculateTradeDate(reduceModal.rawDate, reduceModal.timeSlot); const fd = new FormData(); fd.append('username', currentUser.value); fd.append('code', reduceModal.code); fd.append('reduceShares', reduceModal.shares); fd.append('reduceAmount', reduceModal.amount || 0); fd.append('tradeDate', tradeDate); try { const res = await fetch(API_BASE + '/api/Fund/reduce-position', { method: 'POST', body: fd }); const result = await res.json(); if (res.ok) { showToast(result.msg || "结转成功", "success"); reduceModal.show = false; fetchData({ force: true, silent: true }); } else showToast(result.msg || "核算失败", "error"); } catch (e) { showToast("网络异常", "error"); } };
 
-                onUnmounted(() => { if (timer) clearInterval(timer); window.removeEventListener('resize', handleResize); document.removeEventListener('visibilitychange', handleVisibilityChange); window.removeEventListener('touchstart', onPullStart); window.removeEventListener('touchmove', onPullMove); window.removeEventListener('touchend', onPullEnd); if (chartInstance.value) chartInstance.value.dispose(); });
+                onUnmounted(() => { if (timer) clearInterval(timer); window.removeEventListener('resize', handleResize); document.removeEventListener('visibilitychange', handleVisibilityChange); window.removeEventListener('touchstart', onPullStart); window.removeEventListener('touchmove', onPullMove); window.removeEventListener('touchend', onPullEnd); if (chartInstance.value) chartInstance.value.dispose(); if (stockChartInstance.value) stockChartInstance.value.dispose(); });
 
                 return {
                     toasts, isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, activePage, switchPage, showProfileModal, userAvatar,
@@ -3589,7 +4565,7 @@
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
                     analysisMonth, selectedAnalysisDate, analysisViewMode, analysisDetailMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, analysisProfitTop, analysisLossTop, analysisMonthTotal, fetchAnalysis, todayDashStr,
-                    dailyBattleReport, confidenceRows, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, calibrationRows,
+                    assetMode, setAssetMode, stockHoldings, stockWatchList, stockSearchKeyword, stockSearchResults, stockOcrLoading, stockOcrPreview, selectedStock, stockKlinePeriod, stockKlinePeriods, stockChartRef, triggerStockOcr, handleStockOcrUpload, confirmStockOcr, loadStockDashboard, searchStocks, addStockWatch, openStockHoldingEditor, deleteStockHolding, deleteStockWatch, openStockDetail, switchStockKline, dailyBattleReport, confidenceRows, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, calibrationRows,
                     globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, saveDailyArchive, ocrModal,
                     reduceModal, openReduceModal, handleReducePosition, addModal, openAddModal, handleAddPosition
                 };
