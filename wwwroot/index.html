@@ -2429,8 +2429,8 @@
                             <span v-else class="user-avatar-fallback">{{ currentUser ? currentUser.slice(0,1).toUpperCase() : '我' }}</span>
                         </button>
 
-                        <button class="btn home-ocr-main" @click="triggerUpload" :disabled="isUploading">
-                            📷 {{ isUploading ? '解析中...' : '智能截图导入持仓' }}
+                        <button class="btn home-ocr-main" @click="triggerSmartOcr" :disabled="smartOcrBusy">
+                            📷 {{ smartOcrText }}
                         </button>
                     </div>
                 </div>
@@ -2447,8 +2447,7 @@
                         <div class="stock-toolbar">
                             <input class="stock-search-input" v-model="stockSearchKeyword" @keyup.enter="searchStocks" placeholder="输入股票代码或名称，如 000001 / 平安银行">
                             <button class="btn btn-primary" @click="searchStocks">查询</button>
-                            <button class="btn btn-ocr" @click="triggerStockOcr" :disabled="stockOcrLoading">{{ stockOcrLoading ? '识别中...' : 'OCR持仓' }}</button>
-                            <button class="btn" @click="loadStockDashboard(true)">刷新</button>
+                            <div class="feature-subtitle" style="grid-column:1/3;line-height:1.6;">股票 OCR 使用顶部“智能截图导入持仓”按钮；股票数据刷新改为页面顶部下拉刷新。</div>
                         </div>
 
                         <div v-if="stockSearchResults.length" class="stock-search-results">
@@ -3201,6 +3200,27 @@
 
                 const apiFetch = async (path, options = {}) => fetch(API_BASE + path, options);
 
+                const apiFetchJsonWithTimeout = async (path, options = {}, timeoutMs = 45000) => {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+                    try {
+                        const res = await fetch(API_BASE + path, { ...options, signal: controller.signal, cache: options.cache || 'no-store' });
+                        const text = await res.text();
+                        let data = null;
+                        try { data = text ? JSON.parse(text) : {}; }
+                        catch (e) { data = { success: false, message: text ? text.slice(0, 180) : '接口没有返回 JSON' }; }
+                        if (!res.ok || data.success === false) {
+                            throw new Error(data.message || `请求失败：HTTP ${res.status}`);
+                        }
+                        return data;
+                    } catch (e) {
+                        if (e.name === 'AbortError') throw new Error('识别超时，请裁剪截图后重试');
+                        throw e;
+                    } finally {
+                        clearTimeout(timeoutId);
+                    }
+                };
+
                 const authFetch = async (path, formData) => {
                     const fd = new FormData();
                     for (const [k, v] of formData.entries()) fd.append(k, v);
@@ -3273,6 +3293,11 @@
                 ];
                 const stockChartRef = ref(null);
                 const stockChartInstance = shallowRef(null);
+                const smartOcrBusy = computed(() => assetMode.value === 'stock' ? stockOcrLoading.value : isUploading.value);
+                const smartOcrText = computed(() => {
+                    if (assetMode.value === 'stock') return stockOcrLoading.value ? '股票识别中...' : '智能截图导入股票';
+                    return isUploading.value ? '基金解析中...' : '智能截图导入基金';
+                });
 
 
                 const savedMode = localStorage.getItem('privacy_mode');
@@ -3482,6 +3507,10 @@
                 };
 
                 const triggerStockOcr = () => document.getElementById('stockOcrInput')?.click();
+                const triggerSmartOcr = () => {
+                    if (assetMode.value === 'stock') triggerStockOcr();
+                    else triggerUpload();
+                };
 
                 const loadStockDashboard = async (force = false) => {
                     if (!currentUser.value) return;
@@ -3588,24 +3617,38 @@
                     }, true);
                 };
 
+                const compressImageForOcr = (file) => new Promise((resolve, reject) => {
+                    try {
+                        compressImageBeforeUpload(file, resolve);
+                    } catch (e) {
+                        reject(e);
+                    }
+                });
+
                 const handleStockOcrUpload = async (event) => {
                     const file = event.target.files?.[0];
                     event.target.value = '';
                     if (!file) return;
                     stockOcrLoading.value = true;
                     try {
+                        const compressedFile = await compressImageForOcr(file);
                         const fd = new FormData();
                         fd.append('username', currentUser.value);
-                        fd.append('image', file);
-                        const res = await apiFetch('/api/stock/import-ocr-preview', { method: 'POST', body: fd });
-                        const data = await res.json();
-                        if (!res.ok || !data.success) throw new Error(data.message || '股票 OCR 失败');
+                        fd.append('image', compressedFile);
+                        const data = await apiFetchJsonWithTimeout('/api/stock/import-ocr-preview', { method: 'POST', body: fd }, 45000);
                         stockOcrPreview.show = true;
                         stockOcrPreview.batchId = data.batchId;
                         stockOcrPreview.items = (data.items || []).map(x => ({ ...x, action: x.action || 'holding' }));
-                        showToast(`识别到 ${stockOcrPreview.items.length} 条股票候选`, 'success');
-                    } catch (e) { showToast(e.message || '股票 OCR 失败', 'error'); }
-                    finally { stockOcrLoading.value = false; }
+                        if (stockOcrPreview.items.length === 0) {
+                            showToast('OCR 成功但没有识别到股票候选，请裁剪到持仓列表区域再试', 'info');
+                        } else {
+                            showToast(`识别到 ${stockOcrPreview.items.length} 条股票候选`, 'success');
+                        }
+                    } catch (e) {
+                        showToast(e.message || '股票 OCR 失败', 'error');
+                    } finally {
+                        stockOcrLoading.value = false;
+                    }
                 };
 
                 const confirmStockOcr = async () => {
@@ -4199,12 +4242,18 @@
                 };
 
                 const refreshNow = async (force = true) => {
-                    if (pullRefresh.loading || isFetchingData) return;
+                    if (pullRefresh.loading || (assetMode.value === 'fund' && isFetchingData)) return;
                     pullRefresh.loading = true;
                     try {
-                        if (force) await syncRealNavIfNeeded();
-                        await fetchData({ force, silent: true });
-                        showToast('✅ 数据已刷新', 'success');
+                        if (assetMode.value === 'stock') {
+                            await loadStockDashboard(false);
+                            if (selectedStock.code) await fetchStockKlines();
+                            showToast('✅ 股票数据已刷新', 'success');
+                        } else {
+                            if (force) await syncRealNavIfNeeded();
+                            await fetchData({ force, silent: true });
+                            showToast('✅ 数据已刷新', 'success');
+                        }
                     } finally {
                         pullRefresh.loading = false;
                         pullRefresh.show = false;
@@ -4556,9 +4605,9 @@
                 onUnmounted(() => { if (timer) clearInterval(timer); window.removeEventListener('resize', handleResize); document.removeEventListener('visibilitychange', handleVisibilityChange); window.removeEventListener('touchstart', onPullStart); window.removeEventListener('touchmove', onPullMove); window.removeEventListener('touchend', onPullEnd); if (chartInstance.value) chartInstance.value.dispose(); if (stockChartInstance.value) stockChartInstance.value.dispose(); });
 
                 return {
-                    toasts, isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, activePage, switchPage, showProfileModal, userAvatar,
+                    toasts, isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, activePage, switchPage, showProfileModal, userAvatar, smartOcrBusy, smartOcrText,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
-                    handleLogin, handleRegister, handleLogout, handleAddFund, handleDeleteFund, triggerUpload, handleFileUpload, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
+                    handleLogin, handleRegister, handleLogout, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
                     sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, isCapitalLoading, fetchCapitalFlow,
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, isDetailsLoading, expandedSectors, toggleSector,

@@ -196,14 +196,13 @@ namespace 估值助手.Controllers
             foreach (var c in candidates)
             {
                 var code = NormalizeCode(c.StockCode);
-                StockQuoteDto? quote = null;
-                if (!string.IsNullOrWhiteSpace(code)) quote = await _quotes.GetQuoteAsync(code, cancellationToken);
+                // 预览阶段不逐条拉行情，避免 OCR 成功后被外部行情接口拖慢；确认写库时再补行情和证券简称。
                 batch.Items.Add(new StockOcrImportItem
                 {
                     BatchId = batch.Id,
                     StockCode = code,
-                    Market = quote?.Market ?? (string.IsNullOrWhiteSpace(code) ? string.Empty : _quotes.InferMarket(code)),
-                    StockName = quote?.Name ?? c.StockName,
+                    Market = string.IsNullOrWhiteSpace(code) ? string.Empty : _quotes.InferMarket(code),
+                    StockName = !string.IsNullOrWhiteSpace(c.StockName) ? c.StockName : c.RecognizedName,
                     RecognizedName = c.RecognizedName,
                     Shares = c.Shares,
                     CostPrice = c.CostPrice,
