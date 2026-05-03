@@ -639,11 +639,36 @@
 
         .recovery-plan-row {
             display: grid;
-            grid-template-columns: 74px 1fr 84px;
+            grid-template-columns: 92px 1fr 96px;
             gap: 10px;
             align-items: center;
             padding: 10px 0;
             border-bottom: 1px dashed rgba(255,255,255,.08);
+        }
+
+        .recovery-input-row {
+            display: grid;
+            grid-template-columns: 92px minmax(0, 1fr);
+            gap: 10px;
+            align-items: center;
+            margin: 12px 0;
+            padding: 10px 12px;
+            border-radius: 14px;
+            background: rgba(15, 23, 42, .45);
+            border: 1px solid rgba(148, 163, 184, .18);
+        }
+
+        .recovery-input {
+            width: 100%;
+            box-sizing: border-box;
+            border: 1px solid rgba(96, 165, 250, .35);
+            background: rgba(15, 23, 42, .65);
+            color: #f8fafc;
+            border-radius: 12px;
+            padding: 10px 12px;
+            font-size: 15px;
+            font-weight: 900;
+            outline: none;
         }
 
         .report-line {
@@ -1903,7 +1928,7 @@
                                 </template>
                             </div>
                         </div>
-                    </div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">当日盈亏明细</div><div class="page-subtitle">{{ selectedAnalysisDate || '请选择日期' }}</div><div style="margin-top:12px;"><div v-if="analysisLoading" class="news-empty">📡 正在读取收益档案...</div><div v-else-if="selectedDayFundRecords.length===0" class="news-empty">当天暂无明细</div><div v-else><div v-for="(item,index) in selectedDayFundRecords" :key="item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="min-width:0;"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.fundName }}</div><div style="color:#64748b;font-size:11px;font-family:monospace;">{{ item.fundCode }} · 市值 {{ Number(item.assets || 0).toFixed(2) }}</div></div><div :style="{textAlign:'right',color:item.dailyProfit>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New'}">{{ item.dailyProfit>0?'+':'' }}{{ Number(item.dailyProfit||0).toFixed(2) }}<br><span style="font-size:12px;">{{ item.dailyRate>0?'+':'' }}{{ Number(item.dailyRate||0).toFixed(2) }}%</span></div></div></div></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">盈利 TOP5</div><div v-for="(item,index) in analysisProfitTop" :key="'p'+item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="color:#f8fafc;font-weight:800;">{{ item.fundName }}</div><div style="text-align:right;color:#ff4d4f;font-weight:900;">+{{ Number(item.dailyProfit||0).toFixed(2) }}</div></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">亏损 TOP5</div><div v-for="(item,index) in analysisLossTop" :key="'l'+item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="color:#f8fafc;font-weight:800;">{{ item.fundName }}</div><div style="text-align:right;color:#10b981;font-weight:900;">{{ Number(item.dailyProfit||0).toFixed(2) }}</div></div></div>
+                    </div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">当日盈亏明细</div><div class="page-subtitle">{{ selectedAnalysisDate || '请选择日期' }}</div><div style="margin-top:12px;"><div v-if="analysisLoading" class="news-empty">📡 正在读取收益档案...</div><div v-else-if="selectedDayFundRecords.length===0" class="news-empty">当天暂无明细</div><div v-else><div v-for="(item,index) in selectedDayFundRecords" :key="item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="min-width:0;"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.fundName }}</div><div style="color:#64748b;font-size:11px;font-family:monospace;">{{ item.fundCode }} · 市值 {{ Number(item.assets || 0).toFixed(2) }}</div></div><div :style="{textAlign:'right',color:item.dailyProfit>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New'}">{{ item.dailyProfit>0?'+':'' }}{{ Number(item.dailyProfit||0).toFixed(2) }}<br><span style="font-size:12px;">{{ item.dailyRate>0?'+':'' }}{{ Number(item.dailyRate||0).toFixed(2) }}%</span></div></div></div></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">至今总盈亏明细</div><div class="page-subtitle">{{ selectedAnalysisDate || '请选择日期' }} · 按累计盈亏绝对值排序</div><div style="margin-top:12px;"><div v-if="analysisLoading" class="news-empty">📡 正在读取收益档案...</div><div v-else-if="selectedDayTotalProfitRecords.length===0" class="news-empty">暂无累计明细</div><div v-else><div v-for="(item,index) in selectedDayTotalProfitRecords" :key="'total-'+item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="min-width:0;"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.fundName }}</div><div style="color:#64748b;font-size:11px;font-family:monospace;">{{ item.fundCode }} · 市值 {{ Number(item.assets || 0).toFixed(2) }}</div></div><div :style="{textAlign:'right',color:item.totalProfit>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New'}">{{ item.totalProfit>0?'+':'' }}{{ Number(item.totalProfit||0).toFixed(2) }}<br><span style="font-size:12px;">{{ item.totalRate>0?'+':'' }}{{ Number(item.totalRate||0).toFixed(2) }}%</span></div></div></div></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">盈利 TOP5</div><div v-for="(item,index) in analysisProfitTop" :key="'p'+item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="color:#f8fafc;font-weight:800;">{{ item.fundName }}</div><div style="text-align:right;color:#ff4d4f;font-weight:900;">+{{ Number(item.dailyProfit||0).toFixed(2) }}</div></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">亏损 TOP5</div><div v-for="(item,index) in analysisLossTop" :key="'l'+item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="color:#f8fafc;font-weight:800;">{{ item.fundName }}</div><div style="text-align:right;color:#10b981;font-weight:900;">{{ Number(item.dailyProfit||0).toFixed(2) }}</div></div></div>
                 </div>
             </div>
 
@@ -1911,12 +1936,17 @@
                 <div class="modal-content" style="max-width:520px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><h3 style="margin:0;color:#fbbf24;">🧭 回本路径模拟器</h3><span @click="recoveryModal.show=false" style="font-size:24px;color:#94a3b8;cursor:pointer;">&times;</span></div>
                     <div style="color:#cbd5e1;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ recoveryModal.name }}</div>
-                    <div class="feature-subtitle" style="margin:6px 0 12px;">当前亏损 {{ recoveryModal.loss.toFixed(2) }} 元，回本需要上涨 {{ recoveryModal.breakEvenRate }}%。下方为按不同补仓金额估算的新回本涨幅。</div>
-                    <div v-for="plan in recoveryPlans" :key="plan.amount" class="recovery-plan-row">
-                        <strong style="color:#93c5fd;">补 {{ plan.amount }}</strong>
-                        <div><div class="exposure-bar"><span :style="{width:Math.min(100, Math.max(5, 100-plan.newBreakEven*6))+'%'}"></span></div><div class="feature-subtitle">新成本 {{ plan.newCost.toFixed(2) }} · 新市值 {{ plan.newAssets.toFixed(2) }}</div></div>
-                        <strong :style="{color:plan.newBreakEven<=0?'#10b981':'#fbbf24',textAlign:'right'}">{{ plan.newBreakEven<=0?'已回本':plan.newBreakEven.toFixed(2)+'%' }}</strong>
+                    <div class="feature-subtitle" style="margin:6px 0 12px;">当前亏损 {{ recoveryModal.loss.toFixed(2) }} 元，回本需要上涨 {{ recoveryModal.breakEvenRate }}%。输入计划加仓金额后，实时估算新的回本涨幅。</div>
+                    <div class="recovery-input-row">
+                        <strong style="color:#93c5fd;">加仓金额</strong>
+                        <input class="recovery-input" type="number" min="0" step="100" v-model="recoveryModal.addAmount" placeholder="例如 500" inputmode="decimal">
                     </div>
+                    <div v-if="customRecoveryPlan.amount > 0" class="recovery-plan-row">
+                        <strong style="color:#93c5fd;">补 {{ customRecoveryPlan.amount.toFixed(2) }}</strong>
+                        <div><div class="exposure-bar"><span :style="{width:Math.min(100, Math.max(5, 100-customRecoveryPlan.newBreakEven*6))+'%'}"></span></div><div class="feature-subtitle">新成本 {{ customRecoveryPlan.newCost.toFixed(2) }} · 新市值 {{ customRecoveryPlan.newAssets.toFixed(2) }}</div></div>
+                        <strong :style="{color:customRecoveryPlan.newBreakEven<=0?'#10b981':'#fbbf24',textAlign:'right'}">{{ customRecoveryPlan.newBreakEven<=0?'已回本':customRecoveryPlan.newBreakEven.toFixed(2)+'%' }}</strong>
+                    </div>
+                    <div v-else class="feature-subtitle" style="padding:12px 0;border-top:1px dashed rgba(255,255,255,.08);">请输入大于 0 的加仓金额。</div>
                     <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:14px;" @click="recoveryModal.show=false">知道了</button>
                 </div>
             </div>
@@ -2385,6 +2415,7 @@
 
                 const analysisTotalRecords = computed(() => analysisRecords.value.filter(r => r.fundCode === 'TOTAL'));
                 const selectedDayFundRecords = computed(() => analysisRecords.value.filter(r => r.fundCode !== 'TOTAL' && String(r.recordDate || '').slice(0, 10) === selectedAnalysisDate.value).sort((a, b) => Math.abs(Number(b.dailyProfit || 0)) - Math.abs(Number(a.dailyProfit || 0))));
+                const selectedDayTotalProfitRecords = computed(() => analysisRecords.value.filter(r => r.fundCode !== 'TOTAL' && String(r.recordDate || '').slice(0, 10) === selectedAnalysisDate.value).sort((a, b) => Math.abs(Number(b.totalProfit || 0)) - Math.abs(Number(a.totalProfit || 0))));
                 const analysisMonthTotal = computed(() => analysisTotalRecords.value.filter(r => String(r.recordDate || '').slice(0, 7) === analysisMonth.value).reduce((sum, r) => sum + Number(r.dailyProfit || 0), 0));
                 const analysisCalendarDays = computed(() => {
                     const [y, m] = analysisMonth.value.split('-').map(Number);
@@ -2495,7 +2526,7 @@
                 });
 
                 const recoveryWatchList = computed(() => fundsList.value.filter(f => Number(f.breakEvenRate || 0) > 0).sort((a, b) => Number(b.breakEvenRate || 0) - Number(a.breakEvenRate || 0)));
-                const recoveryModal = reactive({ show: false, code: '', name: '', assets: 0, cost: 0, loss: 0, breakEvenRate: 0 });
+                const recoveryModal = reactive({ show: false, code: '', name: '', assets: 0, cost: 0, loss: 0, breakEvenRate: 0, addAmount: '' });
                 const openRecoveryModal = (fund) => {
                     const assets = Number(fund.todayAmount || fund.amount || 0);
                     const cost = Number(fund.cost || fund.amount || 0);
@@ -2506,13 +2537,15 @@
                     recoveryModal.cost = cost;
                     recoveryModal.loss = Math.max(0, cost - assets);
                     recoveryModal.breakEvenRate = Number(fund.breakEvenRate || 0);
+                    recoveryModal.addAmount = '';
                 };
-                const recoveryPlans = computed(() => [100, 300, 500, 1000, 2000].map(amount => {
+                const customRecoveryPlan = computed(() => {
+                    const amount = Math.max(0, Number(recoveryModal.addAmount || 0));
                     const newAssets = recoveryModal.assets + amount;
                     const newCost = recoveryModal.cost + amount;
-                    const newBreakEven = newAssets > 0 ? Math.max(0, (newCost / newAssets - 1) * 100) : 0;
+                    const newBreakEven = amount > 0 && newAssets > 0 ? Math.max(0, (newCost / newAssets - 1) * 100) : recoveryModal.breakEvenRate;
                     return { amount, newAssets, newCost, newBreakEven };
-                }));
+                });
 
                 const historyModal = reactive({ show: false, isLoading: false, name: '', data: [] });
                 const archiveModal = reactive({ show: false, isLoading: false, targetName: '', data: [] });
@@ -2895,11 +2928,19 @@
                 };
 
                 let capitalCacheTime = 0;
+                const isBoardFlowName = (name = '') => {
+                    const text = String(name || '').trim();
+                    if (!text) return false;
+                    const blocked = ['融资融券', '富时罗素', '标准普尔', 'MSCI', '沪股通', '深股通', '大盘股', 'HS300', '基金重仓', '昨日涨停', '昨日连板', '昨日触板', '证金持股', '养老金', '中字头', '上证', '深证', '北证'];
+                    return !blocked.some(k => text.includes(k));
+                };
+                const normalizeCapitalRows = (rows = []) => (Array.isArray(rows) ? rows : []).filter(x => isBoardFlowName(x?.name));
                 const applyCapitalPayload = (data) => {
-                    capitalFlowRows.value = data.rows || [];
-                    capitalFlowInRows.value = data.inflow || (data.rows || []).filter(x => (x.mainNet || 0) > 0).sort((a, b) => (b.mainNet || 0) - (a.mainNet || 0));
-                    capitalFlowOutRows.value = data.outflow || (data.rows || []).filter(x => (x.mainNet || 0) < 0).sort((a, b) => (a.mainNet || 0) - (b.mainNet || 0));
-                    capitalFlowSource.value = data.source || '';
+                    const rows = normalizeCapitalRows(data.rows || []);
+                    capitalFlowRows.value = rows;
+                    capitalFlowInRows.value = normalizeCapitalRows(data.inflow || rows).filter(x => (x.mainNet || 0) > 0).sort((a, b) => (b.mainNet || 0) - (a.mainNet || 0));
+                    capitalFlowOutRows.value = normalizeCapitalRows(data.outflow || rows).filter(x => (x.mainNet || 0) < 0).sort((a, b) => (a.mainNet || 0) - (b.mainNet || 0));
+                    capitalFlowSource.value = data.source || '东方财富板块资金流向';
                     capitalFlowUpdatedAt.value = data.updatedAt || '';
                     capitalCacheTime = Date.now();
                 };
@@ -3279,8 +3320,8 @@
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, isDetailsLoading, expandedSectors, toggleSector,
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
-                    analysisMonth, selectedAnalysisDate, analysisViewMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, analysisProfitTop, analysisLossTop, analysisMonthTotal, fetchAnalysis, todayDashStr,
-                    dailyBattleReport, confidenceRows, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, recoveryPlans, openRecoveryModal,
+                    analysisMonth, selectedAnalysisDate, analysisViewMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, analysisProfitTop, analysisLossTop, analysisMonthTotal, fetchAnalysis, todayDashStr,
+                    dailyBattleReport, confidenceRows, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal,
                     globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, saveDailyArchive, ocrModal,
                     reduceModal, openReduceModal, handleReducePosition, addModal, openAddModal, handleAddPosition
                 };
