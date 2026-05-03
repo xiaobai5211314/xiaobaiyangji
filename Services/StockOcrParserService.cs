@@ -17,6 +17,8 @@ namespace 估值助手.Services
 
     public sealed class StockOcrParserService
     {
+        private readonly record struct NumberToken(string Raw, decimal Value, bool IsPercent, bool HasExplicitSign);
+
         private static readonly Regex CodeRegex = new(@"(?<!\d)([0-9]{6})(?!\d)", RegexOptions.Compiled);
         private static readonly Regex NumberRegex = new(@"[-+]?\d+(?:,\d{3})*(?:\.\d+)?%?", RegexOptions.Compiled);
         private static readonly Regex ChineseNameRegex = new(@"^[\u4e00-\u9fa5A-Za-z0-9（）()·\-]{2,12}$", RegexOptions.Compiled);
@@ -75,9 +77,8 @@ namespace 估值助手.Services
                 var windowEnd = Math.Min(cleaned.Count - 1, i + 12);
                 var window = cleaned.Skip(windowStart).Take(windowEnd - windowStart + 1).ToList();
                 var name = GuessName(window, code);
-                var numbers = window.SelectMany(x => NumberRegex.Matches(x).Select(m => m.Value)).ToList();
 
-                result.Add(BuildCandidate(code, name, name, numbers, "按 OCR 邻近文本推断，确认后写库"));
+                result.Add(BuildCandidateFromHoldingWindow(code, name, name, window, "按 OCR 邻近文本推断，确认后写库"));
             }
 
             return result;
@@ -117,15 +118,15 @@ namespace 估值助手.Services
                 if (!IsLikelyStockName(text)) continue;
                 if (!seen.Add(text)) continue;
 
-                var tail = block.Skip(i + 1).Take(14).ToList();
-                var numbers = tail.SelectMany(x => NumberRegex.Matches(x).Select(m => m.Value)).ToList();
-                if (!HasHoldingNumericEvidence(numbers)) continue;
+                var tail = block.Skip(i + 1).Take(18).ToList();
+                var tokens = ExtractNumberTokens(tail).ToList();
+                if (!HasHoldingNumericEvidence(tokens.Select(x => x.Raw).ToList())) continue;
 
-                result.Add(BuildCandidate(
+                result.Add(BuildCandidateFromHoldingWindow(
                     code: string.Empty,
                     name: text,
                     recognizedName: text,
-                    numbers: numbers,
+                    lines: tail,
                     note: "未在截图中识别到代码，已按持仓表格区域提取名称；请确认代码后写库"));
 
                 if (result.Count >= 5) break;
@@ -134,14 +135,53 @@ namespace 估值助手.Services
             return result;
         }
 
-        private static StockOcrCandidate BuildCandidate(string code, string name, string recognizedName, IReadOnlyList<string> numbers, string note)
+        private static StockOcrCandidate BuildCandidateFromHoldingWindow(string code, string name, string recognizedName, IReadOnlyList<string> lines, string note)
         {
-            var shares = GuessShares(numbers);
-            var marketValue = GuessMarketValue(numbers);
-            var costPrice = GuessCostPrice(numbers);
-            var floatingProfit = GuessFloatingProfit(numbers);
-            var floatingProfitRate = GuessRate(numbers);
-            var costAmount = shares.HasValue && costPrice.HasValue ? Math.Round(shares.Value * costPrice.Value, 2) : (decimal?)null;
+            var tokens = ExtractNumberTokens(lines).ToList();
+
+            var marketIndex = tokens.FindIndex(x => x.Value >= 100 && x.Value < 1000000000 && !x.IsPercent);
+            decimal? marketValue = marketIndex >= 0 ? tokens[marketIndex].Value : GuessMarketValue(tokens.Select(x => x.Raw));
+
+            var profitIndex = -1;
+            if (marketIndex >= 0)
+            {
+                profitIndex = tokens.FindIndex(marketIndex + 1, x => !x.IsPercent && x.HasExplicitSign && Math.Abs(x.Value) >= 0.01m && Math.Abs(x.Value) < 100000000);
+            }
+            if (profitIndex < 0)
+            {
+                profitIndex = tokens.FindIndex(x => !x.IsPercent && x.HasExplicitSign && Math.Abs(x.Value) >= 0.01m && Math.Abs(x.Value) < 100000000);
+            }
+            decimal? floatingProfit = profitIndex >= 0 ? tokens[profitIndex].Value : GuessFloatingProfit(tokens.Select(x => x.Raw));
+
+            var rateIndex = -1;
+            if (profitIndex >= 0)
+            {
+                rateIndex = tokens.FindIndex(profitIndex + 1, x => x.IsPercent && Math.Abs(x.Value) < 1000);
+            }
+            if (rateIndex < 0) rateIndex = tokens.FindIndex(x => x.IsPercent && Math.Abs(x.Value) < 1000);
+            decimal? floatingProfitRate = rateIndex >= 0 ? tokens[rateIndex].Value : GuessRate(tokens.Select(x => x.Raw));
+
+            var sharesIndex = -1;
+            if (rateIndex >= 0)
+            {
+                sharesIndex = tokens.FindIndex(rateIndex + 1, x => IsLikelyShareCount(x.Value));
+            }
+            if (sharesIndex < 0) sharesIndex = tokens.FindIndex(x => IsLikelyShareCount(x.Value));
+            decimal? shares = sharesIndex >= 0 ? tokens[sharesIndex].Value : GuessShares(tokens.Select(x => x.Raw));
+
+            var priceStart = sharesIndex >= 0 ? sharesIndex + 1 : 0;
+            if (sharesIndex >= 0 && sharesIndex + 1 < tokens.Count && tokens[sharesIndex + 1].Value == tokens[sharesIndex].Value)
+            {
+                // 券商截图经常是“持仓/可用”两列，例如 600 / 600；成本价在这两个数量后面。
+                priceStart = sharesIndex + 2;
+            }
+
+            var costPriceIndex = tokens.FindIndex(priceStart, x => IsLikelyPrice(x.Value));
+            decimal? costPrice = costPriceIndex >= 0 ? tokens[costPriceIndex].Value : GuessCostPrice(tokens.Select(x => x.Raw));
+
+            var costAmount = shares.HasValue && costPrice.HasValue
+                ? Math.Round(shares.Value * costPrice.Value, 2)
+                : (decimal?)null;
 
             return new StockOcrCandidate(
                 StockCode: code,
@@ -155,6 +195,35 @@ namespace 估值助手.Services
                 FloatingProfitRate: floatingProfitRate,
                 Action: shares.GetValueOrDefault() > 0 || marketValue.GetValueOrDefault() > 0 ? "holding" : "watch",
                 Note: note);
+        }
+
+        private static IEnumerable<NumberToken> ExtractNumberTokens(IEnumerable<string> lines)
+        {
+            foreach (var line in lines)
+            {
+                foreach (Match match in NumberRegex.Matches(line))
+                {
+                    var raw = match.Value;
+                    var value = ParsePlainNumber(raw);
+                    if (!value.HasValue) continue;
+
+                    yield return new NumberToken(
+                        Raw: raw,
+                        Value: value.Value,
+                        IsPercent: raw.EndsWith('%'),
+                        HasExplicitSign: raw.StartsWith('+') || raw.StartsWith('-'));
+                }
+            }
+        }
+
+        private static bool IsLikelyShareCount(decimal value)
+        {
+            return value >= 1 && value <= 100000000 && value % 1 == 0;
+        }
+
+        private static bool IsLikelyPrice(decimal value)
+        {
+            return value > 0 && value < 10000 && value % 1 != 0;
         }
 
         private static string GuessName(IEnumerable<string> window, string code)
