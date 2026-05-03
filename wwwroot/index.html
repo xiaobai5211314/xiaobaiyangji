@@ -10,11 +10,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
     <link rel="preconnect" href="https://guzhi.21212121.xyz" crossorigin>
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
     <style>
         html {
             background-color: #0f172a;
@@ -3427,7 +3423,13 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/vue@3.3.4/dist/vue.global.prod.min.js"></script>
+    <script src="/vendor/vue.global.prod.min.js"></script>
+    <script>
+        // 又拍云本地 vendor 优先；本地文件缺失时才回退外部 CDN，避免页面直接白屏。
+        if (!window.Vue) {
+            document.write('<script src="https://cdn.jsdelivr.net/npm/vue@3.3.4/dist/vue.global.prod.min.js"><\/script>');
+        }
+    </script>
     <script>
         if (window.hasOwnProperty('chrome') && window.chrome.webview || window.location.protocol === 'file:') {
             var script = document.createElement('script'); script.src = "_framework/blazor.webview.js"; document.body.appendChild(script);
