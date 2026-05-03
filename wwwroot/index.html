@@ -2443,12 +2443,14 @@
                 const analysisDetailMode = ref('daily');
                 const analysisLoading = ref(false);
                 const analysisRecords = ref([]);
+                const uiStateMap = ref({});
+                const calibrationProfileMap = ref({});
 
 
                 const savedMode = localStorage.getItem('privacy_mode');
                 const privacyMode = ref(savedMode !== null ? Number(savedMode) : 2);
                 const showPrivacyModal = ref(false);
-                const setPrivacyMode = (mode) => { privacyMode.value = mode; localStorage.setItem('privacy_mode', mode); showPrivacyModal.value = false; };
+                const setPrivacyMode = (mode) => { privacyMode.value = mode; localStorage.setItem('privacy_mode', mode); showPrivacyModal.value = false; saveUiState('privacy_mode', { value: mode }); };
                 const editForm = reactive({ show: false, code: '', name: '', cost: '', shares: '', originalCode: '' });
 
                 const sectorTopList = ref([]);
@@ -2633,7 +2635,8 @@
                     recoveryModal.cost = cost;
                     recoveryModal.loss = Math.max(0, cost - assets);
                     recoveryModal.breakEvenRate = Number(fund.breakEvenRate || 0);
-                    recoveryModal.addAmount = '';
+                    const savedRecovery = uiStateMap.value?.[`recovery_amount_${fund.code}`];
+                    recoveryModal.addAmount = savedRecovery?.amount ? String(savedRecovery.amount) : '';
                 };
                 const customRecoveryPlan = computed(() => {
                     const amount = Math.max(0, Number(recoveryModal.addAmount || 0));
@@ -2727,56 +2730,108 @@
                 };
 
 
-                const getCalibrationStorageKey = () => `fund_valuation_calibration_v1_${currentUser.value || 'guest'}`;
-                const loadCalibrationState = () => {
+                const loadPersistentUiState = async () => {
+                    if (!currentUser.value) return;
                     try {
-                        return JSON.parse(localStorage.getItem(getCalibrationStorageKey()) || '{}') || {};
-                    } catch (e) { return {}; }
+                        const res = await apiFetch(`/api/fund/ui-state/all?username=${encodeURIComponent(currentUser.value)}`, { cache: 'no-store' });
+                        if (!res.ok) return;
+                        const data = await res.json();
+                        uiStateMap.value = data.states || {};
+                        const privacy = uiStateMap.value.privacy_mode;
+                        const privacyValue = typeof privacy === 'number' ? privacy : Number(privacy?.value ?? localStorage.getItem('privacy_mode') ?? privacyMode.value);
+                        if (Number.isFinite(privacyValue)) privacyMode.value = privacyValue;
+                        const analysisPrefs = uiStateMap.value.analysis_preferences || {};
+                        if (analysisPrefs.month) analysisMonth.value = analysisPrefs.month;
+                        if (analysisPrefs.viewMode) analysisViewMode.value = analysisPrefs.viewMode;
+                        if (analysisPrefs.detailMode) analysisDetailMode.value = analysisPrefs.detailMode;
+                    } catch (e) { }
                 };
-                const saveCalibrationState = (state) => {
-                    try { localStorage.setItem(getCalibrationStorageKey(), JSON.stringify(state || {})); } catch (e) { }
+
+                const saveUiState = async (key, state) => {
+                    if (!currentUser.value || !key) return;
+                    uiStateMap.value = { ...(uiStateMap.value || {}), [key]: state };
+                    try {
+                        await apiFetch('/api/fund/ui-state', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: currentUser.value, key, state })
+                        });
+                    } catch (e) { }
                 };
+
+                const persistAnalysisPreferences = () => saveUiState('analysis_preferences', {
+                    month: analysisMonth.value,
+                    viewMode: analysisViewMode.value,
+                    detailMode: analysisDetailMode.value
+                });
+
+                const loadCalibrationProfiles = async () => {
+                    if (!currentUser.value) return;
+                    try {
+                        const res = await apiFetch(`/api/fund/valuation-calibration/current?username=${encodeURIComponent(currentUser.value)}`, { cache: 'no-store' });
+                        if (!res.ok) return;
+                        const data = await res.json();
+                        const map = {};
+                        (data.items || []).forEach(item => {
+                            const code = item.code || item.fundCode;
+                            if (!code) return;
+                            map[code] = {
+                                offset: Number(item.offset || 0),
+                                samples: Number(item.samples || 0),
+                                lastError: Number(item.lastError || 0),
+                                confidence: item.confidence || '低',
+                                note: item.note || ''
+                            };
+                        });
+                        calibrationProfileMap.value = map;
+                    } catch (e) { }
+                };
+
                 const getCalibrationProfileByCode = (code) => {
-                    const state = loadCalibrationState();
-                    const row = state[code] || { samples: [], estimates: {} };
-                    const samples = Array.isArray(row.samples) ? row.samples.slice(-5) : [];
-                    const weighted = samples.reduce((acc, s, idx) => {
-                        const w = idx + 1;
-                        acc.sum += Number(s.error || 0) * w;
-                        acc.weight += w;
-                        return acc;
-                    }, { sum: 0, weight: 0 });
-                    const offset = weighted.weight > 0 ? Math.max(-3, Math.min(3, weighted.sum / weighted.weight)) : 0;
-                    const last = samples[samples.length - 1];
-                    const confidence = samples.length >= 5 ? '高' : (samples.length >= 3 ? '中' : '低');
-                    return { offset, samples: samples.length, lastError: Number(last?.error || 0), confidence };
+                    const row = calibrationProfileMap.value?.[code] || {};
+                    return {
+                        offset: Number(row.offset || 0),
+                        samples: Number(row.samples || 0),
+                        lastError: Number(row.lastError || 0),
+                        confidence: row.confidence || '低',
+                        note: row.note || ''
+                    };
                 };
-                const rememberIntradayEstimate = (fund, dateText, rawRate) => {
-                    if (!fund?.code || !dateText || !Number.isFinite(Number(rawRate))) return;
-                    const state = loadCalibrationState();
-                    const row = state[fund.code] || { name: fund.name || '', samples: [], estimates: {} };
-                    row.name = fund.name || row.name || fund.code;
-                    row.estimates = row.estimates || {};
-                    row.estimates[dateText] = { rate: Number(rawRate), time: Date.now() };
-                    state[fund.code] = row;
-                    saveCalibrationState(state);
+
+                const saveIntradayCalibrationSnapshots = async (items) => {
+                    if (!currentUser.value || !items || items.length === 0) return;
+                    try {
+                        await apiFetch('/api/fund/valuation-calibration/intraday-snapshot', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: currentUser.value, items })
+                        });
+                    } catch (e) { }
                 };
-                const settleCalibrationSample = (fund, dateText, actualRate) => {
-                    if (!fund?.code || !dateText || !Number.isFinite(Number(actualRate))) return;
-                    const state = loadCalibrationState();
-                    const row = state[fund.code] || { name: fund.name || '', samples: [], estimates: {} };
-                    const estimate = row.estimates?.[dateText];
-                    if (!estimate || !Number.isFinite(Number(estimate.rate))) return;
-                    const estimatedRate = Number(estimate.rate);
-                    const error = Number(actualRate) - estimatedRate;
-                    row.samples = (Array.isArray(row.samples) ? row.samples : []).filter(s => s.date !== dateText);
-                    row.samples.push({ date: dateText, estimatedRate, actualRate: Number(actualRate), error });
-                    row.samples = row.samples.slice(-8);
-                    delete row.estimates[dateText];
-                    row.name = fund.name || row.name || fund.code;
-                    state[fund.code] = row;
-                    saveCalibrationState(state);
+
+                const settleCalibrationSamples = async (items) => {
+                    if (!currentUser.value || !items || items.length === 0) return;
+                    try {
+                        const res = await apiFetch('/api/fund/valuation-calibration/settle', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: currentUser.value, items })
+                        });
+                        if (res.ok) await loadCalibrationProfiles();
+                    } catch (e) { }
                 };
+
+                const saveInsightSnapshot = async (snapshotType, payload, snapshotDate = todayDashStr) => {
+                    if (!currentUser.value || !snapshotType) return;
+                    try {
+                        await apiFetch('/api/fund/insight-snapshots', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: currentUser.value, snapshotType, snapshotDate, payload })
+                        });
+                    } catch (e) { }
+                };
+
                 const calibrationRows = computed(() => {
                     return fundsList.value.map(f => {
                         const profile = getCalibrationProfileByCode(f.code);
@@ -2913,6 +2968,7 @@
                             currentUser.value = username;
                             userAvatar.value = data.avatarDataUrl || '';
                             isLoggedIn.value = true;
+                            await loadPersistentUiState();
                             showToast("接入成功", "success");
                             initDashboard();
                         } else {
@@ -3273,7 +3329,7 @@
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                     if (page === 'sector') { await fetchSectors(false, false); fetchCapitalFlow(false); }
                     if (page === 'news') fetchNews(newsMode.value, false);
-                    if (page === 'analysis') await fetchAnalysis(false);
+                    if (page === 'analysis') { persistAnalysisPreferences(); await fetchAnalysis(false); }
                     if (page === 'home') nextTick(() => { if (chartInstance.value) chartInstance.value.resize(); });
                 };
 
@@ -3294,13 +3350,24 @@
                         let todaySlash = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
                         let todayDash = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
                         let currentMinutes = d.getHours() * 60 + d.getMinutes(); let isWeekend = (d.getDay() === 0 || d.getDay() === 6);
+                        await loadCalibrationProfiles();
+                        const intradayCalibrationPayload = [];
+                        const settledCalibrationPayload = [];
 
                         apiData.forEach(fund => {
                             if (fund.isSettled) { fund.currentRate = fund.actualRate; fund.isHoliday = false; if (fund.data.length > 0 && String(fund.data[fund.data.length - 1][0]).includes("15:00:00")) { fund.data[fund.data.length - 1][1] = fund.actualRate; } else { fund.data.push([`${todaySlash} 15:00:00`, fund.actualRate]); } } else if (isWeekend || currentMinutes < 565) { fund.currentRate = 0; fund.isHoliday = true; } else if (fund.data && fund.data.length > 0) { let lastDataTime = String(fund.data[fund.data.length - 1][0]); let hasTodayDate = lastDataTime.includes(todaySlash) || lastDataTime.includes(todayDash); let isPast935 = (d.getHours() > 9) || (d.getHours() === 9 && d.getMinutes() >= 35); if (hasTodayDate && !(isPast935 && fund.data.length <= 2)) { fund.currentRate = fund.data[fund.data.length - 1][1]; fund.isHoliday = false; } else { fund.currentRate = 0; fund.isHoliday = true; } } else { fund.currentRate = 0; fund.isHoliday = true; }
 
                             const rawCurrentRate = Number(fund.currentRate || 0);
                             if (fund.isSettled) {
-                                settleCalibrationSample(fund, todayDash, Number(fund.actualRate ?? fund.lastSettledRate ?? fund.currentRate ?? 0));
+                                settledCalibrationPayload.push({
+                                    fundCode: fund.code,
+                                    fundName: fund.name,
+                                    tradeDate: todayDash,
+                                    estimatedRate: rawCurrentRate,
+                                    actualRate: Number(fund.actualRate ?? fund.lastSettledRate ?? fund.currentRate ?? 0),
+                                    estimatedAssets: Number(fund.amount || 0),
+                                    actualAssets: Number(fund.todayAmount || fund.amount || 0)
+                                });
                             }
                             const calibrationProfile = getCalibrationProfileByCode(fund.code);
                             fund.rawCurrentRate = rawCurrentRate;
@@ -3311,10 +3378,10 @@
                             if (!fund.isSettled && !fund.isHoliday && calibrationProfile.samples >= 1) {
                                 fund.currentRate = Number((rawCurrentRate + calibrationProfile.offset).toFixed(2));
                                 fund.calibrationNote = `原估 ${rawCurrentRate >= 0 ? '+' : ''}${rawCurrentRate.toFixed(2)}% · ${calibrationProfile.samples}天样本${calibrationProfile.confidence}可信`;
-                                rememberIntradayEstimate(fund, todayDash, rawCurrentRate);
+                                intradayCalibrationPayload.push({ fundCode: fund.code, fundName: fund.name, tradeDate: todayDash, estimatedRate: rawCurrentRate, estimatedAssets: Number(fund.amount || 0), source: 'today-api' });
                             } else if (!fund.isSettled && !fund.isHoliday) {
                                 fund.calibrationNote = '正在积累盘中估值样本';
-                                rememberIntradayEstimate(fund, todayDash, rawCurrentRate);
+                                intradayCalibrationPayload.push({ fundCode: fund.code, fundName: fund.name, tradeDate: todayDash, estimatedRate: rawCurrentRate, estimatedAssets: Number(fund.amount || 0), source: 'today-api' });
                             } else if (fund.isSettled && calibrationProfile.samples > 0) {
                                 fund.calibrationNote = `盘后已校准 · 最近误差 ${calibrationProfile.lastError >= 0 ? '+' : ''}${calibrationProfile.lastError.toFixed(2)}%`;
                             } else {
@@ -3367,6 +3434,23 @@
                         const currentTotalAssets = fundsList.value.reduce((sum, f) => sum + (parseFloat(f.todayAmount || f.amount) || 0), 0);
                         totalProfit.value = currentTotalAssets - tCost + tRealized;
                         totalRate.value = tCost > 0 ? ((currentTotalAssets - tCost + tRealized) / tCost * 100) : 0;
+
+                        saveIntradayCalibrationSnapshots(intradayCalibrationPayload);
+                        settleCalibrationSamples(settledCalibrationPayload);
+                        saveUiState('dashboard_summary', {
+                            date: todayDash,
+                            totalPrincipal: Number(totalPrincipal.value || 0),
+                            totalTodayProfit: Number(totalTodayProfit.value || 0),
+                            totalTodayRate: Number(totalTodayRate.value || 0),
+                            totalProfit: Number(totalProfit.value || 0),
+                            totalRate: Number(totalRate.value || 0)
+                        });
+                        saveInsightSnapshot('dashboard', {
+                            dailyBattleReport: dailyBattleReport.value,
+                            confidenceRows: confidenceRows.value,
+                            recoveryWatchList: recoveryWatchList.value,
+                            portfolioExposure: portfolioExposure.value
+                        }, todayDash);
 
                         // 真实净值确认后，自动重写一次今日档案。
                         // 用“已确认基金代码+真实收益/涨跌幅”的指纹判断，后续更多基金确认时会再次覆盖。
@@ -3460,7 +3544,7 @@
 
                 const handleVisibilityChange = () => { if (document.visibilityState === 'visible') { updateRadarMode(); } };
 
-                const initDashboard = () => { nextTick(() => { updateRadarMode(); setTimeout(() => { fetchData({ force: false }); warmNewsCache(); }, 120); }); };
+                const initDashboard = async () => { await loadPersistentUiState(); await loadCalibrationProfiles(); nextTick(() => { updateRadarMode(); setTimeout(() => { fetchData({ force: false }); warmNewsCache(); }, 120); }); };
 
                 const fetchUserProfile = async () => {
                     if (!currentUser.value) return;
@@ -3471,6 +3555,11 @@
                         if (res.ok) { const data = await res.json(); userAvatar.value = data.avatarDataUrl || ''; }
                     } catch (e) { }
                 };
+
+                watch([analysisMonth, analysisViewMode, analysisDetailMode], () => persistAnalysisPreferences());
+                watch(() => recoveryModal.addAmount, (value) => {
+                    if (recoveryModal.code) saveUiState(`recovery_amount_${recoveryModal.code}`, { amount: Number(value || 0) });
+                });
 
                 onMounted(() => { if (currentUser.value) { isLoggedIn.value = true; fetchUserProfile(); initDashboard(); } document.addEventListener('visibilitychange', handleVisibilityChange); window.addEventListener('touchstart', onPullStart, { passive: true }); window.addEventListener('touchmove', onPullMove, { passive: false }); window.addEventListener('touchend', onPullEnd, { passive: true }); });
 
