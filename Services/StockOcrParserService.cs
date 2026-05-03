@@ -85,7 +85,16 @@ namespace 估值助手.Services
 
         private static IReadOnlyList<StockOcrCandidate> ParseNameCandidatesFromHoldingBlock(IReadOnlyList<string> cleaned)
         {
-            var start = cleaned.FindIndex(x => HoldingAnchors.Any(anchor => x.Contains(anchor)));
+            var start = -1;
+            for (var i = 0; i < cleaned.Count; i++)
+            {
+                if (HoldingAnchors.Any(anchor => cleaned[i].Contains(anchor)))
+                {
+                    start = i;
+                    break;
+                }
+            }
+
             if (start < 0) return Array.Empty<StockOcrCandidate>();
 
             var end = cleaned.Count;
