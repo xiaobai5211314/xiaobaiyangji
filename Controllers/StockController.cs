@@ -173,12 +173,12 @@ namespace 估值助手.Controllers
                 .Where(x => !string.IsNullOrWhiteSpace(x))
                 .ToList() ?? new List<string>();
 
-            var candidates = _parser.Parse(words);
+            var candidates = await ResolveNameOnlyCandidatesAsync(_parser.Parse(words), cancellationToken);
             var diagnostics = new List<string>
             {
                 $"OCR 文本行数：{words.Count}",
                 $"识别候选：{candidates.Count}",
-                "同花顺/东方财富持仓图：优先识别 6 位股票代码；无代码时返回名称候选。"
+                "股票 OCR 已限制在持仓表格区域；无代码时会尝试按名称搜索补代码。"
             };
 
             var batch = new StockOcrImportBatch
@@ -265,6 +265,51 @@ namespace 估值助手.Controllers
             batch.ConfirmedAt = DateTime.Now;
             await _context.SaveChangesAsync(cancellationToken);
             return Ok(new { success = true, saved });
+        }
+
+
+        private async Task<IReadOnlyList<StockOcrCandidate>> ResolveNameOnlyCandidatesAsync(IReadOnlyList<StockOcrCandidate> candidates, CancellationToken cancellationToken)
+        {
+            var resolved = new List<StockOcrCandidate>();
+            foreach (var candidate in candidates)
+            {
+                if (!string.IsNullOrWhiteSpace(candidate.StockCode) || string.IsNullOrWhiteSpace(candidate.StockName))
+                {
+                    resolved.Add(candidate);
+                    continue;
+                }
+
+                try
+                {
+                    var matches = await _quotes.SearchAsync(candidate.StockName, cancellationToken);
+                    var best = matches.FirstOrDefault(x => IsNameMatch(candidate.StockName, x.Name)) ?? matches.FirstOrDefault();
+                    if (best != null)
+                    {
+                        resolved.Add(candidate with
+                        {
+                            StockCode = best.Code,
+                            StockName = best.Name,
+                            Note = $"已按名称匹配代码 {best.Code}，请确认后写库"
+                        });
+                        continue;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "股票 OCR 名称补代码失败：{Name}", candidate.StockName);
+                }
+
+                resolved.Add(candidate);
+            }
+            return resolved;
+        }
+
+        private static bool IsNameMatch(string recognizedName, string quoteName)
+        {
+            static string Clean(string value) => new string((value ?? string.Empty).Where(c => char.IsLetterOrDigit(c) || (c >= '一' && c <= '龥')).ToArray());
+            var a = Clean(recognizedName);
+            var b = Clean(quoteName);
+            return a.Length > 0 && b.Length > 0 && (a == b || a.Contains(b) || b.Contains(a));
         }
 
         private async Task UpsertWatchAsync(string username, string code, string market, string name, CancellationToken cancellationToken)
