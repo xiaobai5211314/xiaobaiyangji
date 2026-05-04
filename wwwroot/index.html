@@ -3049,7 +3049,7 @@
                             <div class="page-subtitle">{{ selectedAnalysisDate || '请选择日期' }}</div>
                             <div style="margin-top:12px;">
                                 <div v-if="analysisLoading" class="news-empty">📡 正在读取收益档案...</div>
-                                <div v-else-if="selectedDayFundRecords.length===0" class="news-empty">当天暂无明细</div>
+                                <div v-else-if="selectedDayFundRecords.length===0" class="news-empty">当天暂无明细</div> 
                                 <div v-else>
                                     <div v-for="(item,index) in selectedDayFundRecords" :key="item.fundCode" class="profit-list-row">
                                         <span class="rank-badge">{{ index+1 }}</span>
