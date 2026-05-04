@@ -72,13 +72,21 @@ namespace 估值助手.Controllers
 
             return isTradingTime ? TimeSpan.FromMinutes(2) : TimeSpan.FromMinutes(30);
         }
-        public FundController(AppDbContext context, IMemoryCache cache, IHttpClientFactory httpClientFactory, IBaiduOcrService ocrService, PortfolioSettlementService portfolioSettlement)
+        private readonly IConnectionMultiplexer _redis;
+        public FundController(
+      AppDbContext context,
+      IMemoryCache cache,
+      IHttpClientFactory httpClientFactory,
+      IBaiduOcrService ocrService,
+      PortfolioSettlementService portfolioSettlement,
+      IConnectionMultiplexer redis)
         {
             _context = context;
             _cache = cache;
             _httpClientFactory = httpClientFactory;
             _ocrService = ocrService;
             _portfolioSettlement = portfolioSettlement;
+            _redis = redis;
         }
 
         private static DateTime ChinaNow() => DateTime.UtcNow.AddHours(8);
@@ -1950,18 +1958,40 @@ namespace 估值助手.Controllers
         [HttpGet("sectors")]
         public async Task<IActionResult> GetSectors([FromQuery] bool force = false)
         {
+            const string redisKey = "api:fund:sectors:v1";
             const string freshKey = "FundSectorRadarV5";
             const string staleKey = "FundSectorRadarV5_Stale";
 
+            var jsonOptions = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            };
+
+            var redisDb = _redis.GetDatabase();
+
+            if (!force)
+            {
+                var cached = await redisDb.StringGetAsync(redisKey);
+                if (cached.HasValue)
+                {
+                    return Content(cached.ToString(), "application/json");
+                }
+            }
+
             if (!force && _cache.TryGetValue(freshKey, out object fresh))
             {
-                return Ok(fresh);
+                var json = JsonSerializer.Serialize(fresh, jsonOptions);
+                await redisDb.StringSetAsync(redisKey, json, GetExternalDataFreshTtl());
+                return Content(json, "application/json");
             }
 
             if (_cache.TryGetValue(staleKey, out object stale))
             {
                 _ = Task.Run(RefreshSectorCacheQuietlyAsync);
-                return Ok(stale);
+
+                var json = JsonSerializer.Serialize(stale, jsonOptions);
+                await redisDb.StringSetAsync(redisKey, json, TimeSpan.FromMinutes(10));
+                return Content(json, "application/json");
             }
 
             if (!await _sectorsRefreshLock.WaitAsync(0))
@@ -1971,12 +2001,28 @@ namespace 估值助手.Controllers
 
             try
             {
-                if (!force && _cache.TryGetValue(freshKey, out fresh)) return Ok(fresh);
-                if (_cache.TryGetValue(staleKey, out stale)) return Ok(stale);
+                if (!force && _cache.TryGetValue(freshKey, out fresh))
+                {
+                    var json = JsonSerializer.Serialize(fresh, jsonOptions);
+                    await redisDb.StringSetAsync(redisKey, json, GetExternalDataFreshTtl());
+                    return Content(json, "application/json");
+                }
+
+                if (_cache.TryGetValue(staleKey, out stale))
+                {
+                    var json = JsonSerializer.Serialize(stale, jsonOptions);
+                    await redisDb.StringSetAsync(redisKey, json, TimeSpan.FromMinutes(10));
+                    return Content(json, "application/json");
+                }
 
                 var payload = await BuildSectorRadarPayloadAsync();
+
                 SetSectorRadarCache(payload);
-                return Ok(payload);
+
+                var payloadJson = JsonSerializer.Serialize(payload, jsonOptions);
+                await redisDb.StringSetAsync(redisKey, payloadJson, GetExternalDataFreshTtl());
+
+                return Content(payloadJson, "application/json");
             }
             catch (Exception ex)
             {

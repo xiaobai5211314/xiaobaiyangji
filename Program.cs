@@ -7,6 +7,7 @@ using System.IO.Compression;
 using System.Text.Json;
 using 估值助手.Models;
 using 估值助手.Services;
+using StackExchange.Redis;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 var builder = WebApplication.CreateBuilder(args);
@@ -98,7 +99,14 @@ builder.Services.AddHttpClient("EastMoneyQuote", client =>
 {
     ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
 });
-
+builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
+{
+    var options = ConfigurationOptions.Parse("localhost:6379");
+    options.AbortOnConnectFail = false;
+    options.ConnectTimeout = 1500;
+    options.SyncTimeout = 1500;
+    return ConnectionMultiplexer.Connect(options);
+});
 builder.Services.AddMemoryCache();
 builder.Services.AddControllers()
     .AddJsonOptions(opt =>
