@@ -1967,65 +1967,162 @@ namespace 估值助手.Controllers
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase
             };
 
-            var redisDb = _redis.GetDatabase();
+            IDatabase? redisDb = null;
 
+            try
+            {
+                redisDb = _redis.GetDatabase();
+            }
+            catch
+            {
+                redisDb = null;
+            }
+
+            async Task TrySetRedisAsync(string json, TimeSpan ttl)
+            {
+                if (redisDb == null) return;
+
+                try
+                {
+                    await redisDb.StringSetAsync(redisKey, json, ttl);
+                }
+                catch
+                {
+                    // Redis 只是缓存，写入失败不能影响接口主流程。
+                }
+            }
+
+            async Task<RedisValue> TryGetRedisAsync()
+            {
+                if (redisDb == null) return RedisValue.Null;
+
+                try
+                {
+                    return await redisDb.StringGetAsync(redisKey);
+                }
+                catch
+                {
+                    return RedisValue.Null;
+                }
+            }
+
+            void SetCacheHeader(string source, TimeSpan? ttl = null)
+            {
+                Response.Headers["X-App-Cache"] = source;
+
+                if (ttl.HasValue)
+                {
+                    Response.Headers["X-App-Cache-Ttl"] = ((int)ttl.Value.TotalSeconds).ToString();
+                }
+            }
+
+            // 1. 普通请求：优先读 Redis。
             if (!force)
             {
-                var cached = await redisDb.StringGetAsync(redisKey);
+                var cached = await TryGetRedisAsync();
                 if (cached.HasValue)
                 {
+                    SetCacheHeader("redis");
                     return Content(cached.ToString(), "application/json");
                 }
             }
 
+            // 2. 普通请求：Redis 没命中，再读内存 fresh，并回填 Redis。
             if (!force && _cache.TryGetValue(freshKey, out object fresh))
             {
+                var ttl = GetExternalDataFreshTtl();
                 var json = JsonSerializer.Serialize(fresh, jsonOptions);
-                await redisDb.StringSetAsync(redisKey, json, GetExternalDataFreshTtl());
+
+                await TrySetRedisAsync(json, ttl);
+
+                SetCacheHeader("memory-fresh", ttl);
                 return Content(json, "application/json");
             }
 
-            if (_cache.TryGetValue(staleKey, out object stale))
+            // 3. 普通请求：fresh 没有，再读 stale，并后台刷新。
+            // force=true 时不走 stale，确保强制刷新真的重新构建。
+            if (!force && _cache.TryGetValue(staleKey, out object stale))
             {
                 _ = Task.Run(RefreshSectorCacheQuietlyAsync);
 
+                var ttl = TimeSpan.FromMinutes(10);
                 var json = JsonSerializer.Serialize(stale, jsonOptions);
-                await redisDb.StringSetAsync(redisKey, json, TimeSpan.FromMinutes(10));
+
+                await TrySetRedisAsync(json, ttl);
+
+                SetCacheHeader("memory-stale", ttl);
                 return Content(json, "application/json");
             }
 
+            // 4. 防止并发重复构建。
             if (!await _sectorsRefreshLock.WaitAsync(0))
             {
+                SetCacheHeader("refreshing");
                 return StatusCode(503, "板块基金雷达正在刷新，请稍后重试");
             }
 
             try
             {
+                // 5. 拿到锁后再检查一次 Redis，避免等待期间别的请求已经写入。
+                if (!force)
+                {
+                    var cached = await TryGetRedisAsync();
+                    if (cached.HasValue)
+                    {
+                        SetCacheHeader("redis-after-lock");
+                        return Content(cached.ToString(), "application/json");
+                    }
+                }
+
+                // 6. 拿到锁后再检查一次内存 fresh。
                 if (!force && _cache.TryGetValue(freshKey, out fresh))
                 {
+                    var ttl = GetExternalDataFreshTtl();
                     var json = JsonSerializer.Serialize(fresh, jsonOptions);
-                    await redisDb.StringSetAsync(redisKey, json, GetExternalDataFreshTtl());
+
+                    await TrySetRedisAsync(json, ttl);
+
+                    SetCacheHeader("memory-fresh-after-lock", ttl);
                     return Content(json, "application/json");
                 }
 
-                if (_cache.TryGetValue(staleKey, out stale))
+                // 7. 拿到锁后再检查一次 stale。
+                if (!force && _cache.TryGetValue(staleKey, out stale))
                 {
+                    var ttl = TimeSpan.FromMinutes(10);
                     var json = JsonSerializer.Serialize(stale, jsonOptions);
-                    await redisDb.StringSetAsync(redisKey, json, TimeSpan.FromMinutes(10));
+
+                    await TrySetRedisAsync(json, ttl);
+
+                    SetCacheHeader("memory-stale-after-lock", ttl);
                     return Content(json, "application/json");
                 }
 
+                // 8. 真正重新构建。
                 var payload = await BuildSectorRadarPayloadAsync();
 
                 SetSectorRadarCache(payload);
 
+                var payloadTtl = GetExternalDataFreshTtl();
                 var payloadJson = JsonSerializer.Serialize(payload, jsonOptions);
-                await redisDb.StringSetAsync(redisKey, payloadJson, GetExternalDataFreshTtl());
 
+                await TrySetRedisAsync(payloadJson, payloadTtl);
+
+                SetCacheHeader("build", payloadTtl);
                 return Content(payloadJson, "application/json");
             }
             catch (Exception ex)
             {
+                // 9. 构建失败时，如果还有 stale，就兜底返回 stale。
+                if (_cache.TryGetValue(staleKey, out object fallbackStale))
+                {
+                    var json = JsonSerializer.Serialize(fallbackStale, jsonOptions);
+
+                    SetCacheHeader("memory-stale-fallback", TimeSpan.FromMinutes(10));
+                    return Content(json, "application/json");
+                }
+
+                SetCacheHeader("error");
                 return StatusCode(500, $"板块基金雷达故障: {ex.Message}");
             }
             finally
@@ -2033,7 +2130,6 @@ namespace 估值助手.Controllers
                 _sectorsRefreshLock.Release();
             }
         }
-
         private async Task RefreshSectorCacheQuietlyAsync()
         {
             if (!await _sectorsRefreshLock.WaitAsync(0)) return;
