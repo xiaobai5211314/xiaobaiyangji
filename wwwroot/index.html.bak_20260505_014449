@@ -3584,19 +3584,6 @@
                 const todayDashStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
                 const analysisMonth = ref(todayDashStr.slice(0, 7));
                 const selectedAnalysisDate = ref(todayDashStr);
-                const getLocalTodayDash = () => {
-                    const d = new Date();
-                    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                };
-
-                const jumpToTodayAnalysis = async () => {
-                    const today = getLocalTodayDash();
-                    analysisMonth.value = today.slice(0, 7);
-                    selectedAnalysisDate.value = today;
-                    await nextTick();
-                    await fetchAnalysis(true, { keepSelectedDate: true, targetDate: today });
-                    selectedAnalysisDate.value = today;
-                };
                 const analysisViewMode = ref('profit');
                 const analysisDetailMode = ref('daily');
                 const analysisLoading = ref(false);
@@ -4762,10 +4749,6 @@
 
                 const fetchAnalysis = async (force = false, keepSelectedDate = false) => {
                     if (!currentUser.value) return;
-                    const keepSelectedDate = options === true || !!options.keepSelectedDate;
-                    const targetDate = typeof options === 'object' && options.targetDate
-                        ? options.targetDate
-                        : selectedAnalysisDate.value;
                     if (analysisRecords.value.length > 0 && !force) return;
                     analysisLoading.value = true;
                     try {
@@ -4776,9 +4759,6 @@
                         const monthRecords = analysisTotalRecords.value.filter(r => String(r.recordDate || '').slice(0, 7) === analysisMonth.value);
                         if (!keepSelectedDate && monthRecords.length > 0 && !monthRecords.some(r => String(r.recordDate || '').slice(0, 10) === selectedAnalysisDate.value)) {
                             selectedAnalysisDate.value = String(monthRecords[0].recordDate || '').slice(0, 10);
-                        }
-                        if (keepSelectedDate && targetDate) {
-                            selectedAnalysisDate.value = targetDate;
                         }
                     } catch (e) {
                         showToast('📊 盈亏档案读取失败', 'error');
@@ -5061,7 +5041,6 @@
     </script>
 </body>
 </html>
-
 
 
 
