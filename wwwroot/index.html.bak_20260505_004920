@@ -1166,7 +1166,7 @@
 
         .calendar-grid {
             display: grid;
-            grid-template-columns: repeat(7, minmax(0, 1fr));
+            grid-template-columns: repeat(7, 1fr);
             gap: 6px;
         }
 
@@ -2120,74 +2120,6 @@
             }
         }
 
-
-        /* 本轮修复：手机端盈亏日历周六/周日数字贴边、溢出 */
-        .calendar-grid {
-            width: 100%;
-            max-width: 100%;
-            box-sizing: border-box;
-        }
-
-        .calendar-day {
-            min-width: 0;
-            box-sizing: border-box;
-            overflow: hidden;
-        }
-
-        .calendar-profit {
-            max-width: 100%;
-            min-width: 0;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: clip;
-            line-height: 1.15;
-            letter-spacing: -0.2px;
-        }
-
-        @media screen and (max-width: 768px) {
-            .analysis-grid > .glass-panel {
-                min-width: 0;
-                overflow: hidden;
-            }
-
-            .calendar-grid {
-                gap: 3px;
-                padding: 0 2px;
-            }
-
-            .calendar-day {
-                min-height: 54px;
-                padding: 6px 3px;
-                border-radius: 10px;
-            }
-
-            .calendar-date {
-                font-size: 11px;
-                line-height: 1.1;
-            }
-
-            .calendar-profit {
-                font-size: 10px;
-                letter-spacing: -0.6px;
-            }
-        }
-
-        @media screen and (max-width: 390px) {
-            .calendar-grid {
-                gap: 2px;
-                padding: 0 1px;
-            }
-
-            .calendar-day {
-                padding: 5px 2px;
-                border-radius: 9px;
-            }
-
-            .calendar-profit {
-                font-size: 9px;
-            }
-        }
-
         /* 本轮：资金流只在板块页展示 + 数字统一微软雅黑等宽数字 */
         .capital-flow-panel {
             margin: 15px;
@@ -3100,7 +3032,7 @@
                 </div>
                 <div class="analysis-grid">
                     <div class="glass-panel" style="padding:16px;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;"><div><div class="page-title" style="font-size:18px;">盈亏日历</div><div class="page-subtitle">{{ analysisMonth }} 月累计：<span :style="{color:analysisMonthTotal>=0?'#ff4d4f':'#10b981',fontWeight:'900'}">{{ analysisMonthTotal>=0?'+':'' }}{{ analysisMonthTotal.toFixed(2) }}</span></div></div><button class="btn btn-primary" @click="jumpToTodayAnalysis">今天</button></div><div class="calendar-grid">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;"><div><div class="page-title" style="font-size:18px;">盈亏日历</div><div class="page-subtitle">{{ analysisMonth }} 月累计：<span :style="{color:analysisMonthTotal>=0?'#ff4d4f':'#10b981',fontWeight:'900'}">{{ analysisMonthTotal>=0?'+':'' }}{{ analysisMonthTotal.toFixed(2) }}</span></div></div><button class="btn btn-primary" @click="selectedAnalysisDate = todayDashStr">今天</button></div><div class="calendar-grid">
                             <div v-for="w in ['一','二','三','四','五','六','日']" :key="w" class="calendar-week">{{ w }}</div><div v-for="day in analysisCalendarDays" :key="day.key" :class="['calendar-day', day.empty?'empty':'', day.profit>0?'positive':(day.profit<0?'negative':''), selectedAnalysisDate===day.date?'active':'']" @click="!day.empty && (selectedAnalysisDate = day.date)">
                                 <template v-if="!day.empty">
                                     <div class="calendar-date">{{ day.day }}</div>
@@ -5041,4 +4973,3 @@
     </script>
 </body>
 </html>
-

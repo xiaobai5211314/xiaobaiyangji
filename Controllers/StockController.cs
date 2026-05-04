@@ -39,12 +39,14 @@ namespace 估值助手.Controllers
 
             var holdings = await _context.StockHoldings.AsNoTracking()
                 .Where(x => x.Username == username)
-                .OrderBy(x => x.StockCode)
+                .OrderBy(x => x.Market)
+                .ThenBy(x => x.StockCode)
                 .ToListAsync(cancellationToken);
 
             var watch = await _context.StockWatchItems.AsNoTracking()
                 .Where(x => x.Username == username)
                 .OrderBy(x => x.SortOrder)
+                .ThenBy(x => x.Market)
                 .ThenBy(x => x.StockCode)
                 .ToListAsync(cancellationToken);
 
@@ -99,7 +101,7 @@ namespace 估值助手.Controllers
             if (request == null) return BadRequest(new { success = false, message = "请求体为空" });
 
             var username = NormalizeUser(request.Username);
-            var identity = await ResolveStockIdentityAsync(request.StockCode, request.StockName, cancellationToken);
+            var identity = await ResolveStockIdentityAsync(request.StockCode, request.Market, request.StockName, cancellationToken);
             var code = identity.Code;
 
             if (username == null || string.IsNullOrWhiteSpace(code))
@@ -109,9 +111,12 @@ namespace 估值助手.Controllers
 
             var quote = await _quotes.GetQuoteAsync(code, cancellationToken);
             var name = !string.IsNullOrWhiteSpace(identity.Name) ? identity.Name : quote?.Name ?? code;
+            var market = quote?.Market ?? identity.Market ?? _quotes.InferMarket(code);
 
             var row = await _context.StockHoldings
-                .FirstOrDefaultAsync(x => x.Username == username && x.StockCode == code, cancellationToken);
+                .FirstOrDefaultAsync(x => x.Username == username && x.Market == market && x.StockCode == code, cancellationToken)
+                ?? await _context.StockHoldings
+                    .FirstOrDefaultAsync(x => x.Username == username && x.StockCode == code, cancellationToken);
 
             if (row == null)
             {
@@ -124,7 +129,8 @@ namespace 估值助手.Controllers
                 _context.StockHoldings.Add(row);
             }
 
-            row.Market = quote?.Market ?? identity.Market ?? _quotes.InferMarket(code);
+            row.Market = market;
+            row.StockCode = code;
             row.StockName = name;
             row.Shares = Math.Max(0, request.Shares);
             row.CostPrice = Math.Max(0, request.CostPrice);
@@ -145,16 +151,22 @@ namespace 估值助手.Controllers
         public async Task<IActionResult> DeleteHolding(
             [FromQuery] string username,
             [FromQuery] string code,
+            [FromQuery] string? market,
             CancellationToken cancellationToken)
         {
             username = NormalizeUser(username);
-            code = NormalizeCode(code);
+            code = NormalizeCode(code, market, null);
+            market = NormalizeMarket(market);
 
             if (username == null) return BadRequest(new { success = false, message = "请提供用户名" });
 
-            var row = await _context.StockHoldings
-                .FirstOrDefaultAsync(x => x.Username == username && x.StockCode == code, cancellationToken);
+            var query = _context.StockHoldings.Where(x => x.Username == username && x.StockCode == code);
+            if (!string.IsNullOrWhiteSpace(market))
+            {
+                query = query.Where(x => x.Market == market);
+            }
 
+            var row = await query.FirstOrDefaultAsync(cancellationToken);
             if (row != null)
             {
                 _context.StockHoldings.Remove(row);
@@ -170,7 +182,7 @@ namespace 估值助手.Controllers
             if (request == null) return BadRequest(new { success = false, message = "请求体为空" });
 
             var username = NormalizeUser(request.Username);
-            var identity = await ResolveStockIdentityAsync(request.StockCode, request.StockName, cancellationToken);
+            var identity = await ResolveStockIdentityAsync(request.StockCode, request.Market, request.StockName, cancellationToken);
             var code = identity.Code;
 
             if (username == null || string.IsNullOrWhiteSpace(code))
@@ -185,7 +197,9 @@ namespace 估值助手.Controllers
             await UpsertWatchAsync(username, code, market, name, cancellationToken);
 
             var row = await _context.StockWatchItems.AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Username == username && x.StockCode == code, cancellationToken);
+                .FirstOrDefaultAsync(x => x.Username == username && x.Market == market && x.StockCode == code, cancellationToken)
+                ?? await _context.StockWatchItems.AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.Username == username && x.StockCode == code, cancellationToken);
 
             return Ok(new
             {
@@ -198,16 +212,22 @@ namespace 估值助手.Controllers
         public async Task<IActionResult> DeleteWatch(
             [FromQuery] string username,
             [FromQuery] string code,
+            [FromQuery] string? market,
             CancellationToken cancellationToken)
         {
             username = NormalizeUser(username);
-            code = NormalizeCode(code);
+            code = NormalizeCode(code, market, null);
+            market = NormalizeMarket(market);
 
             if (username == null) return BadRequest(new { success = false, message = "请提供用户名" });
 
-            var row = await _context.StockWatchItems
-                .FirstOrDefaultAsync(x => x.Username == username && x.StockCode == code, cancellationToken);
+            var query = _context.StockWatchItems.Where(x => x.Username == username && x.StockCode == code);
+            if (!string.IsNullOrWhiteSpace(market))
+            {
+                query = query.Where(x => x.Market == market);
+            }
 
+            var row = await query.FirstOrDefaultAsync(cancellationToken);
             if (row != null)
             {
                 _context.StockWatchItems.Remove(row);
@@ -283,7 +303,7 @@ namespace 估值助手.Controllers
             foreach (var c in candidates)
             {
                 var rawName = !string.IsNullOrWhiteSpace(c.StockName) ? c.StockName : c.RecognizedName;
-                var identity = await ResolveStockIdentityAsync(c.StockCode, rawName, cancellationToken);
+                var identity = await ResolveStockIdentityAsync(c.StockCode, null, rawName, cancellationToken);
                 var code = identity.Code;
 
                 batch.Items.Add(new StockOcrImportItem
@@ -350,7 +370,8 @@ namespace 估值助手.Controllers
                         x.Action,
                         x.Shares,
                         x.CostPrice,
-                        x.CostAmount))
+                        x.CostAmount,
+                        x.Market))
                     .ToList();
 
             var saved = 0;
@@ -358,7 +379,7 @@ namespace 估值助手.Controllers
 
             foreach (var item in selected)
             {
-                var identity = await ResolveStockIdentityAsync(item.StockCode, item.StockName, cancellationToken);
+                var identity = await ResolveStockIdentityAsync(item.StockCode, item.Market, item.StockName, cancellationToken);
                 var code = identity.Code;
 
                 if (string.IsNullOrWhiteSpace(code))
@@ -377,13 +398,14 @@ namespace 估值助手.Controllers
                 var name = !string.IsNullOrWhiteSpace(identity.Name)
                     ? identity.Name
                     : quote?.Name ?? code;
+                var market = quote?.Market ?? identity.Market ?? _quotes.InferMarket(code);
 
                 if (action == "watch")
                 {
                     await UpsertWatchAsync(
                         username,
                         code,
-                        quote?.Market ?? identity.Market ?? _quotes.InferMarket(code),
+                        market,
                         name,
                         cancellationToken);
 
@@ -392,7 +414,9 @@ namespace 估值助手.Controllers
                 }
 
                 var row = await _context.StockHoldings
-                    .FirstOrDefaultAsync(x => x.Username == username && x.StockCode == code, cancellationToken);
+                    .FirstOrDefaultAsync(x => x.Username == username && x.Market == market && x.StockCode == code, cancellationToken)
+                    ?? await _context.StockHoldings
+                        .FirstOrDefaultAsync(x => x.Username == username && x.StockCode == code, cancellationToken);
 
                 if (row == null)
                 {
@@ -405,8 +429,9 @@ namespace 估值助手.Controllers
                     _context.StockHoldings.Add(row);
                 }
 
+                row.StockCode = code;
                 row.StockName = name;
-                row.Market = quote?.Market ?? identity.Market ?? _quotes.InferMarket(code);
+                row.Market = market;
                 row.Shares = Math.Max(0, item.Shares ?? 0);
                 row.CostPrice = Math.Max(0, item.CostPrice ?? 0);
                 row.CostAmount = item.CostAmount.GetValueOrDefault() > 0
@@ -441,7 +466,9 @@ namespace 估值助手.Controllers
             CancellationToken cancellationToken)
         {
             var watch = await _context.StockWatchItems
-                .FirstOrDefaultAsync(x => x.Username == username && x.StockCode == code, cancellationToken);
+                .FirstOrDefaultAsync(x => x.Username == username && x.Market == market && x.StockCode == code, cancellationToken)
+                ?? await _context.StockWatchItems
+                    .FirstOrDefaultAsync(x => x.Username == username && x.StockCode == code, cancellationToken);
 
             if (watch == null)
             {
@@ -461,6 +488,7 @@ namespace 估值助手.Controllers
                 _context.StockWatchItems.Add(watch);
             }
 
+            watch.StockCode = code;
             watch.Market = market;
             watch.StockName = name;
             watch.UpdatedAt = DateTime.Now;
@@ -470,11 +498,13 @@ namespace 估值助手.Controllers
 
         private async Task<(string Code, string Market, string Name)> ResolveStockIdentityAsync(
             string? code,
+            string? market,
             string? name,
             CancellationToken cancellationToken)
         {
-            var normalizedCode = NormalizeCode(code ?? string.Empty);
             var normalizedName = NormalizeStockName(name);
+            var normalizedMarket = NormalizeMarket(market);
+            var normalizedCode = NormalizeCode(code ?? string.Empty, normalizedMarket, normalizedName);
 
             if (!string.IsNullOrWhiteSpace(normalizedCode))
             {
@@ -483,14 +513,14 @@ namespace 估值助手.Controllers
                     var quote = await _quotes.GetQuoteAsync(normalizedCode, cancellationToken);
                     return (
                         normalizedCode,
-                        quote?.Market ?? _quotes.InferMarket(normalizedCode),
+                        quote?.Market ?? normalizedMarket ?? _quotes.InferMarket(normalizedCode),
                         !string.IsNullOrWhiteSpace(quote?.Name) ? quote.Name : normalizedName
                     );
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "按股票代码补全失败：{Code}", normalizedCode);
-                    return (normalizedCode, _quotes.InferMarket(normalizedCode), normalizedName);
+                    return (normalizedCode, normalizedMarket ?? _quotes.InferMarket(normalizedCode), normalizedName);
                 }
             }
 
@@ -515,7 +545,7 @@ namespace 估值助手.Controllers
                     return (string.Empty, string.Empty, normalizedName);
                 }
 
-                return (match.Code, match.Market, match.Name);
+                return (NormalizeCode(match.Code, match.Market, match.Name), match.Market, match.Name);
             }
             catch (Exception ex)
             {
@@ -604,11 +634,78 @@ namespace 估值助手.Controllers
             return string.IsNullOrWhiteSpace(username) ? null : username;
         }
 
-        private static string NormalizeCode(string code)
+        private static string? NormalizeMarket(string? market)
         {
-            var digits = new string((code ?? string.Empty).Where(char.IsDigit).ToArray());
-            if (digits.Length > 6) digits = digits[^6..];
-            return digits.Length == 0 ? string.Empty : digits.PadLeft(6, '0');
+            market = (market ?? string.Empty).Trim().ToUpperInvariant();
+            return market switch
+            {
+                "HK" or "HKG" or "116" or "港股" => "HK",
+                "SH" or "SHA" or "1" or "沪市" => "SH",
+                "SZ" or "SZA" or "0" or "深市" => "SZ",
+                "BJ" or "BSE" or "北交所" => "BJ",
+                _ => string.IsNullOrWhiteSpace(market) ? null : market
+            };
+        }
+
+        private static bool LooksLikeHongKongName(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return false;
+
+            name = name.Trim();
+            return name.EndsWith("-W", StringComparison.OrdinalIgnoreCase)
+                   || name.EndsWith("-SW", StringComparison.OrdinalIgnoreCase)
+                   || name.EndsWith("-B", StringComparison.OrdinalIgnoreCase)
+                   || name.Contains("集团-W", StringComparison.OrdinalIgnoreCase)
+                   || name.Contains("集团-SW", StringComparison.OrdinalIgnoreCase)
+                   || name.Contains("控股-W", StringComparison.OrdinalIgnoreCase)
+                   || name.Contains("港股", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizeCode(string code, string? market = null, string? name = null)
+        {
+            var text = (code ?? string.Empty).Trim().ToUpperInvariant();
+
+            var secIdMatch = System.Text.RegularExpressions.Regex.Match(text, @"(?<!\d)116\.(\d{5})(?!\d)");
+            if (secIdMatch.Success) return secIdMatch.Groups[1].Value;
+
+            text = text
+                .Replace(".HK", "")
+                .Replace("HK", "")
+                .Replace("SH", "")
+                .Replace("SZ", "")
+                .Replace("BJ", "");
+
+            var digits = new string(text.Where(char.IsDigit).ToArray());
+            if (digits.Length == 0) return string.Empty;
+
+            market = NormalizeMarket(market);
+
+            if (market == "HK" || LooksLikeHongKongName(name))
+            {
+                if (digits.Length == 6 && digits.StartsWith("0"))
+                {
+                    digits = digits[1..];
+                }
+
+                if (digits.Length > 5)
+                {
+                    digits = digits[^5..];
+                }
+
+                return digits.PadLeft(5, '0');
+            }
+
+            if (digits.Length == 5)
+            {
+                return digits;
+            }
+
+            if (digits.Length > 6)
+            {
+                digits = digits[^6..];
+            }
+
+            return digits.PadLeft(6, '0');
         }
 
         private static string NormalizeStockName(string? name)
@@ -632,12 +729,14 @@ namespace 估值助手.Controllers
         string? StockName,
         decimal Shares,
         decimal CostPrice,
-        decimal CostAmount);
+        decimal CostAmount,
+        string? Market = null);
 
     public record SaveStockWatchRequest(
         string Username,
         string StockCode,
-        string? StockName);
+        string? StockName,
+        string? Market = null);
 
     public record ConfirmStockOcrRequest(
         string Username,
@@ -651,5 +750,6 @@ namespace 估值助手.Controllers
         string? Action,
         decimal? Shares,
         decimal? CostPrice,
-        decimal? CostAmount);
+        decimal? CostAmount,
+        string? Market = null);
 }

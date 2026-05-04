@@ -123,18 +123,18 @@ namespace 估值助手.Models
                 .HasDatabaseName("IX_UserInsightSnapshot_User_Type_Date");
 
             modelBuilder.Entity<StockHolding>()
-                .HasIndex(x => new { x.Username, x.StockCode })
+                .HasIndex(x => new { x.Username, x.Market, x.StockCode })
                 .IsUnique()
-                .HasDatabaseName("IX_StockHolding_User_Code");
+                .HasDatabaseName("IX_StockHolding_User_Market_Code");
 
             modelBuilder.Entity<StockHolding>()
                 .HasIndex(x => x.Username)
                 .HasDatabaseName("IX_StockHolding_User");
 
             modelBuilder.Entity<StockWatchItem>()
-                .HasIndex(x => new { x.Username, x.StockCode })
+                .HasIndex(x => new { x.Username, x.Market, x.StockCode })
                 .IsUnique()
-                .HasDatabaseName("IX_StockWatch_User_Code");
+                .HasDatabaseName("IX_StockWatch_User_Market_Code");
 
             modelBuilder.Entity<StockOcrImportBatch>()
                 .HasIndex(x => new { x.Username, x.CreatedAt })
