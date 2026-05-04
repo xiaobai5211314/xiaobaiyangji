@@ -3100,7 +3100,7 @@
                 </div>
                 <div class="analysis-grid">
                     <div class="glass-panel" style="padding:16px;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;"><div><div class="page-title" style="font-size:18px;">盈亏日历</div><div class="page-subtitle">{{ analysisMonth }} 月累计：<span :style="{color:analysisMonthTotal>=0?'#ff4d4f':'#10b981',fontWeight:'900'}">{{ analysisMonthTotal>=0?'+':'' }}{{ analysisMonthTotal.toFixed(2) }}</span></div></div><button type="button" class="btn btn-primary" @click.prevent.stop="jumpToTodayAnalysis">今天</button></div><div class="calendar-grid">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;"><div><div class="page-title" style="font-size:18px;">盈亏日历</div><div class="page-subtitle">{{ analysisMonth }} 月累计：<span :style="{color:analysisMonthTotal>=0?'#ff4d4f':'#10b981',fontWeight:'900'}">{{ analysisMonthTotal>=0?'+':'' }}{{ analysisMonthTotal.toFixed(2) }}</span></div></div><button class="btn btn-primary" @click="jumpToTodayAnalysis">今天</button></div><div class="calendar-grid">
                             <div v-for="w in ['一','二','三','四','五','六','日']" :key="w" class="calendar-week">{{ w }}</div><div v-for="day in analysisCalendarDays" :key="day.key" :class="['calendar-day', day.empty?'empty':'', day.profit>0?'positive':(day.profit<0?'negative':''), selectedAnalysisDate===day.date?'active':'']" @click="!day.empty && (selectedAnalysisDate = day.date)">
                                 <template v-if="!day.empty">
                                     <div class="calendar-date">{{ day.day }}</div>
@@ -3593,18 +3593,9 @@
                     const today = getLocalTodayDash();
                     analysisMonth.value = today.slice(0, 7);
                     selectedAnalysisDate.value = today;
-
                     await nextTick();
-
-                    if (activePage.value !== 'analysis') {
-                        activePage.value = 'analysis';
-                    }
-
                     await fetchAnalysis(true, { keepSelectedDate: true, targetDate: today });
-
-                    analysisMonth.value = today.slice(0, 7);
                     selectedAnalysisDate.value = today;
-                    showToast(`📅 已跳转到今天 ${today}`, 'success');
                 };
                 const analysisViewMode = ref('profit');
                 const analysisDetailMode = ref('daily');
@@ -4769,7 +4760,7 @@
                 };
 
 
-                const fetchAnalysis = async (force = false, options = {}) => {
+                const fetchAnalysis = async (force = false, keepSelectedDate = false) => {
                     if (!currentUser.value) return;
                     const keepSelectedDate = options === true || !!options.keepSelectedDate;
                     const targetDate = typeof options === 'object' && options.targetDate
@@ -5060,7 +5051,7 @@
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, isDetailsLoading, expandedSectors, toggleSector,
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
-                    analysisMonth, selectedAnalysisDate, analysisViewMode, analysisDetailMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, analysisProfitTop, analysisLossTop, analysisMonthTotal, fetchAnalysis, jumpToTodayAnalysis, todayDashStr,
+                    analysisMonth, selectedAnalysisDate, analysisViewMode, analysisDetailMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, analysisProfitTop, analysisLossTop, analysisMonthTotal, fetchAnalysis, todayDashStr,
                     assetMode, setAssetMode, stockHoldings, stockWatchList, stockSearchKeyword, stockSearchResults, stockOcrLoading, stockOcrPreview, selectedStock, stockKlinePeriod, stockKlinePeriods, stockChartRef, triggerStockOcr, handleStockOcrUpload, confirmStockOcr, loadStockDashboard, searchStocks, addStockWatch, openStockHoldingEditor, deleteStockHolding, deleteStockWatch, openStockDetail, switchStockKline, recalculateStockOcrItem, formatOcrNumber, signedOcrNumber, profitColor, dailyBattleReport, confidenceRows, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, calibrationRows,
                     globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, saveDailyArchive, ocrModal,
                     reduceModal, openReduceModal, handleReducePosition, addModal, openAddModal, handleAddPosition
