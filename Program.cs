@@ -134,7 +134,12 @@ app.UseStaticFiles(new StaticFileOptions
         ctx.Context.Response.Headers[HeaderNames.CacheControl] = "public,max-age=" + durationInSeconds;
     }
 });
-
+app.MapGet("/api/health", () => Results.Ok(new
+{
+    success = true,
+    status = "ok",
+    time = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+}));
 app.MapControllers();
 app.MapGet("/", () => Results.Redirect("/index.html"));
 

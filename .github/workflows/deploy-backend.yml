@@ -196,10 +196,10 @@ jobs:
           echo "======= 5. 健康检查 ======="
           OK=""
           for i in $(seq 1 10); do
-            CODE="$(curl -sS --max-time 3 -o /tmp/guzhi_health.json -w "%{http_code}" "http://127.0.0.1:${PORT}/api/fund/sectors" || true)"
+            CODE="$(curl -sS --max-time 3 -o /tmp/guzhi_health.json -w "%{http_code}" "http://127.0.0.1:${PORT}/api/health" || true)"
             if [ "$CODE" = "200" ]; then
               OK="1"
-              echo "健康检查通过：/api/fund/sectors"
+              echo "健康检查通过：/api/health"
               head -c 500 /tmp/guzhi_health.json || true
               echo ""
               break
