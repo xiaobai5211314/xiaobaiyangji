@@ -3491,7 +3491,7 @@
         </div>
     </div>
 
-    <script src="https://guzhicdn.21212121.xyzhttps://guzhicdn.21212121.xyz/vendor/vue.global.prod.min.js"></script>
+    <script src="/vendor/vue.global.prod.min.js"></script>
     <script>
         // 又拍云本地 vendor 优先；本地文件缺失时才回退外部 CDN，避免页面直接白屏。
         if (!window.Vue) {
@@ -4604,7 +4604,7 @@
                     }
                 };
                 let echartsLoadingPromise = null;
-                const ECHARTS_LOCAL_URL = 'https://guzhicdn.21212121.xyzhttps://guzhicdn.21212121.xyz/vendor/echarts.min.js';
+                const ECHARTS_LOCAL_URL = '/vendor/echarts.min.js';
                 const ECHARTS_FALLBACK_URL = 'https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js';
                 const ensureEcharts = () => {
                     if (window.echarts) return Promise.resolve(window.echarts);
@@ -4747,7 +4747,7 @@
                 };
 
 
-                const fetchAnalysis = async (force = false, keepSelectedDate = false) => {
+                const fetchAnalysis = async (force = false) => {
                     if (!currentUser.value) return;
                     if (analysisRecords.value.length > 0 && !force) return;
                     analysisLoading.value = true;
@@ -4757,7 +4757,7 @@
                         if (!res.ok) throw new Error(await res.text());
                         analysisRecords.value = await res.json();
                         const monthRecords = analysisTotalRecords.value.filter(r => String(r.recordDate || '').slice(0, 7) === analysisMonth.value);
-                        if (!keepSelectedDate && monthRecords.length > 0 && !monthRecords.some(r => String(r.recordDate || '').slice(0, 10) === selectedAnalysisDate.value)) {
+                        if (monthRecords.length > 0 && !monthRecords.some(r => String(r.recordDate || '').slice(0, 10) === selectedAnalysisDate.value)) {
                             selectedAnalysisDate.value = String(monthRecords[0].recordDate || '').slice(0, 10);
                         }
                     } catch (e) {
@@ -5041,6 +5041,4 @@
     </script>
 </body>
 </html>
-
-
 

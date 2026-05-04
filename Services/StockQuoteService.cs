@@ -83,6 +83,7 @@ namespace 估值助手.Services
             code = NormalizeCode(code);
             if (!IsStockCode(code)) return null;
 
+            var market = InferMarket(code);
             var client = _httpClientFactory.CreateClient("EastMoneyQuote");
             var fields = "f43,f44,f45,f46,f47,f48,f57,f58,f60,f107,f116,f169,f170,f86";
             var url = $"https://push2.eastmoney.com/api/qt/stock/get?secid={Uri.EscapeDataString(ToSecId(code))}&fields={Uri.EscapeDataString(fields)}";
@@ -96,15 +97,15 @@ namespace 估值助手.Services
 
             var quote = new StockQuoteDto(
                 Code: NormalizeCode(GetString(data, "f57", code)),
-                Market: InferMarket(code),
+                Market: market,
                 Name: GetString(data, "f58", code),
-                Price: Scale100(GetDecimal(data, "f43")),
-                ChangeAmount: Scale100(GetDecimal(data, "f169")),
-                ChangeRate: Scale100(GetDecimal(data, "f170")),
-                Open: Scale100(GetDecimal(data, "f46")),
-                High: Scale100(GetDecimal(data, "f44")),
-                Low: Scale100(GetDecimal(data, "f45")),
-                PreviousClose: Scale100(GetDecimal(data, "f60")),
+                Price: ScalePrice(GetDecimal(data, "f43"), market),
+                ChangeAmount: ScalePrice(GetDecimal(data, "f169"), market),
+                ChangeRate: ScalePercent(GetDecimal(data, "f170")),
+                Open: ScalePrice(GetDecimal(data, "f46"), market),
+                High: ScalePrice(GetDecimal(data, "f44"), market),
+                Low: ScalePrice(GetDecimal(data, "f45"), market),
+                PreviousClose: ScalePrice(GetDecimal(data, "f60"), market),
                 Volume: GetDecimal(data, "f47"),
                 Amount: GetDecimal(data, "f48"),
                 QuoteTime: DateTime.Now);
@@ -136,13 +137,11 @@ namespace 估值助手.Services
         public async Task<IReadOnlyList<StockQuoteDto>> GetQuotesAsync(IEnumerable<string> codes, CancellationToken cancellationToken = default)
         {
             var result = new List<StockQuoteDto>();
-
             foreach (var code in codes.Select(NormalizeCode).Where(IsStockCode).Distinct())
             {
                 var quote = await GetQuoteAsync(code, cancellationToken);
                 if (quote != null) result.Add(quote);
             }
-
             return result;
         }
 
@@ -221,11 +220,7 @@ namespace 估值助手.Services
                     var market = InferMarket(code);
                     if (type.Contains("港", StringComparison.OrdinalIgnoreCase)) market = "HK";
 
-                    result.Add(new StockSearchDto(
-                        code,
-                        market,
-                        GetString(item, "Name", code),
-                        type));
+                    result.Add(new StockSearchDto(code, market, GetString(item, "Name", code), type));
                 }
             }
 
@@ -342,16 +337,19 @@ namespace 估值助手.Services
 
             if (digits.Length == 5) return digits;
             if (digits.Length == 6) return digits;
-
-            if (digits.Length > 6)
-            {
-                return digits[^6..];
-            }
-
+            if (digits.Length > 6) return digits[^6..];
             return digits.PadLeft(6, '0');
         }
 
-        private static decimal Scale100(decimal value) => value == 0 ? 0 : Math.Round(value / 100m, 4);
+        private static decimal ScalePrice(decimal value, string market)
+        {
+            if (value == 0) return 0;
+            return market == "HK"
+                ? Math.Round(value / 1000m, 4)
+                : Math.Round(value / 100m, 4);
+        }
+
+        private static decimal ScalePercent(decimal value) => value == 0 ? 0 : Math.Round(value / 100m, 4);
         private static decimal ParseDecimal(string? value) => decimal.TryParse(value, out var d) ? d : 0;
 
         private static decimal GetDecimal(JsonElement element, string name)
