@@ -1277,7 +1277,7 @@ namespace 估值助手.Controllers
             {
                 var funds = await GetAllFundsAsync();
                 watch.Stop();
-                return Ok($"✅ 基金库装载成功！共 {funds.Count} 只。总耗时: {watch.ElapsedMilliseconds} 毫秒。");
+                return Ok($"✅ 基金库装载成功！共 {funds.Count} 只。总耗时: {watch.ElapsedMilliseconds} 毫秒");
             }
             catch (Exception ex)
             {
