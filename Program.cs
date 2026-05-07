@@ -119,7 +119,6 @@ var app = builder.Build();
 
 app.UseCors("ConfiguredOrigins");
 app.UseResponseCompression();
-app.UseMiddleware<估值助手.Middleware.CapitalFlowIndustryFilterMiddleware>();
 
 using (var scope = app.Services.CreateScope())
 {
