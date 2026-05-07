@@ -4,8 +4,20 @@
 		<TargetFramework>net8.0</TargetFramework>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
-	  <UserSecretsId>34e28e91-397c-4427-9665-4098bad9ce5e</UserSecretsId>
-  </PropertyGroup>
+		<UserSecretsId>34e28e91-397c-4427-9665-4098bad9ce5e</UserSecretsId>
+
+		<TypeScriptCompileBlocked>true</TypeScriptCompileBlocked>
+		<DefaultItemExcludes>
+			$(DefaultItemExcludes);
+			miniprogram\**;
+			docs\**;
+			node_modules\**;
+			dist\**;
+			unpackage\**;
+			.uni\**;
+			.hbuilderx\**
+		</DefaultItemExcludes>
+	</PropertyGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Baidu.AI" Version="4.15.16" />
@@ -16,6 +28,13 @@
 		<PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
 		<PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
 		<PackageReference Include="StackExchange.Redis" Version="2.12.8" />
-		<PackageReference Include="System.Text.RegularExpressions" Version="4.3.1" />		
+		<PackageReference Include="System.Text.RegularExpressions" Version="4.3.1" />
 	</ItemGroup>
+
+	<ItemGroup>
+		<Content Remove="miniprogram\**" />
+		<None Remove="miniprogram\**" />
+		<TypeScriptCompile Remove="miniprogram\**" />
+	</ItemGroup>
+
 </Project>

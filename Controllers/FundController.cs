@@ -1805,7 +1805,28 @@ namespace 估值助手.Controllers
             new() { Key = "convertible_bond", Name = "可转债", Include = new[] { "可转债", "转债" }, Exclude = Array.Empty<string>() },
             new() { Key = "mixed_bond", Name = "混债", Include = new[] { "混债", "二级债", "一级债", "固收+", "固收加" }, Exclude = Array.Empty<string>() },
             new() { Key = "money", Name = "货币基金", Include = new[] { "货币", "现金", "添利", "余额", "天天理财" }, Exclude = new[] { "股票", "混合" } },
-            new() { Key = "real_estate", Name = "地产", Include = new[] { "地产", "房地产", "沪深300地产", "地产等权" }, Exclude = new[] { "债", "货币" } }
+            new() { Key = "real_estate", Name = "地产", Include = new[] { "地产", "房地产", "沪深300地产", "地产等权" }, Exclude = new[] { "债", "货币" } },
+            new() { Key = "robot", Name = "机器人", Include = new[] { "机器人", "智能制造", "高端制造", "机床", "自动化", "工业母机", "人形机器人" }, Exclude = new[] { "债", "货币" } },
+
+new() { Key = "cpo", Name = "CPO", Include = new[] { "CPO", "光模块", "光通信", "通信设备", "数据中心", "算力" }, Exclude = new[] { "债", "货币" } },
+
+new() { Key = "communication", Name = "通信", Include = new[] { "通信", "通信设备", "5G", "光通信", "信息技术", "TMT" }, Exclude = new[] { "债", "货币" } },
+
+new() { Key = "hs_tech", Name = "恒生科技", Include = new[] { "恒生科技", "恒生互联网", "港股科技", "港股通科技", "中概互联", "港股互联网" }, Exclude = new[] { "债", "货币" } },
+
+new() { Key = "ai", Name = "人工智能", Include = new[] { "人工智能", "AI", "智能", "智能化", "算力", "大模型", "ChatGPT" }, Exclude = new[] { "债", "货币" } },
+
+new() { Key = "ai_app", Name = "AI应用", Include = new[] { "AI应用", "传媒", "游戏", "软件", "计算机", "云计算", "大数据", "数字经济" }, Exclude = new[] { "债", "货币" } },
+
+new() { Key = "big_tech", Name = "大科技", Include = new[] { "科技", "半导体", "芯片", "人工智能", "计算机", "通信", "电子", "软件", "云计算", "信息技术", "数字经济" }, Exclude = new[] { "债", "货币" } },
+
+new() { Key = "north_exchange", Name = "北证", Include = new[] { "北证", "北交所", "北证50", "专精特新" }, Exclude = new[] { "债", "货币" } },
+
+new() { Key = "consumer_electronics", Name = "消费电子", Include = new[] { "消费电子", "电子", "苹果", "智能终端", "智能汽车", "半导体", "芯片" }, Exclude = new[] { "债", "货币" } },
+
+new() { Key = "cloud", Name = "云计算", Include = new[] { "云计算", "计算机", "软件", "大数据", "数据中心", "算力", "信创" }, Exclude = new[] { "债", "货币" } },
+
+new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运输", "运输", "物流", "航运", "航空", "港口", "高速公路" }, Exclude = new[] { "债", "货币" } }
         };
 
         private static bool ContainsAny(string text, IEnumerable<string> words)
