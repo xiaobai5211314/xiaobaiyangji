@@ -1,0 +1,1 @@
+"use strict";const e=require("../request.js");exports.getArchives=function(t,n=120){return e.get(`/api/fund/get-archives?username=${encodeURIComponent(t)}&limit=${n}`,{loadingText:"读取档案"})},exports.getInsightsDashboard=function(t){return e.get(`/api/fund/insights/dashboard?username=${encodeURIComponent(t)}`,{loadingText:"读取盈亏"})};

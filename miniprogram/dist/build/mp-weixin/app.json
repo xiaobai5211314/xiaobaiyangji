@@ -1,0 +1,19 @@
+{
+  "pages": [
+    "pages/login/index",
+    "pages/home/index",
+    "pages/sector/index",
+    "pages/news/index",
+    "pages/analysis/index",
+    "pages/profile/index",
+    "pages/index-detail/index"
+  ],
+  "window": {
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "估值助手",
+    "navigationBarBackgroundColor": "#111827",
+    "backgroundColor": "#0f172a"
+  },
+  "permission": {},
+  "usingComponents": {}
+}
