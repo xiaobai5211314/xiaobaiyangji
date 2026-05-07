@@ -1198,74 +1198,197 @@ namespace 估值助手.Controllers
             }
         }
         [HttpGet("global-indices")]
-        public async Task<IActionResult> GetGlobalIndices()
+        public async Task<IActionResult> GetGlobalIndices([FromQuery] bool force = false)
         {
+            const string redisKey = "api:fund:global-indices:v1";
+            var jsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+            IDatabase? redisDb = null;
+
+            try
+            {
+                redisDb = _redis.GetDatabase();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[global-indices] Redis 不可用: {ex.Message}");
+            }
+
+            async Task<RedisValue> TryGetRedisAsync()
+            {
+                if (redisDb == null) return RedisValue.Null;
+                try { return await redisDb.StringGetAsync(redisKey); }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[global-indices] Redis 读取失败: {ex.Message}");
+                    return RedisValue.Null;
+                }
+            }
+
+            async Task TrySetRedisAsync(string json)
+            {
+                if (redisDb == null) return;
+                try { await redisDb.StringSetAsync(redisKey, json, GetExternalDataFreshTtl()); }
+                catch (Exception ex) { Console.WriteLine($"[global-indices] Redis 写入失败: {ex.Message}"); }
+            }
+
+            if (!force)
+            {
+                var cached = await TryGetRedisAsync();
+                if (cached.HasValue)
+                {
+                    Response.Headers["X-App-Cache"] = "redis";
+                    return Content(cached.ToString(), "application/json");
+                }
+            }
+
+            var stale = await TryGetRedisAsync();
             var indices = new[]
             {
-        new { name = "上证指数", secid = "1.000001" },
-        new { name = "科创50",   secid = "1.000688" },
-        new { name = "创业板指", secid = "0.399006" },
-        new { name = "恒生指数", secid = "124.HSI" },
-        new { name = "纳斯达克", secid = "105.IXIC" },
-        new { name = "标普500",  secid = "109.SPX" },
-        new { name = "道琼斯",   secid = "100.DJIA" }
-    };
+                new GlobalIndexDefinition("上证指数", "000001", "cn", new[] { "1.000001" }),
+                new GlobalIndexDefinition("科创50", "000688", "cn", new[] { "1.000688" }),
+                new GlobalIndexDefinition("创业板指", "399006", "cn", new[] { "0.399006" }),
+                new GlobalIndexDefinition("恒生指数", "HSI", "hk", new[] { "100.HSI", "124.HSI" }),
+                new GlobalIndexDefinition("纳斯达克", "NDX", "us", new[] { "100.NDX", "105.IXIC" }),
+                new GlobalIndexDefinition("标普500", "SPX", "us", new[] { "100.SPX", "109.SPX" }),
+                new GlobalIndexDefinition("道琼斯", "DJIA", "us", new[] { "100.DJIA" })
+            };
 
             var http = _httpClientFactory.CreateClient("EastMoneyQuote");
+            var tasks = indices.Select(idx => FetchGlobalIndexAsync(http, idx)).ToArray();
+            var results = await Task.WhenAll(tasks);
 
-            var tasks = indices.Select(async idx =>
+            if (!results.Any(item => item.Latest > 0 || item.Klines.Count > 0))
             {
-                var url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={idx.secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250";
+                if (stale.HasValue)
+                {
+                    Response.Headers["X-App-Cache"] = "stale";
+                    return Content(stale.ToString(), "application/json");
+                }
+
+                Response.Headers["X-App-Cache"] = "error";
+                return StatusCode(500, "大盘指数外部数据源暂不可用");
+            }
+
+            var json = JsonSerializer.Serialize(results, jsonOptions);
+            await TrySetRedisAsync(json);
+            Response.Headers["X-App-Cache"] = "build";
+            return Content(json, "application/json");
+        }
+
+        private sealed record GlobalIndexDefinition(string Name, string Code, string Market, string[] Secids);
+
+        private sealed class GlobalIndexKlineDto
+        {
+            public string Date { get; set; } = string.Empty;
+            public double Rate { get; set; }
+        }
+
+        private sealed class GlobalIndexDto
+        {
+            public string Name { get; set; } = string.Empty;
+            public string Code { get; set; } = string.Empty;
+            public string Market { get; set; } = string.Empty;
+            public string Secid { get; set; } = string.Empty;
+            public double Latest { get; set; }
+            public double Point { get; set; }
+            public double Close { get; set; }
+            public double TodayRate { get; set; }
+            public double YearRate { get; set; }
+            public List<GlobalIndexKlineDto> Klines { get; set; } = new();
+        }
+
+        private async Task<GlobalIndexDto> FetchGlobalIndexAsync(HttpClient http, GlobalIndexDefinition index)
+        {
+            foreach (var secid in index.Secids)
+            {
                 try
                 {
-                    var response = await http.GetStringAsync(url);
-                    using var doc = JsonDocument.Parse(response);
-
-                    if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind != JsonValueKind.Null)
-                    {
-                        if (data.TryGetProperty("klines", out var klines) && klines.GetArrayLength() > 0)
-                        {
-                            var klineArray = klines.EnumerateArray().Select(k => k.GetString()).ToArray();
-                            var latestItem = klineArray[^1].Split(',');
-                            var oldestItem = klineArray[0].Split(',');
-
-                            double latestClose = 0, todayRate = 0, oldestClose = 0;
-                            if (latestItem.Length > 2) double.TryParse(latestItem[2], out latestClose);
-                            if (latestItem.Length > 8) double.TryParse(latestItem[8], out todayRate);
-                            if (oldestItem.Length > 2) double.TryParse(oldestItem[2], out oldestClose);
-
-                            double yearRate = oldestClose > 0 ? Math.Round((latestClose - oldestClose) / oldestClose * 100, 2) : 0;
-
-                            var cleanKlines = klineArray.Reverse().Select(k =>
-                            {
-                                var p = k.Split(',');
-                                double rate = 0;
-                                if (p.Length > 8) double.TryParse(p[8], out rate);
-                                return (object)new { date = p[0], rate = rate };
-                            }).ToList();
-
-                            return new
-                            {
-                                name = idx.name,
-                                latest = latestClose,
-                                todayRate = todayRate,
-                                yearRate = yearRate,
-                                klines = cleanKlines
-                            };
-                        }
-                    }
-
-                    return new { name = $"{idx.name} (无数据)", latest = 0.0, todayRate = 0.0, yearRate = 0.0, klines = new List<object>() };
+                    var item = await FetchGlobalIndexBySecidAsync(http, index, secid);
+                    if (item != null) return item;
                 }
                 catch (Exception ex)
                 {
-                    string innerMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
-                    return new { name = $"{idx.name} (异常: {innerMsg})", latest = 0.0, todayRate = 0.0, yearRate = 0.0, klines = new List<object>() };
+                    Console.WriteLine($"[global-indices] {index.Name}({secid}) 拉取失败: {ex.Message}");
                 }
-            });
+            }
 
-            var results = await Task.WhenAll(tasks);
-            return Ok(results);
+            return BuildEmptyGlobalIndex(index);
+        }
+
+        private async Task<GlobalIndexDto?> FetchGlobalIndexBySecidAsync(HttpClient http, GlobalIndexDefinition index, string secid)
+        {
+            var url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250";
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var response = await http.GetStringAsync(url, cts.Token);
+            using var doc = JsonDocument.Parse(response);
+
+            if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null) return null;
+            if (!data.TryGetProperty("klines", out var klines) || klines.ValueKind != JsonValueKind.Array || klines.GetArrayLength() == 0) return null;
+
+            var klineArray = klines.EnumerateArray()
+                .Select(k => k.GetString())
+                .Where(k => !string.IsNullOrWhiteSpace(k))
+                .Select(k => k!)
+                .ToArray();
+            if (klineArray.Length == 0) return null;
+
+            var latestItem = klineArray[^1].Split(',');
+            var oldestItem = klineArray[0].Split(',');
+
+            double? latestClose = TryParseKlineDouble(latestItem, 2);
+            double? todayRate = TryParseKlineDouble(latestItem, 8);
+            double? oldestClose = TryParseKlineDouble(oldestItem, 2);
+            if (!latestClose.HasValue) return null;
+
+            double yearRate = oldestClose.HasValue && oldestClose.Value > 0
+                ? Math.Round((latestClose.Value - oldestClose.Value) / oldestClose.Value * 100, 2)
+                : 0;
+
+            return new GlobalIndexDto
+            {
+                Name = index.Name,
+                Code = index.Code,
+                Market = index.Market,
+                Secid = secid,
+                Latest = Math.Round(latestClose.Value, 2),
+                Point = Math.Round(latestClose.Value, 2),
+                Close = Math.Round(latestClose.Value, 2),
+                TodayRate = Math.Round(todayRate ?? 0, 2),
+                YearRate = yearRate,
+                Klines = klineArray.Reverse().Select(k =>
+                {
+                    var p = k.Split(',');
+                    return new GlobalIndexKlineDto
+                    {
+                        Date = p.Length > 0 ? p[0] : string.Empty,
+                        Rate = Math.Round(TryParseKlineDouble(p, 8) ?? 0, 2)
+                    };
+                }).ToList()
+            };
+        }
+
+        private static double? TryParseKlineDouble(string[] parts, int index)
+        {
+            if (index < 0 || index >= parts.Length) return null;
+            if (string.IsNullOrWhiteSpace(parts[index]) || parts[index] == "-") return null;
+            return double.TryParse(parts[index], out var value) ? value : null;
+        }
+
+        private static GlobalIndexDto BuildEmptyGlobalIndex(GlobalIndexDefinition index)
+        {
+            return new GlobalIndexDto
+            {
+                Name = index.Name,
+                Code = index.Code,
+                Market = index.Market,
+                Secid = index.Secids.FirstOrDefault() ?? string.Empty,
+                Latest = 0,
+                Point = 0,
+                Close = 0,
+                TodayRate = 0,
+                YearRate = 0,
+                Klines = new List<GlobalIndexKlineDto>()
+            };
         }
 
 

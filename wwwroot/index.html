@@ -3420,11 +3420,11 @@
                     <div v-if="isIndicesLoading" style="color: #94a3b8; text-align: center; margin-top: 50px;">📡 正在接入全球卫星数据...</div>
                     <div v-else style="overflow-y: auto; flex: 1; padding-right: 5px;">
                         <div style="display: flex; justify-content: space-between; color: #64748b; font-size: 12px; margin-bottom: 8px;"><span>指数名称</span><span style="text-align: right;">今日 / 近1年</span></div>
-                        <div v-for="item in globalIndices" :key="item.code" @click="viewIndexHistory(item)" style="display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px dashed #334155; cursor: pointer;">
-                            <div style="display: flex; flex-direction: column;"><span style="color: #f8fafc; font-weight: bold; font-size: 16px;">{{ item.name }}</span><span style="color: #94a3b8; font-size: 13px;">点位: {{ item.latest }}</span></div>
+                        <div v-for="item in globalIndices" :key="item.code || item.name" @click="viewIndexHistory(item)" style="display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px dashed #334155; cursor: pointer;">
+                            <div style="display: flex; flex-direction: column;"><span style="color: #f8fafc; font-weight: bold; font-size: 16px;">{{ item.name }}</span><span style="color: #94a3b8; font-size: 13px;">点位: {{ formatIndexPoint(item.latest) }}</span></div>
                             <div style="display: flex; flex-direction: column; align-items: flex-end;">
-                                <span :style="{ color: item.todayRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold', fontSize: '16px' }">今: {{ item.todayRate > 0 ? '+' : '' }}{{ item.todayRate }}%</span>
-                                <span :style="{ color: item.yearRate >= 0 ? '#ff4d4f' : '#10b981', fontSize: '13px', marginTop: '4px' }">1年: {{ item.yearRate > 0 ? '+' : '' }}{{ item.yearRate }}%</span>
+                                <span :style="{ color: item.todayRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold', fontSize: '16px' }">今: {{ formatIndexRate(item.todayRate) }}</span>
+                                <span :style="{ color: item.yearRate >= 0 ? '#ff4d4f' : '#10b981', fontSize: '13px', marginTop: '4px' }">1年: {{ formatIndexRate(item.yearRate) }}</span>
                             </div>
                         </div>
                     </div>
@@ -3438,6 +3438,7 @@
                         <span @click="historyModal.show = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
                     </div>
                     <div v-if="historyModal.isLoading" style="color: #4facfe; text-align: center; margin-top: 50px; font-weight: bold; letter-spacing: 1px;">📡 正在提取...</div>
+                    <div v-else-if="historyModal.data.length === 0" style="color: #64748b; text-align: center; margin-top: 50px;">暂无走势数据</div>
                     <div v-else style="overflow-y: auto; flex: 1; padding-right: 5px;">
                         <div style="display: flex; justify-content: space-between; color: #64748b; font-size: 13px; margin-bottom: 10px;"><span>日期</span><span>单日涨跌幅</span></div>
                         <div v-for="(item, index) in historyModal.data" :key="index" style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px dashed #334155;">
@@ -4305,34 +4306,30 @@
                     } catch (e) { if (!silent) showToast("🌐 指挥中心失联", "error"); }
                 };
 
-                const fetchGlobalIndices = async () => {
+                const formatIndexPoint = (value) => {
+                    const n = Number(value);
+                    return Number.isFinite(n) ? n.toFixed(2) : '--';
+                };
+
+                const formatIndexRate = (value) => {
+                    const n = Number(value);
+                    if (!Number.isFinite(n)) return '--';
+                    return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
+                };
+
+                const fetchGlobalIndices = async (force = false) => {
                     showGlobalIndices.value = true; isIndicesLoading.value = true;
-                    const indices = [{ name: '上证指数', secid: '1.000001' }, { name: '科创50', secid: '1.000688' }, { name: '创业板指', secid: '0.399006' }, { name: '恒生指数', secid: '100.HSI' }, { name: '纳斯达克', secid: '100.NDX' }, { name: '标普500', secid: '100.SPX' }, { name: '道琼斯', secid: '100.DJIA' }];
                     try {
-                        const fetchJSONP = (secid) => {
-                            return new Promise((resolve) => {
-                                const callbackName = 'jsonp_' + secid.replace(/\./g, '_');
-                                window[callbackName] = function (data) { resolve(data); try { delete window[callbackName]; const scriptNode = document.getElementById(callbackName); if (scriptNode) scriptNode.remove(); } catch (e) { } };
-                                const script = document.createElement('script'); script.id = callbackName; script.referrerPolicy = "no-referrer"; script.src = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250&cb=${callbackName}&_t=${Date.now()}`;
-                                script.onerror = () => resolve(null); document.body.appendChild(script);
-                            });
-                        };
-                        const tasks = indices.map(async idx => {
-                            const json = await fetchJSONP(idx.secid); if (!json || !json.data || !json.data.klines) return null;
-                            const klines = json.data.klines; if (klines.length === 0) return null;
-                            const latest = klines[klines.length - 1].split(','); const oldest = klines[0].split(',');
-                            const latestClose = parseFloat(latest[2]) || 0; const todayRate = parseFloat(latest[8]) || 0; const oldestClose = parseFloat(oldest[2]) || 1;
-                            const yearRate = ((latestClose - oldestClose) / oldestClose * 100).toFixed(2);
-                            return { name: idx.name, latest: latestClose, todayRate: todayRate, yearRate: parseFloat(yearRate), klines: klines.slice().reverse().map(k => { const p = k.split(','); return { date: p[0], rate: parseFloat(p[8]) || 0 }; }) };
-                        });
-                        const results = await Promise.all(tasks);
-                        globalIndices.value = globalIndices.value.map(item => { const found = results.find(r => r && r.name === item.name); return found ? { ...item, ...found } : item; });
-                    } catch (e) { } finally { isIndicesLoading.value = false; }
+                        const res = await apiFetch(`/api/fund/global-indices${force ? '?force=true' : ''}`, { cache: 'no-store' });
+                        if (!res.ok) throw new Error(await res.text());
+                        const data = await res.json();
+                        globalIndices.value = Array.isArray(data) ? data : [];
+                    } catch (e) { showToast("🌐 大盘数据读取失败", "error"); } finally { isIndicesLoading.value = false; }
                 };
 
                 const viewIndexHistory = (item) => {
-                    if (!item.klines || item.klines.length === 0) return showToast("暂无数据", "error");
-                    historyModal.show = true; historyModal.name = item.name; historyModal.isLoading = false; historyModal.data = item.klines;
+                    const rows = Array.isArray(item.klines) ? item.klines : (Array.isArray(item.trend) ? item.trend : []);
+                    historyModal.show = true; historyModal.name = item.name; historyModal.isLoading = false; historyModal.data = rows;
                 };
 
                 const fetchHistory = (code, name) => {
@@ -5058,7 +5055,7 @@
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
                     sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, isCapitalLoading, fetchCapitalFlow,
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, isDetailsLoading, expandedSectors, toggleSector,
-                    fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices,
+                    fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices, formatIndexPoint, formatIndexRate,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
                     analysisMonth, selectedAnalysisDate, analysisViewMode, analysisDetailMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, analysisProfitTop, analysisLossTop, analysisMonthTotal, fetchAnalysis, jumpToTodayAnalysis, todayDashStr,
                     assetMode, setAssetMode, stockHoldings, stockWatchList, stockSearchKeyword, stockSearchResults, stockOcrLoading, stockOcrPreview, selectedStock, stockKlinePeriod, stockKlinePeriods, stockChartRef, triggerStockOcr, handleStockOcrUpload, confirmStockOcr, loadStockDashboard, searchStocks, addStockWatch, openStockHoldingEditor, deleteStockHolding, deleteStockWatch, openStockDetail, switchStockKline, recalculateStockOcrItem, formatOcrNumber, signedOcrNumber, profitColor, dailyBattleReport, confidenceRows, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, calibrationRows,
@@ -5070,7 +5067,4 @@
     </script>
 </body>
 </html>
-
-
-
 

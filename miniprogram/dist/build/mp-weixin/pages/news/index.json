@@ -1,7 +1,0 @@
-{
-  "navigationBarTitleText": "资讯",
-  "enablePullDownRefresh": true,
-  "usingComponents": {
-    "app-tab-bar": "../../components/AppTabBar"
-  }
-}

@@ -1,1 +1,0 @@
-"use strict";Object.defineProperty(exports,Symbol.toStringTag,{value:"Module"});const e=require("./common/vendor.js"),o=require("./stores/session.js");Math;const r={onLaunch(){o.restoreSession()}};function t(){return{app:e.createSSRApp(r)}}t().app.mount("#app"),exports.createApp=t;

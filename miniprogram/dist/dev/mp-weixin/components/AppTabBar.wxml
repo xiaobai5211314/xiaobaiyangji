@@ -1,1 +1,0 @@
-<view class="app-tabbar data-v-64fe4807"><button wx:for="{{a}}" wx:for-item="item" wx:key="c" class="{{['data-v-64fe4807', 'tab-item', item.d]}}" bindtap="{{item.e}}"><text class="tab-icon data-v-64fe4807">{{item.a}}</text><text class="tab-label data-v-64fe4807">{{item.b}}</text></button></view>
