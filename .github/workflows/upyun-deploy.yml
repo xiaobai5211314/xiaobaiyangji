@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - gpt-two
+      - wechatapp
     paths:
       - 'wwwroot/index.html'
 
