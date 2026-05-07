@@ -3039,15 +3039,15 @@
                 <div class="glass-panel capital-flow-panel">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;">
                         <div>
-                            <div class="page-title" style="font-size:18px;">💧 行业/赛道主力资金</div>
-                            <div class="page-subtitle">{{ capitalFlowSource || '东方财富板块资金流向' }} · 已过滤指数、风格、事件标签 · {{ capitalFlowUpdatedAt || '待更新' }}</div>
+                            <div class="page-title" style="font-size:18px;">💧 行业板块主力资金</div>
+                            <div class="page-subtitle">{{ capitalFlowSource || '东方财富行业板块资金流向' }} · 已过滤概念/事件标签 · {{ capitalFlowUpdatedAt || '待更新' }}</div>
                         </div>
                         <button class="btn" @click="fetchCapitalFlow(true)">🔄</button>
                     </div>
                     <div v-if="isCapitalLoading" class="news-empty">📡 正在同步主力资金...</div>
                     <div v-else class="capital-two-col">
                         <div class="capital-box">
-                            <div class="capital-box-title"><span>🔴 行业/赛道流入</span><span style="color:#94a3b8;font-size:11px;">TOP {{ capitalFlowInRows.length }}</span></div>
+                            <div class="capital-box-title"><span>🔴 行业板块流入</span><span style="color:#94a3b8;font-size:11px;">TOP {{ capitalFlowInRows.length }}</span></div>
                             <div class="capital-row capital-head"><span>板块</span><span class="capital-value">净流入</span><span class="capital-value">净占比</span></div>
                             <div v-for="item in capitalFlowInRows.slice(0, 12)" :key="'in-'+item.code" class="capital-row">
                                 <div style="min-width:0;"><div class="capital-name">{{ item.name }}</div><div class="capital-sub">涨跌 {{ item.rate > 0 ? '+' : '' }}{{ item.rate }}%</div></div>
@@ -3056,7 +3056,7 @@
                             </div>
                         </div>
                         <div class="capital-box">
-                            <div class="capital-box-title"><span>🟢 行业/赛道流出</span><span style="color:#94a3b8;font-size:11px;">TOP {{ capitalFlowOutRows.length }}</span></div>
+                            <div class="capital-box-title"><span>🟢 行业板块流出</span><span style="color:#94a3b8;font-size:11px;">TOP {{ capitalFlowOutRows.length }}</span></div>
                             <div class="capital-row capital-head"><span>板块</span><span class="capital-value">净流出</span><span class="capital-value">净占比</span></div>
                             <div v-for="item in capitalFlowOutRows.slice(0, 12)" :key="'out-'+item.code" class="capital-row">
                                 <div style="min-width:0;"><div class="capital-name">{{ item.name }}</div><div class="capital-sub">涨跌 {{ item.rate > 0 ? '+' : '' }}{{ item.rate }}%</div></div>

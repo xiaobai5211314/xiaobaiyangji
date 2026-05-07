@@ -1197,75 +1197,248 @@ namespace 估值助手.Controllers
                 return StatusCode(500, $"自动清算引擎异常: {ex.Message}");
             }
         }
-        [HttpGet("global-indices")]
-        public async Task<IActionResult> GetGlobalIndices()
+        private const string GlobalIndicesCacheKey = "api:fund:global-indices:v1";
+
+        private sealed class GlobalIndexDefinition
         {
-            var indices = new[]
+            public string Name { get; init; } = string.Empty;
+            public string Code { get; init; } = string.Empty;
+            public string Market { get; init; } = string.Empty;
+            public string[] Secids { get; init; } = Array.Empty<string>();
+        }
+
+        private sealed class GlobalIndexKlineDto
+        {
+            public string Date { get; init; } = string.Empty;
+            public double Rate { get; init; }
+        }
+
+        private sealed class GlobalIndexDto
+        {
+            public string Name { get; init; } = string.Empty;
+            public string Code { get; init; } = string.Empty;
+            public string Market { get; init; } = string.Empty;
+            public string Secid { get; init; } = string.Empty;
+            public double Latest { get; init; }
+            public double Point { get; init; }
+            public double Close { get; init; }
+            public double TodayRate { get; init; }
+            public double YearRate { get; init; }
+            public List<GlobalIndexKlineDto> Klines { get; init; } = new();
+        }
+
+        private static readonly JsonSerializerOptions GlobalIndicesJsonOptions = new()
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
+
+        [HttpGet("global-indices")]
+        public async Task<IActionResult> GetGlobalIndices([FromQuery] bool force = false)
+        {
+            string? staleCache = await TryReadGlobalIndicesCacheAsync();
+            if (!force && !string.IsNullOrWhiteSpace(staleCache))
             {
-        new { name = "上证指数", secid = "1.000001" },
-        new { name = "科创50",   secid = "1.000688" },
-        new { name = "创业板指", secid = "0.399006" },
-        new { name = "恒生指数", secid = "124.HSI" },
-        new { name = "纳斯达克", secid = "105.IXIC" },
-        new { name = "标普500",  secid = "109.SPX" },
-        new { name = "道琼斯",   secid = "100.DJIA" }
-    };
+                Response.Headers["X-App-Cache"] = "redis";
+                return Content(staleCache, "application/json");
+            }
+
+            var definitions = new[]
+            {
+                new GlobalIndexDefinition { Name = "上证指数", Code = "000001", Market = "A股指数", Secids = new[] { "1.000001" } },
+                new GlobalIndexDefinition { Name = "科创50", Code = "000688", Market = "A股指数", Secids = new[] { "1.000688" } },
+                new GlobalIndexDefinition { Name = "创业板指", Code = "399006", Market = "A股指数", Secids = new[] { "0.399006" } },
+                new GlobalIndexDefinition { Name = "恒生指数", Code = "HSI", Market = "港股指数", Secids = new[] { "100.HSI", "124.HSI" } },
+                new GlobalIndexDefinition { Name = "纳斯达克", Code = "NDX", Market = "美股指数", Secids = new[] { "100.NDX", "105.IXIC" } },
+                new GlobalIndexDefinition { Name = "标普500", Code = "SPX", Market = "美股指数", Secids = new[] { "100.SPX", "109.SPX" } },
+                new GlobalIndexDefinition { Name = "道琼斯", Code = "DJIA", Market = "美股指数", Secids = new[] { "100.DJIA" } }
+            };
 
             var http = _httpClientFactory.CreateClient("EastMoneyQuote");
+            var results = (await Task.WhenAll(definitions.Select(idx => FetchGlobalIndexAsync(http, idx)))).ToList();
+            bool isComplete = IsCompleteGlobalIndicesResult(results);
 
-            var tasks = indices.Select(async idx =>
+            if (isComplete)
             {
-                var url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={idx.secid}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250";
+                await TryWriteGlobalIndicesCacheAsync(results);
+                Response.Headers["X-App-Cache"] = "build";
+                return Ok(results);
+            }
+
+            Console.WriteLine("[global-indices] build partial, skip redis write: " +
+                string.Join("; ", results.Where(x => x.Latest <= 0 || x.Klines.Count == 0).Select(x => $"{x.Name}/{x.Secid}/latest={x.Latest}/klines={x.Klines.Count}")));
+
+            if (!string.IsNullOrWhiteSpace(staleCache))
+            {
+                Response.Headers["X-App-Cache"] = "stale";
+                return Content(staleCache, "application/json");
+            }
+
+            Response.Headers["X-App-Cache"] = "partial";
+            return Ok(results);
+        }
+
+        private async Task<string?> TryReadGlobalIndicesCacheAsync()
+        {
+            try
+            {
+                var db = _redis.GetDatabase();
+                var cached = await db.StringGetAsync(GlobalIndicesCacheKey);
+                if (!cached.HasValue) return null;
+
+                string json = cached.ToString();
+                var result = JsonSerializer.Deserialize<List<GlobalIndexDto>>(json, GlobalIndicesJsonOptions);
+                if (result == null || !IsCompleteGlobalIndicesResult(result))
+                {
+                    Console.WriteLine("[global-indices] redis cache ignored: invalid or partial");
+                    return null;
+                }
+
+                return json;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[global-indices] redis read failed: {ex.Message}");
+                return null;
+            }
+        }
+
+        private async Task TryWriteGlobalIndicesCacheAsync(List<GlobalIndexDto> result)
+        {
+            try
+            {
+                var db = _redis.GetDatabase();
+                string json = JsonSerializer.Serialize(result, GlobalIndicesJsonOptions);
+                await db.StringSetAsync(GlobalIndicesCacheKey, json, GetExternalDataFreshTtl());
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[global-indices] redis write failed: {ex.Message}");
+            }
+        }
+
+        private static async Task<GlobalIndexDto> FetchGlobalIndexAsync(HttpClient http, GlobalIndexDefinition idx)
+        {
+            var failures = new List<string>();
+            foreach (string secid in idx.Secids)
+            {
                 try
                 {
-                    var response = await http.GetStringAsync(url);
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    string url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={Uri.EscapeDataString(secid)}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250";
+                    string response = await http.GetStringAsync(url, cts.Token);
                     using var doc = JsonDocument.Parse(response);
 
-                    if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind != JsonValueKind.Null)
+                    if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null)
                     {
-                        if (data.TryGetProperty("klines", out var klines) && klines.GetArrayLength() > 0)
-                        {
-                            var klineArray = klines.EnumerateArray().Select(k => k.GetString()).ToArray();
-                            var latestItem = klineArray[^1].Split(',');
-                            var oldestItem = klineArray[0].Split(',');
-
-                            double latestClose = 0, todayRate = 0, oldestClose = 0;
-                            if (latestItem.Length > 2) double.TryParse(latestItem[2], out latestClose);
-                            if (latestItem.Length > 8) double.TryParse(latestItem[8], out todayRate);
-                            if (oldestItem.Length > 2) double.TryParse(oldestItem[2], out oldestClose);
-
-                            double yearRate = oldestClose > 0 ? Math.Round((latestClose - oldestClose) / oldestClose * 100, 2) : 0;
-
-                            var cleanKlines = klineArray.Reverse().Select(k =>
-                            {
-                                var p = k.Split(',');
-                                double rate = 0;
-                                if (p.Length > 8) double.TryParse(p[8], out rate);
-                                return (object)new { date = p[0], rate = rate };
-                            }).ToList();
-
-                            return new
-                            {
-                                name = idx.name,
-                                latest = latestClose,
-                                todayRate = todayRate,
-                                yearRate = yearRate,
-                                klines = cleanKlines
-                            };
-                        }
+                        failures.Add($"{secid}: data=null");
+                        continue;
                     }
 
-                    return new { name = $"{idx.name} (无数据)", latest = 0.0, todayRate = 0.0, yearRate = 0.0, klines = new List<object>() };
+                    if (!data.TryGetProperty("klines", out var klines) || klines.ValueKind != JsonValueKind.Array || klines.GetArrayLength() == 0)
+                    {
+                        failures.Add($"{secid}: klines empty");
+                        continue;
+                    }
+
+                    var parsedKlines = new List<(string Date, double Close, double Rate)>();
+                    foreach (var kline in klines.EnumerateArray())
+                    {
+                        string? raw = kline.GetString();
+                        if (string.IsNullOrWhiteSpace(raw)) continue;
+
+                        var parts = raw.Split(',');
+                        if (parts.Length <= 8) continue;
+                        if (!TryParseInvariantDouble(parts[2], out double close)) continue;
+                        if (!TryParseInvariantDouble(parts[8], out double rate)) rate = 0;
+
+                        parsedKlines.Add((parts[0], close, Math.Round(rate, 2)));
+                    }
+
+                    if (parsedKlines.Count == 0)
+                    {
+                        failures.Add($"{secid}: parse empty");
+                        continue;
+                    }
+
+                    double latestClose = Math.Round(parsedKlines[^1].Close, 2);
+                    if (latestClose <= 0)
+                    {
+                        failures.Add($"{secid}: latest={latestClose}");
+                        continue;
+                    }
+
+                    double firstClose = parsedKlines[0].Close;
+                    double yearRate = firstClose > 0 ? Math.Round((latestClose - firstClose) / firstClose * 100, 2) : 0;
+                    double todayRate = parsedKlines[^1].Rate;
+
+                    return new GlobalIndexDto
+                    {
+                        Name = idx.Name,
+                        Code = idx.Code,
+                        Market = idx.Market,
+                        Secid = secid,
+                        Latest = latestClose,
+                        Point = latestClose,
+                        Close = latestClose,
+                        TodayRate = todayRate,
+                        YearRate = yearRate,
+                        Klines = parsedKlines.Select(x => new GlobalIndexKlineDto { Date = x.Date, Rate = x.Rate }).ToList()
+                    };
+                }
+                catch (OperationCanceledException ex)
+                {
+                    failures.Add($"{secid}: timeout {ex.Message}");
                 }
                 catch (Exception ex)
                 {
-                    string innerMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
-                    return new { name = $"{idx.name} (异常: {innerMsg})", latest = 0.0, todayRate = 0.0, yearRate = 0.0, klines = new List<object>() };
+                    failures.Add($"{secid}: {ex.Message}");
                 }
-            });
+            }
 
-            var results = await Task.WhenAll(tasks);
-            return Ok(results);
+            Console.WriteLine($"[global-indices] {idx.Name} failed: {string.Join(" | ", failures)}");
+            return new GlobalIndexDto
+            {
+                Name = idx.Name,
+                Code = idx.Code,
+                Market = idx.Market,
+                Secid = idx.Secids.FirstOrDefault() ?? string.Empty,
+                Latest = 0,
+                Point = 0,
+                Close = 0,
+                TodayRate = 0,
+                YearRate = 0,
+                Klines = new List<GlobalIndexKlineDto>()
+            };
+        }
+
+        private static bool TryParseInvariantDouble(string? value, out double result)
+        {
+            return double.TryParse(
+                value,
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out result);
+        }
+
+        private static bool IsCompleteGlobalIndicesResult(List<GlobalIndexDto> result)
+        {
+            var expectedNames = new HashSet<string>
+            {
+                "上证指数",
+                "科创50",
+                "创业板指",
+                "恒生指数",
+                "纳斯达克",
+                "标普500",
+                "道琼斯"
+            };
+
+            return result.Count == expectedNames.Count &&
+                   result.All(x =>
+                       expectedNames.Contains(x.Name) &&
+                       x.Latest > 0 &&
+                       x.Klines != null &&
+                       x.Klines.Count > 0);
         }
 
 
@@ -2238,12 +2411,51 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             return Math.Round(value, 0).ToString("0");
         }
 
+        private static readonly string[] CapitalFlowExcludedNameKeywords =
+        {
+            "概念",
+            "新高",
+            "近期新高",
+            "百日新高",
+            "融资",
+            "融券",
+            "沪股通",
+            "深股通",
+            "昨日涨停",
+            "昨日连板",
+            "预盈预增",
+            "预亏预减",
+            "ST",
+            "次新",
+            "高送转",
+            "机构重仓",
+            "MSCI",
+            "富时罗素",
+            "小米",
+            "华为",
+            "苹果",
+            "中特估",
+            "机器人概念",
+            "CPO概念",
+            "5G概念",
+            "锂矿概念",
+            "光纤概念",
+            "周期股"
+        };
+
+        private static bool IsIndustryCapitalFlowRow(CapitalFlowRowDto row)
+        {
+            if (string.IsNullOrWhiteSpace(row.Name)) return false;
+            return !CapitalFlowExcludedNameKeywords.Any(keyword =>
+                row.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+        }
+
         [HttpGet("capital-flow")]
         public async Task<IActionResult> GetCapitalFlow([FromQuery] bool force = false, [FromQuery] int limit = 30)
         {
             limit = Math.Clamp(limit, 10, 80);
-            string freshKey = $"CapitalFlowV2_{limit}";
-            string staleKey = $"CapitalFlowV2_{limit}_Stale";
+            string freshKey = $"CapitalFlowV3_{limit}";
+            string staleKey = $"CapitalFlowV3_{limit}_Stale";
 
             if (!force && _cache.TryGetValue(freshKey, out object fresh))
             {
@@ -2301,8 +2513,8 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
         private void SetCapitalFlowCache(int limit, object payload)
         {
-            _cache.Set($"CapitalFlowV2_{limit}", payload, GetExternalDataFreshTtl());
-            _cache.Set($"CapitalFlowV2_{limit}_Stale", payload, _staleExternalDataTtl);
+            _cache.Set($"CapitalFlowV3_{limit}", payload, GetExternalDataFreshTtl());
+            _cache.Set($"CapitalFlowV3_{limit}_Stale", payload, _staleExternalDataTtl);
         }
 
         private async Task<object> BuildCapitalFlowPayloadAsync(int limit)
@@ -2310,7 +2522,8 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             async Task<List<CapitalFlowRowDto>> FetchRowsAsync(int po)
             {
                 long ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                string url = $"https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz={limit}&po={po}&np=1&fltt=2&invt=2&fid=f62&fs=m:90+t:2,m:90+t:3&fields=f12,f14,f3,f62,f184,f66,f72&_={ts}";
+                int requestSize = Math.Clamp(limit * 5, 120, 300);
+                string url = $"https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz={requestSize}&po={po}&np=1&fltt=2&invt=2&fid=f62&fs=m:90+t:2,m:90+t:3&fields=f12,f14,f3,f62,f184,f66,f72&_={ts}";
                 using var handler = new HttpClientHandler { ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true };
                 using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(6) };
                 client.DefaultRequestVersion = new Version(1, 1);
@@ -2350,8 +2563,17 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 return result;
             }
 
-            var inflow = (await FetchRowsAsync(1)).OrderByDescending(x => x.MainNet).Take(limit).ToList();
-            var outflow = (await FetchRowsAsync(0)).OrderBy(x => x.MainNet).Take(limit).ToList();
+            var inflow = (await FetchRowsAsync(1))
+                .Where(IsIndustryCapitalFlowRow)
+                .OrderByDescending(x => x.MainNet)
+                .Take(limit)
+                .ToList();
+
+            var outflow = (await FetchRowsAsync(0))
+                .Where(IsIndustryCapitalFlowRow)
+                .OrderBy(x => x.MainNet)
+                .Take(limit)
+                .ToList();
 
             var rows = inflow.Concat(outflow)
                 .GroupBy(x => x.Code)
@@ -2361,7 +2583,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
             return new
             {
-                source = "东方财富数据中心-板块资金流向",
+                source = "东方财富行业板块资金流向",
                 updatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
                 rows,
                 inflow,
