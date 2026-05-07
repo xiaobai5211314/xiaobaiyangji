@@ -4,8 +4,26 @@
 		<TargetFramework>net8.0</TargetFramework>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
-	  <UserSecretsId>34e28e91-397c-4427-9665-4098bad9ce5e</UserSecretsId>
-  </PropertyGroup>
+
+		<!-- 阻止 Visual Studio / MSBuild 编译项目里的 TypeScript -->
+		<TypeScriptCompileBlocked>true</TypeScriptCompileBlocked>
+
+		<!-- 阻止 .NET SDK 默认把小程序目录当成项目内容 -->
+		<DefaultItemExcludes>
+			$(DefaultItemExcludes);
+			miniprogram\**;
+			docs\**;
+			node_modules\**;
+			dist\**;
+			unpackage\**;
+			.uni\**;
+			.hbuilderx\**;
+			*.ts;
+			*.vue;
+			*.tsx;
+			*.jsx
+		</DefaultItemExcludes>
+	</PropertyGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Baidu.AI" Version="4.15.16" />
@@ -16,6 +34,23 @@
 		<PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
 		<PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
 		<PackageReference Include="StackExchange.Redis" Version="2.12.8" />
-		<PackageReference Include="System.Text.RegularExpressions" Version="4.3.1" />		
+		<PackageReference Include="System.Text.RegularExpressions" Version="4.3.1" />
 	</ItemGroup>
+
+	<ItemGroup>
+		<Content Remove="miniprogram\**" />
+		<Content Remove="docs\**" />
+		<Content Remove="node_modules\**" />
+		<Content Remove="dist\**" />
+		<Content Remove="unpackage\**" />
+		<None Remove="miniprogram\**" />
+		<None Remove="docs\**" />
+		<None Remove="node_modules\**" />
+		<None Remove="dist\**" />
+		<None Remove="unpackage\**" />
+		<TypeScriptCompile Remove="miniprogram\**" />
+		<TypeScriptCompile Remove="**\*.ts" />
+		<TypeScriptCompile Remove="**\*.tsx" />
+	</ItemGroup>
+
 </Project>
