@@ -4965,8 +4965,14 @@
                 const renderChart = async (apiData) => {
                     if (!chartRef.value || activePage.value !== 'home') return;
                     try { await ensureEcharts(); } catch (e) { return; }
-                    const currentHash = JSON.stringify(apiData.map(f => ({ code: f.code, data: f.data?.slice(-5) })));
-                    if (currentHash === lastChartDataHash) { return; } lastChartDataHash = currentHash;
+                    const currentHash = JSON.stringify({
+                        privacyMode: privacyMode.value,
+                        isNight: isNight.value,
+                        data: apiData.map(f => ({ code: f.code, data: f.data?.slice(-5) }))
+                    });
+
+                    if (currentHash === lastChartDataHash) return;
+                    lastChartDataHash = currentHash;
                     if (!chartInstance.value) { chartInstance.value = echarts.init(chartRef.value, 'dark'); window.addEventListener('resize', handleResize); }
                     var holdAmounts = {}; var validData = apiData.filter(f => f.data && f.data.length > 1 && !f.isHoliday);
                     var seriesData = validData.map(fund => {
@@ -5003,7 +5009,11 @@
                     }, true);
                 };
 
-                watch(privacyMode, () => { if (fundsList.value.length > 0) renderChart(fundsList.value); });
+                watch(privacyMode, () => {
+                    if (fundsList.value.length > 0) {
+                        nextTick(() => renderChart(fundsList.value));
+                    }
+                });
 
                 const updateRadarMode = () => { let d = new Date(); let time = d.getHours() * 100 + d.getMinutes(); isNight.value = (d.getDay() === 0 || d.getDay() === 6 || time < 925 || time > 1605); };
 
