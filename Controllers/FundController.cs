@@ -889,7 +889,7 @@ namespace 估值助手.Controllers
                 Items = items,
                 Diagnostics = diagnostics
             };
-        }优化
+        }
         private static string FindPreviousFundName(List<string> texts, int amountIndex)
         {
             for (int k = amountIndex - 1; k >= 0; k--)
