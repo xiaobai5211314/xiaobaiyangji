@@ -643,6 +643,7 @@ namespace 估值助手.Controllers
         private async Task<OcrImportPreviewResponse> BuildOcrImportPreviewAsync(string username, IFormFile imageFile)
         {
             var allFunds = await GetAllFundsAsync();
+
             var userFundDict = await _context.MyFunds
                 .AsNoTracking()
                 .Where(f => f.Username == username)
@@ -654,18 +655,30 @@ namespace 估值助手.Controllers
                 .ToListAsync();
 
             var robustFundPool = allFunds?.ToList() ?? new List<FundInfoCache>();
+
             foreach (var uf in userFundDict.Values)
             {
                 if (!robustFundPool.Any(c => c.Code == uf.FundCode))
                 {
-                    robustFundPool.Add(new FundInfoCache { Code = uf.FundCode, Name = uf.FundName, NormalizedName = NormalizeFundName(uf.FundName) });
+                    robustFundPool.Add(new FundInfoCache
+                    {
+                        Code = uf.FundCode,
+                        Name = uf.FundName,
+                        NormalizedName = NormalizeFundName(uf.FundName)
+                    });
                 }
             }
+
             foreach (var correction in corrections)
             {
                 if (!robustFundPool.Any(c => c.Code == correction.FundCode))
                 {
-                    robustFundPool.Add(new FundInfoCache { Code = correction.FundCode, Name = correction.FundName, NormalizedName = NormalizeFundName(correction.FundName) });
+                    robustFundPool.Add(new FundInfoCache
+                    {
+                        Code = correction.FundCode,
+                        Name = correction.FundName,
+                        NormalizedName = NormalizeFundName(correction.FundName)
+                    });
                 }
             }
 
@@ -677,12 +690,15 @@ namespace 估值助手.Controllers
             using (Image image = Image.Load(inputStream))
             {
                 const int targetMaxWidth = 1080;
+
                 if (image.Width > targetMaxWidth)
                 {
                     int newHeight = (int)((double)image.Height / image.Width * targetMaxWidth);
                     image.Mutate(x => x.Resize(targetMaxWidth, newHeight));
                 }
+
                 image.Mutate(x => x.BackgroundColor(Color.White));
+
                 using var outputStream = new MemoryStream();
                 image.SaveAsJpeg(outputStream, new JpegEncoder { Quality = 60 });
                 finalProcessedBytes = outputStream.ToArray();
@@ -700,11 +716,21 @@ namespace 估值助手.Controllers
             var result = await ocrTask;
             diagnostics.Add($"OCR 耗时: {watch.ElapsedMilliseconds} ms");
 
-            var texts = (result["words_result"] as JArray)?.Select(x => x["words"]?.ToString().Trim() ?? string.Empty).Where(x => !string.IsNullOrWhiteSpace(x)).ToList() ?? new List<string>();
-            if (texts.Count == 0) throw new InvalidOperationException("OCR 未能识别出任何文字");
+            var texts = (result["words_result"] as JArray)?
+                .Select(x => x["words"]?.ToString().Trim() ?? string.Empty)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToList() ?? new List<string>();
+
+            if (texts.Count == 0)
+            {
+                throw new InvalidOperationException("OCR 未能识别出任何文字");
+            }
 
             var items = new List<OcrImportPreviewItem>();
             const string amountPattern = @"^\d[\d,]*\.\d{2}$";
+
+            var navClient = _httpClientFactory.CreateClient("EastMoney");
+            string settleDate = ChinaDateDash();
 
             for (int i = 1; i < texts.Count; i++)
             {
@@ -725,7 +751,11 @@ namespace 估值助手.Controllers
                 for (int j = 1; j <= 6 && i + j < texts.Count; j++)
                 {
                     string nextLine = texts[i + j].Trim();
-                    if (Regex.IsMatch(nextLine, @"[\u4e00-\u9fa5]{4,}") && !IsNoiseLine(nextLine)) break;
+
+                    if (Regex.IsMatch(nextLine, @"[\u4e00-\u9fa5]{4,}") && !IsNoiseLine(nextLine))
+                    {
+                        break;
+                    }
 
                     foreach (Match m in Regex.Matches(nextLine, @"([-+]?\d+[\.,]\d{2})\s*%"))
                     {
@@ -736,27 +766,44 @@ namespace 估值助手.Controllers
                     {
                         string valStr = m.Groups[1].Value.Replace(",", "");
                         double val = double.Parse(valStr);
+
                         if (valStr.StartsWith("+") || valStr.StartsWith("-"))
                         {
-                            if (!signedNumbers.Contains(val)) signedNumbers.Add(val);
+                            if (!signedNumbers.Contains(val))
+                            {
+                                signedNumbers.Add(val);
+                            }
                         }
                         else if (val != 0)
                         {
-                            if (!signedNumbers.Contains(val)) signedNumbers.Add(val);
-                            if (!signedNumbers.Contains(-val)) signedNumbers.Add(-val);
+                            if (!signedNumbers.Contains(val))
+                            {
+                                signedNumbers.Add(val);
+                            }
+
+                            if (!signedNumbers.Contains(-val))
+                            {
+                                signedNumbers.Add(-val);
+                            }
                         }
                     }
 
                     if (holdShares == 0 && Regex.IsMatch(nextLine, amountPattern))
                     {
                         string contextText = string.Join("", texts.Skip(Math.Max(0, i - 2)).Take(j + 3));
+
                         if (contextText.Contains("份额"))
                         {
                             double candidate = double.Parse(nextLine.Replace(",", ""));
-                            if (Math.Abs(candidate - holdAmount) > 10) holdShares = candidate;
+                            if (Math.Abs(candidate - holdAmount) > 10)
+                            {
+                                holdShares = candidate;
+                            }
                         }
                     }
-                    else if (string.IsNullOrEmpty(potentialFragment) && !Regex.IsMatch(nextLine, @"^[-\d\.,%+]+$") && !IsNoiseLine(nextLine))
+                    else if (string.IsNullOrEmpty(potentialFragment) &&
+                             !Regex.IsMatch(nextLine, @"^[-\d\.,%+]+$") &&
+                             !IsNoiseLine(nextLine))
                     {
                         potentialFragment = nextLine;
                     }
@@ -765,22 +812,30 @@ namespace 估值助手.Controllers
                 SelectIncomeCandidates(holdAmount, holdingRate, signedNumbers, out holdingIncome, out yesterdayIncome);
 
                 var best = MatchOcrFund(namePart, potentialFragment, robustFundPool, corrections);
+
                 if (best.fund == null || best.score <= 65 || holdAmount <= 0)
                 {
                     diagnostics.Add($"未确认: {namePart}，匹配分 {best.score:F1}");
                     continue;
                 }
 
-               
                 string calcMethod = "识别提取";
 
-                var navClient = _httpClientFactory.CreateClient("EastMoney");
-                string settleDate = ChinaDateDash();
+                double effectiveAmountForShares = holdAmount;
+
+                if (userFundDict.TryGetValue(best.fund.Code, out var existingFund) &&
+                    DateTime.TryParse(existingFund.LastTradeDate, out DateTime lastTradeDate) &&
+                    (ChinaNow() - lastTradeDate).TotalDays <= 4 &&
+                    existingFund.LastAddAmount > 0 &&
+                    holdAmount > existingFund.LastAddAmount)
+                {
+                    effectiveAmountForShares = holdAmount - existingFund.LastAddAmount;
+                }
 
                 double navCalibratedShares = await CalibrateSharesByOfficialNavAsync(
                     navClient,
                     best.fund.Code,
-                    holdAmount,
+                    effectiveAmountForShares,
                     settleDate);
 
                 if (navCalibratedShares > 0)
@@ -790,38 +845,40 @@ namespace 估值助手.Controllers
                 }
                 else if (holdShares == 0)
                 {
-                    double effectiveAmountForShares = holdAmount;
-
-                    if (userFundDict.TryGetValue(best.fund.Code, out var existingFund) &&
-                        DateTime.TryParse(existingFund.LastTradeDate, out DateTime lastTradeDate) &&
-                        (ChinaNow() - lastTradeDate).TotalDays <= 4 &&
-                        existingFund.LastAddAmount > 0 &&
-                        holdAmount > existingFund.LastAddAmount)
-                    {
-                        effectiveAmountForShares = holdAmount - existingFund.LastAddAmount;
-                    }
-
-                    holdShares = await DeduceSharesFromHistoryAsync(
+                    double calcShares = await DeduceSharesFromHistoryAsync(
                         best.fund.Code,
                         effectiveAmountForShares,
                         yesterdayIncome);
 
-                    calcMethod = holdShares > 0 ? "历史净值推演" : "未能推演";
+                    if (calcShares > 0)
+                    {
+                        holdShares = Math.Round(calcShares, 6);
+                        calcMethod = "历史净值推演";
+                    }
                 }
+                else
+                {
+                    holdShares = Math.Round(holdShares, 6);
+                }
+
                 items.Add(new OcrImportPreviewItem
                 {
-                    OcrName = string.IsNullOrWhiteSpace(potentialFragment) ? namePart : namePart + potentialFragment,
+                    OcrName = string.IsNullOrWhiteSpace(potentialFragment)
+                        ? namePart
+                        : namePart + potentialFragment,
                     Code = best.fund.Code,
                     Name = best.fund.Name,
                     MatchScore = Math.Round(best.score, 2),
                     HoldAmount = Math.Round(holdAmount, 2),
+                    CostAmount = holdingIncome != 0
+                        ? Math.Round(holdAmount - holdingIncome, 2)
+                        : Math.Round(holdAmount, 2),
                     HoldingIncome = Math.Round(holdingIncome, 2),
                     YesterdayIncome = Math.Round(yesterdayIncome, 2),
                     HoldingRate = Math.Round(holdingRate, 2),
-                    CostAmount = holdingIncome != 0 ? Math.Round(holdAmount - holdingIncome, 2) : holdAmount,
-                    HoldShares = Math.Round(holdShares, 2),
+                    HoldShares = Math.Round(holdShares, 6),
                     CalcMethod = calcMethod,
-                    Warning = best.score < 80 ? "匹配分较低，建议确认基金代码" : string.Empty
+                    Warning = holdShares > 0 ? string.Empty : "未能推算份额"
                 });
             }
 
@@ -832,8 +889,7 @@ namespace 估值助手.Controllers
                 Items = items,
                 Diagnostics = diagnostics
             };
-        }
-
+        }优化
         private static string FindPreviousFundName(List<string> texts, int amountIndex)
         {
             for (int k = amountIndex - 1; k >= 0; k--)
