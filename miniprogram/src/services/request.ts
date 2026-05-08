@@ -1,0 +1,208 @@
+import { getApiBaseUrl } from './config';
+
+export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
+
+export interface RequestOptions<TData = unknown> {
+  method?: RequestMethod;
+  data?: TData;
+  header?: Record<string, string>;
+  loadingText?: string;
+  silent?: boolean;
+  timeout?: number;
+  showErrorToast?: boolean;
+}
+
+export interface ApiErrorBody {
+  message?: string;
+  msg?: string;
+  title?: string;
+  error?: string;
+  [key: string]: unknown;
+}
+
+class ApiRequestError extends Error {
+  statusCode: number;
+  responseData: unknown;
+
+  constructor(message: string, statusCode: number, responseData: unknown) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.statusCode = statusCode;
+    this.responseData = responseData;
+  }
+}
+
+class NetworkRequestError extends Error {
+  errMsg: string;
+
+  constructor(message: string, errMsg: string) {
+    super(message);
+    this.name = 'NetworkRequestError';
+    this.errMsg = errMsg;
+  }
+}
+
+const DEBUG_REQUEST =
+  (import.meta as ImportMeta & { env?: { VITE_DEBUG_REQUEST?: string } }).env?.VITE_DEBUG_REQUEST === 'true';
+
+function normalizePath(path: string) {
+  return path.startsWith('/') ? path : `/${path}`;
+}
+
+function toQueryString(data: Record<string, unknown>) {
+  return Object.entries(data)
+    .filter(([, value]) => value !== undefined && value !== null)
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`)
+    .join('&');
+}
+
+function extractErrorMessage(data: unknown, fallback: string) {
+  if (typeof data === 'string' && data.trim()) return data;
+  if (data && typeof data === 'object') {
+    const body = data as ApiErrorBody;
+    return body.message || body.msg || body.title || body.error || fallback;
+  }
+
+  return fallback;
+}
+
+function extractErrMsg(error: unknown) {
+  if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === 'object' && 'errMsg' in error) {
+    return String((error as { errMsg?: unknown }).errMsg || '');
+  }
+
+  return String(error || '');
+}
+
+function isTimeoutError(error: unknown) {
+  const message = extractErrMsg(error);
+  return /timeout|time\s*out|超时/i.test(message);
+}
+
+function maskSensitiveString(value: string) {
+  return value.replace(/(password=)[^&]*/gi, '$1***');
+}
+
+function maskSensitiveData(data: unknown): unknown {
+  if (typeof data === 'string') return maskSensitiveString(data);
+  if (Array.isArray(data)) return data.map((item) => maskSensitiveData(item));
+  if (data && typeof data === 'object') {
+    return Object.fromEntries(
+      Object.entries(data as Record<string, unknown>).map(([key, value]) => {
+        if (/password|token|secret/i.test(key)) return [key, '***'];
+        return [key, maskSensitiveData(value)];
+      })
+    );
+  }
+
+  return data;
+}
+
+export async function request<TResponse = unknown, TData = unknown>(
+  path: string,
+  options: RequestOptions<TData> = {}
+): Promise<TResponse> {
+  const method = options.method ?? 'GET';
+  const loadingText = options.loadingText ?? '加载中';
+  const timeout = options.timeout ?? 20000;
+  const showErrorToast = options.showErrorToast ?? true;
+  const fullUrl = `${getApiBaseUrl()}${normalizePath(path)}`;
+  const header = {
+    Accept: 'application/json',
+    ...options.header
+  };
+
+  if (!options.silent) {
+    uni.showLoading({ title: loadingText, mask: true });
+  }
+
+  try {
+    const result = await new Promise<UniApp.RequestSuccessCallbackResult>((resolve, reject) => {
+      uni.request({
+        url: fullUrl,
+        method,
+        data: options.data as UniApp.RequestOptions['data'],
+        header,
+        timeout,
+        success: resolve,
+        fail: reject
+      });
+    });
+
+    const statusCode = Number(result.statusCode || 0);
+    if (DEBUG_REQUEST) {
+      console.info('[request]', { method, url: fullUrl, statusCode });
+    }
+
+    if (statusCode < 200 || statusCode >= 300) {
+      const message = extractErrorMessage(result.data, `请求失败：${statusCode}`);
+      console.error('[request:error]', { method, fullUrl, statusCode, message, data: result.data });
+      throw new ApiRequestError(message, statusCode, result.data);
+    }
+
+    return result.data as TResponse;
+  } catch (error) {
+    if (error instanceof ApiRequestError) {
+      throw error;
+    }
+
+    const timeoutError = isTimeoutError(error);
+    const message = timeoutError
+      ? '请求超时，请检查网络或后端接口'
+      : error instanceof Error
+        ? error.message
+        : '网络请求失败';
+
+    console.error('[request:fail]', {
+      method,
+      fullUrl,
+      errMsg: extractErrMsg(error),
+      message,
+      data: maskSensitiveData(options.data)
+    });
+    if (showErrorToast) {
+      uni.showToast({ title: message, icon: 'none', duration: 2600 });
+    }
+
+    throw new NetworkRequestError(message, extractErrMsg(error));
+  } finally {
+    if (!options.silent) {
+      uni.hideLoading();
+    }
+  }
+}
+
+export function get<TResponse = unknown>(path: string, options: Omit<RequestOptions, 'method'> = {}) {
+  return request<TResponse>(path, { ...options, method: 'GET' });
+}
+
+export function postJson<TResponse = unknown, TData = unknown>(
+  path: string,
+  data: TData,
+  options: Omit<RequestOptions<TData>, 'method' | 'data' | 'header'> = {}
+) {
+  return request<TResponse, TData>(path, {
+    ...options,
+    method: 'POST',
+    data,
+    header: {
+      'content-type': 'application/json'
+    }
+  });
+}
+
+export function postForm<TResponse = unknown>(
+  path: string,
+  data: Record<string, unknown>,
+  options: Omit<RequestOptions<string>, 'method' | 'data' | 'header'> = {}
+) {
+  return request<TResponse, string>(path, {
+    ...options,
+    method: 'POST',
+    data: toQueryString(data),
+    header: {
+      'content-type': 'application/x-www-form-urlencoded'
+    }
+  });
+}

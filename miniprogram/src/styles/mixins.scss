@@ -1,0 +1,50 @@
+@import './variables.scss';
+
+@mixin page-gradient {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(90, 167, 255, 0.18), transparent 34%),
+    radial-gradient(circle at 88% 10%, rgba(139, 124, 246, 0.2), transparent 32%),
+    linear-gradient(155deg, #08111f 0%, #101b38 44%, #20285f 100%);
+}
+
+@mixin glass-card {
+  background:
+    linear-gradient(145deg, rgba(35, 52, 91, 0.62), rgba(17, 27, 52, 0.48)),
+    $bg-panel;
+  border: 1rpx solid $card-border;
+  border-radius: $card-radius;
+  box-shadow: $card-shadow;
+}
+
+@mixin primary-gradient {
+  color: #fff;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.16), transparent 42%),
+    linear-gradient(135deg, $primary-blue 0%, $primary-purple 100%);
+  box-shadow: 0 14rpx 34rpx rgba(90, 167, 255, 0.24), inset 0 1rpx 0 rgba(255, 255, 255, 0.22);
+}
+
+@mixin finance-number {
+  font-family: "Microsoft YaHei", "微软雅黑", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+  font-weight: 900;
+  letter-spacing: 0;
+  white-space: nowrap;
+  word-break: keep-all;
+}
+
+@mixin tabbar-shell {
+  position: fixed;
+  left: 24rpx;
+  right: 24rpx;
+  bottom: calc(20rpx + env(safe-area-inset-bottom));
+  z-index: 50;
+  height: $tabbar-height;
+  box-sizing: border-box;
+  padding: 14rpx;
+  border-radius: 72rpx;
+  background:
+    radial-gradient(circle at 16% 0%, rgba(90, 167, 255, 0.18), transparent 36%),
+    rgba(10, 18, 36, 0.84);
+  border: 1rpx solid rgba(191, 219, 254, 0.16);
+  box-shadow: 0 24rpx 64rpx rgba(3, 7, 18, 0.42), inset 0 1rpx 0 rgba(255, 255, 255, 0.08);
+}

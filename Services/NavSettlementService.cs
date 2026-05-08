@@ -159,12 +159,36 @@ namespace 估值助手.Services
             };
         }
 
-        private static bool ApplyOneDaySettlement(MyFundConfig fund, double actualRate, string settleDate, double? exactProfit = null)
+        private static bool ApplyOneDaySettlement(
+      MyFundConfig fund,
+      double actualRate,
+      string settleDate,
+      double? exactProfit = null,
+      double? exactAssets = null)
         {
             double baseAmount = GetDailyBaseAmount(fund, settleDate);
             double pending = GetPendingTradeAmount(fund, settleDate);
-            double settledProfit = Math.Round(exactProfit ?? (baseAmount * (actualRate / 100.0)), 2);
-            double newHoldAmount = Math.Round(baseAmount + settledProfit + pending, 2);
+
+            double settledProfit;
+            double newHoldAmount;
+
+            if (exactAssets.HasValue && exactAssets.Value > 0)
+            {
+                // 关键：用“份额 × 官方单位净值”锚定今日真实市值，自动消除旧的几分钱尾差。
+                double exactMarketAmount = Math.Round(exactAssets.Value, 2);
+
+                newHoldAmount = Math.Round(exactMarketAmount + pending, 2);
+
+                // 如果能用单位净值差算出真实昨日收益，优先保留真实昨日收益。
+                // 如果没有 NavDiff，则用新市值反推收益。
+                settledProfit = Math.Round(exactProfit ?? (exactMarketAmount - baseAmount), 2);
+            }
+            else
+            {
+                // 没有份额或没有单位净值时，保留旧逻辑。
+                settledProfit = Math.Round(exactProfit ?? (baseAmount * (actualRate / 100.0)), 2);
+                newHoldAmount = Math.Round(baseAmount + settledProfit + pending, 2);
+            }
 
             bool changed = fund.LastSettledDate != settleDate ||
                            Math.Abs(fund.LastSettledRate - actualRate) > 0.0001 ||
@@ -177,10 +201,9 @@ namespace 估值助手.Services
             fund.LastSettledDate = settleDate;
             fund.LastSettledProfit = settledProfit;
             fund.LastSettledRate = Math.Round(actualRate, 4);
+
             return true;
         }
-
-
         private static double GetDailyBaseAmount(MyFundConfig fund, string settleDate)
         {
             double pending = GetPendingTradeAmount(fund, settleDate);
@@ -381,16 +404,34 @@ namespace 估值助手.Services
                     foreach (var holding in holdingUsers)
                     {
                         double? exactProfit = null;
-                        if (navSnapshot.NavDiff.HasValue)
+                        double? exactAssets = null;
+
+                        double effectiveShares = GetEffectiveShares(holding, settleDate);
+
+                        if (effectiveShares > 0)
                         {
-                            double effectiveShares = GetEffectiveShares(holding, settleDate);
-                            if (effectiveShares > 0) exactProfit = Math.Round(effectiveShares * navSnapshot.NavDiff.Value, 2);
+                            if (navSnapshot.NavDiff.HasValue)
+                            {
+                                exactProfit = Math.Round(effectiveShares * navSnapshot.NavDiff.Value, 2);
+                            }
+
+                            if (navSnapshot.TodayNav.HasValue && navSnapshot.TodayNav.Value > 0)
+                            {
+                                exactAssets = Math.Round(effectiveShares * navSnapshot.TodayNav.Value, 2);
+                            }
                         }
 
-                        if (ApplyOneDaySettlement(holding, actualRate, settleDate, exactProfit))
+                        if (ApplyOneDaySettlement(holding, actualRate, settleDate, exactProfit, exactAssets))
                         {
                             affectedUsers.Add(holding.Username);
-                            _logger.LogInformation("清算完成 {FundName}({Code}) {Rate}% [{Source}] -> {Amount}", holding.FundName, code, actualRate, navSnapshot.Source, holding.HoldAmount);
+                            _logger.LogInformation(
+                                "清算完成 {FundName}({Code}) {Rate}% [{Source}] -> {Amount} ExactAssets={ExactAssets}",
+                                holding.FundName,
+                                code,
+                                actualRate,
+                                navSnapshot.Source,
+                                holding.HoldAmount,
+                                exactAssets);
                         }
                     }
                 }

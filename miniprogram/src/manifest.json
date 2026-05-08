@@ -1,0 +1,37 @@
+{
+    "name" : "估值助手小程序",
+    "appid" : "__UNI__1C55542",
+    "description" : "估值助手微信小程序迁移",
+    "versionName" : "0.1.0",
+    "versionCode" : "1",
+    "mp-weixin" : {
+        "appid" : "wx762240eed778eb07",
+        "setting" : {
+            "urlCheck" : true,
+            "es6" : true,
+            "postcss" : true,
+            "minified" : true,
+            "ignoreDevUnusedFiles" : false,
+            "ignoreUploadUnusedFiles" : false
+        },
+        "usingComponents" : {},
+        "permission" : {},
+        "secureNetwork" : {
+            "enable" : false
+        }
+    },
+    "locale" : "zh-Hans",
+    "fallbackLocale" : "zh-Hans",
+    "h5" : {
+        "template" : "",
+        "router" : {
+            "mode" : "hash"
+        },
+        "sdkConfigs" : {
+            "maps" : {}
+        },
+        "devServer" : {
+            "https" : true
+        }
+    }
+}

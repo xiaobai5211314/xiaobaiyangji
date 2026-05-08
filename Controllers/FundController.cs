@@ -224,12 +224,36 @@ namespace 估值助手.Controllers
             return TryBuildOfficialNavSnapshot(dataArray, settleDate);
         }
 
-        private static bool ApplyOneDaySettlement(MyFundConfig fund, double actualRate, string settleDate, double? exactProfit = null)
+        private static bool ApplyOneDaySettlement(
+       MyFundConfig fund,
+       double actualRate,
+       string settleDate,
+       double? exactProfit = null,
+       double? exactAssets = null)
         {
             double baseAmount = GetDailyBaseAmount(fund, settleDate);
             double pending = GetPendingTradeAmount(fund, settleDate);
-            double settledProfit = Math.Round(exactProfit ?? (baseAmount * (actualRate / 100.0)), 2);
-            double newHoldAmount = Math.Round(baseAmount + settledProfit + pending, 2);
+
+            double settledProfit;
+            double newHoldAmount;
+
+            if (exactAssets.HasValue && exactAssets.Value > 0)
+            {
+                // 关键：用“份额 × 官方单位净值”锚定今日真实市值，自动消除旧的几分钱尾差。
+                double exactMarketAmount = Math.Round(exactAssets.Value, 2);
+
+                newHoldAmount = Math.Round(exactMarketAmount + pending, 2);
+
+                // 如果能用单位净值差算出真实昨日收益，优先保留真实昨日收益。
+                // 如果没有 NavDiff，则用新市值反推收益。
+                settledProfit = Math.Round(exactProfit ?? (exactMarketAmount - baseAmount), 2);
+            }
+            else
+            {
+                // 没有份额或没有单位净值时，保留旧逻辑。
+                settledProfit = Math.Round(exactProfit ?? (baseAmount * (actualRate / 100.0)), 2);
+                newHoldAmount = Math.Round(baseAmount + settledProfit + pending, 2);
+            }
 
             bool changed = fund.LastSettledDate != settleDate ||
                            Math.Abs(fund.LastSettledRate - actualRate) > 0.0001 ||
@@ -242,9 +266,9 @@ namespace 估值助手.Controllers
             fund.LastSettledDate = settleDate;
             fund.LastSettledProfit = settledProfit;
             fund.LastSettledRate = Math.Round(actualRate, 4);
+
             return true;
         }
-
         private void ClearTodayCache(string username)
         {
             if (string.IsNullOrWhiteSpace(username)) return;
@@ -1677,13 +1701,24 @@ namespace 估值助手.Controllers
                     foreach (var fund in group)
                     {
                         double? exactProfit = null;
-                        if (snapshot.NavDiff.HasValue)
+                        double? exactAssets = null;
+
+                        double effectiveShares = GetEffectiveShares(fund, settleDate);
+
+                        if (effectiveShares > 0)
                         {
-                            double effectiveShares = GetEffectiveShares(fund, settleDate);
-                            if (effectiveShares > 0) exactProfit = Math.Round(effectiveShares * snapshot.NavDiff.Value, 2);
+                            if (snapshot.NavDiff.HasValue)
+                            {
+                                exactProfit = Math.Round(effectiveShares * snapshot.NavDiff.Value, 2);
+                            }
+
+                            if (snapshot.TodayNav.HasValue && snapshot.TodayNav.Value > 0)
+                            {
+                                exactAssets = Math.Round(effectiveShares * snapshot.TodayNav.Value, 2);
+                            }
                         }
 
-                        if (ApplyOneDaySettlement(fund, snapshot.Rate, settleDate, exactProfit))
+                        if (ApplyOneDaySettlement(fund, snapshot.Rate, settleDate, exactProfit, exactAssets))
                         {
                             updated++;
                         }

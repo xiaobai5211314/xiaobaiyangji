@@ -1,0 +1,34 @@
+$bg-deep-blue: #09111f;
+$bg-purple: #20285f;
+$bg-panel: rgba(24, 36, 68, 0.54);
+$bg-panel-strong: rgba(12, 20, 39, 0.76);
+$card-border: rgba(191, 219, 254, 0.14);
+$card-shadow: 0 22rpx 58rpx rgba(3, 7, 18, 0.24), 0 10rpx 34rpx rgba(96, 165, 250, 0.08);
+
+$primary-blue: #5aa7ff;
+$primary-purple: #8b7cf6;
+$profit-red: #ff6b6b;
+$loss-green: #2dd4bf;
+$warning-yellow: #f59e0b;
+
+$text-white: #f8fafc;
+$text-muted: #91a4c2;
+$text-soft: #d2def0;
+
+$page-padding: 28rpx;
+$card-radius: 42rpx;
+$button-radius: 999rpx;
+$control-radius: 26rpx;
+$tabbar-height: 136rpx;
+$safe-bottom-padding: env(safe-area-inset-bottom);
+
+// Backward-compatible aliases for early page styles.
+$page-bg: $bg-deep-blue;
+$panel-bg: $bg-panel;
+$panel-border: $card-border;
+$text-primary: $text-white;
+$text-secondary: $text-muted;
+$accent: $primary-blue;
+$danger: $profit-red;
+$success: $loss-green;
+$warning: $warning-yellow;

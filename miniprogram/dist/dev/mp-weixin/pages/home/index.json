@@ -1,0 +1,8 @@
+{
+  "navigationBarTitleText": "估值助手",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "app-tab-bar": "../../components/AppTabBar",
+    "sparkline-chart": "../../components/SparklineChart"
+  }
+}
