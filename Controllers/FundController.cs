@@ -223,13 +223,29 @@ namespace 估值助手.Controllers
 
             return TryBuildOfficialNavSnapshot(dataArray, settleDate);
         }
+        private async Task<double> CalibrateSharesByOfficialNavAsync(
+    HttpClient client,
+    string fundCode,
+    double antAmount,
+    string settleDate)
+        {
+            if (string.IsNullOrWhiteSpace(fundCode) || antAmount <= 0) return 0;
 
+            var snapshot = await FetchOfficialNavSnapshotAsync(client, fundCode, settleDate);
+
+            if (snapshot?.TodayNav is > 0)
+            {
+                return Math.Round(antAmount / snapshot.TodayNav.Value, 6);
+            }
+
+            return 0;
+        }
         private static bool ApplyOneDaySettlement(
-       MyFundConfig fund,
-       double actualRate,
-       string settleDate,
-       double? exactProfit = null,
-       double? exactAssets = null)
+     MyFundConfig fund,
+     double actualRate,
+     string settleDate,
+     double? exactProfit = null,
+     double? exactAssets = null)
         {
             double baseAmount = GetDailyBaseAmount(fund, settleDate);
             double pending = GetPendingTradeAmount(fund, settleDate);
@@ -755,26 +771,43 @@ namespace 估值助手.Controllers
                     continue;
                 }
 
+               
                 string calcMethod = "识别提取";
-                if (holdShares == 0)
+
+                var navClient = _httpClientFactory.CreateClient("EastMoney");
+                string settleDate = ChinaDateDash();
+
+                double navCalibratedShares = await CalibrateSharesByOfficialNavAsync(
+                    navClient,
+                    best.fund.Code,
+                    holdAmount,
+                    settleDate);
+
+                if (navCalibratedShares > 0)
+                {
+                    holdShares = navCalibratedShares;
+                    calcMethod = "蚂蚁金额/官方净值校准";
+                }
+                else if (holdShares == 0)
                 {
                     double effectiveAmountForShares = holdAmount;
+
                     if (userFundDict.TryGetValue(best.fund.Code, out var existingFund) &&
                         DateTime.TryParse(existingFund.LastTradeDate, out DateTime lastTradeDate) &&
                         (ChinaNow() - lastTradeDate).TotalDays <= 4 &&
-                        existingFund.LastAddAmount > 0 && holdAmount > existingFund.LastAddAmount)
+                        existingFund.LastAddAmount > 0 &&
+                        holdAmount > existingFund.LastAddAmount)
                     {
                         effectiveAmountForShares = holdAmount - existingFund.LastAddAmount;
                     }
 
-                    double calcShares = await DeduceSharesFromHistoryAsync(best.fund.Code, effectiveAmountForShares, yesterdayIncome);
-                    if (calcShares > 0)
-                    {
-                        holdShares = calcShares;
-                        calcMethod = "净值推演";
-                    }
-                }
+                    holdShares = await DeduceSharesFromHistoryAsync(
+                        best.fund.Code,
+                        effectiveAmountForShares,
+                        yesterdayIncome);
 
+                    calcMethod = holdShares > 0 ? "历史净值推演" : "未能推演";
+                }
                 items.Add(new OcrImportPreviewItem
                 {
                     OcrName = string.IsNullOrWhiteSpace(potentialFragment) ? namePart : namePart + potentialFragment,
@@ -955,6 +988,7 @@ namespace 估值助手.Controllers
                 .ToDictionaryAsync(f => f.FundCode);
 
             int imported = 0;
+
             foreach (var item in items.Where(x => !string.IsNullOrWhiteSpace(x.Code) && x.HoldAmount > 0))
             {
                 if (userFundDict.TryGetValue(item.Code, out var exist))

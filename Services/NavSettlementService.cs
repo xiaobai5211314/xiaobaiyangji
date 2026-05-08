@@ -174,18 +174,13 @@ namespace 估值助手.Services
 
             if (exactAssets.HasValue && exactAssets.Value > 0)
             {
-                // 关键：用“份额 × 官方单位净值”锚定今日真实市值，自动消除旧的几分钱尾差。
                 double exactMarketAmount = Math.Round(exactAssets.Value, 2);
 
                 newHoldAmount = Math.Round(exactMarketAmount + pending, 2);
-
-                // 如果能用单位净值差算出真实昨日收益，优先保留真实昨日收益。
-                // 如果没有 NavDiff，则用新市值反推收益。
                 settledProfit = Math.Round(exactProfit ?? (exactMarketAmount - baseAmount), 2);
             }
             else
             {
-                // 没有份额或没有单位净值时，保留旧逻辑。
                 settledProfit = Math.Round(exactProfit ?? (baseAmount * (actualRate / 100.0)), 2);
                 newHoldAmount = Math.Round(baseAmount + settledProfit + pending, 2);
             }
