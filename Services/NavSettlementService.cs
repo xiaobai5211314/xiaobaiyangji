@@ -363,6 +363,14 @@ namespace 估值助手.Services
             var holdingsByCode = allHoldings.GroupBy(f => f.FundCode)
                 .ToDictionary(g => g.Key, g => g.ToList());
 
+            var todayRecordList = await dbContext.FundRecords
+                .Where(r => r.FetchTime >= todayStart && r.FetchTime < tomorrowStart && targetFunds.Contains(r.FundCode))
+                .ToListAsync(stoppingToken);
+
+            var latestTodayRecordByCode = todayRecordList
+                .GroupBy(r => r.FundCode)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).First());
+
             foreach (var code in targetFunds)
             {
                 if (stoppingToken.IsCancellationRequested) break;
@@ -389,10 +397,7 @@ namespace 估值助手.Services
 
                     double actualRate = navSnapshot.Rate;
 
-                    var targetRecord = await dbContext.FundRecords
-                        .Where(r => r.FundCode == code && r.FetchTime >= todayStart && r.FetchTime < tomorrowStart)
-                        .OrderByDescending(r => r.FetchTime)
-                        .FirstOrDefaultAsync(stoppingToken);
+                    latestTodayRecordByCode.TryGetValue(code, out var targetRecord);
 
                     if (targetRecord != null)
                     {
@@ -446,9 +451,7 @@ namespace 估值助手.Services
 
             if (affectedUsers.Count > 0)
             {
-                var todayRecords = await dbContext.FundRecords
-                    .Where(r => r.FetchTime >= todayStart && r.FetchTime < tomorrowStart)
-                    .ToListAsync(stoppingToken);
+                var todayRecords = todayRecordList;
 
                 // 优化4：批量查询所有受影响用户的基金
                 var allUserFunds = await dbContext.MyFunds

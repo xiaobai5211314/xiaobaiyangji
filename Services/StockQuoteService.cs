@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
 using 估值助手.Models;
 
 namespace 估值助手.Services
@@ -53,7 +54,7 @@ namespace 估值助手.Services
         private readonly AppDbContext _context;
         private readonly ILogger<EastmoneyStockQuoteService> _logger;
         private readonly IMemoryCache _cache;
-        private readonly IServiceProvider _serviceProvider;
+        private readonly IServiceScopeFactory _scopeFactory;
         private readonly SemaphoreSlim _saveSemaphore = new(1, 1);
 
         public EastmoneyStockQuoteService(
@@ -61,13 +62,13 @@ namespace 估值助手.Services
             AppDbContext context, 
             ILogger<EastmoneyStockQuoteService> logger,
             IMemoryCache cache,
-            IServiceProvider serviceProvider)
+            IServiceScopeFactory scopeFactory)
         {
             _httpClientFactory = httpClientFactory;
             _context = context;
             _logger = logger;
             _cache = cache;
-            _serviceProvider = serviceProvider;
+            _scopeFactory = scopeFactory;
         }
 
         public string InferMarket(string code)
@@ -137,11 +138,12 @@ namespace 估值助手.Services
             // 异步保存快照（不阻塞主流程）
             _ = Task.Run(async () =>
             {
-                await _saveSemaphore.WaitAsync(cancellationToken);
+                await _saveSemaphore.WaitAsync();
                 try
                 {
-                    using var scope = _serviceProvider.CreateScope();
+                    using var scope = _scopeFactory.CreateScope();
                     var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                    using var saveCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
                     context.StockQuoteSnapshots.Add(new StockQuoteSnapshot
                     {
                         StockCode = quote.Code,
@@ -159,7 +161,7 @@ namespace 估值助手.Services
                         QuoteTime = quote.QuoteTime,
                         CreatedAt = DateTime.Now
                     });
-                    await context.SaveChangesAsync(cancellationToken);
+                    await context.SaveChangesAsync(saveCts.Token);
                 }
                 catch (Exception ex)
                 {
@@ -169,7 +171,7 @@ namespace 估值助手.Services
                 {
                     _saveSemaphore.Release();
                 }
-            }, cancellationToken);
+            });
 
             return quote;
         }
@@ -187,6 +189,15 @@ namespace 估值助手.Services
                 try
                 {
                     return await GetQuoteAsync(code, cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "查询股票行情失败：{Code}", code);
+                    return null;
                 }
                 finally
                 {
