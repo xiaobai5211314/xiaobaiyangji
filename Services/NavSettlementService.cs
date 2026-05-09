@@ -355,6 +355,14 @@ namespace 估值助手.Services
                 .Distinct()
                 .ToListAsync(stoppingToken);
 
+            // 优化3：一次性获取所有持仓，避免N+1查询
+            var allHoldings = await dbContext.MyFunds
+                .Where(f => targetFunds.Contains(f.FundCode))
+                .ToListAsync(stoppingToken);
+
+            var holdingsByCode = allHoldings.GroupBy(f => f.FundCode)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
             foreach (var code in targetFunds)
             {
                 if (stoppingToken.IsCancellationRequested) break;
@@ -392,41 +400,41 @@ namespace 估值助手.Services
                         targetRecord.DiffRate = Math.Round(actualRate - targetRecord.EstimatedRate, 2);
                     }
 
-                    var holdingUsers = await dbContext.MyFunds
-                        .Where(f => f.FundCode == code)
-                        .ToListAsync(stoppingToken);
-
-                    foreach (var holding in holdingUsers)
+                    // 使用预加载的持仓数据
+                    if (holdingsByCode.TryGetValue(code, out var holdingUsers))
                     {
-                        double? exactProfit = null;
-                        double? exactAssets = null;
-
-                        double effectiveShares = GetEffectiveShares(holding, settleDate);
-
-                        if (effectiveShares > 0)
+                        foreach (var holding in holdingUsers)
                         {
-                            if (navSnapshot.NavDiff.HasValue)
+                            double? exactProfit = null;
+                            double? exactAssets = null;
+
+                            double effectiveShares = GetEffectiveShares(holding, settleDate);
+
+                            if (effectiveShares > 0)
                             {
-                                exactProfit = Math.Round(effectiveShares * navSnapshot.NavDiff.Value, 2);
+                                if (navSnapshot.NavDiff.HasValue)
+                                {
+                                    exactProfit = Math.Round(effectiveShares * navSnapshot.NavDiff.Value, 2);
+                                }
+
+                                if (navSnapshot.TodayNav.HasValue && navSnapshot.TodayNav.Value > 0)
+                                {
+                                    exactAssets = Math.Round(effectiveShares * navSnapshot.TodayNav.Value, 2);
+                                }
                             }
 
-                            if (navSnapshot.TodayNav.HasValue && navSnapshot.TodayNav.Value > 0)
+                            if (ApplyOneDaySettlement(holding, actualRate, settleDate, exactProfit, exactAssets))
                             {
-                                exactAssets = Math.Round(effectiveShares * navSnapshot.TodayNav.Value, 2);
+                                affectedUsers.Add(holding.Username);
+                                _logger.LogInformation(
+                                    "清算完成 {FundName}({Code}) {Rate}% [{Source}] -> {Amount} ExactAssets={ExactAssets}",
+                                    holding.FundName,
+                                    code,
+                                    actualRate,
+                                    navSnapshot.Source,
+                                    holding.HoldAmount,
+                                    exactAssets);
                             }
-                        }
-
-                        if (ApplyOneDaySettlement(holding, actualRate, settleDate, exactProfit, exactAssets))
-                        {
-                            affectedUsers.Add(holding.Username);
-                            _logger.LogInformation(
-                                "清算完成 {FundName}({Code}) {Rate}% [{Source}] -> {Amount} ExactAssets={ExactAssets}",
-                                holding.FundName,
-                                code,
-                                actualRate,
-                                navSnapshot.Source,
-                                holding.HoldAmount,
-                                exactAssets);
                         }
                     }
                 }
@@ -442,15 +450,22 @@ namespace 估值助手.Services
                     .Where(r => r.FetchTime >= todayStart && r.FetchTime < tomorrowStart)
                     .ToListAsync(stoppingToken);
 
+                // 优化4：批量查询所有受影响用户的基金
+                var allUserFunds = await dbContext.MyFunds
+                    .Where(f => affectedUsers.Contains(f.Username))
+                    .ToListAsync(stoppingToken);
+
+                var userFundsDict = allUserFunds.GroupBy(f => f.Username)
+                    .ToDictionary(g => g.Key, g => g.ToList());
+
                 foreach (var username in affectedUsers)
                 {
-                    var userFunds = await dbContext.MyFunds
-                        .Where(f => f.Username == username)
-                        .ToListAsync(stoppingToken);
-
-                    var rows = BuildArchiveRowsFromCurrentHoldings(username, todayStart, userFunds, todayRecords);
-                    await UpsertDailyArchivesAsync(dbContext, username, todayStart, rows, stoppingToken);
-                    ClearTodayCacheForUser(username, settleDate);
+                    if (userFundsDict.TryGetValue(username, out var userFunds))
+                    {
+                        var rows = BuildArchiveRowsFromCurrentHoldings(username, todayStart, userFunds, todayRecords);
+                        await UpsertDailyArchivesAsync(dbContext, username, todayStart, rows, stoppingToken);
+                        ClearTodayCacheForUser(username, settleDate);
+                    }
                 }
             }
 

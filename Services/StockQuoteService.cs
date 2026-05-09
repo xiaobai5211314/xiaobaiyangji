@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using 估值助手.Models;
 
 namespace 估值助手.Services
@@ -45,15 +46,28 @@ namespace 估值助手.Services
     public sealed class EastmoneyStockQuoteService : IStockQuoteService
     {
         private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+        private static readonly TimeSpan _quoteCacheTtl = TimeSpan.FromSeconds(30);
+        private static readonly TimeSpan _snapshotSaveDelay = TimeSpan.FromMilliseconds(100);
+        
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly AppDbContext _context;
         private readonly ILogger<EastmoneyStockQuoteService> _logger;
+        private readonly IMemoryCache _cache;
+        private readonly IServiceProvider _serviceProvider;
+        private readonly SemaphoreSlim _saveSemaphore = new(1, 1);
 
-        public EastmoneyStockQuoteService(IHttpClientFactory httpClientFactory, AppDbContext context, ILogger<EastmoneyStockQuoteService> logger)
+        public EastmoneyStockQuoteService(
+            IHttpClientFactory httpClientFactory, 
+            AppDbContext context, 
+            ILogger<EastmoneyStockQuoteService> logger,
+            IMemoryCache cache,
+            IServiceProvider serviceProvider)
         {
             _httpClientFactory = httpClientFactory;
             _context = context;
             _logger = logger;
+            _cache = cache;
+            _serviceProvider = serviceProvider;
         }
 
         public string InferMarket(string code)
@@ -83,10 +97,17 @@ namespace 估值助手.Services
             code = NormalizeCode(code);
             if (!IsStockCode(code)) return null;
 
+            // 检查缓存
+            var cacheKey = $"quote_{code}";
+            if (_cache.TryGetValue<StockQuoteDto>(cacheKey, out var cachedQuote))
+            {
+                return cachedQuote;
+            }
+
             var market = InferMarket(code);
             var client = _httpClientFactory.CreateClient("EastMoneyQuote");
-            var fields = "f43,f44,f45,f46,f47,f48,f57,f58,f60,f107,f116,f169,f170,f86";
-            var url = $"https://push2.eastmoney.com/api/qt/stock/get?secid={Uri.EscapeDataString(ToSecId(code))}&fields={Uri.EscapeDataString(fields)}";
+            var fieldsCache = "f43,f44,f45,f46,f47,f48,f57,f58,f60,f107,f116,f169,f170,f86";
+            var url = $"https://push2.eastmoney.com/api/qt/stock/get?secid={Uri.EscapeDataString(ToSecId(code))}&fields={Uri.EscapeDataString(fieldsCache)}";
 
             using var response = await client.GetAsync(url, cancellationToken);
             response.EnsureSuccessStatusCode();
@@ -110,39 +131,71 @@ namespace 估值助手.Services
                 Amount: GetDecimal(data, "f48"),
                 QuoteTime: DateTime.Now);
 
-            _context.StockQuoteSnapshots.Add(new StockQuoteSnapshot
-            {
-                StockCode = quote.Code,
-                Market = quote.Market,
-                StockName = quote.Name,
-                LatestPrice = quote.Price,
-                ChangeAmount = quote.ChangeAmount,
-                ChangeRate = quote.ChangeRate,
-                OpenPrice = quote.Open,
-                HighPrice = quote.High,
-                LowPrice = quote.Low,
-                PreviousClose = quote.PreviousClose,
-                Volume = quote.Volume,
-                Amount = quote.Amount,
-                QuoteTime = quote.QuoteTime,
-                CreatedAt = DateTime.Now
-            });
+            // 缓存结果
+            _cache.Set(cacheKey, quote, _quoteCacheTtl);
 
-            try { await _context.SaveChangesAsync(cancellationToken); }
-            catch (Exception ex) { _logger.LogWarning(ex, "保存股票行情快照失败：{Code}", code); }
+            // 异步保存快照（不阻塞主流程）
+            _ = Task.Run(async () =>
+            {
+                await _saveSemaphore.WaitAsync(cancellationToken);
+                try
+                {
+                    using var scope = _serviceProvider.CreateScope();
+                    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                    context.StockQuoteSnapshots.Add(new StockQuoteSnapshot
+                    {
+                        StockCode = quote.Code,
+                        Market = quote.Market,
+                        StockName = quote.Name,
+                        LatestPrice = quote.Price,
+                        ChangeAmount = quote.ChangeAmount,
+                        ChangeRate = quote.ChangeRate,
+                        OpenPrice = quote.Open,
+                        HighPrice = quote.High,
+                        LowPrice = quote.Low,
+                        PreviousClose = quote.PreviousClose,
+                        Volume = quote.Volume,
+                        Amount = quote.Amount,
+                        QuoteTime = quote.QuoteTime,
+                        CreatedAt = DateTime.Now
+                    });
+                    await context.SaveChangesAsync(cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "保存股票行情快照失败：{Code}", code);
+                }
+                finally
+                {
+                    _saveSemaphore.Release();
+                }
+            }, cancellationToken);
 
             return quote;
         }
 
         public async Task<IReadOnlyList<StockQuoteDto>> GetQuotesAsync(IEnumerable<string> codes, CancellationToken cancellationToken = default)
         {
-            var result = new List<StockQuoteDto>();
-            foreach (var code in codes.Select(NormalizeCode).Where(IsStockCode).Distinct())
+            var normalizedCodes = codes.Select(NormalizeCode).Where(IsStockCode).Distinct().ToList();
+            if (normalizedCodes.Count == 0) return Array.Empty<StockQuoteDto>();
+            
+            // 并行请求，限制并发数避免过载
+            var semaphore = new SemaphoreSlim(10);
+            var tasks = normalizedCodes.Select(async code =>
             {
-                var quote = await GetQuoteAsync(code, cancellationToken);
-                if (quote != null) result.Add(quote);
-            }
-            return result;
+                await semaphore.WaitAsync(cancellationToken);
+                try
+                {
+                    return await GetQuoteAsync(code, cancellationToken);
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+            
+            var quotes = await Task.WhenAll(tasks);
+            return quotes.Where(q => q != null).ToList()!;
         }
 
         public async Task<IReadOnlyList<StockKLineDto>> GetKLinesAsync(string code, string period, CancellationToken cancellationToken = default)
