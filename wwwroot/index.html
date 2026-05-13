@@ -3005,7 +3005,7 @@
             <div v-show="activePage === 'sector'" class="app-page">
                 <div class="page-topbar glass-panel">
                     <div><div class="page-title">📈 行情 / 板块基金</div><div class="page-subtitle">{{ sectorSource || '板块基金池 · 实时估值均值' }} · {{ sectorUpdatedAt || '待更新' }}</div></div>
-                    <div class="mini-action-grid" style="grid-template-columns:repeat(2,minmax(0,1fr));min-width:180px;"><button class="btn" @click="refreshSectorPage(true)">🔄 刷新</button></div>
+                    <div class="mini-action-grid" style="grid-template-columns:repeat(2,minmax(0,1fr));min-width:180px;"><button class="btn" @click="refreshSectorPage(true)">🔄 刷新</button><button class="btn" @click="fetchGlobalIndices(false)">🌍 大盘</button></div>
                 </div>
                 <div class="sector-page-layout">
                     <div class="glass-panel" style="padding:16px;">
