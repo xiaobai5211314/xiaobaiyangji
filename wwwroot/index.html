@@ -3005,7 +3005,7 @@
             <div v-show="activePage === 'sector'" class="app-page">
                 <div class="page-topbar glass-panel">
                     <div><div class="page-title">📈 行情 / 板块基金</div><div class="page-subtitle">{{ sectorSource || '板块基金池 · 实时估值均值' }} · {{ sectorUpdatedAt || '待更新' }}</div></div>
-                    <div class="mini-action-grid" style="grid-template-columns:repeat(2,minmax(0,1fr));min-width:180px;"><button class="btn" @click="fetchSectors(true, false)">🔄 刷新</button><button class="btn" @click="fetchGlobalIndices(false)">🌍 大盘</button></div>
+                    <div class="mini-action-grid" style="grid-template-columns:repeat(2,minmax(0,1fr));min-width:180px;"><button class="btn" @click="refreshSectorPage(true)">🔄 刷新</button></div>
                 </div>
                 <div class="sector-page-layout">
                     <div class="glass-panel" style="padding:16px;">
@@ -3093,7 +3093,7 @@
             </div>
 
             <div v-show="activePage === 'analysis'" class="app-page">
-                <div class="page-topbar glass-panel"><div><div class="page-title">📊 盈亏分析</div><div class="page-subtitle">每日战报、月历、盈利/亏损排行</div></div><div class="analysis-toolbar"><input type="month" v-model="analysisMonth" @change="fetchAnalysis(true)"><select v-model="analysisViewMode"><option value="profit">金额</option><option value="rate">收益率</option></select><button class="btn" @click="fetchAnalysis(true)">🔄</button></div></div>
+                <div class="page-topbar glass-panel"><div><div class="page-title">📊 盈亏分析</div><div class="page-subtitle">每日战报、月历、盈利/亏损排行</div></div><div class="analysis-toolbar"><input type="month" v-model="analysisMonth" @change="fetchAnalysis(true)"><select v-model="analysisViewMode"><option value="profit">金额</option><option value="rate">收益率</option></select><button class="btn" @click="refreshAnalysisPage(true)">🔄</button></div></div>
                 <div class="feature-grid">
                     <div class="glass-panel feature-card"><div class="feature-title">🧾 每日收盘战报</div><div class="feature-subtitle">{{ selectedAnalysisDate }} · {{ dailyBattleReport.summary }}</div><div class="report-line"><span>今日收益</span><strong :style="{color:totalTodayProfit>=0?'#ff4d4f':'#10b981'}">{{ dailyBattleReport.todayProfitText }}</strong></div><div class="report-line"><span>贡献核心</span><strong style="color:#ff4d4f;">{{ dailyBattleReport.bestName }}</strong></div><div class="report-line"><span>风险拖累</span><strong style="color:#10b981;">{{ dailyBattleReport.worstName }}</strong></div></div>
                     <div class="glass-panel feature-card"><div class="feature-title">🧭 回本总览</div><div class="feature-subtitle">全部未回本持仓，按回本所需涨幅排序。</div><div class="compact-scroll-list" style="margin-top:8px;max-height:170px;"><div v-if="recoveryWatchList.length===0" class="feature-subtitle" style="padding:10px 0;">当前没有需要回本的持仓。</div><div v-for="fund in recoveryWatchList" :key="'rw-'+fund.code" class="report-line"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;">{{ fund.name }}</span><strong style="color:#fbbf24;">{{ Number(fund.breakEvenRate || 0).toFixed(2) }}%</strong></div></div></div>
@@ -4568,10 +4568,12 @@
                         if (cached) applySectorPayload(cached);
                     }
                     if (openModal) showSectorRadar.value = true;
-                    isSectorLoading.value = sectorTopList.value.length === 0;
+                    isSectorLoading.value = force || sectorTopList.value.length === 0;
                     expandedSectors.value = new Set();
                     try {
-                        const res = await fetch(`${API_BASE}/api/fund/sectors${force ? '?force=true' : ''}`);
+                        const res = await fetch(`${API_BASE}/api/fund/sectors?force=${force ? 'true' : 'false'}&_t=${Date.now()}`, {
+                            cache: 'no-store'
+                        });
                         if (!res.ok) throw new Error(await res.text());
                         const data = await res.json();
                         applySectorPayload(data);
@@ -4677,7 +4679,18 @@
                         clearTimeout(timeoutId);
                     }
                 };
+                const refreshSectorPage = async (force = true) => {
+                    if (isSectorLoading.value || isCapitalLoading.value) return;
 
+                    try {
+                        await Promise.all([
+                            fetchSectors(force, false),
+                            fetchCapitalFlow(force)
+                        ]);
+                    } catch (e) {
+                        showToast('🚨 板块刷新失败', 'error');
+                    }
+                };
                 const refreshNow = async (force = true) => {
                     if (pullRefresh.loading || (assetMode.value === 'fund' && isFetchingData)) return;
                     pullRefresh.loading = true;
@@ -4765,7 +4778,26 @@
                     }
                 };
 
+                const refreshAnalysisPage = async (force = true) => {
+                    if (analysisLoading.value || isFetchingData) return;
 
+                    analysisLoading.value = true;
+
+                    try {
+                        if (force) {
+                            await syncRealNavIfNeeded();
+                            await fetchData({ force: true, silent: true });
+                            await saveDailyArchive(true);
+                        }
+
+                        await fetchAnalysis(true);
+                        showToast('✅ 盈亏数据已刷新', 'success');
+                    } catch (e) {
+                        showToast('📊 盈亏刷新失败', 'error');
+                    } finally {
+                        analysisLoading.value = false;
+                    }
+                };
                 const fetchAnalysis = async (force = false, options = {}) => {
                     if (!currentUser.value) return;
                     const keepSelectedDate = options === true || !!options.keepSelectedDate;
@@ -5059,7 +5091,7 @@
                 onUnmounted(() => { if (timer) clearInterval(timer); window.removeEventListener('resize', handleResize); document.removeEventListener('visibilitychange', handleVisibilityChange); window.removeEventListener('touchstart', onPullStart); window.removeEventListener('touchmove', onPullMove); window.removeEventListener('touchend', onPullEnd); if (chartInstance.value) chartInstance.value.dispose(); if (stockChartInstance.value) stockChartInstance.value.dispose(); });
 
                 return {
-                    toasts, isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, activePage, switchPage, showProfileModal, userAvatar, smartOcrBusy, smartOcrText,
+                    toasts, isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, refreshSectorPage, activePage, switchPage, showProfileModal, userAvatar, smartOcrBusy, smartOcrText,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
                     handleLogin, handleRegister, handleLogout, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
@@ -5067,7 +5099,7 @@
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, isDetailsLoading, expandedSectors, toggleSector,
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices, formatIndexPoint, formatIndexRate,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
-                    analysisMonth, selectedAnalysisDate, analysisViewMode, analysisDetailMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, analysisProfitTop, analysisLossTop, analysisMonthTotal, fetchAnalysis, jumpToTodayAnalysis, todayDashStr,
+                    analysisMonth, selectedAnalysisDate, analysisViewMode, analysisDetailMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, analysisProfitTop, analysisLossTop, analysisMonthTotal, fetchAnalysis, refreshAnalysisPage, jumpToTodayAnalysis, todayDashStr,
                     assetMode, setAssetMode, stockHoldings, stockWatchList, stockSearchKeyword, stockSearchResults, stockOcrLoading, stockOcrPreview, selectedStock, stockKlinePeriod, stockKlinePeriods, stockChartRef, triggerStockOcr, handleStockOcrUpload, confirmStockOcr, loadStockDashboard, searchStocks, addStockWatch, openStockHoldingEditor, deleteStockHolding, deleteStockWatch, openStockDetail, switchStockKline, recalculateStockOcrItem, formatOcrNumber, signedOcrNumber, profitColor, dailyBattleReport, confidenceRows, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, calibrationRows,
                     globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, saveDailyArchive, ocrModal,
                     reduceModal, openReduceModal, handleReducePosition, addModal, openAddModal, handleAddPosition
