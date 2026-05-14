@@ -3,11 +3,11 @@ Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 const common_vendor = require("./common/vendor.js");
 const stores_session = require("./stores/session.js");
 if (!Math) {
-  "./pages/login/index.js";
   "./pages/home/index.js";
   "./pages/sector/index.js";
   "./pages/news/index.js";
   "./pages/analysis/index.js";
+  "./pages/login/index.js";
   "./pages/profile/index.js";
   "./pages/index-detail/index.js";
 }

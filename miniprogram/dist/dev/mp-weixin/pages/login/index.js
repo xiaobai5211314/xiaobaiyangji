@@ -51,7 +51,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         form.password = "";
         common_vendor.index.reLaunch({ url: "/pages/home/index" });
       } catch (error) {
-        console.error("[login:submit]", error);
+        console.warn("[login:submit]", error);
         errorMessage.value = getErrorMessage(error);
       } finally {
         submitting.value = false;
@@ -68,7 +68,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         form.password = "";
         common_vendor.index.showToast({ title: "注册成功，请登录", icon: "none" });
       } catch (error) {
-        console.error("[login:register]", error);
+        console.warn("[login:register]", error);
         errorMessage.value = getErrorMessage(error);
       } finally {
         registering.value = false;

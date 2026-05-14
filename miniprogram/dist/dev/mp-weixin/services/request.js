@@ -27,6 +27,9 @@ class NetworkRequestError extends Error {
   }
 }
 const DEBUG_REQUEST = (define_import_meta_env_default == null ? void 0 : define_import_meta_env_default.VITE_DEBUG_REQUEST) === "true";
+const GET_CACHE_TTL = 6e4;
+const getCache = /* @__PURE__ */ new Map();
+const inFlightGets = /* @__PURE__ */ new Map();
 function normalizePath(path) {
   return path.startsWith("/") ? path : `/${path}`;
 }
@@ -79,14 +82,26 @@ async function request(path, options = {}) {
   const timeout = options.timeout ?? 2e4;
   const showErrorToast = options.showErrorToast ?? true;
   const fullUrl = `${services_config.getApiBaseUrl()}${normalizePath(path)}`;
+  const cacheKey = `${method}:${fullUrl}`;
+  const canUseCache = method === "GET" && options.silent !== false && !/[?&]force=true\b/i.test(fullUrl) && !/[?&]_t=/.test(fullUrl);
   const header = {
     Accept: "application/json",
     ...options.header
   };
+  if (canUseCache) {
+    const cached = getCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data;
+    }
+    const pending = inFlightGets.get(cacheKey);
+    if (pending) {
+      return pending;
+    }
+  }
   if (!options.silent) {
     common_vendor.index.showLoading({ title: loadingText, mask: true });
   }
-  try {
+  const executor = (async () => {
     const result = await new Promise((resolve, reject) => {
       common_vendor.index.request({
         url: fullUrl,
@@ -104,17 +119,26 @@ async function request(path, options = {}) {
     }
     if (statusCode < 200 || statusCode >= 300) {
       const message = extractErrorMessage(result.data, `请求失败：${statusCode}`);
-      console.error("[request:error]", { method, fullUrl, statusCode, message, data: result.data });
+      console.warn("[request:error]", { method, fullUrl, statusCode, message, data: result.data });
       throw new ApiRequestError(message, statusCode, result.data);
     }
+    if (canUseCache) {
+      getCache.set(cacheKey, { expiresAt: Date.now() + GET_CACHE_TTL, data: result.data });
+    }
     return result.data;
+  })();
+  if (canUseCache) {
+    inFlightGets.set(cacheKey, executor);
+  }
+  try {
+    return await executor;
   } catch (error) {
     if (error instanceof ApiRequestError) {
       throw error;
     }
     const timeoutError = isTimeoutError(error);
     const message = timeoutError ? "请求超时，请检查网络或后端接口" : error instanceof Error ? error.message : "网络请求失败";
-    console.error("[request:fail]", {
+    console.warn("[request:fail]", {
       method,
       fullUrl,
       errMsg: extractErrMsg(error),
@@ -126,6 +150,9 @@ async function request(path, options = {}) {
     }
     throw new NetworkRequestError(message, extractErrMsg(error));
   } finally {
+    if (canUseCache) {
+      inFlightGets.delete(cacheKey);
+    }
     if (!options.silent) {
       common_vendor.index.hideLoading();
     }

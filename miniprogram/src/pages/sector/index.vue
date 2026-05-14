@@ -156,6 +156,8 @@ const loading = ref(false);
 const sectorPayload = ref<SectorRadarResponse>({});
 const flowPayload = ref<CapitalFlowResponse>({});
 const indices = ref<GlobalIndexItem[]>([]);
+const PAGE_CACHE_TTL = 60000;
+const loadedAt = ref(0);
 const DEBUG_FIELD_AUDIT =
   (import.meta as ImportMeta & { env?: { VITE_DEBUG_MARKET_INDEX?: string } }).env?.VITE_DEBUG_MARKET_INDEX === 'true';
 
@@ -214,25 +216,36 @@ onPullDownRefresh(async () => {
 
 async function loadData(force: boolean) {
   if (loading.value) return;
+  const hasPageData = allSectors.value.length > 0 || flowRows.value.length > 0 || indices.value.length > 0;
+  if (!force && hasPageData && Date.now() - loadedAt.value < PAGE_CACHE_TTL) return;
+
   loading.value = true;
   try {
-    const [sectors, flow, globalIndexRows] = await Promise.all([
-      getSectors(force).catch((error) => {
-        console.warn('[sector:sectors]', error);
-        return {} as SectorRadarResponse;
-      }),
-      getCapitalFlow(force, 100).catch((error) => {
-        console.warn('[sector:capital-flow]', error);
-        return {} as CapitalFlowResponse;
-      }),
-      getGlobalIndices(force).catch((error) => {
-        console.warn('[sector:global-indices]', error);
-        return [] as GlobalIndexItem[];
-      })
+    const [sectorsResult, flowResult, indicesResult] = await Promise.allSettled([
+      getSectors(force),
+      getCapitalFlow(force, 100),
+      getGlobalIndices(force)
     ]);
-    sectorPayload.value = sectors || {};
-    flowPayload.value = flow || {};
-    indices.value = Array.isArray(globalIndexRows) ? globalIndexRows : [];
+
+    if (sectorsResult.status === 'fulfilled') {
+      sectorPayload.value = sectorsResult.value || {};
+    } else {
+      console.warn('[sector:sectors]', sectorsResult.reason);
+    }
+
+    if (flowResult.status === 'fulfilled') {
+      flowPayload.value = flowResult.value || {};
+    } else {
+      console.warn('[sector:capital-flow]', flowResult.reason);
+    }
+
+    if (indicesResult.status === 'fulfilled') {
+      indices.value = Array.isArray(indicesResult.value) ? indicesResult.value : [];
+    } else {
+      console.warn('[sector:global-indices]', indicesResult.reason);
+    }
+
+    loadedAt.value = Date.now();
     logGlobalIndicesAudit(indices.value);
   } finally {
     loading.value = false;
@@ -438,7 +451,8 @@ function logGlobalIndicesAudit(rows: GlobalIndexItem[]) {
 .board-card,
 .index-card {
   background:
-    radial-gradient(circle at 12% 8%, rgba(90, 167, 255, 0.16), transparent 36%),
+    radial-gradient(circle at 14% 0%, rgba(255, 95, 162, 0.12), transparent 34%),
+    radial-gradient(circle at 92% 6%, rgba(56, 189, 248, 0.1), transparent 32%),
     linear-gradient(145deg, rgba(34, 49, 86, 0.58), rgba(17, 27, 52, 0.46));
 }
 
@@ -462,6 +476,17 @@ function logGlobalIndicesAudit(rows: GlobalIndexItem[]) {
   align-items: center;
   justify-content: space-between;
   gap: 18rpx;
+}
+
+.list-head {
+  padding: 26rpx;
+  border-radius: 38rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.1);
+  background:
+    radial-gradient(circle at 14% 0%, $soft-pink, transparent 30%),
+    radial-gradient(circle at 86% 4%, $soft-cyan, transparent 30%),
+    rgba(18, 28, 56, 0.7);
+  box-shadow: 0 18rpx 48rpx rgba(3, 7, 18, 0.2);
 }
 
 .hero-title {
@@ -515,7 +540,7 @@ function logGlobalIndicesAudit(rows: GlobalIndexItem[]) {
 .rank-badge {
   width: 42rpx;
   height: 42rpx;
-  border-radius: 18rpx;
+  border-radius: 20rpx;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -523,11 +548,11 @@ function logGlobalIndicesAudit(rows: GlobalIndexItem[]) {
   color: #fff;
   font-size: 22rpx;
   font-weight: 900;
-  background: rgba(255, 107, 107, 0.18);
+  background: linear-gradient(135deg, rgba(255, 95, 162, 0.24), rgba(139, 92, 246, 0.18));
 }
 
 .loss-badge {
-  background: rgba(45, 212, 191, 0.18);
+  background: linear-gradient(135deg, rgba(45, 212, 191, 0.18), rgba(56, 189, 248, 0.16));
 }
 
 .row-main {
@@ -581,6 +606,7 @@ function logGlobalIndicesAudit(rows: GlobalIndexItem[]) {
   display: flex;
   flex-direction: column;
   gap: 14rpx;
+  border-radius: 36rpx;
 }
 
 .index-group {
@@ -601,8 +627,8 @@ function logGlobalIndicesAudit(rows: GlobalIndexItem[]) {
   padding: 9rpx 20rpx;
   border-radius: 999rpx;
   color: #deebff;
-  background: rgba(90, 167, 255, 0.12);
-  border: 1rpx solid rgba(191, 219, 254, 0.14);
+  background: linear-gradient(135deg, rgba(255, 95, 162, 0.14), rgba(139, 92, 246, 0.16), rgba(56, 189, 248, 0.12));
+  border: 1rpx solid rgba(255, 255, 255, 0.12);
   font-size: 21rpx;
   font-weight: 900;
 }

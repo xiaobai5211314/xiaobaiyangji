@@ -52,7 +52,7 @@ const rawValues = computed(() => {
     .filter((point) => Number.isFinite(point));
 });
 
-const values = computed(() => smoothValues(downsample(rawValues.value, 96)));
+const values = computed(() => smoothValues(downsample(rawValues.value, 72)));
 const chartPoints = computed(() => normalizePoints(values.value));
 const hasData = computed(() => chartPoints.value.length > 1);
 const emptyText = computed(() => props.emptyText);
@@ -166,8 +166,11 @@ function clamp(value: number, min: number, max: number) {
   width: 100%;
   height: 140rpx;
   overflow: hidden;
-  border-radius: 18rpx;
-  background: rgba(15, 23, 42, 0.32);
+  border-radius: 24rpx;
+  background:
+    radial-gradient(circle at 14% 0%, rgba(255, 95, 162, 0.08), transparent 32%),
+    radial-gradient(circle at 88% 0%, rgba(56, 189, 248, 0.08), transparent 30%),
+    rgba(15, 23, 42, 0.32);
 }
 
 .sparkline-plot {

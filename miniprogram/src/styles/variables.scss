@@ -1,9 +1,16 @@
 $bg-deep-blue: #09111f;
-$bg-purple: #20285f;
-$bg-panel: rgba(24, 36, 68, 0.54);
-$bg-panel-strong: rgba(12, 20, 39, 0.76);
-$card-border: rgba(191, 219, 254, 0.14);
-$card-shadow: 0 22rpx 58rpx rgba(3, 7, 18, 0.24), 0 10rpx 34rpx rgba(96, 165, 250, 0.08);
+$bg-purple: #1f2760;
+$rainbow-pink: #ff5fa2;
+$rainbow-purple: #8b5cf6;
+$rainbow-cyan: #38bdf8;
+$soft-pink: rgba(255, 95, 162, 0.18);
+$soft-purple: rgba(139, 92, 246, 0.22);
+$soft-cyan: rgba(56, 189, 248, 0.16);
+$rainbow-gradient: linear-gradient(135deg, $rainbow-pink 0%, $rainbow-purple 52%, $rainbow-cyan 100%);
+$bg-panel: rgba(18, 28, 56, 0.78);
+$bg-panel-strong: rgba(11, 18, 36, 0.86);
+$card-border: rgba(255, 255, 255, 0.1);
+$card-shadow: 0 24rpx 64rpx rgba(3, 7, 18, 0.22), 0 12rpx 34rpx rgba(139, 92, 246, 0.08);
 
 $primary-blue: #5aa7ff;
 $primary-purple: #8b7cf6;
@@ -19,7 +26,7 @@ $page-padding: 28rpx;
 $card-radius: 42rpx;
 $button-radius: 999rpx;
 $control-radius: 26rpx;
-$tabbar-height: 136rpx;
+$tabbar-height: 160rpx;
 $safe-bottom-padding: env(safe-area-inset-bottom);
 
 // Backward-compatible aliases for early page styles.

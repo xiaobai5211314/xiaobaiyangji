@@ -21,7 +21,7 @@
       <text>{{ mode === 'holding' && !sessionState.username ? '登录后可同步你的个人持仓记录。' : '暂无资讯数据，点击重试或下拉刷新' }}</text>
     </view>
 
-    <view v-for="item in activeItems" :key="item.id || item.title" class="glass-card news-card">
+    <view v-for="(item, itemIndex) in activeItems" :key="newsItemKey(item, itemIndex)" class="glass-card news-card">
       <view class="news-head">
         <view class="time-dot" />
         <view class="news-main">
@@ -35,7 +35,7 @@
             <text v-if="item.important" class="tag important">重要</text>
             <text v-if="item.sentiment" class="tag">{{ item.sentiment }}</text>
             <text v-if="item.matchedFundName" class="tag">{{ item.matchedFundName }}</text>
-            <text v-for="tag in item.tags || []" :key="tag" class="tag">{{ tag }}</text>
+            <text v-for="(tag, tagIndex) in item.tags || []" :key="`${newsItemKey(item, itemIndex)}-${tag}-${tagIndex}`" class="tag">{{ tag }}</text>
           </view>
         </view>
       </view>
@@ -57,6 +57,8 @@ const loading = ref(false);
 const mode = ref<'global' | 'holding'>('global');
 const globalPayload = ref<NewsResponse>({});
 const holdingPayload = ref<NewsResponse>({});
+const PAGE_CACHE_TTL = 60000;
+const loadedAt = ref(0);
 
 const activeItems = computed<NewsItem[]>(() => {
   const rows = mode.value === 'holding' ? holdingPayload.value.items : globalPayload.value.items;
@@ -85,25 +87,38 @@ onPullDownRefresh(async () => {
 
 async function loadData(force: boolean) {
   if (loading.value) return;
+  const hasPageData =
+    (Array.isArray(globalPayload.value.items) && globalPayload.value.items.length > 0) ||
+    (Array.isArray(holdingPayload.value.items) && holdingPayload.value.items.length > 0);
+  if (!force && hasPageData && Date.now() - loadedAt.value < PAGE_CACHE_TTL) return;
+
   loading.value = true;
   try {
-    const globalTask = getGlobalNews(force, false, 60).catch((error) => {
-      console.warn('[news:global]', error);
-      return { items: [] } as NewsResponse;
-    });
-    const holdingTask = sessionState.username
-      ? getHoldingNews(sessionState.username, force, false, 40).catch((error) => {
-          console.warn('[news:holding]', error);
-          return { items: [] } as NewsResponse;
-        })
-      : Promise.resolve({ items: [] } as NewsResponse);
+    const [globalResult, holdingResult] = await Promise.allSettled([
+      getGlobalNews(force, false, 60),
+      sessionState.username ? getHoldingNews(sessionState.username, force, false, 40) : Promise.resolve({ items: [] } as NewsResponse)
+    ]);
 
-    const [globalNews, holdingNews] = await Promise.all([globalTask, holdingTask]);
-    globalPayload.value = globalNews || {};
-    holdingPayload.value = holdingNews || {};
+    if (globalResult.status === 'fulfilled') {
+      globalPayload.value = globalResult.value || {};
+    } else {
+      console.warn('[news:global]', globalResult.reason);
+    }
+
+    if (holdingResult.status === 'fulfilled') {
+      holdingPayload.value = holdingResult.value || {};
+    } else {
+      console.warn('[news:holding]', holdingResult.reason);
+    }
+
+    loadedAt.value = Date.now();
   } finally {
     loading.value = false;
   }
+}
+
+function newsItemKey(item: NewsItem, index: number) {
+  return `${item.id || item.title || item.showTime || 'news'}-${index}`;
 }
 </script>
 
@@ -150,6 +165,10 @@ async function loadData(force: boolean) {
 
 .news-card {
   padding: 28rpx;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(255, 95, 162, 0.1), transparent 30%),
+    radial-gradient(circle at 90% 8%, rgba(56, 189, 248, 0.08), transparent 28%),
+    rgba(18, 28, 56, 0.72);
 }
 
 .news-head {
@@ -162,8 +181,8 @@ async function loadData(force: boolean) {
   height: 18rpx;
   margin-top: 12rpx;
   border-radius: 50%;
-  background: $primary-blue;
-  box-shadow: 0 0 24rpx rgba(59, 130, 246, 0.65);
+  background: $rainbow-gradient;
+  box-shadow: 0 0 24rpx rgba(139, 92, 246, 0.45);
 }
 
 .news-main {
@@ -207,7 +226,7 @@ async function loadData(force: boolean) {
   padding: 7rpx 14rpx;
   border-radius: 999rpx;
   color: #dbeafe;
-  background: rgba(59, 130, 246, 0.14);
+  background: linear-gradient(135deg, rgba(255, 95, 162, 0.1), rgba(139, 92, 246, 0.12), rgba(56, 189, 248, 0.1));
   font-size: 20rpx;
   font-weight: 800;
 }

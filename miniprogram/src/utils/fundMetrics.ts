@@ -323,15 +323,29 @@ export function buildPortfolioMetrics(rawFunds: FundTodayItem[], now = new Date(
     totalCost: round(totalCost),
     exposure,
     dailyBattleReport: buildDailyReport(funds, round(totalTodayProfit), exposure),
-    profitTop: funds
+    profitTop: dedupeFundsByCode(funds)
       .filter((fund) => fund.estimatedProfitValue > 0)
       .sort((a, b) => b.estimatedProfitValue - a.estimatedProfitValue)
       .slice(0, 5),
-    lossTop: funds
+    lossTop: dedupeFundsByCode(funds)
       .filter((fund) => fund.estimatedProfitValue < 0)
       .sort((a, b) => a.estimatedProfitValue - b.estimatedProfitValue)
       .slice(0, 5)
   };
+}
+
+function dedupeFundsByCode(funds: FundView[]) {
+  const bestByKey = new Map<string, FundView>();
+
+  for (const fund of funds) {
+    const key = String(fund.code || fund.name || fund.viewKey || '').trim() || fund.viewKey;
+    const current = bestByKey.get(key);
+    if (!current || Math.abs(fund.estimatedProfitValue) > Math.abs(current.estimatedProfitValue)) {
+      bestByKey.set(key, fund);
+    }
+  }
+
+  return Array.from(bestByKey.values());
 }
 
 export function maskByPrivacy(value: string, mode: PrivacyMode, requiredMode: PrivacyMode) {

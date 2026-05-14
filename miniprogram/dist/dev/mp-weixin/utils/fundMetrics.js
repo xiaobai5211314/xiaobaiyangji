@@ -71,7 +71,7 @@ function buildConfidence(fund) {
   const reasons = [];
   if (fund.isSettledValue) {
     score += 28;
-    reasons.push("净值确认");
+    reasons.push("净值参考");
   } else if (fund.isHolidayValue) {
     score += 8;
     reasons.push("休市沿用");
@@ -128,7 +128,7 @@ function buildDailyReport(funds, totalTodayProfit, exposure) {
   } else if (topExposure && topExposure.ratio >= 45) {
     actionHint = `${topExposure.name} 集中度偏高`;
   } else if (totalTodayProfit > 0) {
-    actionHint = "盈利日先看净值确认";
+    actionHint = "盈利日关注净值参考";
   }
   return {
     summary: funds.length > 0 ? `${funds.length} 只持仓，主暴露 ${(topExposure == null ? void 0 : topExposure.name) || "待识别"} ${round((topExposure == null ? void 0 : topExposure.ratio) || 0)}%。` : "暂无持仓数据。",
@@ -199,7 +199,7 @@ function buildPortfolioMetrics(rawFunds, now = /* @__PURE__ */ new Date()) {
       isHoliday: rateState.isHoliday,
       isHolidayValue: rateState.isHoliday,
       isSettledValue: rateState.isSettled || isAlreadySettled,
-      statusLabel: rateState.isHoliday ? "休市" : rateState.isSettled || isAlreadySettled ? "净值确认" : "盘中侦测",
+      statusLabel: rateState.isHoliday ? "休市" : rateState.isSettled || isAlreadySettled ? "净值参考" : "盘中参考",
       trendLabel: rateState.isHoliday ? "休市沿用" : rateState.isSettled || isAlreadySettled ? "真" : "估",
       confidenceView: { score: 0, level: "", reason: "", tone: "medium" }
     };
@@ -223,9 +223,20 @@ function buildPortfolioMetrics(rawFunds, now = /* @__PURE__ */ new Date()) {
     totalCost: round(totalCost),
     exposure,
     dailyBattleReport: buildDailyReport(funds, round(totalTodayProfit), exposure),
-    profitTop: funds.filter((fund) => fund.estimatedProfitValue > 0).sort((a, b) => b.estimatedProfitValue - a.estimatedProfitValue).slice(0, 5),
-    lossTop: funds.filter((fund) => fund.estimatedProfitValue < 0).sort((a, b) => a.estimatedProfitValue - b.estimatedProfitValue).slice(0, 5)
+    profitTop: dedupeFundsByCode(funds).filter((fund) => fund.estimatedProfitValue > 0).sort((a, b) => b.estimatedProfitValue - a.estimatedProfitValue).slice(0, 5),
+    lossTop: dedupeFundsByCode(funds).filter((fund) => fund.estimatedProfitValue < 0).sort((a, b) => a.estimatedProfitValue - b.estimatedProfitValue).slice(0, 5)
   };
+}
+function dedupeFundsByCode(funds) {
+  const bestByKey = /* @__PURE__ */ new Map();
+  for (const fund of funds) {
+    const key = String(fund.code || fund.name || fund.viewKey || "").trim() || fund.viewKey;
+    const current = bestByKey.get(key);
+    if (!current || Math.abs(fund.estimatedProfitValue) > Math.abs(current.estimatedProfitValue)) {
+      bestByKey.set(key, fund);
+    }
+  }
+  return Array.from(bestByKey.values());
 }
 function maskByPrivacy(value, mode, requiredMode) {
   return mode <= requiredMode ? value : "****";

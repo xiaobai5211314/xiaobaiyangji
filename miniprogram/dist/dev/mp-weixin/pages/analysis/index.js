@@ -6,6 +6,7 @@ if (!Math) {
   AppTabBar();
 }
 const AppTabBar = () => "../../components/AppTabBar.js";
+const PAGE_CACHE_TTL = 3e4;
 const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
   __name: "index",
   setup(__props) {
@@ -16,6 +17,8 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
     const selectedDate = common_vendor.ref(todayDate());
     const currentMonth = common_vendor.ref(todayDate().slice(0, 7));
     const viewMode = common_vendor.ref("amount");
+    const loadedAt = common_vendor.ref(0);
+    const isGuest = common_vendor.computed(() => !stores_session.sessionState.username);
     const fundRows = common_vendor.computed(
       () => archives.value.filter((row) => !isTotalRow(row)).map((row, index) => normalizeDetailRow(row, index)).filter((row) => Boolean(row.date))
     );
@@ -91,30 +94,52 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
     common_vendor.onShow(() => {
       stores_session.loadSession();
       if (!stores_session.sessionState.username) {
-        common_vendor.index.reLaunch({ url: "/pages/login/index" });
+        dashboard.value = {};
+        archives.value = [];
         return;
       }
-      loadData().catch((error) => console.error("[analysis:load]", error));
+      loadData(false).catch((error) => console.warn("[analysis:load]", error));
     });
     common_vendor.onPullDownRefresh(async () => {
       try {
-        await loadData();
+        await loadData(true);
       } catch (error) {
-        console.error("[analysis:pull-down-refresh]", error);
+        console.warn("[analysis:pull-down-refresh]", error);
         common_vendor.index.showToast({ title: "刷新失败，请稍后重试", icon: "none" });
       } finally {
         common_vendor.index.stopPullDownRefresh();
       }
     });
-    async function loadData() {
-      if (!stores_session.sessionState.username || loading.value)
+    async function loadData(force = false) {
+      if (loading.value)
+        return;
+      if (!stores_session.sessionState.username) {
+        dashboard.value = {};
+        archives.value = [];
+        loadedAt.value = 0;
+        return;
+      }
+      if (!force && archives.value.length > 0 && Date.now() - loadedAt.value < PAGE_CACHE_TTL)
         return;
       loading.value = true;
       try {
-        const [insights, rows] = await Promise.all([services_api_analysis.getInsightsDashboard(stores_session.sessionState.username), services_api_analysis.getArchives(stores_session.sessionState.username, 500)]);
-        dashboard.value = insights || {};
-        archives.value = Array.isArray(rows) ? rows : [];
-        ensureSelectedDate();
+        const [insightsResult, archivesResult] = await Promise.allSettled([
+          services_api_analysis.getInsightsDashboard(stores_session.sessionState.username),
+          services_api_analysis.getArchives(stores_session.sessionState.username, 500)
+        ]);
+        if (insightsResult.status === "fulfilled") {
+          dashboard.value = insightsResult.value || {};
+        } else {
+          console.warn("[analysis:dashboard]", insightsResult.reason);
+        }
+        if (archivesResult.status === "fulfilled") {
+          archives.value = Array.isArray(archivesResult.value) ? archivesResult.value : [];
+        } else {
+          console.warn("[analysis:archives]", archivesResult.reason);
+        }
+        loadedAt.value = Date.now();
+        if (force || archives.value.length > 0)
+          ensureSelectedDate();
       } finally {
         loading.value = false;
       }
@@ -245,39 +270,41 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
       return common_vendor.e({
         a: common_vendor.t(overview.value.dateText),
         b: common_vendor.t(overview.value.fundCountText),
-        c: common_vendor.n(viewMode.value === "amount" ? "active" : ""),
-        d: common_vendor.o(($event) => setViewMode("amount"), "48"),
-        e: common_vendor.n(viewMode.value === "rate" ? "active" : ""),
-        f: common_vendor.o(($event) => setViewMode("rate"), "75"),
-        g: common_vendor.t(overview.value.statusText),
-        h: common_vendor.t(overview.value.primaryText),
-        i: common_vendor.n(overview.value.primaryClass),
-        j: common_vendor.t(overview.value.totalAssetsText),
-        k: common_vendor.t(viewMode.value === "rate" ? "今日收益率" : "今日收益"),
-        l: common_vendor.t(viewMode.value === "rate" ? overview.value.dailyRateText : overview.value.dailyProfitText),
-        m: common_vendor.n(viewMode.value === "rate" ? overview.value.dailyRateClass : overview.value.dailyProfitClass),
-        n: common_vendor.t(viewMode.value === "rate" ? "累计收益率" : "累计盈亏"),
-        o: common_vendor.t(viewMode.value === "rate" ? overview.value.totalRateText : overview.value.totalProfitText),
-        p: common_vendor.n(viewMode.value === "rate" ? overview.value.totalRateClass : overview.value.totalProfitClass),
-        q: common_vendor.t(viewMode.value === "rate" ? "累计盈亏" : "累计收益率"),
-        r: common_vendor.t(viewMode.value === "rate" ? overview.value.totalProfitText : overview.value.totalRateText),
-        s: common_vendor.n(viewMode.value === "rate" ? overview.value.totalProfitClass : overview.value.totalRateClass),
-        t: common_vendor.o(goPrevMonth, "5c"),
-        v: common_vendor.t(currentMonth.value),
-        w: common_vendor.o(goNextMonth, "44"),
-        x: common_vendor.o(goToday, "1f"),
-        y: common_vendor.f(weekDays, (item, k0, i0) => {
+        c: isGuest.value
+      }, isGuest.value ? {} : {}, {
+        d: common_vendor.n(viewMode.value === "amount" ? "active" : ""),
+        e: common_vendor.o(($event) => setViewMode("amount"), "f6"),
+        f: common_vendor.n(viewMode.value === "rate" ? "active" : ""),
+        g: common_vendor.o(($event) => setViewMode("rate"), "6d"),
+        h: common_vendor.t(overview.value.statusText),
+        i: common_vendor.t(overview.value.primaryText),
+        j: common_vendor.n(overview.value.primaryClass),
+        k: common_vendor.t(overview.value.totalAssetsText),
+        l: common_vendor.t(viewMode.value === "rate" ? "今日收益率" : "今日收益"),
+        m: common_vendor.t(viewMode.value === "rate" ? overview.value.dailyRateText : overview.value.dailyProfitText),
+        n: common_vendor.n(viewMode.value === "rate" ? overview.value.dailyRateClass : overview.value.dailyProfitClass),
+        o: common_vendor.t(viewMode.value === "rate" ? "累计收益率" : "累计盈亏"),
+        p: common_vendor.t(viewMode.value === "rate" ? overview.value.totalRateText : overview.value.totalProfitText),
+        q: common_vendor.n(viewMode.value === "rate" ? overview.value.totalRateClass : overview.value.totalProfitClass),
+        r: common_vendor.t(viewMode.value === "rate" ? "累计盈亏" : "累计收益率"),
+        s: common_vendor.t(viewMode.value === "rate" ? overview.value.totalProfitText : overview.value.totalRateText),
+        t: common_vendor.n(viewMode.value === "rate" ? overview.value.totalProfitClass : overview.value.totalRateClass),
+        v: common_vendor.o(goPrevMonth, "f5"),
+        w: common_vendor.t(currentMonth.value),
+        x: common_vendor.o(goNextMonth, "e9"),
+        y: common_vendor.o(goToday, "6e"),
+        z: common_vendor.f(weekDays, (item, k0, i0) => {
           return {
             a: common_vendor.t(item),
             b: item
           };
         }),
-        z: common_vendor.f(leadingBlanks.value, (blank, k0, i0) => {
+        A: common_vendor.f(leadingBlanks.value, (blank, k0, i0) => {
           return {
             a: blank
           };
         }),
-        A: common_vendor.f(calendarDays.value, (day, k0, i0) => {
+        B: common_vendor.f(calendarDays.value, (day, k0, i0) => {
           return {
             a: common_vendor.t(day.dayText),
             b: common_vendor.t(day.profitText),
@@ -288,10 +315,10 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
             g: common_vendor.o(($event) => selectDate(day.date), day.key)
           };
         }),
-        B: common_vendor.t(viewMode.value === "rate" ? "收益率 TOP5" : "盈利 TOP5"),
-        C: profitTop.value.length === 0
+        C: common_vendor.t(viewMode.value === "rate" ? "收益率 TOP5" : "盈利 TOP5"),
+        D: profitTop.value.length === 0
       }, profitTop.value.length === 0 ? {} : {}, {
-        D: common_vendor.f(profitTop.value, (item, k0, i0) => {
+        E: common_vendor.f(profitTop.value, (item, k0, i0) => {
           return {
             a: common_vendor.t(item.nameText),
             b: common_vendor.t(item.codeText),
@@ -299,10 +326,10 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
             d: item.key
           };
         }),
-        E: common_vendor.t(viewMode.value === "rate" ? "亏损率 TOP5" : "亏损 TOP5"),
-        F: lossTop.value.length === 0
+        F: common_vendor.t(viewMode.value === "rate" ? "亏损率 TOP5" : "亏损 TOP5"),
+        G: lossTop.value.length === 0
       }, lossTop.value.length === 0 ? {} : {}, {
-        G: common_vendor.f(lossTop.value, (item, k0, i0) => {
+        H: common_vendor.f(lossTop.value, (item, k0, i0) => {
           return {
             a: common_vendor.t(item.nameText),
             b: common_vendor.t(item.codeText),
@@ -310,11 +337,14 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
             d: item.key
           };
         }),
-        H: common_vendor.t(selectedDate.value),
-        I: common_vendor.t(selectedDayRows.value.length),
-        J: selectedDayRows.value.length === 0
-      }, selectedDayRows.value.length === 0 ? {} : {}, {
-        K: common_vendor.f(selectedDayRows.value, (item, k0, i0) => {
+        I: common_vendor.t(selectedDate.value),
+        J: common_vendor.t(selectedDayRows.value.length),
+        K: selectedDayRows.value.length === 0
+      }, selectedDayRows.value.length === 0 ? {
+        L: common_vendor.t(isGuest.value ? "登录后可同步你的个人持仓记录。" : "该日暂无基金明细，点击重试或下拉刷新"),
+        M: common_vendor.o(($event) => !isGuest.value && loadData(true), "66")
+      } : {}, {
+        N: common_vendor.f(selectedDayRows.value, (item, k0, i0) => {
           return {
             a: common_vendor.t(item.nameText),
             b: common_vendor.t(item.codeText),
@@ -324,7 +354,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
             f: item.key
           };
         }),
-        L: common_vendor.p({
+        O: common_vendor.p({
           active: "analysis"
         })
       });

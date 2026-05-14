@@ -58,7 +58,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         });
         common_vendor.index.showToast({ title: "头像已更新", icon: "none" });
       } catch (error) {
-        console.error("[profile:avatar-upload]", error);
+        console.warn("[profile:avatar-upload]", error);
         common_vendor.index.showToast({ title: getErrorMessage(error, "头像上传失败"), icon: "none" });
       } finally {
         avatarUploading.value = false;

@@ -166,6 +166,8 @@ const archives = ref<ArchiveRow[]>([]);
 const selectedDate = ref(todayDate());
 const currentMonth = ref(todayDate().slice(0, 7));
 const viewMode = ref<'amount' | 'rate'>('amount');
+const PAGE_CACHE_TTL = 30000;
+const loadedAt = ref(0);
 const isGuest = computed(() => !sessionState.username);
 
 const fundRows = computed(() =>
@@ -277,14 +279,31 @@ async function loadData(force = false) {
   if (!sessionState.username) {
     dashboard.value = {};
     archives.value = [];
+    loadedAt.value = 0;
     return;
   }
+  if (!force && archives.value.length > 0 && Date.now() - loadedAt.value < PAGE_CACHE_TTL) return;
 
   loading.value = true;
   try {
-    const [insights, rows] = await Promise.all([getInsightsDashboard(sessionState.username), getArchives(sessionState.username, 500)]);
-    dashboard.value = insights || {};
-    archives.value = Array.isArray(rows) ? rows : [];
+    const [insightsResult, archivesResult] = await Promise.allSettled([
+      getInsightsDashboard(sessionState.username),
+      getArchives(sessionState.username, 500)
+    ]);
+
+    if (insightsResult.status === 'fulfilled') {
+      dashboard.value = insightsResult.value || {};
+    } else {
+      console.warn('[analysis:dashboard]', insightsResult.reason);
+    }
+
+    if (archivesResult.status === 'fulfilled') {
+      archives.value = Array.isArray(archivesResult.value) ? archivesResult.value : [];
+    } else {
+      console.warn('[analysis:archives]', archivesResult.reason);
+    }
+
+    loadedAt.value = Date.now();
     if (force || archives.value.length > 0) ensureSelectedDate();
   } finally {
     loading.value = false;
@@ -448,7 +467,8 @@ function profitClass(value: number | null) {
 .rank-card,
 .detail-card {
   background:
-    radial-gradient(circle at 10% 8%, rgba(96, 165, 250, 0.2), transparent 34%),
+    radial-gradient(circle at 14% 0%, rgba(255, 95, 162, 0.12), transparent 32%),
+    radial-gradient(circle at 88% 6%, rgba(56, 189, 248, 0.1), transparent 30%),
     linear-gradient(135deg, rgba(30, 41, 59, 0.72), rgba(30, 27, 75, 0.58));
 }
 
@@ -489,8 +509,8 @@ function profitClass(value: number | null) {
 
 .mode-button.active {
   color: #fff;
-  background: linear-gradient(135deg, $primary-blue, $primary-purple);
-  box-shadow: 0 12rpx 28rpx rgba(59, 130, 246, 0.22);
+  background: $rainbow-gradient;
+  box-shadow: 0 12rpx 28rpx rgba(139, 92, 246, 0.18);
 }
 
 .overview-head,
@@ -528,8 +548,10 @@ function profitClass(value: number | null) {
 .summary-cell {
   min-width: 0;
   padding: 20rpx;
-  border-radius: 22rpx;
-  background: rgba(15, 23, 42, 0.42);
+  border-radius: 28rpx;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(255, 95, 162, 0.06), transparent 32%),
+    rgba(15, 23, 42, 0.42);
   border: 1rpx solid rgba(148, 163, 184, 0.12);
 }
 

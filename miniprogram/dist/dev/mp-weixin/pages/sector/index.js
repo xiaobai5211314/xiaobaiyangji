@@ -2,10 +2,12 @@
 const common_vendor = require("../../common/vendor.js");
 const services_api_sector = require("../../services/api/sector.js");
 const utils_format = require("../../utils/format.js");
+var define_import_meta_env_default = {};
 if (!Math) {
   AppTabBar();
 }
 const AppTabBar = () => "../../components/AppTabBar.js";
+const PAGE_CACHE_TTL = 6e4;
 const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
   __name: "index",
   setup(__props) {
@@ -13,6 +15,8 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
     const sectorPayload = common_vendor.ref({});
     const flowPayload = common_vendor.ref({});
     const indices = common_vendor.ref([]);
+    const loadedAt = common_vendor.ref(0);
+    const DEBUG_FIELD_AUDIT = (define_import_meta_env_default == null ? void 0 : define_import_meta_env_default.VITE_DEBUG_MARKET_INDEX) === "true";
     const allSectors = common_vendor.computed(() => sectorPayload.value.all || []);
     const topList = common_vendor.computed(() => {
       var _a;
@@ -53,13 +57,13 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
       return groups.filter((group) => group.items.length > 0);
     });
     common_vendor.onShow(() => {
-      loadData(false).catch((error) => console.error("[sector:load]", error));
+      loadData(false).catch((error) => console.warn("[sector:load]", error));
     });
     common_vendor.onPullDownRefresh(async () => {
       try {
         await loadData(true);
       } catch (error) {
-        console.error("[sector:pull-down-refresh]", error);
+        console.warn("[sector:pull-down-refresh]", error);
         common_vendor.index.showToast({ title: "刷新失败，请稍后重试", icon: "none" });
       } finally {
         common_vendor.index.stopPullDownRefresh();
@@ -68,12 +72,32 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
     async function loadData(force) {
       if (loading.value)
         return;
+      const hasPageData = allSectors.value.length > 0 || flowRows.value.length > 0 || indices.value.length > 0;
+      if (!force && hasPageData && Date.now() - loadedAt.value < PAGE_CACHE_TTL)
+        return;
       loading.value = true;
       try {
-        const [sectors, flow, globalIndexRows] = await Promise.all([services_api_sector.getSectors(force), services_api_sector.getCapitalFlow(force, 100), services_api_sector.getGlobalIndices()]);
-        sectorPayload.value = sectors || {};
-        flowPayload.value = flow || {};
-        indices.value = Array.isArray(globalIndexRows) ? globalIndexRows : [];
+        const [sectorsResult, flowResult, indicesResult] = await Promise.allSettled([
+          services_api_sector.getSectors(force),
+          services_api_sector.getCapitalFlow(force, 100),
+          services_api_sector.getGlobalIndices(force)
+        ]);
+        if (sectorsResult.status === "fulfilled") {
+          sectorPayload.value = sectorsResult.value || {};
+        } else {
+          console.warn("[sector:sectors]", sectorsResult.reason);
+        }
+        if (flowResult.status === "fulfilled") {
+          flowPayload.value = flowResult.value || {};
+        } else {
+          console.warn("[sector:capital-flow]", flowResult.reason);
+        }
+        if (indicesResult.status === "fulfilled") {
+          indices.value = Array.isArray(indicesResult.value) ? indicesResult.value : [];
+        } else {
+          console.warn("[sector:global-indices]", indicesResult.reason);
+        }
+        loadedAt.value = Date.now();
         logGlobalIndicesAudit(indices.value);
       } finally {
         loading.value = false;
@@ -172,7 +196,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
     }
     function indexPointValue(item) {
       const source = item;
-      return firstNumber(
+      return firstPositiveNumber(
         source.point,
         source.latest,
         source.close,
@@ -203,6 +227,14 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
       }
       return null;
     }
+    function firstPositiveNumber(...values) {
+      for (const value of values) {
+        const n = firstNumber(value);
+        if (n !== null && n > 0)
+          return n;
+      }
+      return null;
+    }
     function firstArray(...values) {
       for (const value of values) {
         if (Array.isArray(value))
@@ -211,9 +243,10 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
       return [];
     }
     function logGlobalIndicesAudit(rows) {
+      if (!DEBUG_FIELD_AUDIT)
+        return;
       rows.forEach((item) => {
-        console.log("[global.indices keys]", item.name, item.code, Object.keys(item));
-        console.log("[global.indices fields]", {
+        console.info("[global.indices fields]", {
           name: item.name,
           code: item.code,
           point: indexPointValue(item),
@@ -222,7 +255,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
           historyCount: indexHistoryCount(item)
         });
         if (!indexHasMarketData(item)) {
-          console.warn("待核实：后端未返回该指数有效行情字段。", {
+          console.info("待核实：后端未返回该指数有效行情字段。", {
             name: item.name,
             code: item.code,
             point: indexPointValue(item),
@@ -300,8 +333,10 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
           };
         }),
         s: visibleIndices.value.length === 0 && !loading.value
-      }, visibleIndices.value.length === 0 && !loading.value ? {} : {}, {
-        t: common_vendor.f(indexGroups.value, (group, k0, i0) => {
+      }, visibleIndices.value.length === 0 && !loading.value ? {
+        t: common_vendor.o(($event) => loadData(true), "34")
+      } : {}, {
+        v: common_vendor.f(indexGroups.value, (group, k0, i0) => {
           return {
             a: common_vendor.t(group.title),
             b: common_vendor.f(group.items, (item, index, i1) => {
@@ -325,7 +360,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
             c: group.key
           };
         }),
-        v: common_vendor.p({
+        w: common_vendor.p({
           active: "sector"
         })
       });

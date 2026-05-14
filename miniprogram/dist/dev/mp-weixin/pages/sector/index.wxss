@@ -7,10 +7,16 @@
 .hero-card.data-v-4c2bd136,
 .board-card.data-v-4c2bd136,
 .index-card.data-v-4c2bd136 {
-  background: radial-gradient(circle at 12% 8%, rgba(90, 167, 255, 0.16), transparent 36%), linear-gradient(145deg, rgba(34, 49, 86, 0.58), rgba(17, 27, 52, 0.46));
+  background: radial-gradient(circle at 14% 0%, rgba(255, 95, 162, 0.12), transparent 34%), radial-gradient(circle at 92% 6%, rgba(56, 189, 248, 0.1), transparent 32%), linear-gradient(145deg, rgba(34, 49, 86, 0.58), rgba(17, 27, 52, 0.46));
 }
 .hero-card.data-v-4c2bd136 {
   padding: 36rpx;
+}
+.notice-card.data-v-4c2bd136 {
+  padding: 22rpx 26rpx;
+  color: #91a4c2;
+  font-size: 22rpx;
+  line-height: 1.55;
 }
 .hero-row.data-v-4c2bd136,
 .board-head.data-v-4c2bd136,
@@ -21,6 +27,13 @@
   align-items: center;
   justify-content: space-between;
   gap: 18rpx;
+}
+.list-head.data-v-4c2bd136 {
+  padding: 26rpx;
+  border-radius: 38rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.1);
+  background: radial-gradient(circle at 14% 0%, rgba(255, 95, 162, 0.18), transparent 30%), radial-gradient(circle at 86% 4%, rgba(56, 189, 248, 0.16), transparent 30%), rgba(18, 28, 56, 0.7);
+  box-shadow: 0 18rpx 48rpx rgba(3, 7, 18, 0.2);
 }
 .hero-title.data-v-4c2bd136 {
   display: block;
@@ -65,7 +78,7 @@
 .rank-badge.data-v-4c2bd136 {
   width: 42rpx;
   height: 42rpx;
-  border-radius: 18rpx;
+  border-radius: 20rpx;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -73,10 +86,10 @@
   color: #fff;
   font-size: 22rpx;
   font-weight: 900;
-  background: rgba(255, 107, 107, 0.18);
+  background: linear-gradient(135deg, rgba(255, 95, 162, 0.24), rgba(139, 92, 246, 0.18));
 }
 .loss-badge.data-v-4c2bd136 {
-  background: rgba(45, 212, 191, 0.18);
+  background: linear-gradient(135deg, rgba(45, 212, 191, 0.18), rgba(56, 189, 248, 0.16));
 }
 .row-main.data-v-4c2bd136 {
   min-width: 0;
@@ -123,6 +136,7 @@
   display: flex;
   flex-direction: column;
   gap: 14rpx;
+  border-radius: 36rpx;
 }
 .index-group.data-v-4c2bd136 {
   display: flex;
@@ -140,8 +154,8 @@
   padding: 9rpx 20rpx;
   border-radius: 999rpx;
   color: #deebff;
-  background: rgba(90, 167, 255, 0.12);
-  border: 1rpx solid rgba(191, 219, 254, 0.14);
+  background: linear-gradient(135deg, rgba(255, 95, 162, 0.14), rgba(139, 92, 246, 0.16), rgba(56, 189, 248, 0.12));
+  border: 1rpx solid rgba(255, 255, 255, 0.12);
   font-size: 21rpx;
   font-weight: 900;
 }

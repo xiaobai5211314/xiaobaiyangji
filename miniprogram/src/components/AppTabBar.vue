@@ -51,11 +51,11 @@ function handleTap(key: TabKey) {
 
 .tab-item {
   min-width: 0;
-  height: 108rpx;
-  padding: 0 6rpx;
-  border-radius: 54rpx;
+  height: 124rpx;
+  padding: 0 8rpx;
+  border-radius: 62rpx;
   color: $text-muted;
-  background: rgba(24, 36, 68, 0.42);
+  background: rgba(18, 28, 56, 0.66);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -72,18 +72,18 @@ function handleTap(key: TabKey) {
 .tab-item.active {
   background:
     radial-gradient(circle at 30% 12%, rgba(255, 255, 255, 0.22), transparent 30%),
-    linear-gradient(135deg, rgba(90, 167, 255, 0.9), rgba(139, 124, 246, 0.88));
+    $rainbow-gradient;
   color: #fff;
-  box-shadow: 0 10rpx 26rpx rgba(90, 167, 255, 0.18), inset 0 1rpx 0 rgba(255, 255, 255, 0.18);
+  box-shadow: 0 12rpx 30rpx rgba(139, 92, 246, 0.18), 0 0 22rpx rgba(56, 189, 248, 0.12), inset 0 1rpx 0 rgba(255, 255, 255, 0.18);
 }
 
 .tab-icon {
-  font-size: 38rpx;
-  line-height: 40rpx;
+  font-size: 43rpx;
+  line-height: 44rpx;
 }
 
 .tab-label {
-  font-size: 25rpx;
+  font-size: 27rpx;
   font-weight: 900;
 }
 </style>

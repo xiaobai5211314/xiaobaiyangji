@@ -18,24 +18,24 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
     common_vendor.onLoad((query) => {
       indexName.value = decodeURIComponent(String((query == null ? void 0 : query.indexName) || ""));
       indexCode.value = decodeURIComponent(String((query == null ? void 0 : query.indexCode) || ""));
-      loadData().catch((error) => console.error("[index-detail:load]", error));
+      loadData(false).catch((error) => console.warn("[index-detail:load]", error));
     });
     common_vendor.onPullDownRefresh(async () => {
       try {
-        await loadData();
+        await loadData(true);
       } catch (error) {
-        console.error("[index-detail:pull-down-refresh]", error);
+        console.warn("[index-detail:pull-down-refresh]", error);
         common_vendor.index.showToast({ title: "刷新失败，请稍后重试", icon: "none" });
       } finally {
         common_vendor.index.stopPullDownRefresh();
       }
     });
-    async function loadData() {
+    async function loadData(force = false) {
       if (loading.value)
         return;
       loading.value = true;
       try {
-        const data = await services_api_sector.getGlobalIndices();
+        const data = await services_api_sector.getGlobalIndices(force);
         rows.value = Array.isArray(data) ? data.filter(hasIndexEntry) : [];
       } finally {
         loading.value = false;
@@ -162,7 +162,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
     function firstIndexPoint(...values) {
       for (const value of values) {
         const n = finiteNumber(value);
-        if (n !== null)
+        if (n !== null && n > 0)
           return n;
       }
       return null;

@@ -18,7 +18,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
     const rawValues = common_vendor.computed(() => {
       return props.points.map((point) => Number(point)).filter((point) => Number.isFinite(point));
     });
-    const values = common_vendor.computed(() => smoothValues(downsample(rawValues.value, 96)));
+    const values = common_vendor.computed(() => smoothValues(downsample(rawValues.value, 72)));
     const chartPoints = common_vendor.computed(() => normalizePoints(values.value));
     const hasData = common_vendor.computed(() => chartPoints.value.length > 1);
     const emptyText = common_vendor.computed(() => props.emptyText);

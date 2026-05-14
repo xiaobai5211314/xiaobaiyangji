@@ -14,10 +14,14 @@
         </button>
       </view>
       <view class="user-panel">
-        <button class="avatar-button" @tap="openProfile">
-          <image v-if="avatarUrl" class="avatar-img" :src="avatarUrl" mode="aspectFill" />
-          <view v-else class="avatar-fallback">
+        <button :class="['account-button', sessionState.username ? 'logged-in' : 'guest']" @tap="openProfile">
+          <image v-if="sessionState.username && avatarUrl" class="avatar-img" :src="avatarUrl" mode="aspectFill" />
+          <view v-else-if="sessionState.username" class="avatar-fallback">
             <text>{{ avatarText }}</text>
+          </view>
+          <view class="account-copy">
+            <text class="account-title">{{ accountEntryTitle }}</text>
+            <text class="account-subtitle">{{ accountEntrySubtitle }}</text>
           </view>
         </button>
       </view>
@@ -146,7 +150,7 @@
       <text>{{ sessionState.username ? '暂无持仓数据，可使用智能截图导入基金' : '暂无个人持仓数据。登录后可同步你的个人持仓记录。' }}</text>
     </view>
 
-    <view v-for="fund in funds" :key="fund.viewKey" class="glass-card fund-card">
+    <view v-for="(fund, fundIndex) in funds" :key="fund.viewKey" class="glass-card fund-card">
       <view class="fund-head">
         <view class="fund-title">
           <text class="fund-name">{{ fund.name || '未命名基金' }}</text>
@@ -173,11 +177,15 @@
           <text>{{ trendPointCount(fund) }} 点</text>
         </view>
         <SparklineChart
+          v-if="shouldRenderFundTrend(fund, fundIndex)"
           :canvas-id="fundTrendCanvasId(fund)"
           :points="todayTrendPoints(fund)"
           :tone="fund.currentRateValue >= 0 ? 'profit' : 'loss'"
           empty-text="暂无估值走势数据"
         />
+        <button v-else class="expand-trend-button" @tap="expandFundTrend(fund)">
+          展开走势
+        </button>
       </view>
 
       <view class="fund-grid">
@@ -647,7 +655,11 @@ import {
 const PRIVACY_KEY = 'privacy_mode';
 const DEBUG_FIELD_AUDIT =
   (import.meta as ImportMeta & { env?: { VITE_DEBUG_FIELD_AUDIT?: string } }).env?.VITE_DEBUG_FIELD_AUDIT === 'true';
-const LOGIN_SYNC_TIP = '登录后可同步你的个人持仓记录。';
+const LOGIN_REQUIRED_TIP = '登录后可使用该功能';
+const FUND_PAGE_CACHE_TTL = 30000;
+const STOCK_PAGE_CACHE_TTL = 30000;
+const PROFILE_PAGE_CACHE_TTL = 60000;
+const DEFAULT_RENDERED_TREND_COUNT = 3;
 
 const rawFunds = ref<FundTodayItem[]>([]);
 const assetMode = ref<'fund' | 'stock'>('fund');
@@ -689,6 +701,10 @@ const historyModal = ref({
   name: '',
   rows: [] as FundArchiveRow[]
 });
+const fundLoadedAt = ref(0);
+const stockLoadedAt = ref(0);
+const profileLoadedAt = ref(0);
+const expandedTrendKeys = ref<Record<string, boolean>>({});
 
 const metrics = computed(() => buildPortfolioMetrics(rawFunds.value));
 const funds = computed(() => metrics.value.funds);
@@ -714,6 +730,8 @@ const ocrButtonText = computed(() => {
 });
 const avatarUrl = computed(() => sessionState.avatarDataUrl || sessionState.avatarUrl || '');
 const avatarText = computed(() => avatarInitial(sessionState.username));
+const accountEntryTitle = computed(() => (sessionState.username ? '个人中心' : '登录 / 同步持仓'));
+const accountEntrySubtitle = computed(() => (sessionState.username ? sessionState.displayName || sessionState.username : '同步个人记录'));
 const stockKlinePoints = computed(() =>
   normalizeStockKlines(stockKlineRows.value).map((row) => row.close)
 );
@@ -739,7 +757,16 @@ const privacyLabel = computed(() => {
 onShow(() => {
   loadSession();
   privacyMode.value = normalizePrivacyMode(getStorage(PRIVACY_KEY, privacyMode.value));
-  if (!sessionState.username) return;
+  if (!sessionState.username) {
+    rawFunds.value = [];
+    stockHoldings.value = [];
+    stockWatchList.value = [];
+    stockUpdatedAt.value = '';
+    fundLoadedAt.value = 0;
+    stockLoadedAt.value = 0;
+    profileLoadedAt.value = 0;
+    return;
+  }
 
   loadProfile().catch((error) => console.warn('[home:profile]', error));
   if (assetMode.value === 'stock') {
@@ -771,8 +798,10 @@ async function loadFunds(force: boolean) {
   if (loading.value) return;
   if (!sessionState.username) {
     rawFunds.value = [];
+    fundLoadedAt.value = 0;
     return;
   }
+  if (!force && rawFunds.value.length > 0 && Date.now() - fundLoadedAt.value < FUND_PAGE_CACHE_TTL) return;
 
   loading.value = true;
   try {
@@ -780,6 +809,7 @@ async function loadFunds(force: boolean) {
     const items = Array.isArray(data) ? data : [];
     logFundTodayAudit(items);
     rawFunds.value = items;
+    fundLoadedAt.value = Date.now();
   } finally {
     loading.value = false;
   }
@@ -825,6 +855,14 @@ async function loadStocks(force: boolean) {
     stockHoldings.value = [];
     stockWatchList.value = [];
     stockUpdatedAt.value = '';
+    stockLoadedAt.value = 0;
+    return;
+  }
+  if (
+    !force &&
+    (stockHoldings.value.length > 0 || stockWatchList.value.length > 0) &&
+    Date.now() - stockLoadedAt.value < STOCK_PAGE_CACHE_TTL
+  ) {
     return;
   }
 
@@ -836,6 +874,7 @@ async function loadStocks(force: boolean) {
     stockHoldings.value = Array.isArray(data.holdings) ? data.holdings : [];
     stockWatchList.value = Array.isArray(data.watchList) ? data.watchList : [];
     stockUpdatedAt.value = String(data.updatedAt || '');
+    stockLoadedAt.value = Date.now();
 
     if (!selectedStock.value.code && !selectedStock.value.stockCode && !selectedStock.value.symbol) {
       const first = stockHoldings.value[0] || stockWatchList.value[0];
@@ -1305,6 +1344,7 @@ function confirmModal(content: string) {
 
 async function loadProfile() {
   if (!sessionState.username || profileLoading.value) return;
+  if (profileLoadedAt.value > 0 && Date.now() - profileLoadedAt.value < PROFILE_PAGE_CACHE_TTL) return;
 
   profileLoading.value = true;
   try {
@@ -1317,21 +1357,36 @@ async function loadProfile() {
       avatarDataUrl: avatar,
       loginTime: sessionState.loginTime || Date.now()
     });
+    profileLoadedAt.value = Date.now();
   } finally {
     profileLoading.value = false;
   }
 }
 
 function openProfile() {
-  if (!requireLogin()) return;
+  if (!sessionState.username) {
+    navigateToLogin();
+    return;
+  }
+
   uni.navigateTo({ url: '/pages/profile/index' });
 }
 
 function requireLogin() {
   if (sessionState.username) return true;
 
-  uni.showToast({ title: LOGIN_SYNC_TIP, icon: 'none', duration: 2600 });
+  uni.showToast({ title: LOGIN_REQUIRED_TIP, icon: 'none', duration: 2200 });
+  setTimeout(() => navigateToLogin(), 500);
   return false;
+}
+
+function navigateToLogin() {
+  uni.navigateTo({
+    url: '/pages/login/index',
+    fail: () => {
+      uni.redirectTo({ url: '/pages/login/index' });
+    }
+  });
 }
 
 function normalizePrivacyMode(value: unknown): PrivacyMode {
@@ -1510,6 +1565,18 @@ function todayTrendPoints(fund: FundView) {
 
 function trendPointCount(fund: FundView) {
   return todayTrendPoints(fund).length;
+}
+
+function shouldRenderFundTrend(fund: FundView, index: number) {
+  return index < DEFAULT_RENDERED_TREND_COUNT || Boolean(expandedTrendKeys.value[fund.viewKey]);
+}
+
+function expandFundTrend(fund: FundView) {
+  if (!fund.viewKey) return;
+  expandedTrendKeys.value = {
+    ...expandedTrendKeys.value,
+    [fund.viewKey]: true
+  };
 }
 
 function fundTrendCanvasId(fund: FundView) {
@@ -1698,31 +1765,43 @@ function getErrorMessage(error: unknown, fallback: string) {
   justify-content: space-between;
   padding: 20rpx;
   background:
-    radial-gradient(circle at 12% 10%, rgba(255, 255, 255, 0.09), transparent 34%),
-    linear-gradient(135deg, rgba(33, 50, 89, 0.6), rgba(26, 32, 70, 0.48));
+    radial-gradient(circle at 14% 0%, $soft-pink, transparent 30%),
+    radial-gradient(circle at 88% 0%, $soft-cyan, transparent 30%),
+    rgba(18, 28, 56, 0.78);
 }
 
 .user-panel {
-  flex: 0 0 92rpx;
+  flex: 1 1 210rpx;
   min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.avatar-button {
-  width: 72rpx;
-  height: 72rpx;
-  padding: 0;
-  border-radius: 50%;
-  background: transparent;
-  flex-shrink: 0;
+.account-button {
+  width: 100%;
+  min-width: 0;
+  min-height: 76rpx;
+  padding: 0 18rpx;
+  border-radius: 999rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  color: $text-white;
+  background: rgba(96, 165, 250, 0.1);
+  border: 1rpx solid rgba(191, 219, 254, 0.16);
+}
+
+.account-button.guest {
+  background: linear-gradient(135deg, rgba(255, 95, 162, 0.2), rgba(139, 92, 246, 0.24), rgba(56, 189, 248, 0.16));
+  box-shadow: 0 14rpx 32rpx rgba(139, 92, 246, 0.14);
 }
 
 .avatar-img,
 .avatar-fallback {
-  width: 72rpx;
-  height: 72rpx;
+  width: 56rpx;
+  height: 56rpx;
   border-radius: 50%;
   flex-shrink: 0;
   border: 2rpx solid rgba(255, 255, 255, 0.24);
@@ -1734,9 +1813,41 @@ function getErrorMessage(error: unknown, fallback: string) {
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: 34rpx;
+  font-size: 28rpx;
   font-weight: 900;
-  background: linear-gradient(135deg, $primary-blue, $primary-purple);
+  background: $rainbow-gradient;
+}
+
+.account-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.account-title,
+.account-subtitle {
+  max-width: 170rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-title {
+  font-size: 23rpx;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.account-subtitle {
+  margin-top: 5rpx;
+  color: $text-muted;
+  font-size: 18rpx;
+  line-height: 1.1;
+}
+
+.account-button.guest .account-subtitle {
+  color: rgba(239, 246, 255, 0.78);
 }
 
 .privacy-button,
@@ -1749,12 +1860,12 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 .action-buttons {
-  flex: 1.05 1 290rpx;
+  flex: 1 1 250rpx;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 0;
   min-width: 230rpx;
-  max-width: 320rpx;
+  max-width: 300rpx;
 }
 
 .ocr-button {
@@ -1795,8 +1906,8 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 .asset-switch-btn.active {
   color: $text-white;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.92), rgba(124, 58, 237, 0.9));
-  box-shadow: 0 16rpx 42rpx rgba(91, 141, 255, 0.22);
+  background: $rainbow-gradient;
+  box-shadow: 0 16rpx 42rpx rgba(139, 92, 246, 0.2);
 }
 
 .notice-card {
@@ -1815,10 +1926,10 @@ function getErrorMessage(error: unknown, fallback: string) {
 .hero-card {
   padding: 38rpx;
   background:
-    radial-gradient(circle at 12% 10%, rgba(90, 167, 255, 0.24), transparent 38%),
-    radial-gradient(circle at 92% 0%, rgba(139, 124, 246, 0.22), transparent 32%),
-    linear-gradient(135deg, rgba(14, 25, 50, 0.88), rgba(35, 42, 91, 0.66));
-  box-shadow: 0 24rpx 64rpx rgba(3, 7, 18, 0.2), 0 0 36rpx rgba(90, 167, 255, 0.1);
+    radial-gradient(circle at 18% 0%, rgba(255, 95, 162, 0.22), transparent 34%),
+    radial-gradient(circle at 86% 4%, rgba(56, 189, 248, 0.18), transparent 34%),
+    linear-gradient(135deg, rgba(14, 25, 50, 0.9), rgba(35, 42, 91, 0.68));
+  box-shadow: 0 24rpx 64rpx rgba(3, 7, 18, 0.2), 0 0 34rpx rgba(139, 92, 246, 0.11);
 }
 
 .hero-top,
@@ -1856,7 +1967,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16rpx;
+  gap: 18rpx;
   margin-top: 34rpx;
 }
 
@@ -1865,13 +1976,15 @@ function getErrorMessage(error: unknown, fallback: string) {
   min-width: 0;
   box-sizing: border-box;
   padding: 20rpx;
-  border-radius: 30rpx;
-  background: rgba(12, 20, 39, 0.34);
+  border-radius: 34rpx;
+  background:
+    radial-gradient(circle at 22% 0%, rgba(255, 95, 162, 0.06), transparent 32%),
+    rgba(12, 20, 39, 0.34);
   border: 1rpx solid rgba(191, 219, 254, 0.1);
 }
 
 .glow-cell {
-  box-shadow: inset 0 0 0 1rpx rgba(96, 165, 250, 0.18), 0 0 28rpx rgba(59, 130, 246, 0.1);
+  box-shadow: inset 0 0 0 1rpx rgba(255, 255, 255, 0.12), 0 0 28rpx rgba(139, 92, 246, 0.12);
 }
 
 .metric-label {
@@ -2036,7 +2149,9 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 .fund-card {
   background:
-    radial-gradient(circle at 92% 8%, rgba(139, 124, 246, 0.16), transparent 34%),
+    linear-gradient(90deg, rgba(255, 95, 162, 0.5), rgba(139, 92, 246, 0.45), rgba(56, 189, 248, 0.42)) top left / 100% 6rpx no-repeat,
+    radial-gradient(circle at 14% 0%, rgba(255, 95, 162, 0.12), transparent 34%),
+    radial-gradient(circle at 92% 8%, rgba(56, 189, 248, 0.12), transparent 34%),
     linear-gradient(145deg, rgba(34, 49, 86, 0.58), rgba(17, 27, 52, 0.46));
 }
 
@@ -2123,8 +2238,10 @@ function getErrorMessage(error: unknown, fallback: string) {
 .history-chart-block {
   margin-top: 22rpx;
   padding: 18rpx;
-  border-radius: 28rpx;
-  background: rgba(12, 20, 39, 0.28);
+  border-radius: 32rpx;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(255, 95, 162, 0.08), transparent 30%),
+    rgba(12, 20, 39, 0.28);
   border: 1rpx solid rgba(191, 219, 254, 0.1);
 }
 
@@ -2146,7 +2263,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 .fund-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14rpx;
+  gap: 18rpx;
   margin-top: 26rpx;
 }
 
@@ -2180,6 +2297,19 @@ function getErrorMessage(error: unknown, fallback: string) {
   background: rgba(56, 189, 248, 0.14);
   border: 1rpx solid rgba(56, 189, 248, 0.28);
   font-size: 22rpx;
+  font-weight: 900;
+}
+
+.expand-trend-button {
+  width: 100%;
+  height: 112rpx;
+  border-radius: 24rpx;
+  color: #dbeafe;
+  background:
+    linear-gradient(135deg, rgba(255, 95, 162, 0.08), rgba(139, 92, 246, 0.12), rgba(56, 189, 248, 0.08)),
+    rgba(15, 23, 42, 0.28);
+  border: 1rpx solid rgba(255, 255, 255, 0.1);
+  font-size: 24rpx;
   font-weight: 900;
 }
 

@@ -22,12 +22,19 @@
 }
 .switch-btn.active.data-v-a33dc070 {
   color: #fff;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.16), transparent 42%), linear-gradient(135deg, #5aa7ff 0%, #8b7cf6 100%);
-  box-shadow: 0 14rpx 34rpx rgba(90, 167, 255, 0.24), inset 0 1rpx 0 rgba(255, 255, 255, 0.22);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 42%), linear-gradient(135deg, #ff5fa2 0%, #8b5cf6 52%, #38bdf8 100%);
+  box-shadow: 0 16rpx 40rpx rgba(139, 92, 246, 0.2), 0 0 24rpx rgba(56, 189, 248, 0.12), inset 0 1rpx 0 rgba(255, 255, 255, 0.22);
   color: #fff;
+}
+.notice-card.data-v-a33dc070 {
+  padding: 22rpx 26rpx;
+  color: #91a4c2;
+  font-size: 22rpx;
+  line-height: 1.55;
 }
 .news-card.data-v-a33dc070 {
   padding: 28rpx;
+  background: radial-gradient(circle at 12% 0%, rgba(255, 95, 162, 0.1), transparent 30%), radial-gradient(circle at 90% 8%, rgba(56, 189, 248, 0.08), transparent 28%), rgba(18, 28, 56, 0.72);
 }
 .news-head.data-v-a33dc070 {
   display: flex;
@@ -38,8 +45,8 @@
   height: 18rpx;
   margin-top: 12rpx;
   border-radius: 50%;
-  background: #5aa7ff;
-  box-shadow: 0 0 24rpx rgba(59, 130, 246, 0.65);
+  background: linear-gradient(135deg, #ff5fa2 0%, #8b5cf6 52%, #38bdf8 100%);
+  box-shadow: 0 0 24rpx rgba(139, 92, 246, 0.45);
 }
 .news-main.data-v-a33dc070 {
   min-width: 0;
@@ -77,7 +84,7 @@
   padding: 7rpx 14rpx;
   border-radius: 999rpx;
   color: #dbeafe;
-  background: rgba(59, 130, 246, 0.14);
+  background: linear-gradient(135deg, rgba(255, 95, 162, 0.1), rgba(139, 92, 246, 0.12), rgba(56, 189, 248, 0.1));
   font-size: 20rpx;
   font-weight: 800;
 }
