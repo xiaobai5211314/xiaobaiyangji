@@ -1,5 +1,5 @@
 <template>
-  <view class="page-shell analysis-page">
+  <view :class="['page-shell', 'analysis-page', themeClass]">
     <view class="page-header">
       <view>
         <text class="page-title">盈亏分析</text>
@@ -9,7 +9,7 @@
     </view>
 
     <view class="glass-card notice-card">
-      <text>数据仅供个人记录与行情参考，不构成投资建议，实际数据以基金公司、交易所或券商披露为准。</text>
+      <view class="notice-text">数据仅供个人记录与行情参考，不构成投资建议，实际数据以基金公司、交易所或券商披露为准。</view>
     </view>
 
     <view v-if="isGuest" class="glass-card empty-card">
@@ -142,6 +142,7 @@ import { onPullDownRefresh, onShow } from '@dcloudio/uni-app';
 import AppTabBar from '../../components/AppTabBar.vue';
 import { getArchives, getInsightsDashboard, type ArchiveRow, type InsightsDashboard } from '../../services/api/analysis';
 import { loadSession, sessionState } from '../../stores/session';
+import { loadTheme, themeClass } from '../../stores/theme';
 
 interface DetailView {
   key: string;
@@ -253,6 +254,7 @@ const lossTop = computed(() =>
 );
 
 onShow(() => {
+  loadTheme();
   loadSession();
   if (!sessionState.username) {
     dashboard.value = {};

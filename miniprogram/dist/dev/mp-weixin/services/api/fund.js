@@ -5,13 +5,15 @@ const services_request = require("../request.js");
 function getTodayFunds(username, force = false) {
   const query = `username=${encodeURIComponent(username)}${force ? "&force=true" : ""}`;
   return services_request.get(`/api/fund/today?${query}`, {
-    loadingText: "读取持仓"
+    loadingText: "读取持仓",
+    fallbackData: []
   });
 }
 function getFundArchives(username, fundCode, limit = 365) {
   const query = `username=${encodeURIComponent(username)}&fundCode=${encodeURIComponent(fundCode)}&limit=${limit}`;
   return services_request.get(`/api/fund/get-archives?${query}`, {
-    loadingText: "读取历史"
+    loadingText: "读取历史",
+    fallbackData: []
   });
 }
 function parseUploadData(data) {

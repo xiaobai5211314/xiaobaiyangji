@@ -1,5 +1,5 @@
 <template>
-  <view class="app-tabbar">
+  <view :class="['app-tabbar', themeState.theme === 'neon' ? 'theme-neon' : 'theme-dark']">
     <button
       v-for="item in tabs"
       :key="item.key"
@@ -13,6 +13,8 @@
 </template>
 
 <script setup lang="ts">
+import { themeState } from '../stores/theme';
+
 type TabKey = 'home' | 'sector' | 'news' | 'analysis';
 
 defineProps<{
@@ -49,6 +51,15 @@ function handleTap(key: TabKey) {
   backdrop-filter: blur(20rpx);
 }
 
+.app-tabbar.theme-neon {
+  background:
+    radial-gradient(circle at 14% 0%, rgba(255, 95, 162, 0.2), transparent 32%),
+    radial-gradient(circle at 90% 8%, rgba(56, 189, 248, 0.18), transparent 30%),
+    rgba(255, 255, 255, 0.86);
+  border-color: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 24rpx 62rpx rgba(31, 41, 85, 0.16), inset 0 1rpx 0 rgba(255, 255, 255, 0.82);
+}
+
 .tab-item {
   min-width: 0;
   height: 124rpx;
@@ -65,6 +76,12 @@ function handleTap(key: TabKey) {
   box-shadow: inset 0 1rpx 0 rgba(255, 255, 255, 0.05);
 }
 
+.app-tabbar.theme-neon .tab-item {
+  color: #66758f;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1rpx 0 rgba(255, 255, 255, 0.72), 0 8rpx 22rpx rgba(31, 41, 85, 0.06);
+}
+
 .tab-item::after {
   border: none;
 }
@@ -75,6 +92,14 @@ function handleTap(key: TabKey) {
     $rainbow-gradient;
   color: #fff;
   box-shadow: 0 12rpx 30rpx rgba(139, 92, 246, 0.18), 0 0 22rpx rgba(56, 189, 248, 0.12), inset 0 1rpx 0 rgba(255, 255, 255, 0.18);
+}
+
+.app-tabbar.theme-neon .tab-item.active {
+  color: #fff;
+  background:
+    radial-gradient(circle at 28% 12%, rgba(255, 255, 255, 0.24), transparent 30%),
+    $rainbow-gradient;
+  box-shadow: 0 16rpx 34rpx rgba(139, 92, 246, 0.2), 0 0 26rpx rgba(56, 189, 248, 0.14);
 }
 
 .tab-icon {

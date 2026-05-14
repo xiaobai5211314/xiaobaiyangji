@@ -1,5 +1,5 @@
 <template>
-  <view class="page-shell home-page">
+  <view :class="['page-shell', 'home-page', themeClass]">
     <view class="page-header home-header compact-header">
       <view class="title-block">
         <text class="page-subtitle compact-subtitle">持仓、收益与净值参考</text>
@@ -34,7 +34,7 @@
     </view>
 
     <view class="glass-card notice-card">
-      <text>数据仅供个人记录与行情参考，不构成投资建议，实际数据以基金公司、交易所或券商披露为准。</text>
+      <view class="notice-text">数据仅供个人记录与行情参考，不构成投资建议，实际数据以基金公司、交易所或券商披露为准。</view>
     </view>
 
     <view v-if="assetMode === 'fund'" class="mode-pane">
@@ -641,6 +641,7 @@ import {
   type StockWatchItem
 } from '../../services/api/stock';
 import { loadSession, saveSession, sessionState } from '../../stores/session';
+import { loadTheme, themeClass } from '../../stores/theme';
 import { avatarInitial, formatMoney, profitClass, signedMoney, signedPercent } from '../../utils/format';
 import { getStorage, setStorage } from '../../utils/storage';
 import {
@@ -755,6 +756,7 @@ const privacyLabel = computed(() => {
 });
 
 onShow(() => {
+  loadTheme();
   loadSession();
   privacyMode.value = normalizePrivacyMode(getStorage(PRIVACY_KEY, privacyMode.value));
   if (!sessionState.username) {
@@ -820,7 +822,7 @@ function logFundTodayAudit(items: FundTodayItem[], phase = 'today') {
 
   items.slice(0, 8).forEach((fund) => {
     const fields = getFundNavFields(fund as FundView);
-    console.info('[fund.today nav fields]', {
+    console.warn('[fund.today nav fields]', {
       phase,
       name: fund.name,
       code: fund.code,
@@ -1364,11 +1366,6 @@ async function loadProfile() {
 }
 
 function openProfile() {
-  if (!sessionState.username) {
-    navigateToLogin();
-    return;
-  }
-
   uni.navigateTo({ url: '/pages/profile/index' });
 }
 

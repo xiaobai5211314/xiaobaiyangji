@@ -54,7 +54,8 @@ export function register(payload: LoginRequest) {
 
 export function getProfile(username: string) {
   return get<LoginResponse>(`/api/auth/profile?username=${encodeURIComponent(username)}`, {
-    loadingText: '读取用户'
+    loadingText: '读取用户',
+    fallbackData: { success: false, username }
   });
 }
 

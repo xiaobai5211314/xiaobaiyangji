@@ -76,6 +76,14 @@ function maskSensitiveData(data) {
   }
   return data;
 }
+function resolveFallback(options) {
+  if (!Object.prototype.hasOwnProperty.call(options, "fallbackData")) {
+    return { hasFallback: false, value: void 0 };
+  }
+  const fallback = options.fallbackData;
+  const value = typeof fallback === "function" ? fallback() : fallback;
+  return { hasFallback: true, value };
+}
 async function request(path, options = {}) {
   const method = options.method ?? "GET";
   const loadingText = options.loadingText ?? "加载中";
@@ -115,11 +123,18 @@ async function request(path, options = {}) {
     });
     const statusCode = Number(result.statusCode || 0);
     if (DEBUG_REQUEST) {
-      console.info("[request]", { method, url: fullUrl, statusCode });
+      console.warn("[request:debug]", { method, url: fullUrl, statusCode });
     }
     if (statusCode < 200 || statusCode >= 300) {
       const message = extractErrorMessage(result.data, `请求失败：${statusCode}`);
       console.warn("[request:error]", { method, fullUrl, statusCode, message, data: result.data });
+      const fallback = resolveFallback(options);
+      if (fallback.hasFallback) {
+        if (showErrorToast) {
+          common_vendor.index.showToast({ title: message, icon: "none", duration: 2200 });
+        }
+        return fallback.value;
+      }
       throw new ApiRequestError(message, statusCode, result.data);
     }
     if (canUseCache) {
@@ -127,12 +142,7 @@ async function request(path, options = {}) {
     }
     return result.data;
   })();
-  if (canUseCache) {
-    inFlightGets.set(cacheKey, executor);
-  }
-  try {
-    return await executor;
-  } catch (error) {
+  const handled = executor.catch((error) => {
     if (error instanceof ApiRequestError) {
       throw error;
     }
@@ -148,9 +158,19 @@ async function request(path, options = {}) {
     if (showErrorToast) {
       common_vendor.index.showToast({ title: message, icon: "none", duration: 2600 });
     }
+    const fallback = resolveFallback(options);
+    if (fallback.hasFallback) {
+      return fallback.value;
+    }
     throw new NetworkRequestError(message, extractErrMsg(error));
+  });
+  if (canUseCache) {
+    inFlightGets.set(cacheKey, handled);
+  }
+  try {
+    return await handled;
   } finally {
-    if (canUseCache) {
+    if (canUseCache && inFlightGets.get(cacheKey) === handled) {
       inFlightGets.delete(cacheKey);
     }
     if (!options.silent) {

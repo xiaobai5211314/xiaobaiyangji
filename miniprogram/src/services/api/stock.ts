@@ -160,13 +160,15 @@ export interface StockOcrConfirmResponse {
 
 export function getStockDashboard(username: string) {
   return get<StockDashboardResponse>(`/api/stock/dashboard?username=${encodeURIComponent(username)}`, {
-    loadingText: '读取股票'
+    loadingText: '读取股票',
+    fallbackData: { holdings: [], watchList: [] }
   });
 }
 
 export function searchStocks(keyword: string) {
   return get<StockSearchResponse>(`/api/stock/search?keyword=${encodeURIComponent(keyword)}`, {
-    loadingText: '查询股票'
+    loadingText: '查询股票',
+    fallbackData: { success: false, message: '查询失败，请稍后重试', items: [] }
   });
 }
 
@@ -201,7 +203,8 @@ export function deleteStockHolding(username: string, code: string, market?: stri
 export function getStockKlines(code: string, period: StockKlinePeriod) {
   const query = `code=${encodeURIComponent(code)}&period=${encodeURIComponent(period)}`;
   return get<StockKlinesResponse>(`/api/stock/klines?${query}`, {
-    loadingText: '读取走势'
+    loadingText: '读取走势',
+    fallbackData: { items: [] }
   });
 }
 

@@ -2,6 +2,7 @@
 const common_vendor = require("../../common/vendor.js");
 const services_api_news = require("../../services/api/news.js");
 const stores_session = require("../../stores/session.js");
+const stores_theme = require("../../stores/theme.js");
 if (!Math) {
   AppTabBar();
 }
@@ -24,6 +25,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
       return payload.updatedAt || "市场快讯与持仓影响";
     });
     common_vendor.onShow(() => {
+      stores_theme.loadTheme();
       stores_session.restoreSession();
       loadData(false).catch((error) => console.warn("[news:load]", error));
     });
@@ -72,13 +74,13 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         a: common_vendor.t(updatedAtText.value),
         b: common_vendor.t(activeItems.value.length),
         c: common_vendor.n(mode.value === "global" ? "active" : ""),
-        d: common_vendor.o(($event) => mode.value = "global", "cb"),
+        d: common_vendor.o(($event) => mode.value = "global", "ae"),
         e: common_vendor.n(mode.value === "holding" ? "active" : ""),
-        f: common_vendor.o(($event) => mode.value = "holding", "2f"),
+        f: common_vendor.o(($event) => mode.value = "holding", "94"),
         g: activeItems.value.length === 0 && !loading.value
       }, activeItems.value.length === 0 && !loading.value ? {
         h: common_vendor.t(mode.value === "holding" && !common_vendor.unref(stores_session.sessionState).username ? "登录后可同步你的个人持仓记录。" : "暂无资讯数据，点击重试或下拉刷新"),
-        i: common_vendor.o(($event) => loadData(true), "44")
+        i: common_vendor.o(($event) => loadData(true), "56")
       } : {}, {
         j: common_vendor.f(activeItems.value, (item, itemIndex, i0) => {
           return common_vendor.e({
@@ -110,7 +112,8 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         }),
         k: common_vendor.p({
           active: "news"
-        })
+        }),
+        l: common_vendor.n(common_vendor.unref(stores_theme.themeClass))
       });
     };
   }

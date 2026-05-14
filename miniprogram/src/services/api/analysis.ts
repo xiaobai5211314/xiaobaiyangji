@@ -80,12 +80,14 @@ export interface ArchiveRow {
 
 export function getInsightsDashboard(username: string) {
   return get<InsightsDashboard>(`/api/fund/insights/dashboard?username=${encodeURIComponent(username)}`, {
-    loadingText: '读取盈亏'
+    loadingText: '读取盈亏',
+    fallbackData: {}
   });
 }
 
 export function getArchives(username: string, limit = 120) {
   return get<ArchiveRow[]>(`/api/fund/get-archives?username=${encodeURIComponent(username)}&limit=${limit}`, {
-    loadingText: '读取档案'
+    loadingText: '读取档案',
+    fallbackData: []
   });
 }

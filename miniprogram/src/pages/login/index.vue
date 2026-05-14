@@ -1,5 +1,5 @@
 <template>
-  <view class="page-shell login-page">
+  <view :class="['page-shell', 'login-page', themeClass]">
     <view class="brand">
       <view class="brand-mark">
         <text>估</text>
@@ -58,6 +58,7 @@ import { reactive, ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import { login, pickAvatar, pickDisplayName, pickUsername, register } from '../../services/api/auth';
 import { loadSession, saveSession } from '../../stores/session';
+import { loadTheme, themeClass } from '../../stores/theme';
 
 const submitting = ref(false);
 const registering = ref(false);
@@ -68,6 +69,7 @@ const form = reactive({
 });
 
 onShow(() => {
+  loadTheme();
   const session = loadSession();
   if (session?.username) {
     uni.reLaunch({ url: '/pages/home/index' });

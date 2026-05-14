@@ -151,26 +151,29 @@ export interface GlobalIndexItem {
 
 export function getSectors(force = false) {
   return get<SectorRadarResponse>(`/api/fund/sectors${force ? '?force=true' : ''}`, {
-    loadingText: '读取板块'
+    loadingText: '读取板块',
+    fallbackData: { top: [], bottom: [], all: [] }
   });
 }
 
 export function getCapitalFlow(force = false, limit = 30) {
   const query = `limit=${limit}${force ? '&force=true' : ''}`;
   return get<CapitalFlowResponse>(`/api/fund/capital-flow?${query}`, {
-    loadingText: '读取资金'
+    loadingText: '读取资金',
+    fallbackData: { rows: [], inflow: [], outflow: [] }
   }).then(normalizeCapitalFlowResponse);
 }
 
 export function getGlobalIndices(force = false) {
   return get<unknown>(`/api/fund/global-indices${force ? '?force=true' : ''}`, {
-    loadingText: '读取大盘'
+    loadingText: '读取大盘',
+    fallbackData: []
   }).then((payload) => {
-    if (DEBUG_MARKET_INDEX) console.info('[global-indices raw response]', payload);
+    if (DEBUG_MARKET_INDEX) console.warn('[global-indices raw response]', payload);
     const rows = extractGlobalIndexRows(payload).map(normalizeGlobalIndexRow);
     if (DEBUG_MARKET_INDEX) {
       rows.forEach((item) => {
-        console.info('[global-indices normalized]', {
+        console.warn('[global-indices normalized]', {
           name: item.name,
           point: item.point ?? item.latest ?? null,
           todayRate: item.todayRate ?? null,

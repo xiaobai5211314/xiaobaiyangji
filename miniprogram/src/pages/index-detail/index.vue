@@ -1,5 +1,5 @@
 <template>
-  <view class="page-shell index-detail-page">
+  <view :class="['page-shell', 'index-detail-page', themeClass]">
     <view class="page-header">
       <view>
         <text class="page-title">{{ displayIndexName(currentIndex) || '指数详情' }}</text>
@@ -52,6 +52,7 @@ import { computed, ref } from 'vue';
 import { onLoad, onPullDownRefresh } from '@dcloudio/uni-app';
 import { getGlobalIndices, type GlobalIndexItem, type GlobalIndexKline } from '../../services/api/sector';
 import { optionalProfitClass, signedPercent } from '../../utils/format';
+import { loadTheme, themeClass } from '../../stores/theme';
 
 interface HistoryRow {
   raw: GlobalIndexKline;
@@ -80,6 +81,7 @@ const currentIndex = computed(() => {
 const historyRows = computed(() => indexHistoryRows(currentIndex.value));
 
 onLoad((query) => {
+  loadTheme();
   indexName.value = decodeURIComponent(String(query?.indexName || ''));
   indexCode.value = decodeURIComponent(String(query?.indexCode || ''));
   loadData(false).catch((error) => console.warn('[index-detail:load]', error));

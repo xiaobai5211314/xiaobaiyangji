@@ -77,25 +77,28 @@ const CAPITAL_FLOW_EXCLUDED_NAME_KEYWORDS = [
 const DEBUG_MARKET_INDEX = (define_import_meta_env_default == null ? void 0 : define_import_meta_env_default.VITE_DEBUG_MARKET_INDEX) === "true";
 function getSectors(force = false) {
   return services_request.get(`/api/fund/sectors${force ? "?force=true" : ""}`, {
-    loadingText: "读取板块"
+    loadingText: "读取板块",
+    fallbackData: { top: [], bottom: [], all: [] }
   });
 }
 function getCapitalFlow(force = false, limit = 30) {
   const query = `limit=${limit}${force ? "&force=true" : ""}`;
   return services_request.get(`/api/fund/capital-flow?${query}`, {
-    loadingText: "读取资金"
+    loadingText: "读取资金",
+    fallbackData: { rows: [], inflow: [], outflow: [] }
   }).then(normalizeCapitalFlowResponse);
 }
 function getGlobalIndices(force = false) {
   return services_request.get(`/api/fund/global-indices${force ? "?force=true" : ""}`, {
-    loadingText: "读取大盘"
+    loadingText: "读取大盘",
+    fallbackData: []
   }).then((payload) => {
     if (DEBUG_MARKET_INDEX)
-      console.info("[global-indices raw response]", payload);
+      console.warn("[global-indices raw response]", payload);
     const rows = extractGlobalIndexRows(payload).map(normalizeGlobalIndexRow);
     if (DEBUG_MARKET_INDEX) {
       rows.forEach((item) => {
-        console.info("[global-indices normalized]", {
+        console.warn("[global-indices normalized]", {
           name: item.name,
           point: item.point ?? item.latest ?? null,
           todayRate: item.todayRate ?? null,

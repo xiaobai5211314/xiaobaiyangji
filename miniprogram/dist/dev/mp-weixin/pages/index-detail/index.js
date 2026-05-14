@@ -2,6 +2,7 @@
 const common_vendor = require("../../common/vendor.js");
 const services_api_sector = require("../../services/api/sector.js");
 const utils_format = require("../../utils/format.js");
+const stores_theme = require("../../stores/theme.js");
 const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
   __name: "index",
   setup(__props) {
@@ -16,6 +17,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
     });
     const historyRows = common_vendor.computed(() => indexHistoryRows(currentIndex.value));
     common_vendor.onLoad((query) => {
+      stores_theme.loadTheme();
       indexName.value = decodeURIComponent(String((query == null ? void 0 : query.indexName) || ""));
       indexCode.value = decodeURIComponent(String((query == null ? void 0 : query.indexCode) || ""));
       loadData(false).catch((error) => console.warn("[index-detail:load]", error));
@@ -195,7 +197,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
     return (_ctx, _cache) => {
       return common_vendor.e({
         a: common_vendor.t(displayIndexName(currentIndex.value) || "指数详情"),
-        b: common_vendor.o(goBack, "1c"),
+        b: common_vendor.o(goBack, "0c"),
         c: !currentIndex.value.name && !loading.value
       }, !currentIndex.value.name && !loading.value ? {} : common_vendor.e({
         d: common_vendor.t(indexPointText(currentIndex.value)),
@@ -218,7 +220,9 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         l: currentIndex.value.updatedAt
       }, currentIndex.value.updatedAt ? {
         m: common_vendor.t(currentIndex.value.updatedAt)
-      } : {}));
+      } : {}), {
+        n: common_vendor.n(common_vendor.unref(stores_theme.themeClass))
+      });
     };
   }
 });

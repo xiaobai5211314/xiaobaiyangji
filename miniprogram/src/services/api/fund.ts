@@ -115,14 +115,16 @@ export interface FundArchiveRow {
 export function getTodayFunds(username: string, force = false) {
   const query = `username=${encodeURIComponent(username)}${force ? '&force=true' : ''}`;
   return get<FundTodayItem[]>(`/api/fund/today?${query}`, {
-    loadingText: '读取持仓'
+    loadingText: '读取持仓',
+    fallbackData: []
   });
 }
 
 export function getFundArchives(username: string, fundCode: string, limit = 365) {
   const query = `username=${encodeURIComponent(username)}&fundCode=${encodeURIComponent(fundCode)}&limit=${limit}`;
   return get<FundArchiveRow[]>(`/api/fund/get-archives?${query}`, {
-    loadingText: '读取历史'
+    loadingText: '读取历史',
+    fallbackData: []
   });
 }
 

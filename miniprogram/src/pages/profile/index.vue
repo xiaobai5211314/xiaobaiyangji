@@ -1,9 +1,9 @@
 <template>
-  <view class="page-shell profile-page">
+  <view :class="['page-shell', 'profile-page', themeClass]">
     <view class="page-header">
       <view>
         <text class="page-title">个人中心</text>
-        <text class="page-subtitle">头像与登录状态</text>
+        <text class="page-subtitle">个人资料与主题设置</text>
       </view>
       <button class="back-button" @tap="goBack">返回</button>
     </view>
@@ -16,12 +16,31 @@
         </view>
       </button>
       <text class="profile-name">{{ displayUsername }}</text>
-      <text class="profile-subtitle">点击头像或按钮可更换头像</text>
+      <text class="profile-subtitle">{{ profileSubtitle }}</text>
 
-      <button class="primary-gradient-button action-button" :disabled="avatarUploading" @tap="changeAvatar">
-        {{ avatarUploading ? '上传中...' : '更换头像' }}
+      <button class="primary-gradient-button action-button" :disabled="avatarUploading" @tap="handleProfileAction">
+        {{ primaryActionText }}
       </button>
-      <button class="logout-button" @tap="logout">退出登录</button>
+
+      <view class="theme-panel">
+        <view class="theme-head">
+          <text class="theme-title">主题切换</text>
+          <text class="theme-subtitle">仅调整视觉，不重新请求数据</text>
+        </view>
+        <view class="theme-options">
+          <button
+            v-for="item in themeOptions"
+            :key="item.value"
+            :class="['theme-option', themeState.theme === item.value ? 'active' : '']"
+            @tap="selectTheme(item.value)"
+          >
+            <text>{{ item.label }}</text>
+            <text>{{ item.description }}</text>
+          </button>
+        </view>
+      </view>
+
+      <button v-if="sessionState.username" class="logout-button" @tap="logout">退出登录</button>
     </view>
   </view>
 </template>
@@ -31,18 +50,24 @@ import { computed, ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import { uploadAvatar } from '../../services/api/auth';
 import { clearSession, loadSession, saveSession, sessionState } from '../../stores/session';
+import { loadTheme, setTheme, themeClass, themeOptions, themeState, type AppTheme } from '../../stores/theme';
 import { avatarInitial } from '../../utils/format';
 
 const avatarUploading = ref(false);
 const avatarUrl = computed(() => sessionState.avatarDataUrl || sessionState.avatarUrl || '');
 const avatarText = computed(() => avatarInitial(sessionState.username));
 const displayUsername = computed(() => sessionState.displayName || sessionState.username || '未登录');
+const profileSubtitle = computed(() =>
+  sessionState.username ? '点击头像或按钮可更换头像' : '登录后可同步你的个人持仓记录。'
+);
+const primaryActionText = computed(() => {
+  if (!sessionState.username) return '登录 / 同步持仓';
+  return avatarUploading.value ? '上传中...' : '更换头像';
+});
 
 onShow(() => {
+  loadTheme();
   loadSession();
-  if (!sessionState.username) {
-    uni.reLaunch({ url: '/pages/login/index' });
-  }
 });
 
 function chooseImage() {
@@ -64,7 +89,11 @@ function chooseImage() {
 }
 
 async function changeAvatar() {
-  if (!sessionState.username || avatarUploading.value) return;
+  if (!sessionState.username) {
+    uni.showToast({ title: '登录后可使用该功能', icon: 'none' });
+    return;
+  }
+  if (avatarUploading.value) return;
 
   try {
     const filePath = await chooseImage();
@@ -93,9 +122,29 @@ async function changeAvatar() {
   }
 }
 
+function handleProfileAction() {
+  if (!sessionState.username) {
+    uni.navigateTo({
+      url: '/pages/login/index',
+      fail: () => uni.redirectTo({ url: '/pages/login/index' })
+    });
+    return;
+  }
+
+  changeAvatar();
+}
+
 function logout() {
   clearSession();
   uni.reLaunch({ url: '/pages/login/index' });
+}
+
+function selectTheme(theme: AppTheme) {
+  setTheme(theme);
+  uni.showToast({
+    title: theme === 'neon' ? '已切换霓虹主题' : '已切换深色主题',
+    icon: 'none'
+  });
 }
 
 function goBack() {
@@ -196,6 +245,80 @@ function getErrorMessage(error: unknown, fallback: string) {
 .logout-button {
   width: 100%;
   min-height: 88rpx;
+}
+
+.theme-panel {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 24rpx;
+  border-radius: 32rpx;
+  background: rgba(15, 23, 42, 0.34);
+  border: 1rpx solid rgba(255, 255, 255, 0.1);
+}
+
+.theme-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  margin-bottom: 18rpx;
+}
+
+.theme-title {
+  color: $text-white;
+  font-size: 28rpx;
+  font-weight: 900;
+}
+
+.theme-subtitle {
+  color: $text-muted;
+  font-size: 22rpx;
+}
+
+.theme-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+}
+
+.theme-option {
+  min-height: 112rpx;
+  padding: 18rpx;
+  border-radius: 30rpx;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1rpx solid rgba(148, 163, 184, 0.16);
+  color: $text-soft;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8rpx;
+  text-align: left;
+}
+
+.theme-option::after {
+  border: none;
+}
+
+.theme-option text:first-child {
+  font-size: 26rpx;
+  font-weight: 900;
+}
+
+.theme-option text:last-child {
+  color: $text-muted;
+  font-size: 21rpx;
+}
+
+.theme-option.active {
+  color: #fff;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 42%),
+    $rainbow-gradient;
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 16rpx 34rpx rgba(139, 92, 246, 0.18);
+}
+
+.theme-option.active text:last-child {
+  color: rgba(255, 255, 255, 0.82);
 }
 
 .logout-button {

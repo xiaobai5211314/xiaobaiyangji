@@ -4,12 +4,14 @@ const services_config = require("../config.js");
 const services_request = require("../request.js");
 function getStockDashboard(username) {
   return services_request.get(`/api/stock/dashboard?username=${encodeURIComponent(username)}`, {
-    loadingText: "读取股票"
+    loadingText: "读取股票",
+    fallbackData: { holdings: [], watchList: [] }
   });
 }
 function searchStocks(keyword) {
   return services_request.get(`/api/stock/search?keyword=${encodeURIComponent(keyword)}`, {
-    loadingText: "查询股票"
+    loadingText: "查询股票",
+    fallbackData: { success: false, message: "查询失败，请稍后重试", items: [] }
   });
 }
 function saveStockWatch(payload) {
@@ -39,7 +41,8 @@ function deleteStockHolding(username, code, market) {
 function getStockKlines(code, period) {
   const query = `code=${encodeURIComponent(code)}&period=${encodeURIComponent(period)}`;
   return services_request.get(`/api/stock/klines?${query}`, {
-    loadingText: "读取走势"
+    loadingText: "读取走势",
+    fallbackData: { items: [] }
   });
 }
 function previewStockOcr(username, filePath) {

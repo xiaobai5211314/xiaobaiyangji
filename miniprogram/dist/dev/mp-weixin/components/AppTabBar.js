@@ -1,5 +1,6 @@
 "use strict";
 const common_vendor = require("../common/vendor.js");
+const stores_theme = require("../stores/theme.js");
 const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
   __name: "AppTabBar",
   props: {
@@ -31,7 +32,8 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
             d: common_vendor.n(_ctx.active === item.key ? "active" : ""),
             e: common_vendor.o(($event) => handleTap(item.key), item.key)
           };
-        })
+        }),
+        b: common_vendor.n(common_vendor.unref(stores_theme.themeState).theme === "neon" ? "theme-neon" : "theme-dark")
       };
     };
   }

@@ -2,6 +2,7 @@
 const common_vendor = require("../../common/vendor.js");
 const services_api_sector = require("../../services/api/sector.js");
 const utils_format = require("../../utils/format.js");
+const stores_theme = require("../../stores/theme.js");
 var define_import_meta_env_default = {};
 if (!Math) {
   AppTabBar();
@@ -57,6 +58,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
       return groups.filter((group) => group.items.length > 0);
     });
     common_vendor.onShow(() => {
+      stores_theme.loadTheme();
       loadData(false).catch((error) => console.warn("[sector:load]", error));
     });
     common_vendor.onPullDownRefresh(async () => {
@@ -246,7 +248,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
       if (!DEBUG_FIELD_AUDIT)
         return;
       rows.forEach((item) => {
-        console.info("[global.indices fields]", {
+        console.warn("[global.indices fields]", {
           name: item.name,
           code: item.code,
           point: indexPointValue(item),
@@ -255,7 +257,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
           historyCount: indexHistoryCount(item)
         });
         if (!indexHasMarketData(item)) {
-          console.info("待核实：后端未返回该指数有效行情字段。", {
+          console.warn("待核实：后端未返回该指数有效行情字段。", {
             name: item.name,
             code: item.code,
             point: indexPointValue(item),
@@ -334,7 +336,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         }),
         s: visibleIndices.value.length === 0 && !loading.value
       }, visibleIndices.value.length === 0 && !loading.value ? {
-        t: common_vendor.o(($event) => loadData(true), "34")
+        t: common_vendor.o(($event) => loadData(true), "8d")
       } : {}, {
         v: common_vendor.f(indexGroups.value, (group, k0, i0) => {
           return {
@@ -362,7 +364,8 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         }),
         w: common_vendor.p({
           active: "sector"
-        })
+        }),
+        x: common_vendor.n(common_vendor.unref(stores_theme.themeClass))
       });
     };
   }

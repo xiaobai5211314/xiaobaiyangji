@@ -11,9 +11,56 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="preconnect" href="https://guzhi.21212121.xyz" crossorigin>
+    <script>
+        (function () {
+            try {
+                var theme = localStorage.getItem('guzhi_web_theme') === 'rainbow' ? 'rainbow' : 'classic';
+                document.documentElement.setAttribute('data-theme', theme);
+            } catch (e) {
+                document.documentElement.setAttribute('data-theme', 'classic');
+            }
+        })();
+    </script>
     <style>
+        :root {
+            --page-bg: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            --page-bg-color: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.4);
+            --card-border: rgba(255, 255, 255, 0.1);
+            --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            --primary-gradient: linear-gradient(135deg, #3b82f6, #6366f1);
+            --logo-gradient: linear-gradient(to right, #60a5fa, #a78bfa);
+            --secondary-gradient: linear-gradient(135deg, rgba(59, 130, 246, .16), rgba(139, 92, 246, .14));
+            --accent-pink: #ff5fa2;
+            --accent-purple: #8b5cf6;
+            --accent-blue: #38bdf8;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --profit-color: #ff4d4f;
+            --loss-color: #10b981;
+            --button-radius: 20px;
+            --card-radius: 16px;
+        }
+
+        :root[data-theme="rainbow"] {
+            --page-bg: radial-gradient(circle at 12% 0%, rgba(255,95,162,.10), transparent 28%),
+                radial-gradient(circle at 88% 4%, rgba(56,189,248,.10), transparent 30%),
+                linear-gradient(135deg, #0b1226 0%, #151d3f 52%, #1f2252 100%);
+            --page-bg-color: #0b1226;
+            --card-bg: radial-gradient(circle at 18% 0%, rgba(255,95,162,.18), transparent 32%),
+                radial-gradient(circle at 92% 12%, rgba(56,189,248,.16), transparent 30%),
+                rgba(18, 28, 56, .82);
+            --card-border: rgba(255,255,255,.12);
+            --card-shadow: 0 14px 36px rgba(2, 6, 23, .28), 0 0 22px rgba(139,92,246,.10);
+            --primary-gradient: linear-gradient(135deg, #ff5fa2 0%, #8b5cf6 48%, #38bdf8 100%);
+            --logo-gradient: var(--primary-gradient);
+            --secondary-gradient: linear-gradient(135deg, rgba(255,95,162,.22), rgba(139,92,246,.18), rgba(56,189,248,.16));
+            --button-radius: 999px;
+            --card-radius: 24px;
+        }
+
         html {
-            background-color: #0f172a;
+            background-color: var(--page-bg-color);
             overscroll-behavior-y: contain;
         }
 
@@ -24,8 +71,8 @@
         body {
             margin: 0;
             padding: 0;
-            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
-            color: #f8fafc;
+            background: var(--page-bg);
+            color: var(--text-main);
             font-family: "Microsoft YaHei", "微软雅黑", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             overflow-x: hidden;
             min-height: 100vh;
@@ -34,12 +81,12 @@
 
         /* 借鉴的新版毛玻璃与阴影质感 */
         .glass-panel {
-            background: rgba(30, 41, 59, 0.4);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 16px;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: var(--card-radius);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            box-shadow: var(--card-shadow);
         }
 
         .header {
@@ -55,7 +102,7 @@
             margin: 0;
             font-size: 20px;
             font-weight: 800;
-            background: linear-gradient(to right, #60a5fa, #a78bfa);
+            background: var(--logo-gradient);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             letter-spacing: 1px;
@@ -85,7 +132,7 @@
             border: 1px solid rgba(255,255,255,0.15);
             color: white;
             padding: 8px 16px;
-            border-radius: 20px;
+            border-radius: var(--button-radius);
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
@@ -101,7 +148,7 @@
             }
 
         .btn-primary {
-            background: linear-gradient(135deg, #3b82f6, #6366f1);
+            background: var(--primary-gradient);
             border: none;
             box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
         }
@@ -122,7 +169,7 @@
         }
 
         .btn-ocr {
-            background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+            background: var(--primary-gradient);
             border: none;
         }
 
@@ -2673,9 +2720,142 @@
                     font-size: 14px;
                 }
         }
+
+        .theme-settings {
+            margin: 0 18px 18px;
+            padding: 14px;
+            border-radius: 18px;
+            background: rgba(15, 23, 42, .34);
+            border: 1px solid rgba(255, 255, 255, .08);
+        }
+
+        .theme-settings-title {
+            color: var(--text-main);
+            font-size: 13px;
+            font-weight: 900;
+            margin-bottom: 10px;
+        }
+
+        .theme-choice-row {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .theme-choice-btn {
+            min-height: 42px;
+            justify-content: center;
+            border-radius: 999px;
+        }
+
+        .theme-choice-btn.active {
+            background: var(--primary-gradient);
+            border-color: transparent;
+            color: #fff;
+            box-shadow: 0 10px 24px rgba(139, 92, 246, .20);
+        }
+
+        :root[data-theme="rainbow"] .home-hero-clean,
+        :root[data-theme="rainbow"] .total-panel,
+        :root[data-theme="rainbow"] .feature-card,
+        :root[data-theme="rainbow"] .fund-card,
+        :root[data-theme="rainbow"] .stock-card,
+        :root[data-theme="rainbow"] .stock-detail-card,
+        :root[data-theme="rainbow"] .sector-page-layout > .glass-panel,
+        :root[data-theme="rainbow"] .analysis-grid > .glass-panel,
+        :root[data-theme="rainbow"] .calendar-day,
+        :root[data-theme="rainbow"] .profile-modal-card,
+        :root[data-theme="rainbow"] .global-indices-modal {
+            border-radius: var(--card-radius) !important;
+            border-color: var(--card-border) !important;
+            background: var(--card-bg) !important;
+            box-shadow: var(--card-shadow) !important;
+        }
+
+        :root[data-theme="rainbow"] .home-ocr-main,
+        :root[data-theme="rainbow"] .btn-primary:hover:not(:disabled),
+        :root[data-theme="rainbow"] .asset-mode-btn.active,
+        :root[data-theme="rainbow"] .news-tab.active,
+        :root[data-theme="rainbow"] .stock-kline-tab.active,
+        :root[data-theme="rainbow"] .calendar-day.active,
+        :root[data-theme="rainbow"] .bottom-tab.active {
+            background: var(--primary-gradient) !important;
+            border-color: transparent !important;
+            color: #fff !important;
+            box-shadow: 0 10px 26px rgba(139, 92, 246, .22), 0 0 18px rgba(56, 189, 248, .10) !important;
+        }
+
+        :root[data-theme="rainbow"] .bottom-tabbar {
+            border-radius: 999px !important;
+            background:
+                radial-gradient(circle at 18% 0%, rgba(255,95,162,.16), transparent 30%),
+                radial-gradient(circle at 88% 8%, rgba(56,189,248,.12), transparent 28%),
+                rgba(10, 18, 36, .88) !important;
+            border-color: var(--card-border) !important;
+        }
+
+        :root[data-theme="rainbow"] .bottom-tab {
+            border-radius: 999px !important;
+        }
+
+        :root[data-theme="rainbow"] .fund-card::before,
+        :root[data-theme="rainbow"] .stock-card::before,
+        :root[data-theme="rainbow"] .feature-card::before {
+            content: "";
+            position: absolute;
+            left: 14px;
+            right: 14px;
+            top: 0;
+            height: 3px;
+            border-radius: 999px;
+            background: var(--primary-gradient);
+            opacity: .55;
+        }
+
+        :root[data-theme="rainbow"] .fund-card,
+        :root[data-theme="rainbow"] .stock-card,
+        :root[data-theme="rainbow"] .feature-card {
+            position: relative;
+            overflow: hidden;
+        }
+
+        :root[data-theme="rainbow"] .fund-badge,
+        :root[data-theme="rainbow"] .news-badge,
+        :root[data-theme="rainbow"] .stock-code-chip,
+        :root[data-theme="rainbow"] .calibration-pill {
+            border-color: rgba(255, 255, 255, .12) !important;
+            background: var(--secondary-gradient) !important;
+        }
+
+        :root[data-theme="rainbow"] .profile-head {
+            background:
+                radial-gradient(circle at 20% 0%, rgba(255,95,162,.20), transparent 36%),
+                radial-gradient(circle at 90% 0%, rgba(56,189,248,.15), transparent 32%) !important;
+        }
+
+        :root[data-theme="rainbow"] .profile-avatar-large,
+        :root[data-theme="rainbow"] .user-avatar-btn {
+            background: var(--primary-gradient) !important;
+            border-color: rgba(255, 255, 255, .18) !important;
+        }
+
+        :root[data-theme="rainbow"] .modal-content {
+            border-radius: var(--card-radius);
+            background: var(--card-bg);
+            border-color: var(--card-border);
+            box-shadow: var(--card-shadow);
+        }
+
+        :root[data-theme="rainbow"] .profit-list-row > div:last-child {
+            min-width: 118px;
+            white-space: nowrap;
+        }
     </style>
 </head>
-<body>
+<body data-theme="classic">
+    <script>
+        document.body.setAttribute('data-theme', document.documentElement.getAttribute('data-theme') || 'classic');
+    </script>
     <div id="app" v-cloak>
         <div v-if="activePage === 'home' && (pullRefresh.show || pullRefresh.loading)" class="pull-refresh-indicator" :style="{ opacity: activePage === 'home' && (pullRefresh.show || pullRefresh.loading) ? 1 : 0 }">
             {{ pullRefresh.loading ? '正在刷新...' : (pullRefresh.distance >= 70 ? '松开刷新' : '下拉刷新') }}
@@ -3176,6 +3356,13 @@
                         <div class="profile-name">{{ currentUser }}</div>
                         <div class="profile-note">头像已保存到账号数据库，换设备或清缓存后仍可恢复</div>
                     </div>
+                    <div class="theme-settings">
+                        <div class="theme-settings-title">主题设置</div>
+                        <div class="theme-choice-row">
+                            <button :class="['btn', 'theme-choice-btn', appTheme === 'classic' ? 'active' : '']" @click="setAppTheme('classic')">深海玻璃</button>
+                            <button :class="['btn', 'theme-choice-btn', appTheme === 'rainbow' ? 'active' : '']" @click="setAppTheme('rainbow')">彩虹渐变</button>
+                        </div>
+                    </div>
                     <div class="profile-actions">
                         <button class="btn profile-action-btn btn-primary" @click="triggerAvatarUpload">🖼️ 设置头像</button>
                         <button class="btn profile-action-btn profile-logout-btn" @click="handleLogout">🚪 退出登录</button>
@@ -3412,7 +3599,7 @@
             </div>
 
             <div v-show="showGlobalIndices" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: flex-end; z-index: 2500;">
-                <div style="background: #1e293b; width: 100%; height: 80vh; border-radius: 20px 20px 0 0; padding: 20px; display: flex; flex-direction: column;">
+                <div class="global-indices-modal" style="background: #1e293b; width: 100%; height: 80vh; border-radius: 20px 20px 0 0; padding: 20px; display: flex; flex-direction: column;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                         <h3 style="color: white; margin: 0;">🌍 全球大盘雷达</h3>
                         <span @click="showGlobalIndices = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
@@ -3542,6 +3729,28 @@
                     const fd = new FormData();
                     for (const [k, v] of formData.entries()) fd.append(k, v);
                     return fetch(API_BASE + path, { method: 'POST', body: fd, cache: 'no-store' });
+                };
+
+                const THEME_STORAGE_KEY = 'guzhi_web_theme';
+                const normalizeTheme = (theme) => theme === 'rainbow' ? 'rainbow' : 'classic';
+                const applyAppTheme = (theme) => {
+                    const safeTheme = normalizeTheme(theme);
+                    document.documentElement.setAttribute('data-theme', safeTheme);
+                    if (document.body) document.body.setAttribute('data-theme', safeTheme);
+                    const metaTheme = document.querySelector('meta[name="theme-color"]');
+                    if (metaTheme) metaTheme.setAttribute('content', safeTheme === 'rainbow' ? '#151d3f' : '#0f172a');
+                };
+                const appTheme = ref(normalizeTheme(localStorage.getItem(THEME_STORAGE_KEY)));
+                applyAppTheme(appTheme.value);
+                const setAppTheme = (theme) => {
+                    const safeTheme = normalizeTheme(theme);
+                    appTheme.value = safeTheme;
+                    localStorage.setItem(THEME_STORAGE_KEY, safeTheme);
+                    applyAppTheme(safeTheme);
+                    nextTick(() => {
+                        if (chartInstance.value) chartInstance.value.resize();
+                        if (stockChartInstance.value) stockChartInstance.value.resize();
+                    });
                 };
 
                 const toasts = ref([]); let toastId = 0;
@@ -5077,6 +5286,7 @@
                 onUnmounted(() => { if (timer) clearInterval(timer); window.removeEventListener('resize', handleResize); document.removeEventListener('visibilitychange', handleVisibilityChange); window.removeEventListener('touchstart', onPullStart); window.removeEventListener('touchmove', onPullMove); window.removeEventListener('touchend', onPullEnd); if (chartInstance.value) chartInstance.value.dispose(); if (stockChartInstance.value) stockChartInstance.value.dispose(); });
 
                 return {
+                    appTheme, setAppTheme,
                     toasts, isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, refreshSectorPage, activePage, switchPage, showProfileModal, userAvatar, smartOcrBusy, smartOcrText,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
                     handleLogin, handleRegister, handleLogout, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, triggerAvatarUpload, handleAvatarUpload, clearAvatar,

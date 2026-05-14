@@ -2,20 +2,88 @@
 @import './mixins.scss';
 
 .page-shell {
+  --theme-page-bg:
+    radial-gradient(circle at 12% 6%, #{$soft-pink}, transparent 28%),
+    radial-gradient(circle at 86% 2%, #{$soft-cyan}, transparent 30%),
+    radial-gradient(circle at 70% 78%, rgba(139, 92, 246, 0.12), transparent 34%),
+    linear-gradient(155deg, #08111f 0%, #101b38 44%, #20285f 100%);
+  --theme-card-bg:
+    radial-gradient(circle at 20% 0%, rgba(255, 95, 162, 0.14), transparent 30%),
+    radial-gradient(circle at 90% 10%, rgba(56, 189, 248, 0.12), transparent 28%),
+    #{$bg-panel};
+  --theme-card-border: #{$card-border};
+  --theme-card-shadow: #{$card-shadow};
+  --theme-primary-gradient:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 42%),
+    #{$rainbow-gradient};
+  --theme-secondary-gradient:
+    linear-gradient(135deg, rgba(255, 95, 162, 0.12), rgba(139, 92, 246, 0.14), rgba(56, 189, 248, 0.1));
+  --theme-accent-pink: #{$rainbow-pink};
+  --theme-accent-purple: #{$rainbow-purple};
+  --theme-accent-blue: #{$rainbow-cyan};
+  --theme-text-main: #{$text-white};
+  --theme-text-muted: #{$text-muted};
+  --theme-text-soft: #{$text-soft};
+  --theme-profit-color: #{$profit-red};
+  --theme-loss-color: #{$loss-green};
+  --theme-panel-soft: rgba(15, 23, 42, 0.36);
+  --theme-control-bg: rgba(18, 28, 56, 0.66);
+  --theme-button-radius: #{$button-radius};
+  --theme-card-radius: #{$card-radius};
   min-height: 100vh;
   box-sizing: border-box;
   padding: $page-padding $page-padding calc($tabbar-height + 62rpx + env(safe-area-inset-bottom));
   @include page-gradient;
+  background: var(--theme-page-bg);
+  color: var(--theme-text-main);
+}
+
+.page-shell.theme-neon {
+  --theme-page-bg:
+    radial-gradient(circle at 18% 0%, rgba(255, 95, 162, 0.2), transparent 30%),
+    radial-gradient(circle at 92% 5%, rgba(56, 189, 248, 0.18), transparent 32%),
+    radial-gradient(circle at 56% 88%, rgba(139, 92, 246, 0.14), transparent 36%),
+    linear-gradient(180deg, #fbfdff 0%, #eef5ff 48%, #f8f1ff 100%);
+  --theme-card-bg:
+    radial-gradient(circle at 18% 0%, rgba(255, 95, 162, 0.18), transparent 32%),
+    radial-gradient(circle at 92% 12%, rgba(56, 189, 248, 0.16), transparent 30%),
+    rgba(255, 255, 255, 0.86);
+  --theme-card-border: rgba(255, 255, 255, 0.72);
+  --theme-card-shadow: 0 22rpx 54rpx rgba(31, 41, 85, 0.12), 0 8rpx 26rpx rgba(139, 92, 246, 0.1);
+  --theme-primary-gradient:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.24), transparent 40%),
+    #{$rainbow-gradient};
+  --theme-secondary-gradient:
+    linear-gradient(135deg, rgba(255, 95, 162, 0.22), rgba(139, 92, 246, 0.18), rgba(56, 189, 248, 0.16));
+  --theme-text-main: #182235;
+  --theme-text-muted: #66758f;
+  --theme-text-soft: #3c4960;
+  --theme-profit-color: #ef4565;
+  --theme-loss-color: #0f9f8c;
+  --theme-panel-soft: rgba(255, 255, 255, 0.62);
+  --theme-control-bg: rgba(255, 255, 255, 0.72);
+  --theme-card-radius: 44rpx;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(255, 95, 162, 0.2), transparent 30%),
+    radial-gradient(circle at 92% 5%, rgba(56, 189, 248, 0.18), transparent 32%),
+    radial-gradient(circle at 56% 88%, rgba(139, 92, 246, 0.14), transparent 36%),
+    linear-gradient(180deg, #fbfdff 0%, #eef5ff 48%, #f8f1ff 100%);
+  color: #182235;
 }
 
 .glass-card {
   @include glass-card;
+  background: var(--theme-card-bg);
+  border-color: var(--theme-card-border);
+  border-radius: var(--theme-card-radius);
+  box-shadow: var(--theme-card-shadow);
 }
 
 .primary-gradient-button {
   @include primary-gradient;
+  background: var(--theme-primary-gradient);
+  border-radius: var(--theme-button-radius);
   min-height: 86rpx;
-  border-radius: $button-radius;
   font-size: 27rpx;
   font-weight: 900;
 }
@@ -32,21 +100,21 @@
 }
 
 .profit-text {
-  color: $profit-red;
+  color: var(--theme-profit-color);
 }
 
 .loss-text {
-  color: $loss-green;
+  color: var(--theme-loss-color);
 }
 
 .section-title {
-  color: $text-white;
+  color: var(--theme-text-main);
   font-size: 32rpx;
   font-weight: 900;
 }
 
 .muted-text {
-  color: $text-muted;
+  color: var(--theme-text-muted);
   font-size: 24rpx;
 }
 
@@ -64,7 +132,7 @@
 
 .page-title {
   display: block;
-  color: $text-white;
+  color: var(--theme-text-main);
   font-size: 46rpx;
   font-weight: 900;
   line-height: 1.1;
@@ -73,7 +141,7 @@
 .page-subtitle {
   display: block;
   margin-top: 10rpx;
-  color: $text-muted;
+  color: var(--theme-text-muted);
   font-size: 24rpx;
 }
 
@@ -94,12 +162,12 @@
 }
 
 .stat-label {
-  color: $text-muted;
+  color: var(--theme-text-muted);
   font-size: 22rpx;
 }
 
 .stat-value {
-  color: $text-white;
+  color: var(--theme-text-main);
   font-size: 34rpx;
   font-weight: 900;
   line-height: 1.2;
@@ -112,17 +180,139 @@
   min-height: 48rpx;
   padding: 0 18rpx;
   border-radius: 999rpx;
-  color: #dce9ff;
-  background:
-    linear-gradient(135deg, rgba(255, 95, 162, 0.12), rgba(139, 92, 246, 0.14), rgba(56, 189, 248, 0.1));
-  border: 1rpx solid rgba(255, 255, 255, 0.12);
+  color: var(--theme-text-soft);
+  background: var(--theme-secondary-gradient);
+  border: 1rpx solid var(--theme-card-border);
   font-size: 22rpx;
   font-weight: 800;
 }
 
 .empty-card {
   padding: 46rpx 30rpx;
-  color: $text-muted;
+  color: var(--theme-text-muted);
   text-align: center;
   font-size: 25rpx;
+}
+
+.notice-text {
+  color: var(--theme-text-muted);
+  font-size: 22rpx;
+  line-height: 1.55;
+  user-select: none;
+}
+
+.theme-neon .hero-card,
+.theme-neon .feature-card,
+.theme-neon .rank-card,
+.theme-neon .fund-card,
+.theme-neon .stock-card,
+.theme-neon .board-card,
+.theme-neon .index-card,
+.theme-neon .news-card,
+.theme-neon .overview-card,
+.theme-neon .calendar-card,
+.theme-neon .detail-card,
+.theme-neon .login-card,
+.theme-neon .profile-card,
+.theme-neon .theme-panel,
+.theme-neon .asset-switch,
+.theme-neon .switch-card,
+.theme-neon .notice-card,
+.theme-neon .list-head {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(255, 95, 162, 0.18), transparent 32%),
+    radial-gradient(circle at 92% 12%, rgba(56, 189, 248, 0.16), transparent 30%),
+    rgba(255, 255, 255, 0.86) !important;
+  background: var(--theme-card-bg) !important;
+  border-color: rgba(255, 255, 255, 0.72) !important;
+  border-color: var(--theme-card-border) !important;
+  box-shadow: 0 22rpx 54rpx rgba(31, 41, 85, 0.12), 0 8rpx 26rpx rgba(139, 92, 246, 0.1);
+  box-shadow: var(--theme-card-shadow);
+}
+
+.theme-neon .summary-cell,
+.theme-neon .fund-metric,
+.theme-neon .stock-search-card,
+.theme-neon .stock-chart-panel,
+.theme-neon .history-block,
+.theme-neon .trend-panel,
+.theme-neon .calendar-day,
+.theme-neon .detail-row,
+.theme-neon .rank-row,
+.theme-neon .board-row,
+.theme-neon .history-row {
+  background: rgba(255, 255, 255, 0.62) !important;
+  background: var(--theme-panel-soft) !important;
+  border-color: rgba(139, 92, 246, 0.14) !important;
+}
+
+.theme-neon .page-title,
+.theme-neon .section-title,
+.theme-neon .hero-title,
+.theme-neon .fund-name,
+.theme-neon .stock-name,
+.theme-neon .news-title,
+.theme-neon .index-name,
+.theme-neon .profile-name,
+.theme-neon .theme-title,
+.theme-neon .account-title,
+.theme-neon .brand-title,
+.theme-neon .metric-value,
+.theme-neon .stat-value {
+  color: #182235 !important;
+  color: var(--theme-text-main) !important;
+}
+
+.theme-neon .page-subtitle,
+.theme-neon .muted-text,
+.theme-neon .hero-subtitle,
+.theme-neon .hero-sub,
+.theme-neon .row-sub,
+.theme-neon .list-subtitle,
+.theme-neon .index-sub,
+.theme-neon .fund-code,
+.theme-neon .news-summary,
+.theme-neon .profile-subtitle,
+.theme-neon .theme-subtitle,
+.theme-neon .account-subtitle,
+.theme-neon .metric-label,
+.theme-neon .small-rate {
+  color: #66758f !important;
+  color: var(--theme-text-muted) !important;
+}
+
+.theme-neon .primary-gradient-button,
+.theme-neon .ocr-button,
+.theme-neon .asset-switch-btn.active,
+.theme-neon .switch-btn.active,
+.theme-neon .mode-button.active,
+.theme-neon .calendar-day.selected,
+.theme-neon .calendar-button.today-button,
+.theme-neon .expand-trend-button,
+.theme-neon .history-button {
+  color: #fff !important;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.24), transparent 40%),
+    $rainbow-gradient !important;
+  background: var(--theme-primary-gradient) !important;
+  box-shadow: 0 16rpx 38rpx rgba(139, 92, 246, 0.18), 0 0 22rpx rgba(56, 189, 248, 0.12);
+}
+
+.theme-neon .input,
+.theme-neon .secondary-action,
+.theme-neon .back-button,
+.theme-neon .logout-button,
+.theme-neon .privacy-button,
+.theme-neon .account-button,
+.theme-neon .calendar-button,
+.theme-neon .mode-button,
+.theme-neon .asset-switch-btn,
+.theme-neon .switch-btn,
+.theme-neon .tag,
+.theme-neon .status-pill {
+  background: rgba(255, 255, 255, 0.72) !important;
+  background: var(--theme-control-bg) !important;
+  border-color: rgba(139, 92, 246, 0.16) !important;
+  color: #3c4960 !important;
+  color: var(--theme-text-soft) !important;
 }

@@ -1,5 +1,5 @@
 <template>
-  <view class="page-shell news-page">
+  <view :class="['page-shell', 'news-page', themeClass]">
     <view class="page-header">
       <view>
         <text class="page-title">资讯雷达</text>
@@ -14,7 +14,7 @@
     </view>
 
     <view class="glass-card notice-card">
-      <text>数据仅供个人记录与行情参考，不构成投资建议，实际数据以基金公司、交易所或券商披露为准。</text>
+      <view class="notice-text">数据仅供个人记录与行情参考，不构成投资建议，实际数据以基金公司、交易所或券商披露为准。</view>
     </view>
 
     <view v-if="activeItems.length === 0 && !loading" class="glass-card empty-card" @tap="loadData(true)">
@@ -52,6 +52,7 @@ import { onPullDownRefresh, onShow } from '@dcloudio/uni-app';
 import AppTabBar from '../../components/AppTabBar.vue';
 import { getGlobalNews, getHoldingNews, type NewsItem, type NewsResponse } from '../../services/api/news';
 import { restoreSession, sessionState } from '../../stores/session';
+import { loadTheme, themeClass } from '../../stores/theme';
 
 const loading = ref(false);
 const mode = ref<'global' | 'holding'>('global');
@@ -70,6 +71,7 @@ const updatedAtText = computed(() => {
 });
 
 onShow(() => {
+  loadTheme();
   restoreSession();
   loadData(false).catch((error) => console.warn('[news:load]', error));
 });

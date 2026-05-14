@@ -4,6 +4,7 @@ const services_api_auth = require("../../services/api/auth.js");
 const services_api_fund = require("../../services/api/fund.js");
 const services_api_stock = require("../../services/api/stock.js");
 const stores_session = require("../../stores/session.js");
+const stores_theme = require("../../stores/theme.js");
 const utils_format = require("../../utils/format.js");
 const utils_storage = require("../../utils/storage.js");
 const utils_fundMetrics = require("../../utils/fundMetrics.js");
@@ -114,6 +115,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
       return labels[privacyMode.value];
     });
     common_vendor.onShow(() => {
+      stores_theme.loadTheme();
       stores_session.loadSession();
       privacyMode.value = normalizePrivacyMode(utils_storage.getStorage(PRIVACY_KEY, privacyMode.value));
       if (!stores_session.sessionState.username) {
@@ -176,7 +178,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         return;
       items.slice(0, 8).forEach((fund) => {
         const fields = getFundNavFields(fund);
-        console.info("[fund.today nav fields]", {
+        console.warn("[fund.today nav fields]", {
           phase,
           name: fund.name,
           code: fund.code,
@@ -665,10 +667,6 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
       }
     }
     function openProfile() {
-      if (!stores_session.sessionState.username) {
-        navigateToLogin();
-        return;
-      }
       common_vendor.index.navigateTo({ url: "/pages/profile/index" });
     }
     function requireLogin() {
@@ -1001,7 +999,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         a: common_vendor.t(headerCountText.value),
         b: common_vendor.t(ocrButtonText.value),
         c: ocrBusy.value,
-        d: common_vendor.o(handleSmartOcr, "de"),
+        d: common_vendor.o(handleSmartOcr, "8a"),
         e: common_vendor.unref(stores_session.sessionState).username && avatarUrl.value
       }, common_vendor.unref(stores_session.sessionState).username && avatarUrl.value ? {
         f: avatarUrl.value
@@ -1012,13 +1010,13 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         i: common_vendor.t(accountEntryTitle.value),
         j: common_vendor.t(accountEntrySubtitle.value),
         k: common_vendor.n(common_vendor.unref(stores_session.sessionState).username ? "logged-in" : "guest"),
-        l: common_vendor.o(openProfile, "e8"),
+        l: common_vendor.o(openProfile, "b7"),
         m: common_vendor.t(privacyLabel.value),
-        n: common_vendor.o(togglePrivacyMode, "c4"),
+        n: common_vendor.o(togglePrivacyMode, "fe"),
         o: common_vendor.n(assetMode.value === "fund" ? "active" : ""),
-        p: common_vendor.o(($event) => setAssetMode("fund"), "df"),
+        p: common_vendor.o(($event) => setAssetMode("fund"), "26"),
         q: common_vendor.n(assetMode.value === "stock" ? "active" : ""),
-        r: common_vendor.o(($event) => setAssetMode("stock"), "03"),
+        r: common_vendor.o(($event) => setAssetMode("stock"), "c9"),
         s: assetMode.value === "fund"
       }, assetMode.value === "fund" ? common_vendor.e({
         t: common_vendor.t(funds.value.length),
@@ -1070,7 +1068,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         S: funds.value.length === 0 && !loading.value
       }, funds.value.length === 0 && !loading.value ? {
         T: common_vendor.t(common_vendor.unref(stores_session.sessionState).username ? "暂无持仓数据，可使用智能截图导入基金" : "暂无个人持仓数据。登录后可同步你的个人持仓记录。"),
-        U: common_vendor.o(($event) => common_vendor.unref(stores_session.sessionState).username && loadFunds(true), "83")
+        U: common_vendor.o(($event) => common_vendor.unref(stores_session.sessionState).username && loadFunds(true), "75")
       } : {}, {
         V: common_vendor.f(funds.value, (fund, fundIndex, i0) => {
           return common_vendor.e({
@@ -1128,7 +1126,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         }),
         W: ocrPreviewVisible.value
       }, ocrPreviewVisible.value ? common_vendor.e({
-        X: common_vendor.o(closeOcrPreview, "e6"),
+        X: common_vendor.o(closeOcrPreview, "a1"),
         Y: ocrItems.value.length === 0
       }, ocrItems.value.length === 0 ? {} : {}, {
         Z: common_vendor.f(ocrItems.value, (item, index, i0) => {
@@ -1157,16 +1155,16 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
           };
         })
       } : {}, {
-        ac: common_vendor.o(closeOcrPreview, "40"),
+        ac: common_vendor.o(closeOcrPreview, "cf"),
         ad: common_vendor.t(ocrConfirming.value ? "导入中..." : "保存导入"),
         ae: ocrConfirming.value || ocrItems.value.length === 0,
-        af: common_vendor.o(confirmOcrImport, "ea"),
-        ag: common_vendor.o(closeOcrPreview, "ae")
+        af: common_vendor.o(confirmOcrImport, "d5"),
+        ag: common_vendor.o(closeOcrPreview, "1f")
       }) : {}, {
         ah: historyModal.value.show
       }, historyModal.value.show ? common_vendor.e({
         ai: common_vendor.t(historyModal.value.name),
-        aj: common_vendor.o(closeFundHistory, "2c"),
+        aj: common_vendor.o(closeFundHistory, "aa"),
         ak: historyModal.value.loading
       }, historyModal.value.loading ? {} : common_vendor.e({
         al: common_vendor.t(historyRows.value.length),
@@ -1196,15 +1194,15 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
           };
         })
       }), {
-        ar: common_vendor.o(closeFundHistory, "cd")
+        ar: common_vendor.o(closeFundHistory, "95")
       }) : {}) : common_vendor.e({
         as: common_vendor.t(stockUpdatedAt.value || "待刷新"),
-        at: common_vendor.o(handleStockSearch, "93"),
+        at: common_vendor.o(handleStockSearch, "23"),
         av: stockSearchKeyword.value,
-        aw: common_vendor.o(($event) => stockSearchKeyword.value = $event.detail.value, "a0"),
+        aw: common_vendor.o(($event) => stockSearchKeyword.value = $event.detail.value, "70"),
         ax: common_vendor.t(stockSearchLoading.value ? "查询中" : "查询"),
         ay: stockSearchLoading.value,
-        az: common_vendor.o(handleStockSearch, "79"),
+        az: common_vendor.o(handleStockSearch, "49"),
         aA: stockSearchResults.value.length
       }, stockSearchResults.value.length ? {
         aB: common_vendor.f(stockSearchResults.value, (item, k0, i0) => {
@@ -1288,7 +1286,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         }),
         aS: stockOcrPreviewVisible.value
       }, stockOcrPreviewVisible.value ? common_vendor.e({
-        aT: common_vendor.o(closeStockOcrPreview, "fa"),
+        aT: common_vendor.o(closeStockOcrPreview, "8d"),
         aU: stockOcrItems.value.length === 0
       }, stockOcrItems.value.length === 0 ? {} : {}, {
         aV: common_vendor.f(stockOcrItems.value, (item, index, i0) => {
@@ -1324,28 +1322,29 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
           };
         })
       } : {}, {
-        aZ: common_vendor.o(closeStockOcrPreview, "c5"),
+        aZ: common_vendor.o(closeStockOcrPreview, "a0"),
         ba: common_vendor.t(stockOcrConfirming.value ? "导入中..." : "保存导入"),
         bb: stockOcrConfirming.value || stockOcrItems.value.length === 0,
-        bc: common_vendor.o(confirmStockOcrImport, "a4"),
-        bd: common_vendor.o(closeStockOcrPreview, "62")
+        bc: common_vendor.o(confirmStockOcrImport, "aa"),
+        bd: common_vendor.o(closeStockOcrPreview, "43")
       }) : {}, {
         be: holdingEditor.value.show
       }, holdingEditor.value.show ? {
         bf: common_vendor.t(holdingEditor.value.name),
         bg: common_vendor.t(holdingEditor.value.code),
-        bh: common_vendor.o(closeHoldingEditor, "40"),
+        bh: common_vendor.o(closeHoldingEditor, "b9"),
         bi: holdingEditor.value.shares,
-        bj: common_vendor.o(($event) => holdingEditor.value.shares = $event.detail.value, "33"),
+        bj: common_vendor.o(($event) => holdingEditor.value.shares = $event.detail.value, "ad"),
         bk: holdingEditor.value.costPrice,
-        bl: common_vendor.o(($event) => holdingEditor.value.costPrice = $event.detail.value, "84"),
-        bm: common_vendor.o(closeHoldingEditor, "a9"),
-        bn: common_vendor.o(submitHoldingEditor, "7c"),
-        bo: common_vendor.o(closeHoldingEditor, "1e")
+        bl: common_vendor.o(($event) => holdingEditor.value.costPrice = $event.detail.value, "02"),
+        bm: common_vendor.o(closeHoldingEditor, "3d"),
+        bn: common_vendor.o(submitHoldingEditor, "cd"),
+        bo: common_vendor.o(closeHoldingEditor, "fb")
       } : {}), {
         bp: common_vendor.p({
           active: "home"
-        })
+        }),
+        bq: common_vendor.n(common_vendor.unref(stores_theme.themeClass))
       });
     };
   }

@@ -10,6 +10,7 @@ export interface RequestOptions<TData = unknown> {
   silent?: boolean;
   timeout?: number;
   showErrorToast?: boolean;
+  fallbackData?: unknown | (() => unknown);
 }
 
 export interface ApiErrorBody {
@@ -102,6 +103,16 @@ function maskSensitiveData(data: unknown): unknown {
   return data;
 }
 
+function resolveFallback<TResponse>(options: RequestOptions) {
+  if (!Object.prototype.hasOwnProperty.call(options, 'fallbackData')) {
+    return { hasFallback: false, value: undefined as TResponse };
+  }
+
+  const fallback = options.fallbackData;
+  const value = typeof fallback === 'function' ? (fallback as () => unknown)() : fallback;
+  return { hasFallback: true, value: value as TResponse };
+}
+
 export async function request<TResponse = unknown, TData = unknown>(
   path: string,
   options: RequestOptions<TData> = {}
@@ -153,12 +164,19 @@ export async function request<TResponse = unknown, TData = unknown>(
 
     const statusCode = Number(result.statusCode || 0);
     if (DEBUG_REQUEST) {
-      console.info('[request]', { method, url: fullUrl, statusCode });
+      console.warn('[request:debug]', { method, url: fullUrl, statusCode });
     }
 
     if (statusCode < 200 || statusCode >= 300) {
       const message = extractErrorMessage(result.data, `请求失败：${statusCode}`);
       console.warn('[request:error]', { method, fullUrl, statusCode, message, data: result.data });
+      const fallback = resolveFallback<TResponse>(options);
+      if (fallback.hasFallback) {
+        if (showErrorToast) {
+          uni.showToast({ title: message, icon: 'none', duration: 2200 });
+        }
+        return fallback.value;
+      }
       throw new ApiRequestError(message, statusCode, result.data);
     }
 
@@ -169,13 +187,7 @@ export async function request<TResponse = unknown, TData = unknown>(
     return result.data as TResponse;
   })();
 
-  if (canUseCache) {
-    inFlightGets.set(cacheKey, executor);
-  }
-
-  try {
-    return await executor;
-  } catch (error) {
+  const handled = executor.catch((error) => {
     if (error instanceof ApiRequestError) {
       throw error;
     }
@@ -198,9 +210,22 @@ export async function request<TResponse = unknown, TData = unknown>(
       uni.showToast({ title: message, icon: 'none', duration: 2600 });
     }
 
+    const fallback = resolveFallback<TResponse>(options);
+    if (fallback.hasFallback) {
+      return fallback.value;
+    }
+
     throw new NetworkRequestError(message, extractErrMsg(error));
+  });
+
+  if (canUseCache) {
+    inFlightGets.set(cacheKey, handled);
+  }
+
+  try {
+    return await handled;
   } finally {
-    if (canUseCache) {
+    if (canUseCache && inFlightGets.get(cacheKey) === handled) {
       inFlightGets.delete(cacheKey);
     }
     if (!options.silent) {

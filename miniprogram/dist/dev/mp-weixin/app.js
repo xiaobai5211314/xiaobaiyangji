@@ -2,6 +2,7 @@
 Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 const common_vendor = require("./common/vendor.js");
 const stores_session = require("./stores/session.js");
+const stores_theme = require("./stores/theme.js");
 if (!Math) {
   "./pages/home/index.js";
   "./pages/sector/index.js";
@@ -13,6 +14,7 @@ if (!Math) {
 }
 const _sfc_main = {
   onLaunch() {
+    stores_theme.loadTheme();
     stores_session.restoreSession();
   }
 };

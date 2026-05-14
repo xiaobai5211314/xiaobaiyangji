@@ -6,6 +6,7 @@
     "versionCode" : "1",
     "mp-weixin" : {
         "appid" : "wx762240eed778eb07",
+        "lazyCodeLoading" : "requiredComponents",
         "setting" : {
             "urlCheck" : true,
             "es6" : true,

@@ -30,13 +30,15 @@ export interface NewsResponse {
 export function getGlobalNews(force = false, important = false, limit = 60) {
   const query = `mode=global&important=${important}&limit=${limit}${force ? '&force=true' : ''}`;
   return get<NewsResponse>(`/api/fund/news?${query}`, {
-    loadingText: '读取资讯'
+    loadingText: '读取资讯',
+    fallbackData: { items: [] }
   });
 }
 
 export function getHoldingNews(username: string, force = false, important = false, limit = 40) {
   const query = `username=${encodeURIComponent(username)}&important=${important}&limit=${limit}${force ? '&force=true' : ''}`;
   return get<NewsResponse>(`/api/fund/holding-news?${query}`, {
-    loadingText: '读取持仓资讯'
+    loadingText: '读取持仓资讯',
+    fallbackData: { items: [] }
   });
 }

@@ -1,5 +1,5 @@
 <template>
-  <view class="page-shell sector-page">
+  <view :class="['page-shell', 'sector-page', themeClass]">
     <view class="page-header">
       <view>
         <text class="page-title">板块雷达</text>
@@ -9,7 +9,7 @@
     </view>
 
     <view class="glass-card notice-card">
-      <text>数据仅供个人记录与行情参考，不构成投资建议，实际数据以基金公司、交易所或券商披露为准。</text>
+      <view class="notice-text">数据仅供个人记录与行情参考，不构成投资建议，实际数据以基金公司、交易所或券商披露为准。</view>
     </view>
 
     <view class="glass-card hero-card">
@@ -151,6 +151,7 @@ import {
   type SectorSummary
 } from '../../services/api/sector';
 import { optionalProfitClass, signedMoney, signedPercent } from '../../utils/format';
+import { loadTheme, themeClass } from '../../stores/theme';
 
 const loading = ref(false);
 const sectorPayload = ref<SectorRadarResponse>({});
@@ -200,6 +201,7 @@ const indexGroups = computed(() => {
 });
 
 onShow(() => {
+  loadTheme();
   loadData(false).catch((error) => console.warn('[sector:load]', error));
 });
 
@@ -413,7 +415,7 @@ function logGlobalIndicesAudit(rows: GlobalIndexItem[]) {
   if (!DEBUG_FIELD_AUDIT) return;
 
   rows.forEach((item) => {
-    console.info('[global.indices fields]', {
+    console.warn('[global.indices fields]', {
       name: item.name,
       code: item.code,
       point: indexPointValue(item),
@@ -422,7 +424,7 @@ function logGlobalIndicesAudit(rows: GlobalIndexItem[]) {
       historyCount: indexHistoryCount(item)
     });
     if (!indexHasMarketData(item)) {
-      console.info('待核实：后端未返回该指数有效行情字段。', {
+      console.warn('待核实：后端未返回该指数有效行情字段。', {
         name: item.name,
         code: item.code,
         point: indexPointValue(item),

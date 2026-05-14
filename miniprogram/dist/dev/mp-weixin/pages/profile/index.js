@@ -2,6 +2,7 @@
 const common_vendor = require("../../common/vendor.js");
 const services_api_auth = require("../../services/api/auth.js");
 const stores_session = require("../../stores/session.js");
+const stores_theme = require("../../stores/theme.js");
 const utils_format = require("../../utils/format.js");
 const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
   __name: "index",
@@ -10,11 +11,17 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
     const avatarUrl = common_vendor.computed(() => stores_session.sessionState.avatarDataUrl || stores_session.sessionState.avatarUrl || "");
     const avatarText = common_vendor.computed(() => utils_format.avatarInitial(stores_session.sessionState.username));
     const displayUsername = common_vendor.computed(() => stores_session.sessionState.displayName || stores_session.sessionState.username || "未登录");
+    const profileSubtitle = common_vendor.computed(
+      () => stores_session.sessionState.username ? "点击头像或按钮可更换头像" : "登录后可同步你的个人持仓记录。"
+    );
+    const primaryActionText = common_vendor.computed(() => {
+      if (!stores_session.sessionState.username)
+        return "登录 / 同步持仓";
+      return avatarUploading.value ? "上传中..." : "更换头像";
+    });
     common_vendor.onShow(() => {
+      stores_theme.loadTheme();
       stores_session.loadSession();
-      if (!stores_session.sessionState.username) {
-        common_vendor.index.reLaunch({ url: "/pages/login/index" });
-      }
     });
     function chooseImage() {
       return new Promise((resolve, reject) => {
@@ -37,7 +44,11 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
       });
     }
     async function changeAvatar() {
-      if (!stores_session.sessionState.username || avatarUploading.value)
+      if (!stores_session.sessionState.username) {
+        common_vendor.index.showToast({ title: "登录后可使用该功能", icon: "none" });
+        return;
+      }
+      if (avatarUploading.value)
         return;
       try {
         const filePath = await chooseImage();
@@ -65,9 +76,26 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         common_vendor.index.hideLoading();
       }
     }
+    function handleProfileAction() {
+      if (!stores_session.sessionState.username) {
+        common_vendor.index.navigateTo({
+          url: "/pages/login/index",
+          fail: () => common_vendor.index.redirectTo({ url: "/pages/login/index" })
+        });
+        return;
+      }
+      changeAvatar();
+    }
     function logout() {
       stores_session.clearSession();
       common_vendor.index.reLaunch({ url: "/pages/login/index" });
+    }
+    function selectTheme(theme) {
+      stores_theme.setTheme(theme);
+      common_vendor.index.showToast({
+        title: theme === "neon" ? "已切换霓虹主题" : "已切换深色主题",
+        icon: "none"
+      });
     }
     function goBack() {
       common_vendor.index.navigateBack({
@@ -84,7 +112,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
     }
     return (_ctx, _cache) => {
       return common_vendor.e({
-        a: common_vendor.o(goBack, "ec"),
+        a: common_vendor.o(goBack, "41"),
         b: avatarUrl.value
       }, avatarUrl.value ? {
         c: avatarUrl.value
@@ -92,12 +120,26 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         d: common_vendor.t(avatarText.value)
       }, {
         e: avatarUploading.value,
-        f: common_vendor.o(changeAvatar, "21"),
+        f: common_vendor.o(changeAvatar, "fe"),
         g: common_vendor.t(displayUsername.value),
-        h: common_vendor.t(avatarUploading.value ? "上传中..." : "更换头像"),
-        i: avatarUploading.value,
-        j: common_vendor.o(changeAvatar, "23"),
-        k: common_vendor.o(logout, "5b")
+        h: common_vendor.t(profileSubtitle.value),
+        i: common_vendor.t(primaryActionText.value),
+        j: avatarUploading.value,
+        k: common_vendor.o(handleProfileAction, "ab"),
+        l: common_vendor.f(common_vendor.unref(stores_theme.themeOptions), (item, k0, i0) => {
+          return {
+            a: common_vendor.t(item.label),
+            b: common_vendor.t(item.description),
+            c: item.value,
+            d: common_vendor.n(common_vendor.unref(stores_theme.themeState).theme === item.value ? "active" : ""),
+            e: common_vendor.o(($event) => selectTheme(item.value), item.value)
+          };
+        }),
+        m: common_vendor.unref(stores_session.sessionState).username
+      }, common_vendor.unref(stores_session.sessionState).username ? {
+        n: common_vendor.o(logout, "08")
+      } : {}, {
+        o: common_vendor.n(common_vendor.unref(stores_theme.themeClass))
       });
     };
   }

@@ -1,8 +1,10 @@
 <script lang="ts">
 import { restoreSession } from './stores/session';
+import { loadTheme } from './stores/theme';
 
 export default {
   onLaunch() {
+    loadTheme();
     restoreSession();
   }
 };
