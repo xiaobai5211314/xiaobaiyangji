@@ -82,25 +82,25 @@ const historyRows = computed(() => indexHistoryRows(currentIndex.value));
 onLoad((query) => {
   indexName.value = decodeURIComponent(String(query?.indexName || ''));
   indexCode.value = decodeURIComponent(String(query?.indexCode || ''));
-  loadData().catch((error) => console.error('[index-detail:load]', error));
+  loadData(false).catch((error) => console.warn('[index-detail:load]', error));
 });
 
 onPullDownRefresh(async () => {
   try {
-    await loadData();
+    await loadData(true);
   } catch (error) {
-    console.error('[index-detail:pull-down-refresh]', error);
+    console.warn('[index-detail:pull-down-refresh]', error);
     uni.showToast({ title: '刷新失败，请稍后重试', icon: 'none' });
   } finally {
     uni.stopPullDownRefresh();
   }
 });
 
-async function loadData() {
+async function loadData(force = false) {
   if (loading.value) return;
   loading.value = true;
   try {
-    const data = await getGlobalIndices();
+    const data = await getGlobalIndices(force);
     rows.value = Array.isArray(data) ? data.filter(hasIndexEntry) : [];
   } finally {
     loading.value = false;
@@ -262,7 +262,7 @@ function firstFinite(...values: unknown[]) {
 function firstIndexPoint(...values: unknown[]) {
   for (const value of values) {
     const n = finiteNumber(value);
-    if (n !== null) return n;
+    if (n !== null && n > 0) return n;
   }
   return null;
 }

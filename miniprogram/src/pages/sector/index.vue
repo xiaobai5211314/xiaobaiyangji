@@ -8,6 +8,10 @@
       <text class="chip">{{ sectorCount }} 个主题</text>
     </view>
 
+    <view class="glass-card notice-card">
+      <text>数据仅供个人记录与行情参考，不构成投资建议，实际数据以基金公司、交易所或券商披露为准。</text>
+    </view>
+
     <view class="glass-card hero-card">
       <text class="muted-text">今日领涨</text>
       <view class="hero-row">
@@ -103,8 +107,8 @@
       <text class="muted-text">下拉刷新</text>
     </view>
 
-    <view v-if="visibleIndices.length === 0 && !loading" class="glass-card empty-card">
-      <text>暂无大盘指数数据</text>
+    <view v-if="visibleIndices.length === 0 && !loading" class="glass-card empty-card" @tap="loadData(true)">
+      <text>暂无大盘指数数据，点击重试或下拉刷新</text>
     </view>
 
     <view v-for="group in indexGroups" :key="group.key" class="index-group">
@@ -153,7 +157,7 @@ const sectorPayload = ref<SectorRadarResponse>({});
 const flowPayload = ref<CapitalFlowResponse>({});
 const indices = ref<GlobalIndexItem[]>([]);
 const DEBUG_FIELD_AUDIT =
-  (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV !== false;
+  (import.meta as ImportMeta & { env?: { VITE_DEBUG_MARKET_INDEX?: string } }).env?.VITE_DEBUG_MARKET_INDEX === 'true';
 
 const allSectors = computed(() => sectorPayload.value.all || []);
 const topList = computed(() => {
@@ -194,14 +198,14 @@ const indexGroups = computed(() => {
 });
 
 onShow(() => {
-  loadData(false).catch((error) => console.error('[sector:load]', error));
+  loadData(false).catch((error) => console.warn('[sector:load]', error));
 });
 
 onPullDownRefresh(async () => {
   try {
     await loadData(true);
   } catch (error) {
-    console.error('[sector:pull-down-refresh]', error);
+    console.warn('[sector:pull-down-refresh]', error);
     uni.showToast({ title: '刷新失败，请稍后重试', icon: 'none' });
   } finally {
     uni.stopPullDownRefresh();
@@ -212,7 +216,20 @@ async function loadData(force: boolean) {
   if (loading.value) return;
   loading.value = true;
   try {
-    const [sectors, flow, globalIndexRows] = await Promise.all([getSectors(force), getCapitalFlow(force, 100), getGlobalIndices()]);
+    const [sectors, flow, globalIndexRows] = await Promise.all([
+      getSectors(force).catch((error) => {
+        console.warn('[sector:sectors]', error);
+        return {} as SectorRadarResponse;
+      }),
+      getCapitalFlow(force, 100).catch((error) => {
+        console.warn('[sector:capital-flow]', error);
+        return {} as CapitalFlowResponse;
+      }),
+      getGlobalIndices(force).catch((error) => {
+        console.warn('[sector:global-indices]', error);
+        return [] as GlobalIndexItem[];
+      })
+    ]);
     sectorPayload.value = sectors || {};
     flowPayload.value = flow || {};
     indices.value = Array.isArray(globalIndexRows) ? globalIndexRows : [];
@@ -329,7 +346,7 @@ function indexYearPercentText(item: GlobalIndexItem) {
 
 function indexPointValue(item: GlobalIndexItem) {
   const source = item as Record<string, unknown>;
-  return firstNumber(
+  return firstPositiveNumber(
     source.point,
     source.latest,
     source.close,
@@ -362,6 +379,15 @@ function firstNumber(...values: unknown[]) {
   return null;
 }
 
+function firstPositiveNumber(...values: unknown[]) {
+  for (const value of values) {
+    const n = firstNumber(value);
+    if (n !== null && n > 0) return n;
+  }
+
+  return null;
+}
+
 function firstArray(...values: unknown[]) {
   for (const value of values) {
     if (Array.isArray(value)) return value;
@@ -374,8 +400,7 @@ function logGlobalIndicesAudit(rows: GlobalIndexItem[]) {
   if (!DEBUG_FIELD_AUDIT) return;
 
   rows.forEach((item) => {
-    console.log('[global.indices keys]', item.name, item.code, Object.keys(item));
-    console.log('[global.indices fields]', {
+    console.info('[global.indices fields]', {
       name: item.name,
       code: item.code,
       point: indexPointValue(item),
@@ -384,7 +409,7 @@ function logGlobalIndicesAudit(rows: GlobalIndexItem[]) {
       historyCount: indexHistoryCount(item)
     });
     if (!indexHasMarketData(item)) {
-      console.warn('待核实：后端未返回该指数有效行情字段。', {
+      console.info('待核实：后端未返回该指数有效行情字段。', {
         name: item.name,
         code: item.code,
         point: indexPointValue(item),
@@ -419,6 +444,13 @@ function logGlobalIndicesAudit(rows: GlobalIndexItem[]) {
 
 .hero-card {
   padding: 36rpx;
+}
+
+.notice-card {
+  padding: 22rpx 26rpx;
+  color: $text-muted;
+  font-size: 22rpx;
+  line-height: 1.55;
 }
 
 .hero-row,

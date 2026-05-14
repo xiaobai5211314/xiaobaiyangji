@@ -13,8 +13,12 @@
       <button :class="['switch-btn', mode === 'holding' ? 'active' : '']" @tap="mode = 'holding'">持仓相关</button>
     </view>
 
-    <view v-if="activeItems.length === 0 && !loading" class="glass-card empty-card">
-      <text>暂无资讯数据</text>
+    <view class="glass-card notice-card">
+      <text>数据仅供个人记录与行情参考，不构成投资建议，实际数据以基金公司、交易所或券商披露为准。</text>
+    </view>
+
+    <view v-if="activeItems.length === 0 && !loading" class="glass-card empty-card" @tap="loadData(true)">
+      <text>{{ mode === 'holding' && !sessionState.username ? '登录后可同步你的个人持仓记录。' : '暂无资讯数据，点击重试或下拉刷新' }}</text>
     </view>
 
     <view v-for="item in activeItems" :key="item.id || item.title" class="glass-card news-card">
@@ -55,9 +59,8 @@ const globalPayload = ref<NewsResponse>({});
 const holdingPayload = ref<NewsResponse>({});
 
 const activeItems = computed<NewsItem[]>(() => {
-  return mode.value === 'holding'
-    ? holdingPayload.value.items || []
-    : globalPayload.value.items || [];
+  const rows = mode.value === 'holding' ? holdingPayload.value.items : globalPayload.value.items;
+  return Array.isArray(rows) ? rows : [];
 });
 const updatedAtText = computed(() => {
   const payload = mode.value === 'holding' ? holdingPayload.value : globalPayload.value;
@@ -66,14 +69,14 @@ const updatedAtText = computed(() => {
 
 onShow(() => {
   restoreSession();
-  loadData(false).catch((error) => console.error('[news:load]', error));
+  loadData(false).catch((error) => console.warn('[news:load]', error));
 });
 
 onPullDownRefresh(async () => {
   try {
     await loadData(true);
   } catch (error) {
-    console.error('[news:pull-down-refresh]', error);
+    console.warn('[news:pull-down-refresh]', error);
     uni.showToast({ title: '刷新失败，请稍后重试', icon: 'none' });
   } finally {
     uni.stopPullDownRefresh();
@@ -84,7 +87,10 @@ async function loadData(force: boolean) {
   if (loading.value) return;
   loading.value = true;
   try {
-    const globalTask = getGlobalNews(force, false, 60);
+    const globalTask = getGlobalNews(force, false, 60).catch((error) => {
+      console.warn('[news:global]', error);
+      return { items: [] } as NewsResponse;
+    });
     const holdingTask = sessionState.username
       ? getHoldingNews(sessionState.username, force, false, 40).catch((error) => {
           console.warn('[news:holding]', error);
@@ -133,6 +139,13 @@ async function loadData(force: boolean) {
 .switch-btn.active {
   @include primary-gradient;
   color: #fff;
+}
+
+.notice-card {
+  padding: 22rpx 26rpx;
+  color: $text-muted;
+  font-size: 22rpx;
+  line-height: 1.55;
 }
 
 .news-card {

@@ -1,10 +1,10 @@
 {
   "pages": [
-    "pages/login/index",
     "pages/home/index",
     "pages/sector/index",
     "pages/news/index",
     "pages/analysis/index",
+    "pages/login/index",
     "pages/profile/index",
     "pages/index-detail/index"
   ],

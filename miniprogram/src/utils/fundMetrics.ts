@@ -144,7 +144,7 @@ function buildConfidence(fund: FundView): ConfidenceView {
 
   if (fund.isSettledValue) {
     score += 28;
-    reasons.push('净值确认');
+    reasons.push('净值参考');
   } else if (fund.isHolidayValue) {
     score += 8;
     reasons.push('休市沿用');
@@ -212,7 +212,7 @@ function buildDailyReport(funds: FundView[], totalTodayProfit: number, exposure:
   } else if (topExposure && topExposure.ratio >= 45) {
     actionHint = `${topExposure.name} 集中度偏高`;
   } else if (totalTodayProfit > 0) {
-    actionHint = '盈利日先看净值确认';
+    actionHint = '盈利日关注净值参考';
   }
 
   return {
@@ -296,7 +296,7 @@ export function buildPortfolioMetrics(rawFunds: FundTodayItem[], now = new Date(
       isHoliday: rateState.isHoliday,
       isHolidayValue: rateState.isHoliday,
       isSettledValue: rateState.isSettled || isAlreadySettled,
-      statusLabel: rateState.isHoliday ? '休市' : rateState.isSettled || isAlreadySettled ? '净值确认' : '盘中侦测',
+      statusLabel: rateState.isHoliday ? '休市' : rateState.isSettled || isAlreadySettled ? '净值参考' : '盘中参考',
       trendLabel: rateState.isHoliday ? '休市沿用' : rateState.isSettled || isAlreadySettled ? '真' : '估',
       confidenceView: { score: 0, level: '', reason: '', tone: 'medium' }
     };

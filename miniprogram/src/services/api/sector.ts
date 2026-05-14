@@ -118,6 +118,8 @@ const CAPITAL_FLOW_EXCLUDED_NAME_KEYWORDS = [
   '高股息',
   '破净'
 ];
+const DEBUG_MARKET_INDEX =
+  (import.meta as ImportMeta & { env?: { VITE_DEBUG_MARKET_INDEX?: string } }).env?.VITE_DEBUG_MARKET_INDEX === 'true';
 
 export interface GlobalIndexKline {
   date?: string;
@@ -160,20 +162,22 @@ export function getCapitalFlow(force = false, limit = 30) {
   }).then(normalizeCapitalFlowResponse);
 }
 
-export function getGlobalIndices() {
-  return get<unknown>('/api/fund/global-indices', {
+export function getGlobalIndices(force = false) {
+  return get<unknown>(`/api/fund/global-indices${force ? '?force=true' : ''}`, {
     loadingText: '读取大盘'
   }).then((payload) => {
-    console.log('[global-indices raw response]', payload);
+    if (DEBUG_MARKET_INDEX) console.info('[global-indices raw response]', payload);
     const rows = extractGlobalIndexRows(payload).map(normalizeGlobalIndexRow);
-    rows.forEach((item) => {
-      console.log('[global-indices normalized]', {
-        name: item.name,
-        point: item.point ?? item.latest ?? null,
-        todayRate: item.todayRate ?? null,
-        yearRate: item.yearRate ?? null
+    if (DEBUG_MARKET_INDEX) {
+      rows.forEach((item) => {
+        console.info('[global-indices normalized]', {
+          name: item.name,
+          point: item.point ?? item.latest ?? null,
+          todayRate: item.todayRate ?? null,
+          yearRate: item.yearRate ?? null
+        });
       });
-    });
+    }
     return rows;
   });
 }

@@ -8,6 +8,14 @@
       <text class="chip">{{ overview.fundCountText }} 只基金</text>
     </view>
 
+    <view class="glass-card notice-card">
+      <text>数据仅供个人记录与行情参考，不构成投资建议，实际数据以基金公司、交易所或券商披露为准。</text>
+    </view>
+
+    <view v-if="isGuest" class="glass-card empty-card">
+      <text>暂无个人盈亏数据。登录后可同步你的个人持仓记录。</text>
+    </view>
+
     <view class="glass-card overview-card">
       <view class="mode-switch">
         <button :class="['mode-button', viewMode === 'amount' ? 'active' : '']" @tap="setViewMode('amount')">金额</button>
@@ -107,8 +115,8 @@
         <text class="muted-text">{{ selectedDayRows.length }} 条</text>
       </view>
 
-      <view v-if="selectedDayRows.length === 0" class="empty-card inner-empty">
-        <text>该日暂无基金明细</text>
+      <view v-if="selectedDayRows.length === 0" class="empty-card inner-empty" @tap="!isGuest && loadData(true)">
+        <text>{{ isGuest ? '登录后可同步你的个人持仓记录。' : '该日暂无基金明细，点击重试或下拉刷新' }}</text>
       </view>
 
       <view v-for="item in selectedDayRows" :key="item.key" class="detail-row">
@@ -158,6 +166,7 @@ const archives = ref<ArchiveRow[]>([]);
 const selectedDate = ref(todayDate());
 const currentMonth = ref(todayDate().slice(0, 7));
 const viewMode = ref<'amount' | 'rate'>('amount');
+const isGuest = computed(() => !sessionState.username);
 
 const fundRows = computed(() =>
   archives.value
@@ -244,33 +253,39 @@ const lossTop = computed(() =>
 onShow(() => {
   loadSession();
   if (!sessionState.username) {
-    uni.reLaunch({ url: '/pages/login/index' });
+    dashboard.value = {};
+    archives.value = [];
     return;
   }
 
-  loadData().catch((error) => console.error('[analysis:load]', error));
+  loadData(false).catch((error) => console.warn('[analysis:load]', error));
 });
 
 onPullDownRefresh(async () => {
   try {
-    await loadData();
+    await loadData(true);
   } catch (error) {
-    console.error('[analysis:pull-down-refresh]', error);
+    console.warn('[analysis:pull-down-refresh]', error);
     uni.showToast({ title: '刷新失败，请稍后重试', icon: 'none' });
   } finally {
     uni.stopPullDownRefresh();
   }
 });
 
-async function loadData() {
-  if (!sessionState.username || loading.value) return;
+async function loadData(force = false) {
+  if (loading.value) return;
+  if (!sessionState.username) {
+    dashboard.value = {};
+    archives.value = [];
+    return;
+  }
 
   loading.value = true;
   try {
     const [insights, rows] = await Promise.all([getInsightsDashboard(sessionState.username), getArchives(sessionState.username, 500)]);
     dashboard.value = insights || {};
     archives.value = Array.isArray(rows) ? rows : [];
-    ensureSelectedDate();
+    if (force || archives.value.length > 0) ensureSelectedDate();
   } finally {
     loading.value = false;
   }
@@ -442,6 +457,13 @@ function profitClass(value: number | null) {
 .rank-card,
 .detail-card {
   padding: 28rpx;
+}
+
+.notice-card {
+  padding: 22rpx 26rpx;
+  color: $text-muted;
+  font-size: 22rpx;
+  line-height: 1.55;
 }
 
 .mode-switch {

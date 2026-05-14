@@ -44,6 +44,9 @@ class NetworkRequestError extends Error {
 
 const DEBUG_REQUEST =
   (import.meta as ImportMeta & { env?: { VITE_DEBUG_REQUEST?: string } }).env?.VITE_DEBUG_REQUEST === 'true';
+const GET_CACHE_TTL = 60000;
+const getCache = new Map<string, { expiresAt: number; data: unknown }>();
+const inFlightGets = new Map<string, Promise<unknown>>();
 
 function normalizePath(path: string) {
   return path.startsWith('/') ? path : `/${path}`;
@@ -108,16 +111,34 @@ export async function request<TResponse = unknown, TData = unknown>(
   const timeout = options.timeout ?? 20000;
   const showErrorToast = options.showErrorToast ?? true;
   const fullUrl = `${getApiBaseUrl()}${normalizePath(path)}`;
+  const cacheKey = `${method}:${fullUrl}`;
+  const canUseCache =
+    method === 'GET' &&
+    options.silent !== false &&
+    !/[?&]force=true\b/i.test(fullUrl) &&
+    !/[?&]_t=/.test(fullUrl);
   const header = {
     Accept: 'application/json',
     ...options.header
   };
 
+  if (canUseCache) {
+    const cached = getCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data as TResponse;
+    }
+
+    const pending = inFlightGets.get(cacheKey);
+    if (pending) {
+      return pending as Promise<TResponse>;
+    }
+  }
+
   if (!options.silent) {
     uni.showLoading({ title: loadingText, mask: true });
   }
 
-  try {
+  const executor = (async () => {
     const result = await new Promise<UniApp.RequestSuccessCallbackResult>((resolve, reject) => {
       uni.request({
         url: fullUrl,
@@ -137,11 +158,23 @@ export async function request<TResponse = unknown, TData = unknown>(
 
     if (statusCode < 200 || statusCode >= 300) {
       const message = extractErrorMessage(result.data, `请求失败：${statusCode}`);
-      console.error('[request:error]', { method, fullUrl, statusCode, message, data: result.data });
+      console.warn('[request:error]', { method, fullUrl, statusCode, message, data: result.data });
       throw new ApiRequestError(message, statusCode, result.data);
     }
 
+    if (canUseCache) {
+      getCache.set(cacheKey, { expiresAt: Date.now() + GET_CACHE_TTL, data: result.data });
+    }
+
     return result.data as TResponse;
+  })();
+
+  if (canUseCache) {
+    inFlightGets.set(cacheKey, executor);
+  }
+
+  try {
+    return await executor;
   } catch (error) {
     if (error instanceof ApiRequestError) {
       throw error;
@@ -154,7 +187,7 @@ export async function request<TResponse = unknown, TData = unknown>(
         ? error.message
         : '网络请求失败';
 
-    console.error('[request:fail]', {
+    console.warn('[request:fail]', {
       method,
       fullUrl,
       errMsg: extractErrMsg(error),
@@ -167,6 +200,9 @@ export async function request<TResponse = unknown, TData = unknown>(
 
     throw new NetworkRequestError(message, extractErrMsg(error));
   } finally {
+    if (canUseCache) {
+      inFlightGets.delete(cacheKey);
+    }
     if (!options.silent) {
       uni.hideLoading();
     }

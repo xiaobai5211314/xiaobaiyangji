@@ -85,7 +85,7 @@ async function changeAvatar() {
     });
     uni.showToast({ title: '头像已更新', icon: 'none' });
   } catch (error) {
-    console.error('[profile:avatar-upload]', error);
+    console.warn('[profile:avatar-upload]', error);
     uni.showToast({ title: getErrorMessage(error, '头像上传失败'), icon: 'none' });
   } finally {
     avatarUploading.value = false;

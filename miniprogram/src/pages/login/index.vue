@@ -110,7 +110,7 @@ async function submit() {
     form.password = '';
     uni.reLaunch({ url: '/pages/home/index' });
   } catch (error) {
-    console.error('[login:submit]', error);
+    console.warn('[login:submit]', error);
     errorMessage.value = getErrorMessage(error);
   } finally {
     submitting.value = false;
@@ -128,7 +128,7 @@ async function registerAccount() {
     form.password = '';
     uni.showToast({ title: '注册成功，请登录', icon: 'none' });
   } catch (error) {
-    console.error('[login:register]', error);
+    console.warn('[login:register]', error);
     errorMessage.value = getErrorMessage(error);
   } finally {
     registering.value = false;

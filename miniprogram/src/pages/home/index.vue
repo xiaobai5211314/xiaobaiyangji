@@ -2,7 +2,7 @@
   <view class="page-shell home-page">
     <view class="page-header home-header compact-header">
       <view class="title-block">
-        <text class="page-subtitle compact-subtitle">持仓、收益与净值确认</text>
+        <text class="page-subtitle compact-subtitle">持仓、收益与净值参考</text>
       </view>
       <text class="chip">{{ headerCountText }}</text>
     </view>
@@ -27,6 +27,10 @@
     <view class="asset-switch glass-card">
       <button :class="['asset-switch-btn', assetMode === 'fund' ? 'active' : '']" @tap="setAssetMode('fund')">基金</button>
       <button :class="['asset-switch-btn', assetMode === 'stock' ? 'active' : '']" @tap="setAssetMode('stock')">股票</button>
+    </view>
+
+    <view class="glass-card notice-card">
+      <text>数据仅供个人记录与行情参考，不构成投资建议，实际数据以基金公司、交易所或券商披露为准。</text>
     </view>
 
     <view v-if="assetMode === 'fund'" class="mode-pane">
@@ -92,14 +96,14 @@
           <text class="loss-text">{{ metrics.dailyBattleReport.worstName }}</text>
         </view>
         <view class="report-line">
-          <text>操作提示</text>
+          <text>记录提醒</text>
           <text class="warning-text">{{ metrics.dailyBattleReport.actionHint }}</text>
         </view>
       </view>
 
       <view class="glass-card feature-card">
-        <text class="feature-title">估值可信度雷达</text>
-        <text class="feature-subtitle">净值确认、休市和偏离度综合评分</text>
+        <text class="feature-title">估值参考雷达</text>
+        <text class="feature-subtitle">净值参考、休市和偏离度综合评分</text>
         <view v-for="item in confidenceRows" :key="`conf-${item.viewKey}`" class="confidence-row">
           <view class="confidence-copy">
             <text>{{ item.name || item.code }}</text>
@@ -138,8 +142,8 @@
       </view>
     </view>
 
-    <view v-if="funds.length === 0 && !loading" class="glass-card empty-card">
-      <text>暂无持仓数据，可使用智能截图导入基金</text>
+    <view v-if="funds.length === 0 && !loading" class="glass-card empty-card" @tap="sessionState.username && loadFunds(true)">
+      <text>{{ sessionState.username ? '暂无持仓数据，可使用智能截图导入基金' : '暂无个人持仓数据。登录后可同步你的个人持仓记录。' }}</text>
     </view>
 
     <view v-for="fund in funds" :key="fund.viewKey" class="glass-card fund-card">
@@ -240,7 +244,7 @@
         <view class="modal-head">
           <view>
             <text class="section-title">OCR 识别预览</text>
-            <text class="modal-subtitle">确认后写入基金持仓</text>
+            <text class="modal-subtitle">保存后写入基金持仓</text>
           </view>
           <button class="modal-close" @tap="closeOcrPreview">×</button>
         </view>
@@ -290,7 +294,7 @@
         <view class="modal-actions">
           <button class="secondary-action" @tap="closeOcrPreview">取消</button>
           <button class="primary-gradient-button confirm-button" :disabled="ocrConfirming || ocrItems.length === 0" @tap="confirmOcrImport">
-            {{ ocrConfirming ? '导入中...' : '确认导入' }}
+            {{ ocrConfirming ? '导入中...' : '保存导入' }}
           </button>
         </view>
       </view>
@@ -507,7 +511,7 @@
           <view class="modal-head">
             <view>
               <text class="section-title">股票 OCR 识别预览</text>
-              <text class="modal-subtitle">确认后按持仓/自选写入</text>
+            <text class="modal-subtitle">保存后按持仓/自选写入</text>
             </view>
             <button class="modal-close" @tap="closeStockOcrPreview">×</button>
           </view>
@@ -557,7 +561,7 @@
           <view class="modal-actions">
             <button class="secondary-action" @tap="closeStockOcrPreview">取消</button>
             <button class="primary-gradient-button confirm-button" :disabled="stockOcrConfirming || stockOcrItems.length === 0" @tap="confirmStockOcrImport">
-              {{ stockOcrConfirming ? '导入中...' : '确认导入' }}
+              {{ stockOcrConfirming ? '导入中...' : '保存导入' }}
             </button>
           </view>
         </view>
@@ -642,7 +646,8 @@ import {
 
 const PRIVACY_KEY = 'privacy_mode';
 const DEBUG_FIELD_AUDIT =
-  (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV !== false;
+  (import.meta as ImportMeta & { env?: { VITE_DEBUG_FIELD_AUDIT?: string } }).env?.VITE_DEBUG_FIELD_AUDIT === 'true';
+const LOGIN_SYNC_TIP = '登录后可同步你的个人持仓记录。';
 
 const rawFunds = ref<FundTodayItem[]>([]);
 const assetMode = ref<'fund' | 'stock'>('fund');
@@ -734,16 +739,13 @@ const privacyLabel = computed(() => {
 onShow(() => {
   loadSession();
   privacyMode.value = normalizePrivacyMode(getStorage(PRIVACY_KEY, privacyMode.value));
-  if (!sessionState.username) {
-    uni.reLaunch({ url: '/pages/login/index' });
-    return;
-  }
+  if (!sessionState.username) return;
 
-  loadProfile().catch((error) => console.error('[home:profile]', error));
+  loadProfile().catch((error) => console.warn('[home:profile]', error));
   if (assetMode.value === 'stock') {
-    loadStocks(false).catch((error) => console.error('[stock:load]', error));
+    loadStocks(false).catch((error) => console.warn('[stock:load]', error));
   } else {
-    loadFunds(false).catch((error) => console.error('[home:load]', error));
+    loadFunds(false).catch((error) => console.warn('[home:load]', error));
   }
 });
 
@@ -758,7 +760,7 @@ onPullDownRefresh(async () => {
       await loadFunds(true);
     }
   } catch (error) {
-    console.error('[home:pull-down-refresh]', error);
+    console.warn('[home:pull-down-refresh]', error);
     uni.showToast({ title: '刷新失败，请稍后重试', icon: 'none' });
   } finally {
     uni.stopPullDownRefresh();
@@ -766,7 +768,11 @@ onPullDownRefresh(async () => {
 });
 
 async function loadFunds(force: boolean) {
-  if (!sessionState.username || loading.value) return;
+  if (loading.value) return;
+  if (!sessionState.username) {
+    rawFunds.value = [];
+    return;
+  }
 
   loading.value = true;
   try {
@@ -784,8 +790,7 @@ function logFundTodayAudit(items: FundTodayItem[], phase = 'today') {
 
   items.slice(0, 8).forEach((fund) => {
     const fields = getFundNavFields(fund as FundView);
-    console.log('[fund.today keys]', fund.name, fund.code, Object.keys(fund));
-    console.log('[fund.today nav fields]', {
+    console.info('[fund.today nav fields]', {
       phase,
       name: fund.name,
       code: fund.code,
@@ -800,8 +805,8 @@ function logFundTodayAudit(items: FundTodayItem[], phase = 'today') {
 function setAssetMode(mode: 'fund' | 'stock') {
   if (assetMode.value === mode) return;
   assetMode.value = mode;
-  if (mode === 'stock') {
-    loadStocks(false).catch((error) => console.error('[stock:load]', error));
+  if (mode === 'stock' && sessionState.username) {
+    loadStocks(false).catch((error) => console.warn('[stock:load]', error));
   }
 }
 
@@ -815,7 +820,13 @@ function handleSmartOcr() {
 }
 
 async function loadStocks(force: boolean) {
-  if (!sessionState.username || stockLoading.value) return;
+  if (stockLoading.value) return;
+  if (!sessionState.username) {
+    stockHoldings.value = [];
+    stockWatchList.value = [];
+    stockUpdatedAt.value = '';
+    return;
+  }
 
   stockLoading.value = true;
   try {
@@ -854,7 +865,7 @@ async function handleStockSearch() {
       uni.showToast({ title: '没有匹配股票', icon: 'none' });
     }
   } catch (error) {
-    console.error('[stock:search]', error);
+    console.warn('[stock:search]', error);
     uni.showToast({ title: getErrorMessage(error, '查询失败，请稍后重试'), icon: 'none' });
   } finally {
     stockSearchLoading.value = false;
@@ -862,6 +873,8 @@ async function handleStockSearch() {
 }
 
 async function addWatchFromStock(item: StockBaseItem) {
+  if (!requireLogin()) return;
+
   const payload = buildStockWatchPayload(item);
   if (!payload) return;
 
@@ -872,12 +885,14 @@ async function addWatchFromStock(item: StockBaseItem) {
     uni.showToast({ title: '已加入自选', icon: 'none' });
     await loadStocks(false);
   } catch (error) {
-    console.error('[stock:add-watch]', error);
+    console.warn('[stock:add-watch]', error);
     uni.showToast({ title: getErrorMessage(error, '加入自选失败'), icon: 'none' });
   }
 }
 
 function openHoldingEditor(item: StockBaseItem) {
+  if (!requireLogin()) return;
+
   const code = stockCode(item);
   if (!code) {
     uni.showToast({ title: '股票代码缺失', icon: 'none' });
@@ -901,7 +916,7 @@ function closeHoldingEditor() {
 }
 
 async function submitHoldingEditor() {
-  if (!sessionState.username) return;
+  if (!requireLogin()) return;
 
   const shares = toFiniteNumber(holdingEditor.value.shares);
   const costPrice = toFiniteNumber(holdingEditor.value.costPrice);
@@ -926,13 +941,13 @@ async function submitHoldingEditor() {
     uni.showToast({ title: '股票持仓已保存', icon: 'none' });
     await loadStocks(false);
   } catch (error) {
-    console.error('[stock:save-holding]', error);
+    console.warn('[stock:save-holding]', error);
     uni.showToast({ title: getErrorMessage(error, '保存持仓失败'), icon: 'none' });
   }
 }
 
 async function removeHolding(item: StockBaseItem) {
-  if (!sessionState.username) return;
+  if (!requireLogin()) return;
   const code = stockCode(item);
   if (!code) return;
 
@@ -946,13 +961,13 @@ async function removeHolding(item: StockBaseItem) {
     uni.showToast({ title: '已删除股票持仓', icon: 'none' });
     await loadStocks(false);
   } catch (error) {
-    console.error('[stock:delete-holding]', error);
+    console.warn('[stock:delete-holding]', error);
     uni.showToast({ title: getErrorMessage(error, '删除持仓失败'), icon: 'none' });
   }
 }
 
 async function removeWatch(item: StockBaseItem) {
-  if (!sessionState.username) return;
+  if (!requireLogin()) return;
   const code = stockCode(item);
   if (!code) return;
 
@@ -963,7 +978,7 @@ async function removeWatch(item: StockBaseItem) {
     uni.showToast({ title: '已移除自选', icon: 'none' });
     await loadStocks(false);
   } catch (error) {
-    console.error('[stock:delete-watch]', error);
+    console.warn('[stock:delete-watch]', error);
     uni.showToast({ title: getErrorMessage(error, '移除自选失败'), icon: 'none' });
   }
 }
@@ -1002,14 +1017,14 @@ async function loadStockKlines(showError = true) {
     if (data.success === false) throw new Error(String(data.message || '走势读取失败'));
     stockKlineRows.value = Array.isArray(data.items) ? normalizeStockKlines(data.items) : [];
   } catch (error) {
-    console.error('[stock:klines]', error);
+    console.warn('[stock:klines]', error);
     stockKlineRows.value = [];
     if (showError) uni.showToast({ title: getErrorMessage(error, '走势读取失败'), icon: 'none' });
   }
 }
 
 async function startStockOcr() {
-  if (!sessionState.username || ocrBusy.value) return;
+  if (!requireLogin() || ocrBusy.value) return;
 
   try {
     const filePath = await chooseImage();
@@ -1026,7 +1041,7 @@ async function startStockOcr() {
     stockOcrPreviewVisible.value = true;
     uni.showToast({ title: `识别到 ${stockOcrItems.value.length} 条股票`, icon: 'none' });
   } catch (error) {
-    console.error('[stock:ocr-preview]', error);
+    console.warn('[stock:ocr-preview]', error);
     uni.showToast({ title: getErrorMessage(error, '股票 OCR 失败'), icon: 'none' });
   } finally {
     ocrBusy.value = false;
@@ -1035,7 +1050,7 @@ async function startStockOcr() {
 }
 
 async function confirmStockOcrImport() {
-  if (!sessionState.username || stockOcrConfirming.value) return;
+  if (!requireLogin() || stockOcrConfirming.value) return;
   if (!stockOcrBatchId.value || stockOcrItems.value.length === 0) return;
 
   stockOcrConfirming.value = true;
@@ -1051,7 +1066,7 @@ async function confirmStockOcrImport() {
     uni.showToast({ title: `已写入 ${result.saved ?? 0} 条股票数据`, icon: 'none' });
     await loadStocks(false);
   } catch (error) {
-    console.error('[stock:ocr-confirm]', error);
+    console.warn('[stock:ocr-confirm]', error);
     uni.showToast({ title: getErrorMessage(error, '股票 OCR 确认失败'), icon: 'none' });
   } finally {
     stockOcrConfirming.value = false;
@@ -1308,7 +1323,15 @@ async function loadProfile() {
 }
 
 function openProfile() {
+  if (!requireLogin()) return;
   uni.navigateTo({ url: '/pages/profile/index' });
+}
+
+function requireLogin() {
+  if (sessionState.username) return true;
+
+  uni.showToast({ title: LOGIN_SYNC_TIP, icon: 'none', duration: 2600 });
+  return false;
 }
 
 function normalizePrivacyMode(value: unknown): PrivacyMode {
@@ -1521,7 +1544,7 @@ function chooseImage() {
 }
 
 async function startFundOcr() {
-  if (!sessionState.username || ocrBusy.value) return;
+  if (!requireLogin() || ocrBusy.value) return;
 
   try {
     const filePath = await chooseImage();
@@ -1539,7 +1562,7 @@ async function startFundOcr() {
     ocrPreviewVisible.value = true;
     uni.showToast({ title: `识别到 ${ocrItems.value.length} 条基金`, icon: 'none' });
   } catch (error) {
-    console.error('[fund:ocr-preview]', error);
+    console.warn('[fund:ocr-preview]', error);
     uni.showToast({ title: getErrorMessage(error, 'OCR 识别失败'), icon: 'none' });
   } finally {
     ocrBusy.value = false;
@@ -1548,7 +1571,7 @@ async function startFundOcr() {
 }
 
 async function confirmOcrImport() {
-  if (!sessionState.username || ocrConfirming.value || ocrItems.value.length === 0) return;
+  if (!requireLogin() || ocrConfirming.value || ocrItems.value.length === 0) return;
 
   ocrConfirming.value = true;
   try {
@@ -1564,7 +1587,7 @@ async function confirmOcrImport() {
     closeOcrPreview();
     await loadFunds(true);
   } catch (error) {
-    console.error('[fund:ocr-confirm]', error);
+    console.warn('[fund:ocr-confirm]', error);
     uni.showToast({ title: getErrorMessage(error, 'OCR 导入失败'), icon: 'none' });
   } finally {
     ocrConfirming.value = false;
@@ -1576,7 +1599,8 @@ function closeOcrPreview() {
 }
 
 async function openFundHistory(fund: FundView) {
-  if (!sessionState.username || !fund.code) {
+  if (!requireLogin()) return;
+  if (!fund.code) {
     uni.showToast({ title: '基金代码缺失，无法读取历史', icon: 'none' });
     return;
   }
@@ -1593,7 +1617,7 @@ async function openFundHistory(fund: FundView) {
     const rows = await getFundArchives(sessionState.username, fund.code, 365);
     historyModal.value.rows = Array.isArray(rows) ? rows : [];
   } catch (error) {
-    console.error('[fund:history]', error);
+    console.warn('[fund:history]', error);
     uni.showToast({ title: getErrorMessage(error, '历史读取失败'), icon: 'none' });
   } finally {
     historyModal.value.loading = false;
@@ -1773,6 +1797,13 @@ function getErrorMessage(error: unknown, fallback: string) {
   color: $text-white;
   background: linear-gradient(135deg, rgba(59, 130, 246, 0.92), rgba(124, 58, 237, 0.9));
   box-shadow: 0 16rpx 42rpx rgba(91, 141, 255, 0.22);
+}
+
+.notice-card {
+  padding: 22rpx 26rpx;
+  color: $text-muted;
+  font-size: 22rpx;
+  line-height: 1.55;
 }
 
 .mode-pane {
