@@ -4,8 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev:mp-weixin": "uni -p mp-weixin",
-    "build:mp-weixin": "uni build -p mp-weixin",
+    "dev:mp-weixin": "uni -p mp-weixin && npm run clean:private-config",
+    "build:mp-weixin": "uni build -p mp-weixin && npm run clean:private-config",
+    "clean:private-config": "node scripts/clean-private-config.mjs",
     "typecheck": "vue-tsc --noEmit",
     "check:pages-order": "node scripts/check-pages-order.mjs"
   },
