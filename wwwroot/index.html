@@ -6,7 +6,7 @@
     <title>估值助手</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2064%2064%27%3E%3Cdefs%3E%3ClinearGradient%20id%3D%27g%27%20x1%3D%270%27%20y1%3D%270%27%20x2%3D%271%27%20y2%3D%271%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27%232563eb%27/%3E%3Cstop%20offset%3D%27100%25%27%20stop-color%3D%27%237c3aed%27/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20width%3D%2764%27%20height%3D%2764%27%20rx%3D%2716%27%20fill%3D%27url%28%23g%29%27/%3E%3Ctext%20x%3D%2732%27%20y%3D%2742%27%20text-anchor%3D%27middle%27%20font-size%3D%2732%27%3E%F0%9F%92%B9%3C/text%3E%3C/svg%3E">
     <base href="/" />
-    <meta name="theme-color" content="#0f172a">
+    <meta name="theme-color" content="#f8fafc">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -14,32 +14,35 @@
     <script>
         (function () {
             try {
-                var theme = localStorage.getItem('guzhi_web_theme') === 'rainbow' ? 'rainbow' : 'classic';
+                var rawTheme = String(localStorage.getItem('guzhi_web_theme') || '').toLowerCase();
+                var theme = rawTheme === 'rainbow' || rawTheme === 'neon' || rawTheme === 'gradient' ? 'rainbow' : 'light';
                 document.documentElement.setAttribute('data-theme', theme);
             } catch (e) {
-                document.documentElement.setAttribute('data-theme', 'classic');
+                document.documentElement.setAttribute('data-theme', 'light');
             }
         })();
     </script>
     <style>
         :root {
-            --page-bg: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
-            --page-bg-color: #0f172a;
-            --card-bg: rgba(30, 41, 59, 0.4);
-            --card-border: rgba(255, 255, 255, 0.1);
-            --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-            --primary-gradient: linear-gradient(135deg, #3b82f6, #6366f1);
-            --logo-gradient: linear-gradient(to right, #60a5fa, #a78bfa);
-            --secondary-gradient: linear-gradient(135deg, rgba(59, 130, 246, .16), rgba(139, 92, 246, .14));
+            --page-bg: radial-gradient(circle at 12% -4%, rgba(59, 130, 246, .10), transparent 30%),
+                radial-gradient(circle at 90% 2%, rgba(139, 92, 246, .08), transparent 32%),
+                linear-gradient(180deg, #f8fafc 0%, #eef4ff 54%, #f7f3ff 100%);
+            --page-bg-color: #f8fafc;
+            --card-bg: rgba(255, 255, 255, .88);
+            --card-border: rgba(15, 23, 42, .10);
+            --card-shadow: 0 14px 34px rgba(15, 23, 42, .08);
+            --primary-gradient: linear-gradient(135deg, #2563eb, #3b82f6);
+            --logo-gradient: linear-gradient(to right, #2563eb, #7c3aed);
+            --secondary-gradient: linear-gradient(135deg, rgba(37, 99, 235, .10), rgba(99, 102, 241, .08));
             --accent-pink: #ff5fa2;
             --accent-purple: #8b5cf6;
             --accent-blue: #38bdf8;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --profit-color: #ff4d4f;
-            --loss-color: #10b981;
+            --text-main: #172033;
+            --text-muted: #64748b;
+            --profit-color: #dc2626;
+            --loss-color: #059669;
             --button-radius: 20px;
-            --card-radius: 16px;
+            --card-radius: 18px;
         }
 
         :root[data-theme="rainbow"] {
@@ -227,6 +230,72 @@
             background: #475569;
             cursor: not-allowed;
             opacity: 0.7;
+        }
+
+        :root[data-theme="light"] .btn:disabled {
+            background: #e2e8f0;
+            color: #94a3b8;
+            cursor: not-allowed;
+            opacity: 1;
+        }
+
+        :root[data-theme="light"] .glass-panel,
+        :root[data-theme="light"] .fund-card,
+        :root[data-theme="light"] .stock-card,
+        :root[data-theme="light"] .stock-detail-card,
+        :root[data-theme="light"] .feature-card,
+        :root[data-theme="light"] .profile-modal-card,
+        :root[data-theme="light"] .global-indices-modal,
+        :root[data-theme="light"] .modal-content {
+            background: var(--card-bg) !important;
+            border-color: var(--card-border) !important;
+            box-shadow: var(--card-shadow) !important;
+        }
+
+        :root[data-theme="light"] .btn:not(.btn-primary):not(.btn-success):not(.btn-danger),
+        :root[data-theme="light"] .asset-mode-btn:not(.active),
+        :root[data-theme="light"] .news-tab:not(.active),
+        :root[data-theme="light"] .stock-kline-tab:not(.active),
+        :root[data-theme="light"] .theme-choice-btn:not(.active),
+        :root[data-theme="light"] .bottom-tab {
+            background: rgba(255, 255, 255, .78) !important;
+            border-color: rgba(15, 23, 42, .12) !important;
+            color: #334155 !important;
+        }
+
+        :root[data-theme="light"] .btn-primary,
+        :root[data-theme="light"] .btn-ocr,
+        :root[data-theme="light"] .asset-mode-btn.active,
+        :root[data-theme="light"] .news-tab.active,
+        :root[data-theme="light"] .stock-kline-tab.active,
+        :root[data-theme="light"] .calendar-day.active,
+        :root[data-theme="light"] .bottom-tab.active {
+            background: var(--primary-gradient) !important;
+            color: #fff !important;
+            border-color: transparent !important;
+        }
+
+        :root[data-theme="light"] .control-panel input,
+        :root[data-theme="light"] .modal-input,
+        :root[data-theme="light"] .stock-search-input,
+        :root[data-theme="light"] .stock-ocr-value-input,
+        :root[data-theme="light"] .recovery-input,
+        :root[data-theme="light"] .analysis-toolbar input,
+        :root[data-theme="light"] .analysis-toolbar select {
+            background: rgba(255, 255, 255, .86) !important;
+            border-color: rgba(15, 23, 42, .14) !important;
+            color: var(--text-main) !important;
+        }
+
+        :root[data-theme="light"] .bottom-tabbar {
+            background: rgba(255, 255, 255, .90) !important;
+            border-color: rgba(15, 23, 42, .10) !important;
+            box-shadow: 0 14px 34px rgba(15, 23, 42, .12) !important;
+        }
+
+        :root[data-theme="light"] .theme-settings {
+            background: rgba(248, 250, 252, .82);
+            border-color: rgba(15, 23, 42, .10);
         }
 
         .fund-list-container {
@@ -2946,9 +3015,9 @@
         }
     </style>
 </head>
-<body data-theme="classic">
+<body data-theme="light">
     <script>
-        document.body.setAttribute('data-theme', document.documentElement.getAttribute('data-theme') || 'classic');
+        document.body.setAttribute('data-theme', document.documentElement.getAttribute('data-theme') || 'light');
     </script>
     <div id="app" v-cloak>
         <div v-if="activePage === 'home' && (pullRefresh.show || pullRefresh.loading)" class="pull-refresh-indicator" :style="{ opacity: activePage === 'home' && (pullRefresh.show || pullRefresh.loading) ? 1 : 0 }">
@@ -3453,7 +3522,7 @@
                     <div class="theme-settings">
                         <div class="theme-settings-title">主题设置</div>
                         <div class="theme-choice-row">
-                            <button :class="['btn', 'theme-choice-btn', appTheme === 'classic' ? 'active' : '']" @click="setAppTheme('classic')">深海玻璃</button>
+                            <button :class="['btn', 'theme-choice-btn', appTheme === 'light' ? 'active' : '']" @click="setAppTheme('light')">浅色主题</button>
                             <button :class="['btn', 'theme-choice-btn', appTheme === 'rainbow' ? 'active' : '']" @click="setAppTheme('rainbow')">彩虹渐变</button>
                         </div>
                     </div>
@@ -3826,13 +3895,16 @@
                 };
 
                 const THEME_STORAGE_KEY = 'guzhi_web_theme';
-                const normalizeTheme = (theme) => theme === 'rainbow' ? 'rainbow' : 'classic';
+                const normalizeTheme = (theme) => {
+                    const value = String(theme || '').toLowerCase();
+                    return value === 'rainbow' || value === 'neon' || value === 'gradient' ? 'rainbow' : 'light';
+                };
                 const applyAppTheme = (theme) => {
                     const safeTheme = normalizeTheme(theme);
                     document.documentElement.setAttribute('data-theme', safeTheme);
                     if (document.body) document.body.setAttribute('data-theme', safeTheme);
                     const metaTheme = document.querySelector('meta[name="theme-color"]');
-                    if (metaTheme) metaTheme.setAttribute('content', safeTheme === 'rainbow' ? '#151d3f' : '#0f172a');
+                    if (metaTheme) metaTheme.setAttribute('content', safeTheme === 'rainbow' ? '#151d3f' : '#f8fafc');
                 };
                 const appTheme = ref(normalizeTheme(localStorage.getItem(THEME_STORAGE_KEY)));
                 applyAppTheme(appTheme.value);

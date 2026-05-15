@@ -78,14 +78,12 @@
 
 .page-shell.theme-light {
   --page-bg:
-    radial-gradient(circle at 18% 0%, rgba(255, 95, 162, 0.16), transparent 30%),
-    radial-gradient(circle at 92% 6%, rgba(56, 189, 248, 0.18), transparent 32%),
-    linear-gradient(180deg, #f7fbff 0%, #edf5ff 50%, #f8f2ff 100%);
+    radial-gradient(circle at 18% 0%, rgba(255, 95, 162, 0.06), transparent 30%),
+    radial-gradient(circle at 92% 6%, rgba(56, 189, 248, 0.07), transparent 32%),
+    linear-gradient(180deg, #f8fafc 0%, #f1f5f9 50%, #f8fafc 100%);
   --page-bg-soft: rgba(241, 245, 249, 0.92);
   --card-bg:
-    radial-gradient(circle at 18% 0%, rgba(255, 95, 162, 0.12), transparent 32%),
-    radial-gradient(circle at 92% 12%, rgba(56, 189, 248, 0.12), transparent 30%),
-    rgba(255, 255, 255, 0.92);
+    rgba(255, 255, 255, 0.96);
   --card-bg-strong: rgba(255, 255, 255, 0.98);
   --text-primary: #172033;
   --text-secondary: #334155;
@@ -94,15 +92,11 @@
   --border-color: rgba(100, 116, 139, 0.16);
   --shadow-color: rgba(31, 41, 85, 0.12);
   --tab-bg:
-    radial-gradient(circle at 14% 0%, rgba(255, 95, 162, 0.16), transparent 32%),
-    radial-gradient(circle at 90% 8%, rgba(56, 189, 248, 0.14), transparent 30%),
-    rgba(255, 255, 255, 0.92);
+    rgba(255, 255, 255, 0.96);
   --tab-active-bg:
     radial-gradient(circle at 28% 12%, rgba(255, 255, 255, 0.26), transparent 30%),
     #{$rainbow-gradient};
-  --button-primary-bg:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.25), transparent 40%),
-    #{$rainbow-gradient};
+  --button-primary-bg: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
   --button-primary-text: #ffffff;
   --input-bg: rgba(255, 255, 255, 0.94);
   --input-text: #172033;

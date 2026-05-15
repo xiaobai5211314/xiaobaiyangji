@@ -1,6 +1,6 @@
 import { computed, reactive } from 'vue';
 
-export type AppTheme = 'dark' | 'light' | 'neon';
+export type AppTheme = 'light' | 'neon';
 
 export const THEME_STORAGE_KEY = 'valuation_assistant_theme';
 
@@ -12,9 +12,8 @@ interface WxStorageLike {
 declare const wx: WxStorageLike | undefined;
 
 export const themeOptions: Array<{ value: AppTheme; label: string; description: string }> = [
-  { value: 'dark', label: '深色主题', description: '深海玻璃金融风格' },
   { value: 'light', label: '浅色主题', description: '浅色卡片、高对比文字' },
-  { value: 'neon', label: '霓虹渐变主题', description: '深色底、粉紫蓝高亮' }
+  { value: 'neon', label: '彩虹渐变主题', description: '深色底、粉紫蓝高亮' }
 ];
 
 export const themeState = reactive({
@@ -24,9 +23,9 @@ export const themeState = reactive({
 export const themeClass = computed(() => `theme-${themeState.theme}`);
 
 export function normalizeTheme(value: unknown): AppTheme {
-  if (value === 'light') return 'light';
-  if (value === 'neon') return 'neon';
-  return 'dark';
+  const raw = String(value || '').toLowerCase();
+  if (raw === 'neon' || raw === 'rainbow' || raw === 'gradient') return 'neon';
+  return 'light';
 }
 
 export function loadTheme() {
@@ -49,7 +48,7 @@ function readStoredTheme(): AppTheme {
         : uni.getStorageSync(THEME_STORAGE_KEY);
     return normalizeTheme(value);
   } catch {
-    return 'dark';
+    return 'light';
   }
 }
 
