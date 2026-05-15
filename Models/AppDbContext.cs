@@ -62,6 +62,11 @@ namespace 估值助手.Models
                 .HasDatabaseName("IX_User_Username");
 
             modelBuilder.Entity<User>()
+                .HasIndex(u => u.WechatOpenId)
+                .IsUnique()
+                .HasDatabaseName("IX_User_WechatOpenId");
+
+            modelBuilder.Entity<User>()
                 .Property(u => u.Username)
                 .IsRequired();
 
@@ -71,6 +76,29 @@ namespace 估值助手.Models
 
             modelBuilder.Entity<User>()
                 .Property(u => u.AvatarDataUrl)
+                .IsRequired(false);
+
+            modelBuilder.Entity<User>()
+                .Property(u => u.WechatOpenId)
+                .HasMaxLength(128)
+                .IsRequired(false);
+
+            modelBuilder.Entity<User>()
+                .Property(u => u.WechatUnionId)
+                .HasMaxLength(128)
+                .IsRequired(false);
+
+            modelBuilder.Entity<User>()
+                .Property(u => u.Nickname)
+                .HasMaxLength(120)
+                .IsRequired(false);
+
+            modelBuilder.Entity<User>()
+                .Property(u => u.CreatedAt)
+                .IsRequired();
+
+            modelBuilder.Entity<User>()
+                .Property(u => u.LastLoginAt)
                 .IsRequired(false);
 
             modelBuilder.Entity<OcrCorrection>()

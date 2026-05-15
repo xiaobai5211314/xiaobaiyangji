@@ -1,5 +1,5 @@
 import { getApiBaseUrl } from '../config';
-import { get, postForm } from '../request';
+import { get, postForm, postJson } from '../request';
 
 export interface LoginRequest {
   username: string;
@@ -20,6 +20,12 @@ export interface LoginResponse {
   };
   avatarDataUrl?: string;
   avatarUrl?: string;
+}
+
+export interface WechatLoginRequest {
+  code: string;
+  nickname?: string;
+  avatarDataUrl?: string;
 }
 
 export interface AvatarUploadResponse {
@@ -49,6 +55,12 @@ export function login(payload: LoginRequest) {
 export function register(payload: LoginRequest) {
   return postForm<LoginResponse>('/api/auth/register', toAuthForm(payload), {
     loadingText: '注册中'
+  });
+}
+
+export function wechatLogin(payload: WechatLoginRequest) {
+  return postJson<LoginResponse, WechatLoginRequest>('/api/auth/wechat-login', payload, {
+    loadingText: '微信登录中'
   });
 }
 
