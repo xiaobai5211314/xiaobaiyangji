@@ -34,7 +34,7 @@
     }
   },
   "compileType": "miniprogram",
-  "libVersion": "",
+  "libVersion": "3.15.2",
   "appid": "wx762240eed778eb07",
   "projectname": "估值助手小程序",
   "condition": {

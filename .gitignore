@@ -361,3 +361,7 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# WeChat DevTools local private config
+project.private.config.json
+miniprogram/dist/**/project.private.config.json
