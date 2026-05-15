@@ -4977,7 +4977,7 @@
                     }
                     isCapitalLoading.value = capitalFlowRows.value.length === 0;
                     try {
-                        const res = await fetch(`${API_BASE}/api/fund/capital-flow?limit=40${force ? '&force=true' : ''}`);
+                        const res = await fetch(`${API_BASE}/api/fund/capital-flow?limit=40${force ? '&force=true' : ''}&_t=${Date.now()}`, { cache: 'no-store' });
                         if (!res.ok) throw new Error(await res.text());
                         const data = await res.json();
                         applyCapitalPayload(data);
@@ -5051,6 +5051,7 @@
                             fetchSectors(force, false),
                             fetchCapitalFlow(force)
                         ]);
+                        showToast('✅ 板块数据已刷新', 'success');
                     } catch (e) {
                         showToast('🚨 板块刷新失败', 'error');
                     }
