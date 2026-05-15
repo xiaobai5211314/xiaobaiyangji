@@ -18,7 +18,7 @@
 }
 .notice-card.data-v-c6aadd33 {
   padding: 22rpx 26rpx;
-  color: #91a4c2;
+  color: var(--text-muted);
   font-size: 22rpx;
   line-height: 1.55;
 }
@@ -35,14 +35,14 @@
 .mode-button.data-v-c6aadd33 {
   height: 60rpx;
   border-radius: 999rpx;
-  color: #91a4c2;
+  color: var(--text-muted);
   background: transparent;
   font-size: 24rpx;
   font-weight: 900;
   line-height: 60rpx;
 }
 .mode-button.active.data-v-c6aadd33 {
-  color: #fff;
+  color: var(--button-primary-text);
   background: linear-gradient(135deg, #ff5fa2 0%, #8b5cf6 52%, #38bdf8 100%);
   box-shadow: 0 12rpx 28rpx rgba(139, 92, 246, 0.18);
 }
@@ -60,7 +60,7 @@
 .list-subtitle.data-v-c6aadd33 {
   display: block;
   margin-top: 8rpx;
-  color: #91a4c2;
+  color: var(--text-muted);
   font-size: 22rpx;
 }
 .overview-profit.data-v-c6aadd33 {
@@ -83,7 +83,7 @@
 }
 .metric-label.data-v-c6aadd33 {
   display: block;
-  color: #91a4c2;
+  color: var(--text-muted);
   font-size: 22rpx;
 }
 .metric-value.data-v-c6aadd33 {
@@ -106,7 +106,7 @@
   height: 58rpx;
   padding: 0 14rpx;
   border-radius: 999rpx;
-  color: #d2def0;
+  color: var(--text-secondary);
   background: rgba(96, 165, 250, 0.12);
   border: 1rpx solid rgba(96, 165, 250, 0.22);
   font-size: 22rpx;
@@ -124,7 +124,7 @@
 }
 .weekday-row.data-v-c6aadd33 {
   margin-top: 22rpx;
-  color: #91a4c2;
+  color: var(--text-muted);
   text-align: center;
   font-size: 20rpx;
 }
@@ -140,7 +140,7 @@
   border-radius: 18rpx;
   background: rgba(15, 23, 42, 0.38);
   border: 1rpx solid rgba(148, 163, 184, 0.12);
-  color: #d2def0;
+  color: var(--text-secondary);
 }
 .calendar-day.selected.data-v-c6aadd33 {
   background: linear-gradient(135deg, rgba(59, 130, 246, 0.72), rgba(139, 92, 246, 0.7));
@@ -194,7 +194,7 @@
 .rank-name text.data-v-c6aadd33:first-child,
 .fund-name.data-v-c6aadd33 {
   display: block;
-  color: #f8fafc;
+  color: var(--text-primary);
   font-size: 24rpx;
   font-weight: 900;
   overflow: hidden;
@@ -205,12 +205,12 @@
 .fund-code.data-v-c6aadd33 {
   display: block;
   margin-top: 6rpx;
-  color: #91a4c2;
+  color: var(--text-muted);
   font-size: 20rpx;
 }
 .empty-mini.data-v-c6aadd33 {
   padding: 26rpx 0 4rpx;
-  color: #91a4c2;
+  color: var(--text-muted);
   font-size: 22rpx;
   text-align: center;
 }

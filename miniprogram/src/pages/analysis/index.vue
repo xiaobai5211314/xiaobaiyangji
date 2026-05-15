@@ -483,7 +483,7 @@ function profitClass(value: number | null) {
 
 .notice-card {
   padding: 22rpx 26rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 22rpx;
   line-height: 1.55;
 }
@@ -502,7 +502,7 @@ function profitClass(value: number | null) {
 .mode-button {
   height: 60rpx;
   border-radius: 999rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   background: transparent;
   font-size: 24rpx;
   font-weight: 900;
@@ -510,7 +510,7 @@ function profitClass(value: number | null) {
 }
 
 .mode-button.active {
-  color: #fff;
+  color: var(--button-primary-text);
   background: $rainbow-gradient;
   box-shadow: 0 12rpx 28rpx rgba(139, 92, 246, 0.18);
 }
@@ -530,7 +530,7 @@ function profitClass(value: number | null) {
 .list-subtitle {
   display: block;
   margin-top: 8rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 22rpx;
 }
 
@@ -559,7 +559,7 @@ function profitClass(value: number | null) {
 
 .metric-label {
   display: block;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 22rpx;
 }
 
@@ -586,7 +586,7 @@ function profitClass(value: number | null) {
   height: 58rpx;
   padding: 0 14rpx;
   border-radius: 999rpx;
-  color: $text-soft;
+  color: var(--text-secondary);
   background: rgba(96, 165, 250, 0.12);
   border: 1rpx solid rgba(96, 165, 250, 0.22);
   font-size: 22rpx;
@@ -607,7 +607,7 @@ function profitClass(value: number | null) {
 
 .weekday-row {
   margin-top: 22rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   text-align: center;
   font-size: 20rpx;
 }
@@ -626,7 +626,7 @@ function profitClass(value: number | null) {
   border-radius: 18rpx;
   background: rgba(15, 23, 42, 0.38);
   border: 1rpx solid rgba(148, 163, 184, 0.12);
-  color: $text-soft;
+  color: var(--text-secondary);
 }
 
 .calendar-day.selected {
@@ -690,7 +690,7 @@ function profitClass(value: number | null) {
 .rank-name text:first-child,
 .fund-name {
   display: block;
-  color: $text-white;
+  color: var(--text-primary);
   font-size: 24rpx;
   font-weight: 900;
   overflow: hidden;
@@ -702,13 +702,13 @@ function profitClass(value: number | null) {
 .fund-code {
   display: block;
   margin-top: 6rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 20rpx;
 }
 
 .empty-mini {
   padding: 26rpx 0 4rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 22rpx;
   text-align: center;
 }

@@ -142,7 +142,7 @@ function logout() {
 function selectTheme(theme: AppTheme) {
   setTheme(theme);
   uni.showToast({
-    title: theme === 'neon' ? '已切换霓虹主题' : '已切换深色主题',
+    title: themeOptions.find((item) => item.value === theme)?.label || '主题已切换',
     icon: 'none'
   });
 }
@@ -175,9 +175,9 @@ function getErrorMessage(error: unknown, fallback: string) {
 .back-button,
 .logout-button {
   border-radius: 999rpx;
-  color: $text-soft;
-  background: rgba(148, 163, 184, 0.12);
-  border: 1rpx solid rgba(148, 163, 184, 0.16);
+  color: var(--text-secondary);
+  background: var(--control-bg);
+  border: 1rpx solid var(--border-color);
   font-size: 24rpx;
   font-weight: 900;
 }
@@ -194,9 +194,7 @@ function getErrorMessage(error: unknown, fallback: string) {
   flex-direction: column;
   align-items: center;
   gap: 22rpx;
-  background:
-    radial-gradient(circle at 50% 8%, rgba(96, 165, 250, 0.22), transparent 34%),
-    linear-gradient(135deg, rgba(30, 41, 59, 0.72), rgba(30, 27, 75, 0.58));
+  background: var(--card-bg);
 }
 
 .profile-avatar {
@@ -212,7 +210,7 @@ function getErrorMessage(error: unknown, fallback: string) {
   width: 148rpx;
   height: 148rpx;
   border-radius: 50%;
-  border: 2rpx solid rgba(255, 255, 255, 0.24);
+  border: 2rpx solid var(--border-color);
   box-shadow: 0 20rpx 48rpx rgba(59, 130, 246, 0.28), 0 0 28rpx rgba(139, 92, 246, 0.18);
 }
 
@@ -220,7 +218,7 @@ function getErrorMessage(error: unknown, fallback: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--button-primary-text);
   font-size: 58rpx;
   font-weight: 900;
   background: linear-gradient(135deg, $primary-blue, $primary-purple);
@@ -228,7 +226,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 .profile-name {
   max-width: 100%;
-  color: $text-white;
+  color: var(--text-primary);
   font-size: 38rpx;
   font-weight: 900;
   overflow: hidden;
@@ -237,7 +235,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 .profile-subtitle {
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 24rpx;
 }
 
@@ -252,8 +250,8 @@ function getErrorMessage(error: unknown, fallback: string) {
   box-sizing: border-box;
   padding: 24rpx;
   border-radius: 32rpx;
-  background: rgba(15, 23, 42, 0.34);
-  border: 1rpx solid rgba(255, 255, 255, 0.1);
+  background: var(--panel-soft);
+  border: 1rpx solid var(--border-color);
 }
 
 .theme-head {
@@ -264,19 +262,19 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 .theme-title {
-  color: $text-white;
+  color: var(--text-primary);
   font-size: 28rpx;
   font-weight: 900;
 }
 
 .theme-subtitle {
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 22rpx;
 }
 
 .theme-options {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 16rpx;
 }
 
@@ -284,9 +282,9 @@ function getErrorMessage(error: unknown, fallback: string) {
   min-height: 112rpx;
   padding: 18rpx;
   border-radius: 30rpx;
-  background: rgba(148, 163, 184, 0.12);
-  border: 1rpx solid rgba(148, 163, 184, 0.16);
-  color: $text-soft;
+  background: var(--control-bg);
+  border: 1rpx solid var(--border-color);
+  color: var(--text-secondary);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -304,25 +302,23 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 .theme-option text:last-child {
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 21rpx;
 }
 
 .theme-option.active {
-  color: #fff;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 42%),
-    $rainbow-gradient;
-  border-color: rgba(255, 255, 255, 0.28);
+  color: var(--button-primary-text);
+  background: var(--button-primary-bg);
+  border-color: var(--border-color);
   box-shadow: 0 16rpx 34rpx rgba(139, 92, 246, 0.18);
 }
 
 .theme-option.active text:last-child {
-  color: rgba(255, 255, 255, 0.82);
+  color: rgba(255, 255, 255, 0.84);
 }
 
 .logout-button {
-  color: #fecaca;
+  color: var(--profit-color);
   background: rgba(239, 68, 68, 0.12);
   border-color: rgba(239, 68, 68, 0.22);
 }

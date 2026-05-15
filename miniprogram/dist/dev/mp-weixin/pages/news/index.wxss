@@ -15,20 +15,20 @@
   height: 72rpx;
   padding: 0;
   border-radius: 999rpx;
-  color: #91a4c2;
+  color: var(--text-muted);
   background: transparent;
   font-size: 25rpx;
   font-weight: 900;
 }
 .switch-btn.active.data-v-a33dc070 {
-  color: #fff;
+  color: var(--button-primary-text, #fff);
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 42%), linear-gradient(135deg, #ff5fa2 0%, #8b5cf6 52%, #38bdf8 100%);
   box-shadow: 0 16rpx 40rpx rgba(139, 92, 246, 0.2), 0 0 24rpx rgba(56, 189, 248, 0.12), inset 0 1rpx 0 rgba(255, 255, 255, 0.22);
-  color: #fff;
+  color: var(--button-primary-text);
 }
 .notice-card.data-v-a33dc070 {
   padding: 22rpx 26rpx;
-  color: #91a4c2;
+  color: var(--text-muted);
   font-size: 22rpx;
   line-height: 1.55;
 }
@@ -56,13 +56,13 @@
   display: flex;
   justify-content: space-between;
   gap: 18rpx;
-  color: #91a4c2;
+  color: var(--text-muted);
   font-size: 22rpx;
 }
 .news-title.data-v-a33dc070 {
   display: block;
   margin-top: 12rpx;
-  color: #f8fafc;
+  color: var(--text-primary);
   font-size: 30rpx;
   font-weight: 900;
   line-height: 1.42;
@@ -70,7 +70,7 @@
 .news-summary.data-v-a33dc070 {
   display: block;
   margin-top: 12rpx;
-  color: #d2def0;
+  color: var(--text-secondary);
   font-size: 24rpx;
   line-height: 1.5;
 }

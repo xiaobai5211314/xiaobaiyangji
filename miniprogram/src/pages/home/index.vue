@@ -1747,7 +1747,7 @@ function getErrorMessage(error: unknown, fallback: string) {
   margin-top: 0;
   font-size: 24rpx;
   font-weight: 800;
-  color: $text-soft;
+  color: var(--text-secondary);
 }
 
 .title-block {
@@ -1761,10 +1761,8 @@ function getErrorMessage(error: unknown, fallback: string) {
   align-items: center;
   justify-content: space-between;
   padding: 20rpx;
-  background:
-    radial-gradient(circle at 14% 0%, $soft-pink, transparent 30%),
-    radial-gradient(circle at 88% 0%, $soft-cyan, transparent 30%),
-    rgba(18, 28, 56, 0.78);
+  background: var(--card-bg);
+  border-color: var(--border-color);
 }
 
 .user-panel {
@@ -1785,13 +1783,14 @@ function getErrorMessage(error: unknown, fallback: string) {
   align-items: center;
   justify-content: center;
   gap: 12rpx;
-  color: $text-white;
-  background: rgba(96, 165, 250, 0.1);
-  border: 1rpx solid rgba(191, 219, 254, 0.16);
+  color: var(--text-primary);
+  background: var(--control-bg);
+  border: 1rpx solid var(--border-color);
 }
 
 .account-button.guest {
-  background: linear-gradient(135deg, rgba(255, 95, 162, 0.2), rgba(139, 92, 246, 0.24), rgba(56, 189, 248, 0.16));
+  color: var(--button-primary-text);
+  background: var(--button-primary-bg);
   box-shadow: 0 14rpx 32rpx rgba(139, 92, 246, 0.14);
 }
 
@@ -1801,7 +1800,7 @@ function getErrorMessage(error: unknown, fallback: string) {
   height: 56rpx;
   border-radius: 50%;
   flex-shrink: 0;
-  border: 2rpx solid rgba(255, 255, 255, 0.24);
+  border: 2rpx solid var(--border-color);
   box-shadow: 0 14rpx 34rpx rgba(90, 167, 255, 0.2), 0 0 18rpx rgba(139, 124, 246, 0.14);
 }
 
@@ -1809,7 +1808,7 @@ function getErrorMessage(error: unknown, fallback: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--button-primary-text);
   font-size: 28rpx;
   font-weight: 900;
   background: $rainbow-gradient;
@@ -1838,22 +1837,22 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 .account-subtitle {
   margin-top: 5rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 18rpx;
   line-height: 1.1;
 }
 
 .account-button.guest .account-subtitle {
-  color: rgba(239, 246, 255, 0.78);
+  color: rgba(255, 255, 255, 0.84);
 }
 
 .privacy-button,
 .secondary-action,
 .modal-close {
   border-radius: 999rpx;
-  color: $text-soft;
-  background: rgba(191, 219, 254, 0.08);
-  border: 1rpx solid rgba(191, 219, 254, 0.12);
+  color: var(--text-secondary);
+  background: var(--control-bg);
+  border: 1rpx solid var(--border-color);
 }
 
 .action-buttons {
@@ -1893,7 +1892,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 .asset-switch-btn {
   min-height: 72rpx;
   border-radius: 999rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   background: transparent;
   border: 1rpx solid transparent;
   font-size: 26rpx;
@@ -1902,14 +1901,14 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 .asset-switch-btn.active {
-  color: $text-white;
+  color: var(--text-primary);
   background: $rainbow-gradient;
   box-shadow: 0 16rpx 42rpx rgba(139, 92, 246, 0.2);
 }
 
 .notice-card {
   padding: 22rpx 26rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 22rpx;
   line-height: 1.55;
 }
@@ -1949,14 +1948,14 @@ function getErrorMessage(error: unknown, fallback: string) {
 .confidence-reason {
   display: block;
   margin-top: 8rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 22rpx;
 }
 
 .hero-money {
   display: block;
   margin-top: 22rpx;
-  color: $text-white;
+  color: var(--text-primary);
   font-size: 64rpx;
   line-height: 1.12;
 }
@@ -1985,7 +1984,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 .metric-label {
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 22rpx;
 }
 
@@ -1993,7 +1992,7 @@ function getErrorMessage(error: unknown, fallback: string) {
   display: inline-flex;
   max-width: 100%;
   margin-top: 10rpx;
-  color: $text-white;
+  color: var(--text-primary);
   font-size: 30rpx;
   font-weight: 900;
   white-space: nowrap;
@@ -2032,7 +2031,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 .feature-title {
   display: block;
-  color: $text-white;
+  color: var(--text-primary);
   font-size: 28rpx;
   font-weight: 900;
 }
@@ -2041,7 +2040,7 @@ function getErrorMessage(error: unknown, fallback: string) {
   display: block;
   margin-top: 10rpx;
   min-height: 64rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 22rpx;
   line-height: 1.45;
 }
@@ -2054,7 +2053,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 .report-line {
   padding-top: 12rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 22rpx;
 }
 
@@ -2089,7 +2088,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 .confidence-copy text:first-child {
   display: block;
   max-width: 190rpx;
-  color: $text-soft;
+  color: var(--text-secondary);
   font-size: 22rpx;
   font-weight: 900;
   overflow: hidden;
@@ -2100,7 +2099,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 .confidence-copy text:last-child {
   display: block;
   margin-top: 4rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 20rpx;
 }
 
@@ -2127,7 +2126,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 .rank-row {
   margin-top: 18rpx;
-  color: $text-soft;
+  color: var(--text-secondary);
   font-size: 22rpx;
 }
 
@@ -2140,7 +2139,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 .muted-empty {
   margin-top: 18rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 22rpx;
 }
 
@@ -2158,7 +2157,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 .fund-name {
   display: block;
-  color: $text-white;
+  color: var(--text-primary);
   font-size: 31rpx;
   font-weight: 900;
   overflow: hidden;
@@ -2169,7 +2168,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 .fund-code {
   display: block;
   margin-top: 8rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 22rpx;
 }
 
@@ -2185,7 +2184,7 @@ function getErrorMessage(error: unknown, fallback: string) {
   min-height: 42rpx;
   padding: 0 16rpx;
   border-radius: 999rpx;
-  color: $text-soft;
+  color: var(--text-secondary);
   font-size: 20rpx;
   line-height: 42rpx;
   font-weight: 900;
@@ -2225,7 +2224,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 .calibration-strip text:last-child {
   max-width: 360rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2248,12 +2247,12 @@ function getErrorMessage(error: unknown, fallback: string) {
   justify-content: space-between;
   gap: 16rpx;
   margin-bottom: 12rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 22rpx;
 }
 
 .trend-head text:first-child {
-  color: $text-soft;
+  color: var(--text-secondary);
   font-weight: 900;
 }
 
@@ -2275,7 +2274,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 .metric-hint {
   display: block;
   margin-top: 6rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 20rpx;
 }
 
@@ -2345,7 +2344,7 @@ function getErrorMessage(error: unknown, fallback: string) {
   box-sizing: border-box;
   padding: 0 22rpx;
   border-radius: 999rpx;
-  color: $text-white;
+  color: var(--text-primary);
   background: rgba(15, 23, 42, 0.44);
   border: 1rpx solid rgba(191, 219, 254, 0.12);
   font-size: 24rpx;
@@ -2385,7 +2384,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 .stock-name {
   display: block;
-  color: $text-white;
+  color: var(--text-primary);
   font-size: 28rpx;
   font-weight: 900;
   overflow: hidden;
@@ -2396,7 +2395,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 .stock-code {
   display: block;
   margin-top: 8rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 21rpx;
 }
 
@@ -2414,7 +2413,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 .stock-market-data .finance-number {
-  color: $text-white;
+  color: var(--text-primary);
   font-size: 30rpx;
   font-weight: 900;
   white-space: nowrap;
@@ -2495,13 +2494,13 @@ function getErrorMessage(error: unknown, fallback: string) {
 .stock-metric-grid text:first-child,
 .stock-ocr-grid text:first-child,
 .holding-form text:first-child {
-  color: $text-muted;
+  color: var(--text-muted);
 }
 
 .stock-metric-grid text:last-child,
 .stock-ocr-grid text:last-child {
   margin-top: 8rpx;
-  color: $text-white;
+  color: var(--text-primary);
   font-weight: 900;
   white-space: nowrap;
 }
@@ -2516,7 +2515,7 @@ function getErrorMessage(error: unknown, fallback: string) {
   flex: 1;
   min-height: 58rpx;
   border-radius: 999rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   background: rgba(191, 219, 254, 0.07);
   border: 1rpx solid rgba(191, 219, 254, 0.1);
   font-size: 22rpx;
@@ -2525,7 +2524,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 .kline-tab.active {
-  color: $text-white;
+  color: var(--text-primary);
   background: linear-gradient(135deg, rgba(59, 130, 246, 0.8), rgba(124, 58, 237, 0.74));
   border-color: rgba(191, 219, 254, 0.24);
 }
@@ -2593,7 +2592,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 .history-loading {
   padding: 70rpx 0;
-  color: $text-muted;
+  color: var(--text-muted);
   text-align: center;
   font-size: 24rpx;
 }
@@ -2614,7 +2613,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 .history-date {
   display: block;
-  color: $text-white;
+  color: var(--text-primary);
   font-size: 24rpx;
   font-weight: 900;
 }
@@ -2622,7 +2621,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 .history-sub {
   display: block;
   margin-top: 8rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 21rpx;
 }
 
@@ -2654,7 +2653,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 .ocr-name {
   min-width: 0;
-  color: $text-white;
+  color: var(--text-primary);
   font-size: 28rpx;
   font-weight: 900;
   overflow: hidden;
@@ -2681,12 +2680,12 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 .ocr-grid text:first-child {
-  color: $text-muted;
+  color: var(--text-muted);
 }
 
 .ocr-grid text:last-child {
   margin-top: 6rpx;
-  color: $text-white;
+  color: var(--text-primary);
   font-weight: 900;
 }
 

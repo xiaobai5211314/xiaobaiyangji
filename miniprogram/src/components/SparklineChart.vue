@@ -209,7 +209,7 @@ function clamp(value: number, min: number, max: number) {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 22rpx;
 }
 </style>

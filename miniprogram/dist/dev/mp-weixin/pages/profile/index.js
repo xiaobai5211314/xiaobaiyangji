@@ -91,9 +91,10 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
       common_vendor.index.reLaunch({ url: "/pages/login/index" });
     }
     function selectTheme(theme) {
+      var _a;
       stores_theme.setTheme(theme);
       common_vendor.index.showToast({
-        title: theme === "neon" ? "已切换霓虹主题" : "已切换深色主题",
+        title: ((_a = stores_theme.themeOptions.find((item) => item.value === theme)) == null ? void 0 : _a.label) || "主题已切换",
         icon: "none"
       });
     }

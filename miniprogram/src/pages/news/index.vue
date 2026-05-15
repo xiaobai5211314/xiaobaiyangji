@@ -147,7 +147,7 @@ function newsItemKey(item: NewsItem, index: number) {
   height: 72rpx;
   padding: 0;
   border-radius: 999rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   background: transparent;
   font-size: 25rpx;
   font-weight: 900;
@@ -155,12 +155,12 @@ function newsItemKey(item: NewsItem, index: number) {
 
 .switch-btn.active {
   @include primary-gradient;
-  color: #fff;
+  color: var(--button-primary-text);
 }
 
 .notice-card {
   padding: 22rpx 26rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 22rpx;
   line-height: 1.55;
 }
@@ -196,14 +196,14 @@ function newsItemKey(item: NewsItem, index: number) {
   display: flex;
   justify-content: space-between;
   gap: 18rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 22rpx;
 }
 
 .news-title {
   display: block;
   margin-top: 12rpx;
-  color: $text-white;
+  color: var(--text-primary);
   font-size: 30rpx;
   font-weight: 900;
   line-height: 1.42;
@@ -212,7 +212,7 @@ function newsItemKey(item: NewsItem, index: number) {
 .news-summary {
   display: block;
   margin-top: 12rpx;
-  color: $text-soft;
+  color: var(--text-secondary);
   font-size: 24rpx;
   line-height: 1.5;
 }

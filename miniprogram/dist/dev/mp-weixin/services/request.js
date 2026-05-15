@@ -84,12 +84,24 @@ function resolveFallback(options) {
   const value = typeof fallback === "function" ? fallback() : fallback;
   return { hasFallback: true, value };
 }
+function logRequestFailure(params) {
+  const errMsg = extractErrMsg(params.error);
+  const label = isTimeoutError(params.error) ? "[request timeout]" : "[request fail]";
+  console.warn(label, {
+    method: params.method,
+    path: params.path,
+    fullUrl: params.fullUrl,
+    timeout: params.timeout,
+    errMsg
+  });
+}
 async function request(path, options = {}) {
   const method = options.method ?? "GET";
   const loadingText = options.loadingText ?? "加载中";
   const timeout = options.timeout ?? 2e4;
   const showErrorToast = options.showErrorToast ?? true;
-  const fullUrl = `${services_config.getApiBaseUrl()}${normalizePath(path)}`;
+  const normalizedPath = normalizePath(path);
+  const fullUrl = `${services_config.getApiBaseUrl()}${normalizedPath}`;
   const cacheKey = `${method}:${fullUrl}`;
   const canUseCache = method === "GET" && options.silent !== false && !/[?&]force=true\b/i.test(fullUrl) && !/[?&]_t=/.test(fullUrl);
   const header = {
@@ -110,6 +122,7 @@ async function request(path, options = {}) {
     common_vendor.index.showLoading({ title: loadingText, mask: true });
   }
   const executor = (async () => {
+    let usedNetworkFallback = false;
     const result = await new Promise((resolve, reject) => {
       common_vendor.index.request({
         url: fullUrl,
@@ -118,7 +131,16 @@ async function request(path, options = {}) {
         header,
         timeout,
         success: resolve,
-        fail: reject
+        fail: (error) => {
+          logRequestFailure({ method, path: normalizedPath, fullUrl, timeout, error });
+          const fallback = resolveFallback(options);
+          if (fallback.hasFallback) {
+            usedNetworkFallback = true;
+            resolve({ statusCode: 200, data: fallback.value });
+            return;
+          }
+          reject(error);
+        }
       });
     });
     const statusCode = Number(result.statusCode || 0);
@@ -137,7 +159,7 @@ async function request(path, options = {}) {
       }
       throw new ApiRequestError(message, statusCode, result.data);
     }
-    if (canUseCache) {
+    if (canUseCache && !usedNetworkFallback) {
       getCache.set(cacheKey, { expiresAt: Date.now() + GET_CACHE_TTL, data: result.data });
     }
     return result.data;
@@ -148,9 +170,11 @@ async function request(path, options = {}) {
     }
     const timeoutError = isTimeoutError(error);
     const message = timeoutError ? "请求超时，请检查网络或后端接口" : error instanceof Error ? error.message : "网络请求失败";
-    console.warn("[request:fail]", {
+    console.warn("[request:fail:throw]", {
       method,
+      path: normalizedPath,
       fullUrl,
+      timeout,
       errMsg: extractErrMsg(error),
       message,
       data: maskSensitiveData(options.data)

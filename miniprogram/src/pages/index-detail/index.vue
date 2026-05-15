@@ -313,7 +313,7 @@ function goBack() {
   min-width: 104rpx;
   height: 56rpx;
   border-radius: 999rpx;
-  color: $text-soft;
+  color: var(--text-secondary);
   background: rgba(148, 163, 184, 0.12);
   border: 1rpx solid rgba(148, 163, 184, 0.16);
   font-size: 24rpx;
@@ -339,7 +339,7 @@ function goBack() {
 .index-latest {
   display: block;
   margin-top: 12rpx;
-  color: $text-white;
+  color: var(--text-primary);
   font-size: 52rpx;
   font-weight: 900;
 }
@@ -370,12 +370,12 @@ function goBack() {
 
 .history-head {
   margin-bottom: 14rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 23rpx;
 }
 
 .history-head text:first-child {
-  color: $text-soft;
+  color: var(--text-secondary);
   font-weight: 900;
 }
 
@@ -389,14 +389,14 @@ function goBack() {
 
 .table-head {
   padding: 12rpx 0;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 21rpx;
 }
 
 .history-row {
   padding: 16rpx 0;
   border-top: 1rpx solid rgba(148, 163, 184, 0.12);
-  color: $text-soft;
+  color: var(--text-secondary);
   font-size: 23rpx;
 }
 
@@ -409,7 +409,7 @@ function goBack() {
 
 .empty-history {
   padding: 38rpx 0;
-  color: $text-muted;
+  color: var(--text-muted);
   text-align: center;
   font-size: 24rpx;
 }
@@ -417,7 +417,7 @@ function goBack() {
 .updated-text {
   display: block;
   margin-top: 22rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 22rpx;
 }
 </style>

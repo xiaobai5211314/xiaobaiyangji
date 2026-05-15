@@ -2,87 +2,179 @@
 @import './mixins.scss';
 
 .page-shell {
-  --theme-page-bg:
+  --page-bg:
     radial-gradient(circle at 12% 6%, #{$soft-pink}, transparent 28%),
     radial-gradient(circle at 86% 2%, #{$soft-cyan}, transparent 30%),
     radial-gradient(circle at 70% 78%, rgba(139, 92, 246, 0.12), transparent 34%),
     linear-gradient(155deg, #08111f 0%, #101b38 44%, #20285f 100%);
-  --theme-card-bg:
+  --page-bg-soft: rgba(13, 23, 44, 0.78);
+  --card-bg:
     radial-gradient(circle at 20% 0%, rgba(255, 95, 162, 0.14), transparent 30%),
     radial-gradient(circle at 90% 10%, rgba(56, 189, 248, 0.12), transparent 28%),
     #{$bg-panel};
-  --theme-card-border: #{$card-border};
-  --theme-card-shadow: #{$card-shadow};
-  --theme-primary-gradient:
+  --card-bg-strong: #{$bg-panel-strong};
+  --text-primary: #{$text-white};
+  --text-secondary: #{$text-soft};
+  --text-muted: #{$text-muted};
+  --text-inverse: #ffffff;
+  --border-color: #{$card-border};
+  --shadow-color: rgba(3, 7, 18, 0.42);
+  --tab-bg:
+    radial-gradient(circle at 16% 0%, #{$soft-pink}, transparent 32%),
+    radial-gradient(circle at 88% 8%, #{$soft-cyan}, transparent 30%),
+    rgba(10, 18, 36, 0.88);
+  --tab-active-bg:
+    radial-gradient(circle at 30% 12%, rgba(255, 255, 255, 0.22), transparent 30%),
+    #{$rainbow-gradient};
+  --button-primary-bg:
     linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 42%),
     #{$rainbow-gradient};
-  --theme-secondary-gradient:
-    linear-gradient(135deg, rgba(255, 95, 162, 0.12), rgba(139, 92, 246, 0.14), rgba(56, 189, 248, 0.1));
-  --theme-accent-pink: #{$rainbow-pink};
-  --theme-accent-purple: #{$rainbow-purple};
-  --theme-accent-blue: #{$rainbow-cyan};
-  --theme-text-main: #{$text-white};
-  --theme-text-muted: #{$text-muted};
-  --theme-text-soft: #{$text-soft};
-  --theme-profit-color: #{$profit-red};
-  --theme-loss-color: #{$loss-green};
-  --theme-panel-soft: rgba(15, 23, 42, 0.36);
-  --theme-control-bg: rgba(18, 28, 56, 0.66);
-  --theme-button-radius: #{$button-radius};
-  --theme-card-radius: #{$card-radius};
+  --button-primary-text: #ffffff;
+  --input-bg: rgba(18, 28, 56, 0.68);
+  --input-text: #{$text-white};
+  --input-placeholder: #{$text-muted};
+  --toast-bg: rgba(15, 23, 42, 0.94);
+  --toast-text: #ffffff;
+  --profit-color: #{$profit-red};
+  --loss-color: #{$loss-green};
+  --warning-color: #{$warning-yellow};
+  --panel-soft: rgba(15, 23, 42, 0.36);
+  --control-bg: rgba(18, 28, 56, 0.66);
+  --button-radius: #{$button-radius};
+  --card-radius: #{$card-radius};
+  --card-shadow: #{$card-shadow};
+  --primary-gradient: var(--button-primary-bg);
+  --secondary-gradient: linear-gradient(135deg, rgba(255, 95, 162, 0.12), rgba(139, 92, 246, 0.14), rgba(56, 189, 248, 0.1));
+  --accent-pink: #{$rainbow-pink};
+  --accent-purple: #{$rainbow-purple};
+  --accent-blue: #{$rainbow-cyan};
+
+  // Backward-compatible aliases for existing page styles.
+  --theme-page-bg: var(--page-bg);
+  --theme-card-bg: var(--card-bg);
+  --theme-card-border: var(--border-color);
+  --theme-card-shadow: var(--card-shadow);
+  --theme-primary-gradient: var(--button-primary-bg);
+  --theme-secondary-gradient: var(--secondary-gradient);
+  --theme-accent-pink: var(--accent-pink);
+  --theme-accent-purple: var(--accent-purple);
+  --theme-accent-blue: var(--accent-blue);
+  --theme-text-main: var(--text-primary);
+  --theme-text-muted: var(--text-muted);
+  --theme-text-soft: var(--text-secondary);
+  --theme-profit-color: var(--profit-color);
+  --theme-loss-color: var(--loss-color);
+  --theme-panel-soft: var(--panel-soft);
+  --theme-control-bg: var(--control-bg);
+  --theme-button-radius: var(--button-radius);
+  --theme-card-radius: var(--card-radius);
+
   min-height: 100vh;
   box-sizing: border-box;
   padding: $page-padding $page-padding calc($tabbar-height + 62rpx + env(safe-area-inset-bottom));
-  @include page-gradient;
-  background: var(--theme-page-bg);
-  color: var(--theme-text-main);
+  background: var(--page-bg);
+  color: var(--text-primary);
+}
+
+.page-shell.theme-light {
+  --page-bg:
+    radial-gradient(circle at 18% 0%, rgba(255, 95, 162, 0.16), transparent 30%),
+    radial-gradient(circle at 92% 6%, rgba(56, 189, 248, 0.18), transparent 32%),
+    linear-gradient(180deg, #f7fbff 0%, #edf5ff 50%, #f8f2ff 100%);
+  --page-bg-soft: rgba(241, 245, 249, 0.92);
+  --card-bg:
+    radial-gradient(circle at 18% 0%, rgba(255, 95, 162, 0.12), transparent 32%),
+    radial-gradient(circle at 92% 12%, rgba(56, 189, 248, 0.12), transparent 30%),
+    rgba(255, 255, 255, 0.92);
+  --card-bg-strong: rgba(255, 255, 255, 0.98);
+  --text-primary: #172033;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-inverse: #ffffff;
+  --border-color: rgba(100, 116, 139, 0.16);
+  --shadow-color: rgba(31, 41, 85, 0.12);
+  --tab-bg:
+    radial-gradient(circle at 14% 0%, rgba(255, 95, 162, 0.16), transparent 32%),
+    radial-gradient(circle at 90% 8%, rgba(56, 189, 248, 0.14), transparent 30%),
+    rgba(255, 255, 255, 0.92);
+  --tab-active-bg:
+    radial-gradient(circle at 28% 12%, rgba(255, 255, 255, 0.26), transparent 30%),
+    #{$rainbow-gradient};
+  --button-primary-bg:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.25), transparent 40%),
+    #{$rainbow-gradient};
+  --button-primary-text: #ffffff;
+  --input-bg: rgba(255, 255, 255, 0.94);
+  --input-text: #172033;
+  --input-placeholder: #94a3b8;
+  --toast-bg: rgba(23, 32, 51, 0.96);
+  --toast-text: #ffffff;
+  --profit-color: #dc3f55;
+  --loss-color: #0f9f8c;
+  --warning-color: #b45309;
+  --panel-soft: rgba(248, 250, 252, 0.92);
+  --control-bg: rgba(255, 255, 255, 0.86);
+  --card-radius: 44rpx;
+  --card-shadow: 0 22rpx 54rpx rgba(31, 41, 85, 0.12), 0 8rpx 26rpx rgba(139, 92, 246, 0.1);
 }
 
 .page-shell.theme-neon {
-  --theme-page-bg:
-    radial-gradient(circle at 18% 0%, rgba(255, 95, 162, 0.2), transparent 30%),
-    radial-gradient(circle at 92% 5%, rgba(56, 189, 248, 0.18), transparent 32%),
-    radial-gradient(circle at 56% 88%, rgba(139, 92, 246, 0.14), transparent 36%),
-    linear-gradient(180deg, #fbfdff 0%, #eef5ff 48%, #f8f1ff 100%);
-  --theme-card-bg:
+  --page-bg:
+    radial-gradient(circle at 12% 5%, rgba(255, 95, 162, 0.24), transparent 30%),
+    radial-gradient(circle at 90% 6%, rgba(56, 189, 248, 0.22), transparent 32%),
+    radial-gradient(circle at 58% 86%, rgba(139, 92, 246, 0.18), transparent 36%),
+    linear-gradient(155deg, #07101f 0%, #10183a 48%, #221f55 100%);
+  --page-bg-soft: rgba(16, 24, 52, 0.82);
+  --card-bg:
     radial-gradient(circle at 18% 0%, rgba(255, 95, 162, 0.18), transparent 32%),
     radial-gradient(circle at 92% 12%, rgba(56, 189, 248, 0.16), transparent 30%),
-    rgba(255, 255, 255, 0.86);
-  --theme-card-border: rgba(255, 255, 255, 0.72);
-  --theme-card-shadow: 0 22rpx 54rpx rgba(31, 41, 85, 0.12), 0 8rpx 26rpx rgba(139, 92, 246, 0.1);
-  --theme-primary-gradient:
+    rgba(18, 28, 56, 0.82);
+  --card-bg-strong: rgba(12, 18, 38, 0.9);
+  --text-primary: #f8fafc;
+  --text-secondary: #dbeafe;
+  --text-muted: #a8b3cf;
+  --text-inverse: #ffffff;
+  --border-color: rgba(255, 255, 255, 0.12);
+  --shadow-color: rgba(3, 7, 18, 0.36);
+  --tab-bg:
+    radial-gradient(circle at 14% 0%, rgba(255, 95, 162, 0.22), transparent 32%),
+    radial-gradient(circle at 90% 8%, rgba(56, 189, 248, 0.2), transparent 30%),
+    rgba(10, 18, 36, 0.9);
+  --tab-active-bg:
+    radial-gradient(circle at 28% 12%, rgba(255, 255, 255, 0.24), transparent 30%),
+    #{$rainbow-gradient};
+  --button-primary-bg:
     linear-gradient(135deg, rgba(255, 255, 255, 0.24), transparent 40%),
     #{$rainbow-gradient};
-  --theme-secondary-gradient:
-    linear-gradient(135deg, rgba(255, 95, 162, 0.22), rgba(139, 92, 246, 0.18), rgba(56, 189, 248, 0.16));
-  --theme-text-main: #182235;
-  --theme-text-muted: #66758f;
-  --theme-text-soft: #3c4960;
-  --theme-profit-color: #ef4565;
-  --theme-loss-color: #0f9f8c;
-  --theme-panel-soft: rgba(255, 255, 255, 0.62);
-  --theme-control-bg: rgba(255, 255, 255, 0.72);
-  --theme-card-radius: 44rpx;
-  background:
-    radial-gradient(circle at 18% 0%, rgba(255, 95, 162, 0.2), transparent 30%),
-    radial-gradient(circle at 92% 5%, rgba(56, 189, 248, 0.18), transparent 32%),
-    radial-gradient(circle at 56% 88%, rgba(139, 92, 246, 0.14), transparent 36%),
-    linear-gradient(180deg, #fbfdff 0%, #eef5ff 48%, #f8f1ff 100%);
-  color: #182235;
+  --button-primary-text: #ffffff;
+  --input-bg: rgba(20, 30, 58, 0.82);
+  --input-text: #f8fafc;
+  --input-placeholder: #a8b3cf;
+  --toast-bg: rgba(15, 23, 42, 0.96);
+  --toast-text: #ffffff;
+  --profit-color: #ff6b7a;
+  --loss-color: #27d7bd;
+  --warning-color: #fbbf24;
+  --panel-soft: rgba(18, 28, 56, 0.64);
+  --control-bg: rgba(18, 28, 56, 0.74);
+  --card-radius: 44rpx;
+  --card-shadow: 0 24rpx 62rpx rgba(3, 7, 18, 0.34), 0 0 34rpx rgba(139, 92, 246, 0.16);
 }
 
 .glass-card {
   @include glass-card;
-  background: var(--theme-card-bg);
-  border-color: var(--theme-card-border);
-  border-radius: var(--theme-card-radius);
-  box-shadow: var(--theme-card-shadow);
+  background: var(--card-bg);
+  border-color: var(--border-color);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  color: var(--text-primary);
 }
 
 .primary-gradient-button {
   @include primary-gradient;
-  background: var(--theme-primary-gradient);
-  border-radius: var(--theme-button-radius);
+  background: var(--button-primary-bg);
+  border-radius: var(--button-radius);
+  color: var(--button-primary-text);
   min-height: 86rpx;
   font-size: 27rpx;
   font-weight: 900;
@@ -93,6 +185,7 @@
   max-width: 100%;
   display: inline-flex;
   align-items: baseline;
+  color: inherit;
   white-space: nowrap;
   word-break: keep-all;
   overflow: hidden;
@@ -100,21 +193,21 @@
 }
 
 .profit-text {
-  color: var(--theme-profit-color);
+  color: var(--profit-color);
 }
 
 .loss-text {
-  color: var(--theme-loss-color);
+  color: var(--loss-color);
 }
 
 .section-title {
-  color: var(--theme-text-main);
+  color: var(--text-primary);
   font-size: 32rpx;
   font-weight: 900;
 }
 
 .muted-text {
-  color: var(--theme-text-muted);
+  color: var(--text-muted);
   font-size: 24rpx;
 }
 
@@ -132,7 +225,7 @@
 
 .page-title {
   display: block;
-  color: var(--theme-text-main);
+  color: var(--text-primary);
   font-size: 46rpx;
   font-weight: 900;
   line-height: 1.1;
@@ -141,7 +234,7 @@
 .page-subtitle {
   display: block;
   margin-top: 10rpx;
-  color: var(--theme-text-muted);
+  color: var(--text-muted);
   font-size: 24rpx;
 }
 
@@ -162,12 +255,12 @@
 }
 
 .stat-label {
-  color: var(--theme-text-muted);
+  color: var(--text-muted);
   font-size: 22rpx;
 }
 
 .stat-value {
-  color: var(--theme-text-main);
+  color: var(--text-primary);
   font-size: 34rpx;
   font-weight: 900;
   line-height: 1.2;
@@ -180,139 +273,149 @@
   min-height: 48rpx;
   padding: 0 18rpx;
   border-radius: 999rpx;
-  color: var(--theme-text-soft);
-  background: var(--theme-secondary-gradient);
-  border: 1rpx solid var(--theme-card-border);
+  color: var(--text-secondary);
+  background: var(--secondary-gradient);
+  border: 1rpx solid var(--border-color);
   font-size: 22rpx;
   font-weight: 800;
 }
 
 .empty-card {
   padding: 46rpx 30rpx;
-  color: var(--theme-text-muted);
+  color: var(--text-muted);
   text-align: center;
   font-size: 25rpx;
 }
 
 .notice-text {
-  color: var(--theme-text-muted);
+  color: var(--text-muted);
   font-size: 22rpx;
   line-height: 1.55;
   user-select: none;
 }
 
-.theme-neon .hero-card,
-.theme-neon .feature-card,
-.theme-neon .rank-card,
-.theme-neon .fund-card,
-.theme-neon .stock-card,
-.theme-neon .board-card,
-.theme-neon .index-card,
-.theme-neon .news-card,
-.theme-neon .overview-card,
-.theme-neon .calendar-card,
-.theme-neon .detail-card,
-.theme-neon .login-card,
-.theme-neon .profile-card,
-.theme-neon .theme-panel,
-.theme-neon .asset-switch,
-.theme-neon .switch-card,
-.theme-neon .notice-card,
-.theme-neon .list-head {
-  background:
-    radial-gradient(circle at 18% 0%, rgba(255, 95, 162, 0.18), transparent 32%),
-    radial-gradient(circle at 92% 12%, rgba(56, 189, 248, 0.16), transparent 30%),
-    rgba(255, 255, 255, 0.86) !important;
-  background: var(--theme-card-bg) !important;
-  border-color: rgba(255, 255, 255, 0.72) !important;
-  border-color: var(--theme-card-border) !important;
-  box-shadow: 0 22rpx 54rpx rgba(31, 41, 85, 0.12), 0 8rpx 26rpx rgba(139, 92, 246, 0.1);
-  box-shadow: var(--theme-card-shadow);
+.input,
+input,
+textarea {
+  color: var(--input-text);
+  background: var(--input-bg);
 }
 
-.theme-neon .summary-cell,
-.theme-neon .fund-metric,
-.theme-neon .stock-search-card,
-.theme-neon .stock-chart-panel,
-.theme-neon .history-block,
-.theme-neon .trend-panel,
-.theme-neon .calendar-day,
-.theme-neon .detail-row,
-.theme-neon .rank-row,
-.theme-neon .board-row,
-.theme-neon .history-row {
-  background: rgba(255, 255, 255, 0.62) !important;
-  background: var(--theme-panel-soft) !important;
-  border-color: rgba(139, 92, 246, 0.14) !important;
+.input-placeholder,
+input::placeholder,
+textarea::placeholder {
+  color: var(--input-placeholder);
 }
 
-.theme-neon .page-title,
-.theme-neon .section-title,
-.theme-neon .hero-title,
-.theme-neon .fund-name,
-.theme-neon .stock-name,
-.theme-neon .news-title,
-.theme-neon .index-name,
-.theme-neon .profile-name,
-.theme-neon .theme-title,
-.theme-neon .account-title,
-.theme-neon .brand-title,
-.theme-neon .metric-value,
-.theme-neon .stat-value {
-  color: #182235 !important;
-  color: var(--theme-text-main) !important;
+.hero-card,
+.action-card,
+.feature-card,
+.rank-card,
+.fund-card,
+.stock-card,
+.board-card,
+.index-card,
+.news-card,
+.overview-card,
+.calendar-card,
+.detail-card,
+.login-card,
+.profile-card,
+.theme-panel,
+.asset-switch,
+.switch-card,
+.notice-card,
+.list-head {
+  background: var(--card-bg) !important;
+  border-color: var(--border-color) !important;
+  box-shadow: var(--card-shadow);
+  color: var(--text-primary);
 }
 
-.theme-neon .page-subtitle,
-.theme-neon .muted-text,
-.theme-neon .hero-subtitle,
-.theme-neon .hero-sub,
-.theme-neon .row-sub,
-.theme-neon .list-subtitle,
-.theme-neon .index-sub,
-.theme-neon .fund-code,
-.theme-neon .news-summary,
-.theme-neon .profile-subtitle,
-.theme-neon .theme-subtitle,
-.theme-neon .account-subtitle,
-.theme-neon .metric-label,
-.theme-neon .small-rate {
-  color: #66758f !important;
-  color: var(--theme-text-muted) !important;
+.summary-cell,
+.fund-metric,
+.stock-search-card,
+.stock-chart-panel,
+.history-block,
+.trend-panel,
+.calendar-day,
+.detail-row,
+.rank-row,
+.board-row,
+.history-row {
+  background: var(--panel-soft) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary);
 }
 
-.theme-neon .primary-gradient-button,
-.theme-neon .ocr-button,
-.theme-neon .asset-switch-btn.active,
-.theme-neon .switch-btn.active,
-.theme-neon .mode-button.active,
-.theme-neon .calendar-day.selected,
-.theme-neon .calendar-button.today-button,
-.theme-neon .expand-trend-button,
-.theme-neon .history-button {
-  color: #fff !important;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.24), transparent 40%),
-    $rainbow-gradient !important;
-  background: var(--theme-primary-gradient) !important;
+.page-title,
+.section-title,
+.hero-title,
+.fund-name,
+.stock-name,
+.news-title,
+.index-name,
+.profile-name,
+.theme-title,
+.account-title,
+.brand-title,
+.metric-value,
+.stat-value {
+  color: var(--text-primary) !important;
+}
+
+.page-subtitle,
+.muted-text,
+.hero-subtitle,
+.hero-sub,
+.row-sub,
+.list-subtitle,
+.index-sub,
+.fund-code,
+.news-summary,
+.profile-subtitle,
+.theme-subtitle,
+.account-subtitle,
+.metric-label,
+.small-rate {
+  color: var(--text-muted) !important;
+}
+
+.ocr-button,
+.asset-switch-btn.active,
+.switch-btn.active,
+.mode-button.active,
+.calendar-day.selected,
+.calendar-button.today-button,
+.expand-trend-button,
+.history-button {
+  color: var(--button-primary-text) !important;
+  background: var(--button-primary-bg) !important;
   box-shadow: 0 16rpx 38rpx rgba(139, 92, 246, 0.18), 0 0 22rpx rgba(56, 189, 248, 0.12);
 }
 
-.theme-neon .input,
-.theme-neon .secondary-action,
-.theme-neon .back-button,
-.theme-neon .logout-button,
-.theme-neon .privacy-button,
-.theme-neon .account-button,
-.theme-neon .calendar-button,
-.theme-neon .mode-button,
-.theme-neon .asset-switch-btn,
-.theme-neon .switch-btn,
-.theme-neon .tag,
-.theme-neon .status-pill {
-  background: rgba(255, 255, 255, 0.72) !important;
-  background: var(--theme-control-bg) !important;
-  border-color: rgba(139, 92, 246, 0.16) !important;
-  color: #3c4960 !important;
-  color: var(--theme-text-soft) !important;
+.secondary-action,
+.back-button,
+.logout-button,
+.privacy-button,
+.account-button,
+.calendar-button,
+.mode-button,
+.asset-switch-btn,
+.switch-btn,
+.tag,
+.status-pill,
+.theme-option {
+  background: var(--control-bg) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-secondary) !important;
+}
+
+.theme-option.active {
+  color: var(--button-primary-text) !important;
+  background: var(--button-primary-bg) !important;
+}
+
+.theme-option.active text {
+  color: var(--button-primary-text) !important;
 }

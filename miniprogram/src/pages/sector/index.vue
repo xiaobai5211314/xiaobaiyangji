@@ -464,7 +464,7 @@ function logGlobalIndicesAudit(rows: GlobalIndexItem[]) {
 
 .notice-card {
   padding: 22rpx 26rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 22rpx;
   line-height: 1.55;
 }
@@ -494,7 +494,7 @@ function logGlobalIndicesAudit(rows: GlobalIndexItem[]) {
 .hero-title {
   display: block;
   margin-top: 14rpx;
-  color: $text-white;
+  color: var(--text-primary);
   font-size: 40rpx;
   font-weight: 900;
 }
@@ -505,7 +505,7 @@ function logGlobalIndicesAudit(rows: GlobalIndexItem[]) {
 .index-sub {
   display: block;
   margin-top: 8rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 22rpx;
 }
 
@@ -547,7 +547,7 @@ function logGlobalIndicesAudit(rows: GlobalIndexItem[]) {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: #fff;
+  color: var(--button-primary-text);
   font-size: 22rpx;
   font-weight: 900;
   background: linear-gradient(135deg, rgba(255, 95, 162, 0.24), rgba(139, 92, 246, 0.18));
@@ -565,7 +565,7 @@ function logGlobalIndicesAudit(rows: GlobalIndexItem[]) {
 .row-title,
 .index-name {
   display: block;
-  color: $text-white;
+  color: var(--text-primary);
   font-size: 25rpx;
   font-weight: 900;
   overflow: hidden;
@@ -599,7 +599,7 @@ function logGlobalIndicesAudit(rows: GlobalIndexItem[]) {
 
 .empty-mini {
   padding: 24rpx 0 8rpx;
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 22rpx;
   text-align: center;
 }
@@ -618,7 +618,7 @@ function logGlobalIndicesAudit(rows: GlobalIndexItem[]) {
 }
 
 .group-title {
-  color: $text-soft;
+  color: var(--text-secondary);
   font-size: 26rpx;
   font-weight: 900;
 }

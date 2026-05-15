@@ -19,7 +19,7 @@
 }
 
 @mixin primary-gradient {
-  color: #fff;
+  color: var(--button-primary-text, #fff);
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 42%),
     $rainbow-gradient;
@@ -48,6 +48,6 @@
     radial-gradient(circle at 16% 0%, $soft-pink, transparent 32%),
     radial-gradient(circle at 88% 8%, $soft-cyan, transparent 30%),
     rgba(10, 18, 36, 0.88);
-  border: 1rpx solid rgba(255, 255, 255, 0.12);
+  border: 1rpx solid var(--border-color, rgba(255, 255, 255, 0.12));
   box-shadow: 0 28rpx 76rpx rgba(3, 7, 18, 0.42), 0 0 28rpx rgba(139, 92, 246, 0.12), inset 0 1rpx 0 rgba(255, 255, 255, 0.08);
 }

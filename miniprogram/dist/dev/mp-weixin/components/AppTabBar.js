@@ -33,7 +33,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
             e: common_vendor.o(($event) => handleTap(item.key), item.key)
           };
         }),
-        b: common_vendor.n(common_vendor.unref(stores_theme.themeState).theme === "neon" ? "theme-neon" : "theme-dark")
+        b: common_vendor.n(`theme-${common_vendor.unref(stores_theme.themeState).theme}`)
       };
     };
   }

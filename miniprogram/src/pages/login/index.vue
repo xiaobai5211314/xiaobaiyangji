@@ -166,22 +166,22 @@ async function registerAccount() {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--button-primary-text);
   font-size: 48rpx;
   font-weight: 900;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.92), rgba(99, 102, 241, 0.92));
+  background: var(--button-primary-bg);
   box-shadow: 0 20rpx 48rpx rgba(59, 130, 246, 0.32);
 }
 
 .brand-title {
-  color: $text-white;
+  color: var(--text-primary);
   font-size: 60rpx;
   font-weight: 900;
   letter-spacing: 0;
 }
 
 .brand-subtitle {
-  color: $text-muted;
+  color: var(--text-muted);
   font-size: 26rpx;
 }
 
@@ -205,7 +205,7 @@ async function registerAccount() {
 }
 
 .label {
-  color: $text-soft;
+  color: var(--text-secondary);
   font-size: 24rpx;
   font-weight: 700;
 }
@@ -214,15 +214,15 @@ async function registerAccount() {
   height: 92rpx;
   box-sizing: border-box;
   padding: 0 28rpx;
-  border: 1rpx solid rgba(148, 163, 184, 0.2);
+  border: 1rpx solid var(--border-color);
   border-radius: $control-radius;
-  color: $text-white;
-  background: rgba(15, 23, 42, 0.76);
+  color: var(--input-text);
+  background: var(--input-bg);
   font-size: 28rpx;
 }
 
 .input-placeholder {
-  color: rgba(148, 163, 184, 0.58);
+  color: var(--input-placeholder);
 }
 
 .error-banner {
@@ -242,9 +242,9 @@ async function registerAccount() {
 .secondary-action {
   width: 100%;
   min-height: 84rpx;
-  color: $text-soft;
-  background: rgba(96, 165, 250, 0.1);
-  border: 1rpx solid rgba(96, 165, 250, 0.3);
+  color: var(--text-secondary);
+  background: var(--control-bg);
+  border: 1rpx solid var(--border-color);
   border-radius: $button-radius;
   font-size: 26rpx;
   font-weight: 800;

@@ -43,15 +43,26 @@
         }
 
         :root[data-theme="rainbow"] {
-            --page-bg: radial-gradient(circle at 12% 0%, rgba(255,95,162,.10), transparent 28%),
-                radial-gradient(circle at 88% 4%, rgba(56,189,248,.10), transparent 30%),
-                linear-gradient(135deg, #0b1226 0%, #151d3f 52%, #1f2252 100%);
-            --page-bg-color: #0b1226;
-            --card-bg: radial-gradient(circle at 18% 0%, rgba(255,95,162,.18), transparent 32%),
-                radial-gradient(circle at 92% 12%, rgba(56,189,248,.16), transparent 30%),
-                rgba(18, 28, 56, .82);
-            --card-border: rgba(255,255,255,.12);
-            --card-shadow: 0 14px 36px rgba(2, 6, 23, .28), 0 0 22px rgba(139,92,246,.10);
+            --page-bg: radial-gradient(circle at 8% -4%, rgba(255,95,162,.30), transparent 30%),
+                radial-gradient(circle at 92% 4%, rgba(56,189,248,.24), transparent 32%),
+                radial-gradient(circle at 22% 42%, rgba(139,92,246,.18), transparent 34%),
+                radial-gradient(circle at 70% 100%, rgba(69,38,160,.28), transparent 46%),
+                linear-gradient(160deg, #070b1a 0%, #111735 40%, #202053 68%, #111827 100%);
+            --page-bg-color: #080b1b;
+            --card-bg: radial-gradient(circle at 18% 0%, rgba(255,95,162,.16), transparent 34%),
+                radial-gradient(circle at 95% 8%, rgba(56,189,248,.14), transparent 32%),
+                linear-gradient(145deg, rgba(24, 31, 68, .88), rgba(13, 23, 48, .82));
+            --card-bg-hero: radial-gradient(circle at 4% 0%, rgba(255,95,162,.22), transparent 32%),
+                radial-gradient(circle at 100% 12%, rgba(56,189,248,.20), transparent 34%),
+                linear-gradient(140deg, rgba(35, 30, 78, .88), rgba(10, 35, 66, .82));
+            --card-bg-report: radial-gradient(circle at 0% 0%, rgba(255,95,162,.16), transparent 28%),
+                linear-gradient(115deg, rgba(27, 25, 58, .88), rgba(10, 32, 57, .82));
+            --card-bg-list: radial-gradient(circle at 100% 0%, rgba(56,189,248,.15), transparent 30%),
+                linear-gradient(155deg, rgba(19, 25, 56, .90), rgba(20, 29, 62, .80));
+            --card-bg-soft: linear-gradient(145deg, rgba(20, 28, 58, .72), rgba(18, 23, 48, .66));
+            --card-border: rgba(174, 201, 255, .16);
+            --card-border-glow: rgba(255,95,162,.20);
+            --card-shadow: 0 18px 46px rgba(2, 6, 23, .36), 0 0 32px rgba(139,92,246,.14);
             --primary-gradient: linear-gradient(135deg, #ff5fa2 0%, #8b5cf6 48%, #38bdf8 100%);
             --logo-gradient: var(--primary-gradient);
             --secondary-gradient: linear-gradient(135deg, rgba(255,95,162,.22), rgba(139,92,246,.18), rgba(56,189,248,.16));
@@ -77,6 +88,45 @@
             overflow-x: hidden;
             min-height: 100vh;
             overscroll-behavior-y: contain;
+        }
+
+        body::before,
+        body::after {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity .2s ease;
+        }
+
+        body::before {
+            z-index: 0;
+            background:
+                radial-gradient(circle at 10% 16%, rgba(255, 95, 162, .18), transparent 22%),
+                radial-gradient(circle at 93% 22%, rgba(56, 189, 248, .16), transparent 24%),
+                radial-gradient(circle at 48% 92%, rgba(139, 92, 246, .14), transparent 32%);
+            filter: blur(2px);
+        }
+
+        body::after {
+            z-index: 0;
+            background: linear-gradient(180deg, rgba(255,255,255,.025), transparent 18%, rgba(56,189,248,.028) 100%);
+            mix-blend-mode: screen;
+        }
+
+        :root[data-theme="rainbow"] body::before,
+        :root[data-theme="rainbow"] body::after {
+            opacity: 1;
+        }
+
+        :root[data-theme="rainbow"] body {
+            background-attachment: fixed;
+        }
+
+        #app {
+            position: relative;
+            z-index: 1;
         }
 
         /* 借鉴的新版毛玻璃与阴影质感 */
@@ -2769,7 +2819,33 @@
             border-radius: var(--card-radius) !important;
             border-color: var(--card-border) !important;
             background: var(--card-bg) !important;
-            box-shadow: var(--card-shadow) !important;
+            box-shadow: var(--card-shadow), inset 0 1px 0 rgba(255,255,255,.06) !important;
+        }
+
+        :root[data-theme="rainbow"] .home-hero-clean,
+        :root[data-theme="rainbow"] .total-panel {
+            background: var(--card-bg-hero) !important;
+            border-color: rgba(174, 201, 255, .20) !important;
+            box-shadow: 0 20px 54px rgba(2, 6, 23, .38), 0 0 34px rgba(56, 189, 248, .12) !important;
+        }
+
+        :root[data-theme="rainbow"] .feature-card,
+        :root[data-theme="rainbow"] .analysis-grid > .glass-panel,
+        :root[data-theme="rainbow"] .global-indices-modal {
+            background: var(--card-bg-report) !important;
+        }
+
+        :root[data-theme="rainbow"] .fund-card,
+        :root[data-theme="rainbow"] .stock-card,
+        :root[data-theme="rainbow"] .stock-detail-card,
+        :root[data-theme="rainbow"] .sector-page-layout > .glass-panel,
+        :root[data-theme="rainbow"] .calendar-day,
+        :root[data-theme="rainbow"] .profile-modal-card {
+            background: var(--card-bg-list) !important;
+        }
+
+        :root[data-theme="rainbow"] .glass-panel {
+            border-color: var(--card-border) !important;
         }
 
         :root[data-theme="rainbow"] .home-ocr-main,
@@ -2785,17 +2861,35 @@
             box-shadow: 0 10px 26px rgba(139, 92, 246, .22), 0 0 18px rgba(56, 189, 248, .10) !important;
         }
 
+        :root[data-theme="rainbow"] .btn:not(.btn-primary):not(.btn-success):not(.btn-danger),
+        :root[data-theme="rainbow"] .asset-mode-btn:not(.active),
+        :root[data-theme="rainbow"] .news-tab:not(.active),
+        :root[data-theme="rainbow"] .stock-kline-tab:not(.active),
+        :root[data-theme="rainbow"] .theme-choice-btn:not(.active) {
+            background: linear-gradient(145deg, rgba(25, 34, 70, .78), rgba(17, 25, 54, .68)) !important;
+            border-color: rgba(174, 201, 255, .14) !important;
+            color: #d7e3f7 !important;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+        }
+
         :root[data-theme="rainbow"] .bottom-tabbar {
             border-radius: 999px !important;
             background:
-                radial-gradient(circle at 18% 0%, rgba(255,95,162,.16), transparent 30%),
-                radial-gradient(circle at 88% 8%, rgba(56,189,248,.12), transparent 28%),
-                rgba(10, 18, 36, .88) !important;
+                radial-gradient(circle at 18% 0%, rgba(255,95,162,.20), transparent 30%),
+                radial-gradient(circle at 88% 8%, rgba(56,189,248,.16), transparent 28%),
+                linear-gradient(145deg, rgba(11, 17, 36, .94), rgba(15, 28, 56, .88)) !important;
             border-color: var(--card-border) !important;
+            box-shadow: 0 14px 36px rgba(2,6,23,.46), 0 0 22px rgba(139,92,246,.14) !important;
         }
 
         :root[data-theme="rainbow"] .bottom-tab {
             border-radius: 999px !important;
+            background: rgba(21, 29, 61, .62) !important;
+            color: #d7e3f7 !important;
+        }
+
+        :root[data-theme="rainbow"] .bottom-tab.active {
+            color: #fff !important;
         }
 
         :root[data-theme="rainbow"] .fund-card::before,
@@ -2823,7 +2917,7 @@
         :root[data-theme="rainbow"] .news-badge,
         :root[data-theme="rainbow"] .stock-code-chip,
         :root[data-theme="rainbow"] .calibration-pill {
-            border-color: rgba(255, 255, 255, .12) !important;
+            border-color: rgba(174, 201, 255, .16) !important;
             background: var(--secondary-gradient) !important;
         }
 

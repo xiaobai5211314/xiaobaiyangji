@@ -14,7 +14,7 @@
 }
 .notice-card.data-v-4c2bd136 {
   padding: 22rpx 26rpx;
-  color: #91a4c2;
+  color: var(--text-muted);
   font-size: 22rpx;
   line-height: 1.55;
 }
@@ -38,7 +38,7 @@
 .hero-title.data-v-4c2bd136 {
   display: block;
   margin-top: 14rpx;
-  color: #f8fafc;
+  color: var(--text-primary);
   font-size: 40rpx;
   font-weight: 900;
 }
@@ -48,7 +48,7 @@
 .index-sub.data-v-4c2bd136 {
   display: block;
   margin-top: 8rpx;
-  color: #91a4c2;
+  color: var(--text-muted);
   font-size: 22rpx;
 }
 .warning-sub.data-v-4c2bd136 {
@@ -83,7 +83,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: #fff;
+  color: var(--button-primary-text);
   font-size: 22rpx;
   font-weight: 900;
   background: linear-gradient(135deg, rgba(255, 95, 162, 0.24), rgba(139, 92, 246, 0.18));
@@ -98,7 +98,7 @@
 .row-title.data-v-4c2bd136,
 .index-name.data-v-4c2bd136 {
   display: block;
-  color: #f8fafc;
+  color: var(--text-primary);
   font-size: 25rpx;
   font-weight: 900;
   overflow: hidden;
@@ -128,7 +128,7 @@
 }
 .empty-mini.data-v-4c2bd136 {
   padding: 24rpx 0 8rpx;
-  color: #91a4c2;
+  color: var(--text-muted);
   font-size: 22rpx;
   text-align: center;
 }
@@ -144,7 +144,7 @@
   gap: 16rpx;
 }
 .group-title.data-v-4c2bd136 {
-  color: #d2def0;
+  color: var(--text-secondary);
   font-size: 26rpx;
   font-weight: 900;
 }

@@ -113,6 +113,24 @@ function resolveFallback<TResponse>(options: RequestOptions) {
   return { hasFallback: true, value: value as TResponse };
 }
 
+function logRequestFailure(params: {
+  method: RequestMethod;
+  path: string;
+  fullUrl: string;
+  timeout: number;
+  error: unknown;
+}) {
+  const errMsg = extractErrMsg(params.error);
+  const label = isTimeoutError(params.error) ? '[request timeout]' : '[request fail]';
+  console.warn(label, {
+    method: params.method,
+    path: params.path,
+    fullUrl: params.fullUrl,
+    timeout: params.timeout,
+    errMsg
+  });
+}
+
 export async function request<TResponse = unknown, TData = unknown>(
   path: string,
   options: RequestOptions<TData> = {}
@@ -121,7 +139,8 @@ export async function request<TResponse = unknown, TData = unknown>(
   const loadingText = options.loadingText ?? '加载中';
   const timeout = options.timeout ?? 20000;
   const showErrorToast = options.showErrorToast ?? true;
-  const fullUrl = `${getApiBaseUrl()}${normalizePath(path)}`;
+  const normalizedPath = normalizePath(path);
+  const fullUrl = `${getApiBaseUrl()}${normalizedPath}`;
   const cacheKey = `${method}:${fullUrl}`;
   const canUseCache =
     method === 'GET' &&
@@ -150,6 +169,7 @@ export async function request<TResponse = unknown, TData = unknown>(
   }
 
   const executor = (async () => {
+    let usedNetworkFallback = false;
     const result = await new Promise<UniApp.RequestSuccessCallbackResult>((resolve, reject) => {
       uni.request({
         url: fullUrl,
@@ -158,7 +178,16 @@ export async function request<TResponse = unknown, TData = unknown>(
         header,
         timeout,
         success: resolve,
-        fail: reject
+        fail: (error) => {
+          logRequestFailure({ method, path: normalizedPath, fullUrl, timeout, error });
+          const fallback = resolveFallback<TResponse>(options);
+          if (fallback.hasFallback) {
+            usedNetworkFallback = true;
+            resolve({ statusCode: 200, data: fallback.value } as unknown as UniApp.RequestSuccessCallbackResult);
+            return;
+          }
+          reject(error);
+        }
       });
     });
 
@@ -180,7 +209,7 @@ export async function request<TResponse = unknown, TData = unknown>(
       throw new ApiRequestError(message, statusCode, result.data);
     }
 
-    if (canUseCache) {
+    if (canUseCache && !usedNetworkFallback) {
       getCache.set(cacheKey, { expiresAt: Date.now() + GET_CACHE_TTL, data: result.data });
     }
 
@@ -199,9 +228,11 @@ export async function request<TResponse = unknown, TData = unknown>(
         ? error.message
         : '网络请求失败';
 
-    console.warn('[request:fail]', {
+    console.warn('[request:fail:throw]', {
       method,
+      path: normalizedPath,
       fullUrl,
+      timeout,
       errMsg: extractErrMsg(error),
       message,
       data: maskSensitiveData(options.data)
