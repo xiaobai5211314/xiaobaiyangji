@@ -413,3 +413,103 @@ textarea::placeholder {
 .theme-option.active text {
   color: var(--button-primary-text) !important;
 }
+
+/* theme-light: home page hard-coded overrides */
+.page-shell.theme-light .confidence-row {
+  background: rgba(241, 245, 249, 0.92);
+}
+
+.page-shell.theme-light .fund-card {
+  background: var(--card-bg);
+}
+
+.page-shell.theme-light .status-pill.settled {
+  color: #059669;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.page-shell.theme-light .status-pill.holiday {
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.page-shell.theme-light .status-pill.tracking {
+  color: #2563eb;
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.page-shell.theme-light .calibration-strip {
+  color: #6d28d9;
+  background: rgba(139, 92, 246, 0.08);
+}
+
+.page-shell.theme-light .trend-panel,
+.page-shell.theme-light .history-chart-block {
+  background: rgba(241, 245, 249, 0.92);
+  border-color: rgba(100, 116, 139, 0.12);
+}
+
+.page-shell.theme-light .history-button {
+  color: #2563eb;
+  background: rgba(59, 130, 246, 0.10);
+  border-color: rgba(59, 130, 246, 0.20);
+}
+
+.page-shell.theme-light .expand-trend-button {
+  color: #334155;
+  background: rgba(241, 245, 249, 0.92);
+  border-color: rgba(100, 116, 139, 0.12);
+}
+
+.page-shell.theme-light .stock-search-card,
+.page-shell.theme-light .stock-list-card,
+.page-shell.theme-light .stock-chart-card {
+  background: var(--card-bg);
+}
+
+.page-shell.theme-light .stock-search-input,
+.page-shell.theme-light .holding-form input,
+.page-shell.theme-light .stock-ocr-grid input {
+  background: rgba(255, 255, 255, 0.86);
+  border-color: rgba(100, 116, 139, 0.14);
+}
+
+.page-shell.theme-light .stock-actions button,
+.page-shell.theme-light .stock-inline-actions button {
+  color: #2563eb;
+  background: rgba(59, 130, 246, 0.10);
+  border-color: rgba(59, 130, 246, 0.20);
+}
+
+.page-shell.theme-light .stock-actions button.danger,
+.page-shell.theme-light .stock-inline-actions button.danger {
+  color: #dc2626;
+  background: rgba(239, 68, 68, 0.10);
+  border-color: rgba(239, 68, 68, 0.20);
+}
+
+.page-shell.theme-light .stock-card {
+  background: var(--panel-soft);
+  border-color: var(--border-color);
+}
+
+.page-shell.theme-light .stock-metric-grid view,
+.page-shell.theme-light .stock-ocr-grid view,
+.page-shell.theme-light .holding-form view {
+  background: rgba(241, 245, 249, 0.92);
+}
+
+.page-shell.theme-light .kline-tab {
+  background: rgba(241, 245, 249, 0.92);
+  border-color: rgba(100, 116, 139, 0.12);
+}
+
+.page-shell.theme-light .kline-tab.active {
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  color: #fff;
+  border-color: transparent;
+}
+
+.page-shell.theme-light .modal-mask {
+  background: rgba(0, 0, 0, 0.32);
+}
