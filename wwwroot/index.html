@@ -57,6 +57,8 @@
                 --primary-gradient: linear-gradient(135deg, #ff5fa2 0%, #8b5cf6 48%, #38bdf8 100%);
                 --logo-gradient: var(--primary-gradient);
                 --secondary-gradient: linear-gradient(135deg, rgba(255,95,162,.22), rgba(139,92,246,.18), rgba(56,189,248,.16));
+                --text-main: #f8fafc;
+                --text-muted: #a8b3cf;
                 --button-radius: 999px;
                 --card-radius: 24px;
             }
@@ -322,6 +324,99 @@
         :root[data-theme="light"] .skeleton-box {
             background: linear-gradient(90deg, rgba(226, 232, 240, 0.6) 25%, rgba(241, 245, 249, 0.9) 37%, rgba(226, 232, 240, 0.6) 63%);
             background-size: 400% 100%;
+        }
+
+        html[data-theme="light"] .page-title,
+        html[data-theme="light"] .feature-title,
+        html[data-theme="light"] .theme-settings-title,
+        html[data-theme="light"] .stock-row-head strong,
+        html[data-theme="light"] .stock-title,
+        html[data-theme="light"] .stock-name,
+        html[data-theme="light"] .holding-name,
+        html[data-theme="light"] .position-name,
+        html[data-theme="light"] .fund-name,
+        html[data-theme="light"] .sector-name,
+        html[data-theme="light"] .capital-name,
+        html[data-theme="light"] .profit-list-row > div:not(:last-child),
+        html[data-theme="light"] .metric-value,
+        html[data-theme="light"] .stock-metric .value {
+            color: #172033;
+            -webkit-text-fill-color: #172033;
+        }
+
+        html[data-theme="light"] .page-subtitle,
+        html[data-theme="light"] .feature-subtitle,
+        html[data-theme="light"] .metric-label,
+        html[data-theme="light"] .stock-metric .label,
+        html[data-theme="light"] .capital-sub,
+        html[data-theme="light"] .sector-table-head,
+        html[data-theme="light"] .calendar-week,
+        html[data-theme="light"] .news-empty {
+            color: #64748b;
+            -webkit-text-fill-color: #64748b;
+        }
+
+        html[data-theme="light"] .fund-card [style*="color: #fff"],
+        html[data-theme="light"] .fund-card [style*="color:#fff"],
+        html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
+        html[data-theme="light"] .fund-card [style*="color:#f8fafc"],
+        html[data-theme="light"] .stock-card [style*="color: #fff"],
+        html[data-theme="light"] .stock-card [style*="color:#fff"],
+        html[data-theme="light"] .stock-card [style*="color: #f8fafc"],
+        html[data-theme="light"] .stock-card [style*="color:#f8fafc"],
+        html[data-theme="light"] .sector-row [style*="color:#f8fafc"],
+        html[data-theme="light"] .sector-row [style*="color: #f8fafc"],
+        html[data-theme="light"] .exposure-row [style*="color:#f8fafc"],
+        html[data-theme="light"] .exposure-row [style*="color: #f8fafc"],
+        html[data-theme="light"] .calibration-card-row [style*="color:#f8fafc"],
+        html[data-theme="light"] .calibration-card-row [style*="color: #f8fafc"],
+        html[data-theme="light"] .profit-list-row [style*="color:#f8fafc"],
+        html[data-theme="light"] .profit-list-row [style*="color: #f8fafc"] {
+            color: #0f172a !important;
+            -webkit-text-fill-color: #0f172a !important;
+        }
+
+        html[data-theme="light"] .glass-panel [style*="color: #fff"],
+        html[data-theme="light"] .glass-panel [style*="color:#fff"],
+        html[data-theme="light"] .glass-panel [style*="color: #f8fafc"],
+        html[data-theme="light"] .glass-panel [style*="color:#f8fafc"],
+        html[data-theme="light"] .feature-card [style*="color: #fff"],
+        html[data-theme="light"] .feature-card [style*="color:#fff"],
+        html[data-theme="light"] .feature-card [style*="color: #f8fafc"],
+        html[data-theme="light"] .feature-card [style*="color:#f8fafc"],
+        html[data-theme="light"] .modal-content [style*="color: #fff"],
+        html[data-theme="light"] .modal-content [style*="color:#fff"],
+        html[data-theme="light"] .modal-content [style*="color: #f8fafc"],
+        html[data-theme="light"] .modal-content [style*="color:#f8fafc"] {
+            color: #0f172a !important;
+            -webkit-text-fill-color: #0f172a !important;
+        }
+
+        html[data-theme="light"] .fund-card [style*="color:#cbd5e1"],
+        html[data-theme="light"] .fund-card [style*="color: #cbd5e1"],
+        html[data-theme="light"] .stock-card [style*="color:#cbd5e1"],
+        html[data-theme="light"] .stock-card [style*="color: #cbd5e1"],
+        html[data-theme="light"] .sector-row [style*="color:#cbd5e1"],
+        html[data-theme="light"] .sector-row [style*="color: #cbd5e1"] {
+            color: #334155 !important;
+            -webkit-text-fill-color: #334155 !important;
+        }
+
+        html[data-theme="light"] .stock-code-chip {
+            color: #475569;
+            background: rgba(15, 23, 42, .06);
+            border: 1px solid rgba(15, 23, 42, .08);
+        }
+
+        html[data-theme="light"] .stock-metric,
+        html[data-theme="light"] .quick-holding-card,
+        html[data-theme="light"] .calendar-day {
+            background: rgba(241, 245, 249, .86);
+            border-color: rgba(15, 23, 42, .08);
+        }
+
+        html[data-theme="light"] .calendar-date {
+            color: #334155;
         }
 
         .fund-list-container {
@@ -3368,6 +3463,64 @@
                 color: #fff !important;
             }
 
+        html[data-theme="rainbow"] .page-title,
+        html[data-theme="rainbow"] .feature-title,
+        html[data-theme="rainbow"] .theme-settings-title,
+        html[data-theme="rainbow"] .stock-row-head strong,
+        html[data-theme="rainbow"] .stock-title,
+        html[data-theme="rainbow"] .stock-name,
+        html[data-theme="rainbow"] .holding-name,
+        html[data-theme="rainbow"] .position-name,
+        html[data-theme="rainbow"] .fund-name,
+        html[data-theme="rainbow"] .sector-name,
+        html[data-theme="rainbow"] .capital-name,
+        html[data-theme="rainbow"] .profit-list-row > div:not(:last-child),
+        html[data-theme="rainbow"] .metric-value,
+        html[data-theme="rainbow"] .stock-metric .value {
+            color: #f8fafc;
+            -webkit-text-fill-color: #f8fafc;
+            text-shadow: 0 1px 12px rgba(15, 23, 42, .22);
+        }
+
+        html[data-theme="rainbow"] .page-subtitle,
+        html[data-theme="rainbow"] .feature-subtitle,
+        html[data-theme="rainbow"] .metric-label,
+        html[data-theme="rainbow"] .stock-metric .label,
+        html[data-theme="rainbow"] .capital-sub,
+        html[data-theme="rainbow"] .sector-table-head,
+        html[data-theme="rainbow"] .calendar-week,
+        html[data-theme="rainbow"] .news-empty {
+            color: #a8b3cf;
+            -webkit-text-fill-color: #a8b3cf;
+        }
+
+        html[data-theme="rainbow"] .fund-card [style*="color: #fff"],
+        html[data-theme="rainbow"] .fund-card [style*="color:#fff"],
+        html[data-theme="rainbow"] .fund-card [style*="color: #f8fafc"],
+        html[data-theme="rainbow"] .fund-card [style*="color:#f8fafc"],
+        html[data-theme="rainbow"] .stock-card [style*="color: #fff"],
+        html[data-theme="rainbow"] .stock-card [style*="color:#fff"],
+        html[data-theme="rainbow"] .stock-card [style*="color: #f8fafc"],
+        html[data-theme="rainbow"] .stock-card [style*="color:#f8fafc"],
+        html[data-theme="rainbow"] .sector-row [style*="color:#f8fafc"],
+        html[data-theme="rainbow"] .sector-row [style*="color: #f8fafc"],
+        html[data-theme="rainbow"] .exposure-row [style*="color:#f8fafc"],
+        html[data-theme="rainbow"] .exposure-row [style*="color: #f8fafc"],
+        html[data-theme="rainbow"] .calibration-card-row [style*="color:#f8fafc"],
+        html[data-theme="rainbow"] .calibration-card-row [style*="color: #f8fafc"],
+        html[data-theme="rainbow"] .profit-list-row [style*="color:#f8fafc"],
+        html[data-theme="rainbow"] .profit-list-row [style*="color: #f8fafc"] {
+            color: #f8fafc !important;
+            -webkit-text-fill-color: #f8fafc !important;
+            text-shadow: 0 1px 12px rgba(15, 23, 42, .28);
+        }
+
+        html[data-theme="rainbow"] .stock-code-chip {
+            color: #d7e3f7;
+            background: rgba(2, 6, 23, .32);
+            border: 1px solid rgba(174, 201, 255, .14);
+        }
+
         :root[data-theme="rainbow"] .fund-card::before,
         :root[data-theme="rainbow"] .stock-card::before,
         :root[data-theme="rainbow"] .feature-card::before {
@@ -5984,7 +6137,4 @@
     </script>
 </body>
 </html>
-
-
-
 
