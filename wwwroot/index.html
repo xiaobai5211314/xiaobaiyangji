@@ -344,6 +344,14 @@
             -webkit-text-fill-color: #172033;
         }
 
+        html[data-theme="light"] .fund-card > div:first-child > span:first-child,
+        html[data-theme="light"] .fund-card > div:first-child > span:first-child > span:first-child {
+            color: #0f172a !important;
+            -webkit-text-fill-color: #0f172a !important;
+            opacity: 1 !important;
+            text-shadow: none !important;
+        }
+
         html[data-theme="light"] .page-subtitle,
         html[data-theme="light"] .feature-subtitle,
         html[data-theme="light"] .metric-label,
@@ -4539,7 +4547,10 @@
                     applyAppTheme(safeTheme);
                     nextTick(() => {
                         if (chartInstance.value) chartInstance.value.resize();
-                        if (stockChartInstance.value) stockChartInstance.value.resize();
+                        if (stockChartInstance.value) {
+                            stockChartInstance.value.resize();
+                            renderStockChart(lastStockKlineRows.value || []);
+                        }
                     });
                 };
 
@@ -4620,6 +4631,7 @@
                 ];
                 const stockChartRef = ref(null);
                 const stockChartInstance = shallowRef(null);
+                const lastStockKlineRows = ref([]);
                 const smartOcrBusy = computed(() => assetMode.value === 'stock' ? stockOcrLoading.value : isUploading.value);
                 const smartOcrText = computed(() => {
                     if (assetMode.value === 'stock') return stockOcrLoading.value ? '股票识别中...' : '智能截图导入股票';
@@ -4922,25 +4934,66 @@
                 };
 
                 const fetchStockKlines = async () => {
-                    if (!selectedStock.code) { renderStockChart([]); return; }
+                    if (!selectedStock.code) { lastStockKlineRows.value = []; renderStockChart([]); return; }
                     try {
                         const res = await apiFetch(`/api/stock/klines?code=${encodeURIComponent(selectedStock.code)}&period=${encodeURIComponent(stockKlinePeriod.value)}`, { cache: 'no-store' });
                         const data = await res.json();
-                        renderStockChart(data.items || []);
+                        lastStockKlineRows.value = data.items || [];
+                        renderStockChart(lastStockKlineRows.value);
                     } catch (e) { showToast('走势读取失败', 'error'); }
                 };
 
                 const renderStockChart = (rows) => {
                     if (!stockChartRef.value || !window.echarts) return;
                     if (!stockChartInstance.value) stockChartInstance.value = echarts.init(stockChartRef.value);
+                    const isLightTheme = document.documentElement.getAttribute('data-theme') === 'light';
+                    const chartTheme = isLightTheme
+                        ? {
+                            tooltipBg: 'rgba(255,255,255,.96)',
+                            tooltipText: '#0f172a',
+                            tooltipBorder: 'rgba(15,23,42,.16)',
+                            axisLabel: '#64748b',
+                            axisLine: 'rgba(15,23,42,.28)',
+                            splitLine: 'rgba(15,23,42,.10)'
+                        }
+                        : {
+                            tooltipBg: 'rgba(15,23,42,.92)',
+                            tooltipText: '#f8fafc',
+                            tooltipBorder: '#334155',
+                            axisLabel: '#94a3b8',
+                            axisLine: 'rgba(148,163,184,.28)',
+                            splitLine: 'rgba(148,163,184,.14)'
+                        };
                     const data = (rows || []).map(x => [x.time, Number(x.close || 0), Number(x.open || 0), Number(x.low || 0), Number(x.high || 0)]);
                     stockChartInstance.value.setOption({
                         backgroundColor: 'transparent',
-                        tooltip: { trigger: 'axis', backgroundColor: 'rgba(15,23,42,.92)', borderColor: '#334155', textStyle: { color: '#f8fafc' } },
+                        tooltip: { trigger: 'axis', backgroundColor: chartTheme.tooltipBg, borderColor: chartTheme.tooltipBorder, textStyle: { color: chartTheme.tooltipText } },
                         grid: { left: 42, right: 20, top: 28, bottom: 36 },
-                        xAxis: { type: 'category', data: data.map(x => x[0]), axisLabel: { color: '#94a3b8' } },
-                        yAxis: { scale: true, axisLabel: { color: '#94a3b8' }, splitLine: { lineStyle: { color: 'rgba(148,163,184,.14)' } } },
-                        series: [{ name: selectedStock.name || '走势', type: 'candlestick', data: data.map(x => [x[2], x[1], x[3], x[4]]) }]
+                        xAxis: {
+                            type: 'category',
+                            data: data.map(x => x[0]),
+                            axisLabel: { color: chartTheme.axisLabel },
+                            axisLine: { lineStyle: { color: chartTheme.axisLine } },
+                            axisTick: { lineStyle: { color: chartTheme.axisLine } }
+                        },
+                        yAxis: {
+                            scale: true,
+                            axisLabel: { color: chartTheme.axisLabel },
+                            axisLine: { lineStyle: { color: chartTheme.axisLine } },
+                            axisTick: { lineStyle: { color: chartTheme.axisLine } },
+                            splitLine: { lineStyle: { color: chartTheme.splitLine } }
+                        },
+                        series: [{
+                            name: selectedStock.name || '走势',
+                            type: 'candlestick',
+                            data: data.map(x => [x[2], x[1], x[3], x[4]]),
+                            itemStyle: {
+                                color: '#ff4d4f',
+                                color0: '#10b981',
+                                borderColor: '#ff4d4f',
+                                borderColor0: '#10b981'
+                            }
+                        }]
                     }, true);
                 };
 
