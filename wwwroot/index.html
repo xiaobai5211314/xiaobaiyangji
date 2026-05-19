@@ -4523,7 +4523,38 @@
                 const authFetch = async (path, formData) => {
                     const fd = new FormData();
                     for (const [k, v] of formData.entries()) fd.append(k, v);
-                    return fetch(API_BASE + path, { method: 'POST', body: fd, cache: 'no-store' });
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 20000);
+                    try {
+                        return await fetch(API_BASE + path, { method: 'POST', body: fd, cache: 'no-store', signal: controller.signal });
+                    } catch (e) {
+                        if (e.name === 'AbortError') throw new Error('登录请求超时，请检查网络或后端接口');
+                        throw new Error(`登录请求失败：${e.message || '网络或跨域异常'}`);
+                    } finally {
+                        clearTimeout(timeoutId);
+                    }
+                };
+
+                const readAuthErrorMessage = async (res, fallback = '登录失败') => {
+                    const status = res?.status || 0;
+                    const contentType = (res?.headers?.get('content-type') || '').toLowerCase();
+                    const text = await res.text().catch(() => '');
+                    if (contentType.includes('application/json') && text) {
+                        try {
+                            const data = JSON.parse(text);
+                            return data.message || data.error || data.msg || data.title || `${fallback}（HTTP ${status}）`;
+                        } catch (e) { /* fall through to text handling */ }
+                    }
+                    const cleaned = text.replace(/<script[\s\S]*?<\/script>/gi, '')
+                        .replace(/<style[\s\S]*?<\/style>/gi, '')
+                        .replace(/<[^>]+>/g, ' ')
+                        .replace(/\s+/g, ' ')
+                        .trim();
+                    if (status >= 500 && contentType.includes('text/html')) {
+                        return `登录服务暂时不可用（HTTP ${status}${cleaned.includes('Bad Gateway') ? '：Bad Gateway' : ''}）`;
+                    }
+                    if (cleaned) return cleaned.slice(0, 160);
+                    return status >= 500 ? `登录服务暂时不可用（HTTP ${status}）` : `${fallback}（HTTP ${status}）`;
                 };
 
                 const THEME_STORAGE_KEY = 'guzhi_web_theme';
@@ -5443,8 +5474,8 @@
                     try {
                         const res = await authFetch('/api/auth/register', fd);
                         if (res.ok) showToast("✅ 注册成功", "success");
-                        else showToast(await res.text() || "❌ 注册失败", "error");
-                    } catch (e) { showToast("🌐 网络异常", "error"); }
+                        else showToast(await readAuthErrorMessage(res, "❌ 注册失败"), "error");
+                    } catch (e) { showToast(e.message || "🌐 网络异常", "error"); }
                 };
 
                 const handleLogin = async () => {
@@ -5464,10 +5495,10 @@
                             showToast("接入成功", "success");
                             initDashboard();
                         } else {
-                            const msg = await res.text();
-                            showToast(msg || "❌ 密码错误", "error");
+                            const msg = await readAuthErrorMessage(res, "❌ 登录失败");
+                            showToast(msg || "❌ 登录失败", "error");
                         }
-                    } catch (error) { showToast("🌐 登录失败", "error"); }
+                    } catch (error) { showToast(error.message || "🌐 登录失败", "error"); }
                 };
 
                 const handleLogout = () => { localStorage.removeItem('fund_username'); showProfileModal.value = false; location.reload(); };
