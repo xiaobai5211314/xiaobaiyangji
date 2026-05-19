@@ -338,8 +338,8 @@
         html[data-theme="light"] .sector-name,
         html[data-theme="light"] .capital-name,
         html[data-theme="light"] .profit-list-row > div:not(:last-child),
-        html[data-theme="light"] .metric-value,
-        html[data-theme="light"] .stock-metric .value {
+        html[data-theme="light"] .metric-value:not([style]),
+        html[data-theme="light"] .stock-metric .value:not([style]) {
             color: #172033;
             -webkit-text-fill-color: #172033;
         }
@@ -3475,8 +3475,8 @@
         html[data-theme="rainbow"] .sector-name,
         html[data-theme="rainbow"] .capital-name,
         html[data-theme="rainbow"] .profit-list-row > div:not(:last-child),
-        html[data-theme="rainbow"] .metric-value,
-        html[data-theme="rainbow"] .stock-metric .value {
+        html[data-theme="rainbow"] .metric-value:not([style]),
+        html[data-theme="rainbow"] .stock-metric .value:not([style]) {
             color: #f8fafc;
             -webkit-text-fill-color: #f8fafc;
             text-shadow: 0 1px 12px rgba(15, 23, 42, .22);
