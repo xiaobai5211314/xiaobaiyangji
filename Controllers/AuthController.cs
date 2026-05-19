@@ -130,7 +130,8 @@ namespace 估值助手.Controllers
                 return StatusCode(500, new
                 {
                     error = "微信登录未配置",
-                    message = "请在配置中设置 WeChatMiniProgram:AppId 和 WeChatMiniProgram:AppSecret"
+                    message = "微信登录未配置",
+                    detail = "请在配置中设置 WeChatMiniProgram:AppId 和 WeChatMiniProgram:AppSecret"
                 });
             }
 
@@ -350,7 +351,7 @@ namespace 估值助手.Controllers
                 $"&js_code={Uri.EscapeDataString(code)}" +
                 "&grant_type=authorization_code";
 
-            var client = _httpClientFactory.CreateClient();
+            var client = _httpClientFactory.CreateClient("WeChatMiniProgram");
             using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
             var session = await client.GetFromJsonAsync<WechatCodeSessionResponse>(url, timeoutCts.Token);
             return session ?? throw new InvalidOperationException("微信登录服务返回为空");

@@ -18,6 +18,12 @@ function register(payload) {
     loadingText: "注册中"
   });
 }
+function wechatLogin(payload) {
+  return services_request.postJson("/api/auth/wechat-login", payload, {
+    loadingText: "微信登录中",
+    showErrorToast: false
+  });
+}
 function getProfile(username) {
   return services_request.get(`/api/auth/profile?username=${encodeURIComponent(username)}`, {
     loadingText: "读取用户",
@@ -87,3 +93,4 @@ exports.pickDisplayName = pickDisplayName;
 exports.pickUsername = pickUsername;
 exports.register = register;
 exports.uploadAvatar = uploadAvatar;
+exports.wechatLogin = wechatLogin;

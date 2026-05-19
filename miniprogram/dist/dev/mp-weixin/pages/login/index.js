@@ -8,6 +8,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
   setup(__props) {
     const submitting = common_vendor.ref(false);
     const registering = common_vendor.ref(false);
+    const wechatSubmitting = common_vendor.ref(false);
     const errorMessage = common_vendor.ref("");
     const form = common_vendor.reactive({
       username: "",
@@ -23,7 +24,17 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
     function getErrorMessage(error) {
       if (error instanceof Error && error.message)
         return error.message;
+      if (error && typeof error === "object" && "errMsg" in error) {
+        return String(error.errMsg || "");
+      }
       return "操作失败，请稍后重试";
+    }
+    function getWechatErrorMessage(error) {
+      const message = getErrorMessage(error);
+      if (message.includes("未获取到微信登录凭证") || message.includes("login:fail")) {
+        return "可继续使用账号密码登录";
+      }
+      return message;
     }
     function readCredentials() {
       const username = form.username.trim();
@@ -34,6 +45,50 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         return null;
       }
       return { username, password };
+    }
+    function getWechatLoginCode() {
+      return new Promise((resolve, reject) => {
+        common_vendor.index.login({
+          provider: "weixin",
+          success: (result) => {
+            const code = (result.code || "").trim();
+            if (!code) {
+              reject(new Error("未获取到微信登录凭证"));
+              return;
+            }
+            resolve(code);
+          },
+          fail: reject
+        });
+      });
+    }
+    async function wechatOneTapLogin() {
+      if (wechatSubmitting.value)
+        return;
+      wechatSubmitting.value = true;
+      errorMessage.value = "";
+      try {
+        const code = await getWechatLoginCode();
+        const result = await services_api_auth.wechatLogin({ code });
+        const username = services_api_auth.pickUsername(result);
+        if (!username)
+          throw new Error("微信登录成功但未返回账号");
+        stores_session.saveSession({
+          username,
+          displayName: services_api_auth.pickDisplayName(result, username),
+          avatarDataUrl: services_api_auth.pickAvatar(result),
+          loginTime: Date.now()
+        });
+        form.password = "";
+        common_vendor.index.reLaunch({ url: "/pages/home/index" });
+      } catch (error) {
+        console.warn("[login:wechat]", error);
+        const message = getWechatErrorMessage(error);
+        errorMessage.value = message;
+        common_vendor.index.showToast({ title: message, icon: "none" });
+      } finally {
+        wechatSubmitting.value = false;
+      }
     }
     async function submit() {
       const credentials = readCredentials();
@@ -78,24 +133,27 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
     }
     return (_ctx, _cache) => {
       return common_vendor.e({
-        a: form.username,
-        b: common_vendor.o(common_vendor.m(($event) => form.username = $event.detail.value, {
+        a: common_vendor.t(wechatSubmitting.value ? "微信登录中..." : "微信一键登录"),
+        b: wechatSubmitting.value || submitting.value || registering.value,
+        c: common_vendor.o(wechatOneTapLogin, "14"),
+        d: form.username,
+        e: common_vendor.o(common_vendor.m(($event) => form.username = $event.detail.value, {
           trim: true
-        }), "70"),
-        c: common_vendor.o(submit, "32"),
-        d: form.password,
-        e: common_vendor.o(($event) => form.password = $event.detail.value, "a1"),
-        f: errorMessage.value
+        }), "55"),
+        f: common_vendor.o(submit, "db"),
+        g: form.password,
+        h: common_vendor.o(($event) => form.password = $event.detail.value, "19"),
+        i: errorMessage.value
       }, errorMessage.value ? {
-        g: common_vendor.t(errorMessage.value)
+        j: common_vendor.t(errorMessage.value)
       } : {}, {
-        h: common_vendor.t(submitting.value ? "登录中..." : "登录"),
-        i: submitting.value,
-        j: common_vendor.o(submit, "e7"),
-        k: common_vendor.t(registering.value ? "注册中..." : "注册账号"),
-        l: registering.value || submitting.value,
-        m: common_vendor.o(registerAccount, "1f"),
-        n: common_vendor.n(common_vendor.unref(stores_theme.themeClass))
+        k: common_vendor.t(submitting.value ? "登录中..." : "登录"),
+        l: submitting.value,
+        m: common_vendor.o(submit, "20"),
+        n: common_vendor.t(registering.value ? "注册中..." : "注册账号"),
+        o: registering.value || submitting.value,
+        p: common_vendor.o(registerAccount, "af"),
+        q: common_vendor.n(common_vendor.unref(stores_theme.themeClass))
       });
     };
   }

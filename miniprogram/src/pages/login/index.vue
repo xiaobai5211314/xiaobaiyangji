@@ -89,7 +89,19 @@ onShow(() => {
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === 'object' && 'errMsg' in error) {
+    return String((error as { errMsg?: unknown }).errMsg || '');
+  }
   return '操作失败，请稍后重试';
+}
+
+function getWechatErrorMessage(error: unknown) {
+  const message = getErrorMessage(error);
+  if (message.includes('未获取到微信登录凭证') || message.includes('login:fail')) {
+    return '可继续使用账号密码登录';
+  }
+
+  return message;
 }
 
 function readCredentials() {
@@ -124,6 +136,8 @@ function getWechatLoginCode() {
 }
 
 async function wechatOneTapLogin() {
+  if (wechatSubmitting.value) return;
+
   wechatSubmitting.value = true;
   errorMessage.value = '';
 
@@ -144,8 +158,9 @@ async function wechatOneTapLogin() {
     uni.reLaunch({ url: '/pages/home/index' });
   } catch (error) {
     console.warn('[login:wechat]', error);
-    errorMessage.value = '可继续使用账号密码登录';
-    uni.showToast({ title: '可继续使用账号密码登录', icon: 'none' });
+    const message = getWechatErrorMessage(error);
+    errorMessage.value = message;
+    uni.showToast({ title: message, icon: 'none' });
   } finally {
     wechatSubmitting.value = false;
   }

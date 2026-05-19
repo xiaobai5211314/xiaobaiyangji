@@ -60,7 +60,8 @@ export function register(payload: LoginRequest) {
 
 export function wechatLogin(payload: WechatLoginRequest) {
   return postJson<LoginResponse, WechatLoginRequest>('/api/auth/wechat-login', payload, {
-    loadingText: '微信登录中'
+    loadingText: '微信登录中',
+    showErrorToast: false
   });
 }
 

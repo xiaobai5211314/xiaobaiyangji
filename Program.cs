@@ -99,6 +99,12 @@ builder.Services.AddHttpClient("EastMoneyQuote", client =>
 {
     ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
 });
+
+builder.Services.AddHttpClient("WeChatMiniProgram", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(8);
+});
+
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 {
     var options = ConfigurationOptions.Parse("localhost:6379");
