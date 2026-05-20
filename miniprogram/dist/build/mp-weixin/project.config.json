@@ -1,8 +1,7 @@
 {
   "description": "项目配置文件。",
   "packOptions": {
-    "ignore": [],
-    "include": []
+    "ignore": []
   },
   "setting": {
     "urlCheck": true,
@@ -12,29 +11,10 @@
     "newFeature": true,
     "bigPackageSizeSupport": true,
     "ignoreDevUnusedFiles": false,
-    "ignoreUploadUnusedFiles": false,
-    "compileWorklet": false,
-    "uglifyFileName": false,
-    "uploadWithSourceMap": true,
-    "enhance": false,
-    "packNpmManually": false,
-    "packNpmRelationList": [],
-    "minifyWXSS": true,
-    "minifyWXML": true,
-    "localPlugins": false,
-    "disableUseStrict": false,
-    "useCompilerPlugins": false,
-    "condition": false,
-    "swc": false,
-    "disableSWC": true,
-    "babelSetting": {
-      "ignore": [],
-      "disablePlugins": [],
-      "outputPath": ""
-    }
+    "ignoreUploadUnusedFiles": false
   },
   "compileType": "miniprogram",
-  "libVersion": "3.15.2",
+  "libVersion": "",
   "appid": "wx762240eed778eb07",
   "projectname": "估值助手小程序",
   "condition": {
@@ -61,7 +41,5 @@
         }
       ]
     }
-  },
-  "simulatorPluginLibVersion": {},
-  "editorSetting": {}
+  }
 }

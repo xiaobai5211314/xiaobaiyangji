@@ -4083,8 +4083,12 @@
                             <img v-if="userAvatar" :src="userAvatar" alt="头像">
                             <span v-else class="user-avatar-fallback">{{ currentUser ? currentUser.slice(0,1).toUpperCase() : '我' }}</span>
                         </div>
-                        <div class="profile-name">{{ currentUser }}</div>
-                        <div class="profile-note">头像已保存到账号数据库，换设备或清缓存后仍可恢复</div>
+                        <div class="profile-name">{{ userDisplayName || currentUser }}</div>
+                        <div class="profile-note">账号：{{ currentUser }}</div>
+                        <div class="profile-note">头像和昵称会保存到账号数据库，换设备或清缓存后仍可恢复</div>
+                    </div>
+                    <div class="profile-form" style="width:100%;margin-top:12px;">
+                        <input class="modal-input" v-model="profileForm.displayName" maxlength="30" placeholder="输入昵称">
                     </div>
                     <div class="theme-settings">
                         <div class="theme-settings-title">主题设置</div>
@@ -4094,6 +4098,9 @@
                         </div>
                     </div>
                     <div class="profile-actions">
+                        <button class="btn profile-action-btn btn-primary" @click="saveUserProfile" :disabled="profileForm.saving">
+                            {{ profileForm.saving ? '保存中...' : '保存资料' }}
+                        </button>
                         <button class="btn profile-action-btn btn-primary" @click="triggerAvatarUpload">🖼️ 设置头像</button>
                         <button class="btn profile-action-btn profile-logout-btn" @click="handleLogout">🚪 退出登录</button>
                         <button class="btn profile-action-btn" @click="showProfileModal = false">取消</button>
@@ -4635,6 +4642,7 @@
                 };
                 const isLoggedIn = ref(localStorage.getItem('fund_username') ? true : false);
                 const currentUser = ref(localStorage.getItem('fund_username') || '');
+                const userDisplayName = ref(localStorage.getItem('fund_display_name') || '');
                 const fundsList = ref([]);
                 const chartRef = ref(null);
                 const isLoading = ref(true);
@@ -4645,6 +4653,7 @@
                 const totalTodayProfit = ref(0);
                 const totalTodayRate = ref(0);
                 const loginForm = reactive({ username: '', password: '' });
+                const profileForm = reactive({ displayName: '', saving: false });
                 const fundForm = reactive({ code: '', amount: '' });
                 const chartInstance = shallowRef(null);
                 let timer = null;
@@ -5573,8 +5582,12 @@
                         const res = await authFetch('/api/auth/login', fd);
                         if (res.ok) {
                             const data = await res.json();
+                            const displayName = data.displayName || data.nickname || username;
                             localStorage.setItem('fund_username', username);
+                            localStorage.setItem('fund_display_name', displayName);
                             currentUser.value = username;
+                            userDisplayName.value = displayName;
+                            profileForm.displayName = displayName;
                             userAvatar.value = data.avatarDataUrl || '';
                             isLoggedIn.value = true;
                             await loadPersistentUiState();
@@ -5590,6 +5603,37 @@
                 const handleLogout = () => { localStorage.removeItem('fund_username'); showProfileModal.value = false; location.reload(); };
                 const triggerUpload = () => { document.getElementById('ocrInput').click(); };
                 const triggerAvatarUpload = () => { document.getElementById('avatarInput')?.click(); };
+                const saveUserProfile = async () => {
+                    if (!currentUser.value) return showToast('请先登录', 'error');
+                    if (profileForm.saving) return;
+                    profileForm.saving = true;
+                    try {
+                        const res = await apiFetch('/api/auth/profile/update', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                username: currentUser.value,
+                                displayName: profileForm.displayName,
+                                avatarDataUrl: userAvatar.value || ''
+                            })
+                        });
+                        const data = await res.json().catch(() => ({}));
+                        if (!res.ok) {
+                            showToast(data.message || data.msg || data.error || '资料保存失败', 'error');
+                            return;
+                        }
+
+                        userDisplayName.value = data.displayName || profileForm.displayName || currentUser.value;
+                        profileForm.displayName = userDisplayName.value;
+                        userAvatar.value = data.avatarDataUrl || userAvatar.value || '';
+                        localStorage.setItem('fund_display_name', userDisplayName.value);
+                        showToast('资料已保存', 'success');
+                    } catch (e) {
+                        showToast(e?.message || '资料保存失败', 'error');
+                    } finally {
+                        profileForm.saving = false;
+                    }
+                };
                 const blobToDataUrl = (blob) => new Promise((resolve, reject) => {
                     const r = new FileReader();
                     r.onload = () => resolve(r.result);
@@ -6299,7 +6343,14 @@
                         let res = await apiFetch('/api/auth/profile-v3?username=' + encodeURIComponent(currentUser.value));
                         if (!res.ok) res = await apiFetch('/api/auth/profile-v2?username=' + encodeURIComponent(currentUser.value));
                         if (!res.ok) res = await apiFetch('/api/auth/profile?username=' + encodeURIComponent(currentUser.value));
-                        if (res.ok) { const data = await res.json(); userAvatar.value = data.avatarDataUrl || ''; }
+                        if (res.ok) {
+                            const data = await res.json();
+                            const displayName = data.displayName || data.nickname || currentUser.value;
+                            userDisplayName.value = displayName;
+                            profileForm.displayName = displayName;
+                            localStorage.setItem('fund_display_name', displayName);
+                            userAvatar.value = data.avatarDataUrl || '';
+                        }
                     } catch (e) { }
                 };
 
@@ -6328,9 +6379,9 @@
 
                 return {
                     appTheme, setAppTheme,
-                    toasts, isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, refreshSectorPage, activePage, switchPage, showProfileModal, userAvatar, smartOcrBusy, smartOcrText,
+                    toasts, isLoggedIn, currentUser, userDisplayName, fundsList, chartRef, loginForm, profileForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, refreshSectorPage, activePage, switchPage, showProfileModal, userAvatar, smartOcrBusy, smartOcrText,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
-                    handleLogin, handleRegister, handleLogout, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, confirmOcrImport, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
+                    handleLogin, handleRegister, handleLogout, saveUserProfile, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, confirmOcrImport, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
                     sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, isCapitalLoading, fetchCapitalFlow,
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, isDetailsLoading, expandedSectors, toggleSector,
