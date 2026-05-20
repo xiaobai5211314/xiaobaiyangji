@@ -612,7 +612,7 @@ import { computed, ref } from 'vue';
 import { onPullDownRefresh, onShow } from '@dcloudio/uni-app';
 import AppTabBar from '../../components/AppTabBar.vue';
 import SparklineChart from '../../components/SparklineChart.vue';
-import { getProfile, pickAvatar, pickUsername } from '../../services/api/auth';
+import { getProfile, isGeneratedWechatUsername, pickAvatar, pickDisplayName, pickUsername } from '../../services/api/auth';
 import {
   confirmFundOcr,
   getFundArchives,
@@ -732,7 +732,11 @@ const ocrButtonText = computed(() => {
 const avatarUrl = computed(() => sessionState.avatarDataUrl || sessionState.avatarUrl || '');
 const avatarText = computed(() => avatarInitial(sessionState.username));
 const accountEntryTitle = computed(() => (sessionState.username ? '个人中心' : '登录 / 同步持仓'));
-const accountEntrySubtitle = computed(() => (sessionState.username ? sessionState.displayName || sessionState.username : '同步个人记录'));
+const accountEntrySubtitle = computed(() => {
+  if (!sessionState.username) return '同步个人记录';
+  if (sessionState.displayName) return sessionState.displayName;
+  return isGeneratedWechatUsername(sessionState.username) ? '填写微信昵称' : sessionState.username;
+});
 const stockKlinePoints = computed(() =>
   normalizeStockKlines(stockKlineRows.value).map((row) => row.close)
 );
@@ -1352,10 +1356,11 @@ async function loadProfile() {
   try {
     const profile = await getProfile(sessionState.username);
     const username = pickUsername(profile, sessionState.username);
+    const displayName = pickDisplayName(profile, username);
     const avatar = pickAvatar(profile) || sessionState.avatarDataUrl || sessionState.avatarUrl;
     saveSession({
       username,
-      displayName: username,
+      displayName,
       avatarDataUrl: avatar,
       loginTime: sessionState.loginTime || Date.now()
     });

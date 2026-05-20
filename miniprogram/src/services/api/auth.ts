@@ -28,6 +28,12 @@ export interface WechatLoginRequest {
   avatarDataUrl?: string;
 }
 
+export interface ProfileUpdateRequest {
+  username: string;
+  displayName?: string;
+  avatarDataUrl?: string;
+}
+
 export interface AvatarUploadResponse {
   success?: boolean;
   avatarDataUrl?: string;
@@ -72,12 +78,27 @@ export function getProfile(username: string) {
   });
 }
 
+export function updateProfile(payload: ProfileUpdateRequest) {
+  return postJson<LoginResponse, ProfileUpdateRequest>('/api/auth/profile/update', payload, {
+    loadingText: '保存资料',
+    showErrorToast: false
+  });
+}
+
 export function pickUsername(response: LoginResponse, fallback = '') {
   return response.user?.username || response.user?.userName || response.username || response.userName || fallback;
 }
 
+export function isGeneratedWechatUsername(value: string | undefined | null) {
+  return /^wx_[0-9a-f]{8,32}$/i.test(String(value || '').trim());
+}
+
 export function pickDisplayName(response: LoginResponse, fallback = '') {
-  return response.user?.displayName || response.displayName || pickUsername(response, fallback);
+  const candidate = String(response.user?.displayName || response.displayName || '').trim();
+  if (candidate && !isGeneratedWechatUsername(candidate)) return candidate;
+
+  const fallbackName = String(fallback || '').trim();
+  return isGeneratedWechatUsername(fallbackName) ? '' : fallbackName;
 }
 
 export function pickAvatar(response: LoginResponse) {
