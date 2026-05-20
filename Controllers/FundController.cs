@@ -689,7 +689,7 @@ namespace 估值助手.Controllers
             using (var inputStream = imageFile.OpenReadStream())
             using (Image image = Image.Load(inputStream))
             {
-                const int targetMaxWidth = 1080;
+                const int targetMaxWidth = 1800;
 
                 if (image.Width > targetMaxWidth)
                 {
@@ -700,7 +700,7 @@ namespace 估值助手.Controllers
                 image.Mutate(x => x.BackgroundColor(Color.White));
 
                 using var outputStream = new MemoryStream();
-                image.SaveAsJpeg(outputStream, new JpegEncoder { Quality = 60 });
+                image.SaveAsJpeg(outputStream, new JpegEncoder { Quality = 90 });
                 finalProcessedBytes = outputStream.ToArray();
             }
 

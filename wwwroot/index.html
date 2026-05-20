@@ -3724,6 +3724,7 @@
                             <button v-for="p in stockKlinePeriods" :key="p.value" :class="['stock-kline-tab', stockKlinePeriod===p.value?'active':'']" @click="switchStockKline(p.value)">{{ p.label }}</button>
                         </div>
                         <div ref="stockChartRef" class="stock-chart-box"></div>
+                        <div v-if="stockChartStatus" class="feature-subtitle" style="margin-top:8px;">{{ stockChartStatus }}</div>
                         <div class="feature-subtitle" style="margin-top:10px;">行情数据来自公开网页接口，仅作持仓跟踪与自选观察；交易决策以券商客户端和交易所正式披露为准。</div>
                     </div>
                 </div>
@@ -4398,7 +4399,7 @@
             <div v-if="ocrModal.show" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 4000;">
                 <div style="background: #1e293b; width: 85%; max-width: 400px; border-radius: 15px; border: 1px solid #10b981; padding: 20px; display: flex; flex-direction: column;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px;">
-                        <h3 style="color: #10b981; margin: 0; font-size: 18px;">✅ 智能识别收益</h3>
+                        <h3 style="color: #10b981; margin: 0; font-size: 18px;">✅ OCR 导入预览</h3>
                         <span @click="ocrModal.show = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
                     </div>
                     <div style="color: #cbd5e1; font-size: 13px; line-height: 1.8; max-height: 60vh; overflow-y: auto;">
@@ -4406,6 +4407,15 @@
                         <template v-if="ocrModal.data && ocrModal.data.success">
                             <div style="font-size:16px;font-weight:900;color:#34d399;margin-bottom:12px;">
                                 ✅ 成功识别 {{ ocrModal.data.count || 0 }} 只基金
+                            </div>
+                            <div style="background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.24);border-radius:12px;padding:10px;margin-bottom:12px;">
+                                <div style="font-size:12px;color:#94a3b8;">OCR 识别合计金额</div>
+                                <div style="font-size:20px;font-weight:900;color:#f8fafc;">
+                                    ¥ {{ ocrPreviewTotal.toFixed(2) }}
+                                </div>
+                                <div style="font-size:12px;color:#94a3b8;margin-top:4px;">
+                                    识别金额为截图平台持仓金额，持仓页会根据当日估值刷新今日市值。
+                                </div>
                             </div>
 
                             <div v-for="(item, index) in (ocrModal.data.items || [])"
@@ -4441,6 +4451,24 @@
                                             {{ item.costSource || 'OCR识别' }}
                                         </div>
                                     </div>
+                                    <div style="background:rgba(255,255,255,.05);border-radius:10px;padding:8px;">
+                                        <div style="font-size:11px;color:#94a3b8;">持仓收益</div>
+                                        <div :style="{ fontSize:'15px', fontWeight:'900', color: Number(item.holdingIncome || 0) >= 0 ? '#ff4d4f' : '#10b981' }">
+                                            {{ Number(item.holdingIncome || 0) > 0 ? '+' : '' }}{{ Number(item.holdingIncome || 0).toFixed(2) }}
+                                        </div>
+                                    </div>
+                                    <div style="background:rgba(255,255,255,.05);border-radius:10px;padding:8px;">
+                                        <div style="font-size:11px;color:#94a3b8;">昨日收益</div>
+                                        <div :style="{ fontSize:'15px', fontWeight:'900', color: Number(item.yesterdayIncome || 0) >= 0 ? '#ff4d4f' : '#10b981' }">
+                                            {{ Number(item.yesterdayIncome || 0) > 0 ? '+' : '' }}{{ Number(item.yesterdayIncome || 0).toFixed(2) }}
+                                        </div>
+                                    </div>
+                                    <div style="background:rgba(255,255,255,.05);border-radius:10px;padding:8px;">
+                                        <div style="font-size:11px;color:#94a3b8;">持仓收益率</div>
+                                        <div :style="{ fontSize:'15px', fontWeight:'900', color: Number(item.holdingRate || 0) >= 0 ? '#ff4d4f' : '#10b981' }">
+                                            {{ Number(item.holdingRate || 0) > 0 ? '+' : '' }}{{ Number(item.holdingRate || 0).toFixed(2) }}%
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div v-if="item.warning"
@@ -4468,7 +4496,12 @@
                             </div>
                         </template>
                     </div>
-                    <button @click="ocrModal.show = false" class="btn btn-success" style="margin-top: 20px; justify-content: center; padding: 12px; font-weight: bold;">确认阅览</button>
+                    <div style="display:flex;gap:10px;margin-top:20px;">
+                        <button @click="ocrModal.show = false" class="btn" style="flex:1;justify-content:center;padding:12px;font-weight:bold;">取消</button>
+                        <button @click="confirmOcrImport" class="btn btn-success" :disabled="isConfirmingOcrImport" style="flex:1;justify-content:center;padding:12px;font-weight:bold;">
+                            {{ isConfirmingOcrImport ? '导入中...' : '确认导入' }}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -4663,6 +4696,8 @@
                 const stockChartRef = ref(null);
                 const stockChartInstance = shallowRef(null);
                 const lastStockKlineRows = ref([]);
+                const stockChartStatus = ref('');
+                const STOCK_CHART_DEBUG = false;
                 const smartOcrBusy = computed(() => assetMode.value === 'stock' ? stockOcrLoading.value : isUploading.value);
                 const smartOcrText = computed(() => {
                     if (assetMode.value === 'stock') return stockOcrLoading.value ? '股票识别中...' : '智能截图导入股票';
@@ -4977,6 +5012,37 @@
                 const renderStockChart = (rows) => {
                     if (!stockChartRef.value || !window.echarts) return;
                     if (!stockChartInstance.value) stockChartInstance.value = echarts.init(stockChartRef.value);
+                    const rawRows = Array.isArray(rows) ? rows : [];
+                    const parseChartNumber = (value) => {
+                        if (value === null || value === undefined || value === '') return null;
+                        const n = Number(String(value).replace(/,/g, ''));
+                        return Number.isFinite(n) ? n : null;
+                    };
+                    const pickChartNumber = (row, keys) => {
+                        for (const key of keys) {
+                            const value = parseChartNumber(row?.[key]);
+                            if (value !== null) return value;
+                        }
+                        return null;
+                    };
+                    const chartData = rawRows
+                        .map((x) => {
+                            const time = x?.time || x?.date || x?.datetime || x?.tradeTime || x?.Time || '';
+                            const close = pickChartNumber(x, ['close', 'price', 'value', 'current', 'last', 'latest', 'Close']);
+                            if (!time || close === null) return null;
+                            const open = pickChartNumber(x, ['open', 'Open']) ?? close;
+                            const low = pickChartNumber(x, ['low', 'lowest', 'Low']) ?? Math.min(open, close);
+                            const high = pickChartNumber(x, ['high', 'highest', 'High']) ?? Math.max(open, close);
+                            return { time, price: close, open, close, low, high };
+                        })
+                        .filter(Boolean)
+                        .sort((a, b) => String(a.time).localeCompare(String(b.time)));
+                    if (STOCK_CHART_DEBUG) {
+                        console.log('分K原始数据:', rawRows);
+                        console.log('分K图表数据:', chartData);
+                        console.log('分K图表数据长度:', chartData.length);
+                        console.log('分K第一条:', chartData[0]);
+                    }
                     const isLightTheme = document.documentElement.getAttribute('data-theme') === 'light';
                     const chartTheme = isLightTheme
                         ? {
@@ -4995,14 +5061,18 @@
                             axisLine: 'rgba(148,163,184,.28)',
                             splitLine: 'rgba(148,163,184,.14)'
                         };
-                    const data = (rows || []).map(x => [x.time, Number(x.close || 0), Number(x.open || 0), Number(x.low || 0), Number(x.high || 0)]);
+                    const isMinute = stockKlinePeriod.value === 'minute';
+                    const lineColor = chartData.length > 1 && chartData[chartData.length - 1].price < chartData[0].price ? '#10b981' : '#ff4d4f';
+                    stockChartStatus.value = chartData.length === 0
+                        ? (selectedStock.code ? (isMinute ? '暂无分K数据' : '暂无走势数据') : '')
+                        : (chartData.length === 1 ? '数据点不足，暂显示单点价格' : '');
                     stockChartInstance.value.setOption({
                         backgroundColor: 'transparent',
                         tooltip: { trigger: 'axis', backgroundColor: chartTheme.tooltipBg, borderColor: chartTheme.tooltipBorder, textStyle: { color: chartTheme.tooltipText } },
                         grid: { left: 42, right: 20, top: 28, bottom: 36 },
                         xAxis: {
                             type: 'category',
-                            data: data.map(x => x[0]),
+                            data: chartData.map(x => x.time),
                             axisLabel: { color: chartTheme.axisLabel },
                             axisLine: { lineStyle: { color: chartTheme.axisLine } },
                             axisTick: { lineStyle: { color: chartTheme.axisLine } }
@@ -5014,10 +5084,21 @@
                             axisTick: { lineStyle: { color: chartTheme.axisLine } },
                             splitLine: { lineStyle: { color: chartTheme.splitLine } }
                         },
-                        series: [{
+                        series: isMinute ? [{
+                            name: selectedStock.name || '分K',
+                            type: 'line',
+                            data: chartData.map(x => x.price),
+                            smooth: true,
+                            showSymbol: chartData.length <= 1,
+                            symbolSize: 7,
+                            connectNulls: true,
+                            lineStyle: { color: lineColor, width: 2 },
+                            itemStyle: { color: lineColor },
+                            areaStyle: { color: lineColor === '#ff4d4f' ? 'rgba(255,77,79,.10)' : 'rgba(16,185,129,.10)' }
+                        }] : [{
                             name: selectedStock.name || '走势',
                             type: 'candlestick',
-                            data: data.map(x => [x[2], x[1], x[3], x[4]]),
+                            data: chartData.map(x => [x.open, x.close, x.low, x.high]),
                             itemStyle: {
                                 color: '#ff4d4f',
                                 color0: '#10b981',
@@ -5136,6 +5217,11 @@
                     content: '',
                     data: null,
                     showDiagnostics: false
+                });
+                const isConfirmingOcrImport = ref(false);
+                const ocrPreviewTotal = computed(() => {
+                    const items = Array.isArray(ocrModal.data?.items) ? ocrModal.data.items : [];
+                    return items.reduce((sum, x) => sum + (Number(x.holdAmount) || 0), 0);
                 });
 
                 const globalIndices = ref([
@@ -5598,6 +5684,10 @@
                 const handleFileUpload = async (event) => {
                     const file = event.target.files[0];
                     if (!file) return;
+                    if (!currentUser.value) {
+                        event.target.value = '';
+                        return showToast("请先登录后再导入持仓截图", "error");
+                    }
 
                     isUploading.value = true;
 
@@ -5606,7 +5696,7 @@
                         formData.append('imageFile', compressedFile);
 
                         try {
-                            const response = await fetch(`${API_BASE}/api/Fund/import-ocr?username=${encodeURIComponent(currentUser.value)}`, {
+                            const response = await fetch(`${API_BASE}/api/Fund/import-ocr-preview?username=${encodeURIComponent(currentUser.value)}`, {
                                 method: 'POST',
                                 body: formData
                             });
@@ -5625,7 +5715,6 @@
 
                                 ocrModal.showDiagnostics = false;
                                 ocrModal.show = true;
-                                fetchData({ force: true, silent: true });
                             } else {
                                 const msg = await response.text().catch(() => '');
                                 showToast(msg || "❌ 识别失败", "error");
@@ -5637,6 +5726,42 @@
                             event.target.value = '';
                         }
                     });
+                };
+
+                const confirmOcrImport = async () => {
+                    if (isConfirmingOcrImport.value) return;
+                    const items = Array.isArray(ocrModal.data?.items) ? ocrModal.data.items : [];
+                    if (!currentUser.value) return showToast("请先登录后再确认导入", "error");
+                    if (items.length === 0) return showToast("没有可确认导入的持仓行", "error");
+
+                    isConfirmingOcrImport.value = true;
+                    try {
+                        const response = await fetch(`${API_BASE}/api/Fund/import-ocr-confirm`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                username: currentUser.value,
+                                items
+                            })
+                        });
+                        const raw = await response.text();
+                        let result = null;
+                        try { result = raw ? JSON.parse(raw) : null; } catch (e) { }
+                        const message = result?.message || result?.msg || raw;
+
+                        if (!response.ok || result?.success === false) {
+                            showToast(message || "❌ OCR 确认导入失败", "error");
+                            return;
+                        }
+
+                        ocrModal.show = false;
+                        showToast(message || "✅ OCR 持仓已确认导入", "success");
+                        await fetchData({ force: true, silent: true });
+                    } catch (error) {
+                        showToast(error?.message || "🌐 OCR 确认导入异常", "error");
+                    } finally {
+                        isConfirmingOcrImport.value = false;
+                    }
                 };
 
                 const openEditModal = (fund) => { editForm.show = true; editForm.code = (fund.code || '').startsWith('待核对') ? '' : fund.code; editForm.name = fund.name; editForm.cost = fund.cost || 0; editForm.shares = fund.shares || 0; editForm.originalCode = fund.code; };
@@ -6205,15 +6330,15 @@
                     appTheme, setAppTheme,
                     toasts, isLoggedIn, currentUser, fundsList, chartRef, loginForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, refreshSectorPage, activePage, switchPage, showProfileModal, userAvatar, smartOcrBusy, smartOcrText,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
-                    handleLogin, handleRegister, handleLogout, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
+                    handleLogin, handleRegister, handleLogout, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, confirmOcrImport, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
                     sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, isCapitalLoading, fetchCapitalFlow,
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, isDetailsLoading, expandedSectors, toggleSector,
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices, formatIndexPoint, formatIndexRate,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
                     analysisMonth, selectedAnalysisDate, analysisViewMode, analysisDetailMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, analysisProfitTop, analysisLossTop, analysisMonthTotal, fetchAnalysis, refreshAnalysisPage, goAnalysisToday, todayDashStr,
-                    assetMode, setAssetMode, stockHoldings, stockWatchList, stockSearchKeyword, stockSearchResults, stockOcrLoading, stockOcrPreview, selectedStock, stockKlinePeriod, stockKlinePeriods, stockChartRef, triggerStockOcr, handleStockOcrUpload, confirmStockOcr, loadStockDashboard, searchStocks, addStockWatch, openStockHoldingEditor, deleteStockHolding, deleteStockWatch, openStockDetail, switchStockKline, recalculateStockOcrItem, formatOcrNumber, signedOcrNumber, profitColor, dailyBattleReport, confidenceRows, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, calibrationRows,
-                    globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, saveDailyArchive, ocrModal,
+                    assetMode, setAssetMode, stockHoldings, stockWatchList, stockSearchKeyword, stockSearchResults, stockOcrLoading, stockOcrPreview, selectedStock, stockKlinePeriod, stockKlinePeriods, stockChartRef, stockChartStatus, triggerStockOcr, handleStockOcrUpload, confirmStockOcr, loadStockDashboard, searchStocks, addStockWatch, openStockHoldingEditor, deleteStockHolding, deleteStockWatch, openStockDetail, switchStockKline, recalculateStockOcrItem, formatOcrNumber, signedOcrNumber, profitColor, dailyBattleReport, confidenceRows, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, calibrationRows,
+                    globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, saveDailyArchive, ocrModal, ocrPreviewTotal, isConfirmingOcrImport,
                     reduceModal, openReduceModal, handleReducePosition, addModal, openAddModal, handleAddPosition
                 };
             }
