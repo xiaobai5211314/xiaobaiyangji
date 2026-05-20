@@ -37,7 +37,7 @@ function normalizeSession(value: Partial<SessionPayload> | null | undefined): Se
 
   return {
     username,
-    displayName: String(value?.displayName || username),
+    displayName: String(value?.displayName || '').trim(),
     avatarDataUrl: String(value?.avatarDataUrl || ''),
     avatarUrl: String(value?.avatarUrl || ''),
     loginTime: Number(value?.loginTime || Date.now())
@@ -97,7 +97,7 @@ export function setSession(username: string, avatarDataUrl = '', patch: Partial<
   return saveSession({
     ...patch,
     username,
-    displayName: patch.displayName || sessionState.displayName || username,
+    displayName: patch.displayName || sessionState.displayName,
     avatarDataUrl: avatarDataUrl || patch.avatarDataUrl || sessionState.avatarDataUrl,
     avatarUrl: patch.avatarUrl || sessionState.avatarUrl
   });

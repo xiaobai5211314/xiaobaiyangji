@@ -236,6 +236,46 @@ namespace 估值助手.Controllers
         [HttpGet("profile-v3")]
         public Task<IActionResult> ProfileV3([FromQuery] string username) => Profile(username);
 
+        [HttpPost("profile/update")]
+        public async Task<IActionResult> UpdateProfile([FromBody] ProfileUpdateRequest request)
+        {
+            var username = (request.Username ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(username))
+                return BadRequest("缺少账号");
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
+            if (user == null)
+                return NotFound("账号不存在");
+
+            if (request.DisplayName != null)
+                user.Nickname = NormalizeOptionalText(request.DisplayName, 120);
+
+            if (request.AvatarDataUrl != null)
+            {
+                var avatarDataUrl = request.AvatarDataUrl.Trim();
+                if (!string.IsNullOrWhiteSpace(avatarDataUrl))
+                {
+                    if (!avatarDataUrl.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
+                        return BadRequest("头像格式不正确");
+
+                    if (avatarDataUrl.Length > 1_500_000)
+                        return BadRequest("头像保存后过大，请换一张更小的图片");
+
+                    user.AvatarDataUrl = avatarDataUrl;
+                }
+            }
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                success = true,
+                username = user.Username,
+                displayName = user.Nickname ?? string.Empty,
+                avatarDataUrl = user.AvatarDataUrl ?? string.Empty
+            });
+        }
+
         [HttpPost("avatar-file")]
         public async Task<IActionResult> AvatarFile([FromForm] string username, [FromForm] IFormFile avatarFile)
         {
@@ -428,6 +468,13 @@ namespace 估值助手.Controllers
     public sealed class AvatarJsonRequest
     {
         public string? Username { get; set; }
+        public string? AvatarDataUrl { get; set; }
+    }
+
+    public sealed class ProfileUpdateRequest
+    {
+        public string? Username { get; set; }
+        public string? DisplayName { get; set; }
         public string? AvatarDataUrl { get; set; }
     }
 

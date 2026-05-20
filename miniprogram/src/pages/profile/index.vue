@@ -9,17 +9,50 @@
     </view>
 
     <view class="glass-card profile-card">
-      <button class="profile-avatar" :disabled="avatarUploading" @tap="changeAvatar">
+      <button
+        v-if="sessionState.username"
+        class="profile-avatar"
+        open-type="chooseAvatar"
+        :disabled="profileSaving"
+        @chooseavatar="onChooseAvatar"
+      >
         <image v-if="avatarUrl" class="avatar-img" :src="avatarUrl" mode="aspectFill" />
         <view v-else class="avatar-fallback">
+          <text>{{ avatarText }}</text>
+        </view>
+      </button>
+      <button v-else class="profile-avatar" @tap="navigateToLogin">
+        <view class="avatar-fallback">
           <text>{{ avatarText }}</text>
         </view>
       </button>
       <text class="profile-name">{{ displayUsername }}</text>
       <text class="profile-subtitle">{{ profileSubtitle }}</text>
 
-      <button class="primary-gradient-button action-button" :disabled="avatarUploading" @tap="handleProfileAction">
-        {{ primaryActionText }}
+      <view v-if="sessionState.username" class="profile-form">
+        <view class="profile-field">
+          <text class="field-label">昵称</text>
+          <input
+            class="nickname-input"
+            type="nickname"
+            :value="nicknameDraft"
+            placeholder="点击填写或选择微信昵称"
+            placeholder-class="input-placeholder"
+            @input="onNicknameInput"
+          />
+        </view>
+
+        <button class="primary-gradient-button action-button" :disabled="profileSaving" @tap="saveProfile">
+          {{ profileSaving ? '保存中...' : '保存资料' }}
+        </button>
+
+        <button class="secondary-action action-button" :disabled="profileSaving" @tap="changeAvatar">
+          从相册上传头像
+        </button>
+      </view>
+
+      <button v-else class="primary-gradient-button action-button" @tap="navigateToLogin">
+        登录 / 同步持仓
       </button>
 
       <view class="theme-panel">
@@ -48,27 +81,46 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
-import { uploadAvatar } from '../../services/api/auth';
+import { isGeneratedWechatUsername, pickAvatar, pickDisplayName, updateProfile, uploadAvatar } from '../../services/api/auth';
 import { clearSession, loadSession, saveSession, sessionState } from '../../stores/session';
 import { loadTheme, setTheme, themeClass, themeOptions, themeState, type AppTheme } from '../../stores/theme';
 import { avatarInitial } from '../../utils/format';
 
-const avatarUploading = ref(false);
-const avatarUrl = computed(() => sessionState.avatarDataUrl || sessionState.avatarUrl || '');
-const avatarText = computed(() => avatarInitial(sessionState.username));
-const displayUsername = computed(() => sessionState.displayName || sessionState.username || '未登录');
-const profileSubtitle = computed(() =>
-  sessionState.username ? '点击头像或按钮可更换头像' : '登录后可同步你的个人持仓记录。'
-);
-const primaryActionText = computed(() => {
-  if (!sessionState.username) return '登录 / 同步持仓';
-  return avatarUploading.value ? '上传中...' : '更换头像';
+interface ChooseAvatarEvent {
+  detail?: {
+    avatarUrl?: string;
+  };
+}
+
+const profileSaving = ref(false);
+const nicknameDraft = ref('');
+const selectedAvatarPath = ref('');
+const previewAvatarUrl = ref('');
+const avatarUrl = computed(() => previewAvatarUrl.value || sessionState.avatarDataUrl || sessionState.avatarUrl || '');
+const displayUsername = computed(() => {
+  const nickname = String(sessionState.displayName || '').trim();
+  if (nickname) return nickname;
+  if (sessionState.username && isGeneratedWechatUsername(sessionState.username)) return '未设置昵称';
+  return sessionState.username || '未登录';
 });
+const avatarText = computed(() => avatarInitial(displayUsername.value === '未设置昵称' ? '估' : displayUsername.value));
+const profileSubtitle = computed(() =>
+  sessionState.username ? '可选择微信头像、填写昵称后保存' : '登录后可同步你的个人持仓记录。'
+);
 
 onShow(() => {
   loadTheme();
   loadSession();
+  syncDraftFromSession();
 });
+
+function syncDraftFromSession() {
+  nicknameDraft.value = sessionState.displayName && !isGeneratedWechatUsername(sessionState.displayName)
+    ? sessionState.displayName
+    : '';
+  selectedAvatarPath.value = '';
+  previewAvatarUrl.value = '';
+}
 
 function chooseImage() {
   return new Promise<string | null>((resolve, reject) => {
@@ -93,45 +145,99 @@ async function changeAvatar() {
     uni.showToast({ title: '登录后可使用该功能', icon: 'none' });
     return;
   }
-  if (avatarUploading.value) return;
+  if (profileSaving.value) return;
 
   try {
     const filePath = await chooseImage();
     if (!filePath) return;
 
-    avatarUploading.value = true;
-    uni.showLoading({ title: '上传头像', mask: true });
-    const result = await uploadAvatar(sessionState.username, filePath);
-    const avatar = result.avatarDataUrl || result.avatarUrl || '';
-    if (!avatar) throw new Error('头像上传成功但未返回头像数据');
+    selectedAvatarPath.value = filePath;
+    previewAvatarUrl.value = filePath;
+    uni.showToast({ title: '头像已选择，请保存资料', icon: 'none' });
+  } catch (error) {
+    console.warn('[profile:choose-avatar]', error);
+    uni.showToast({ title: getErrorMessage(error, '头像选择失败'), icon: 'none' });
+  }
+}
 
+function onChooseAvatar(event: ChooseAvatarEvent) {
+  if (!sessionState.username) {
+    navigateToLogin();
+    return;
+  }
+
+  const avatarUrl = String(event.detail?.avatarUrl || '').trim();
+  if (!avatarUrl) {
+    uni.showToast({ title: '未选择头像', icon: 'none' });
+    return;
+  }
+
+  selectedAvatarPath.value = avatarUrl;
+  previewAvatarUrl.value = avatarUrl;
+}
+
+function onNicknameInput(event: Event) {
+  const detail = (event as unknown as { detail?: { value?: string } }).detail;
+  nicknameDraft.value = String(detail?.value || '');
+}
+
+async function saveProfile() {
+  if (!sessionState.username) {
+    uni.showToast({ title: '登录后可使用该功能', icon: 'none' });
+    return;
+  }
+  if (profileSaving.value) return;
+
+  profileSaving.value = true;
+  uni.showLoading({ title: '保存资料', mask: true });
+
+  try {
+    let avatarDataUrl = sessionState.avatarDataUrl || '';
+    let avatarUrl = sessionState.avatarUrl || '';
+
+    if (selectedAvatarPath.value) {
+      const uploadResult = await uploadAvatar(sessionState.username, selectedAvatarPath.value);
+      const uploadedAvatar = uploadResult.avatarDataUrl || uploadResult.avatarUrl || '';
+      if (!uploadedAvatar) throw new Error('头像上传成功但未返回头像数据');
+
+      avatarDataUrl = uploadResult.avatarDataUrl || uploadedAvatar;
+      avatarUrl = uploadResult.avatarUrl || '';
+    }
+
+    const result = await updateProfile({
+      username: sessionState.username,
+      displayName: nicknameDraft.value.trim(),
+      avatarDataUrl: selectedAvatarPath.value ? avatarDataUrl : undefined
+    });
+
+    const nextAvatar = pickAvatar(result) || avatarDataUrl || avatarUrl;
+    const nextDisplayName = pickDisplayName(result, sessionState.username) || nicknameDraft.value.trim();
     saveSession({
       username: sessionState.username,
-      displayName: sessionState.displayName || sessionState.username,
-      avatarDataUrl: result.avatarDataUrl || avatar,
-      avatarUrl: result.avatarUrl || '',
+      displayName: nextDisplayName,
+      avatarDataUrl: nextAvatar,
+      avatarUrl,
       loginTime: sessionState.loginTime || Date.now()
     });
-    uni.showToast({ title: '头像已更新', icon: 'none' });
+
+    selectedAvatarPath.value = '';
+    previewAvatarUrl.value = '';
+    nicknameDraft.value = nextDisplayName;
+    uni.showToast({ title: '资料已保存', icon: 'none' });
   } catch (error) {
-    console.warn('[profile:avatar-upload]', error);
-    uni.showToast({ title: getErrorMessage(error, '头像上传失败'), icon: 'none' });
+    console.warn('[profile:save]', error);
+    uni.showToast({ title: getErrorMessage(error, '资料保存失败'), icon: 'none' });
   } finally {
-    avatarUploading.value = false;
+    profileSaving.value = false;
     uni.hideLoading();
   }
 }
 
-function handleProfileAction() {
-  if (!sessionState.username) {
-    uni.navigateTo({
-      url: '/pages/login/index',
-      fail: () => uni.redirectTo({ url: '/pages/login/index' })
-    });
-    return;
-  }
-
-  changeAvatar();
+function navigateToLogin() {
+  uni.navigateTo({
+    url: '/pages/login/index',
+    fail: () => uni.redirectTo({ url: '/pages/login/index' })
+  });
 }
 
 function logout() {
@@ -243,6 +349,52 @@ function getErrorMessage(error: unknown, fallback: string) {
 .logout-button {
   width: 100%;
   min-height: 88rpx;
+}
+
+.profile-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.profile-field {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 22rpx 24rpx;
+  border-radius: 30rpx;
+  background: var(--control-bg);
+  border: 1rpx solid var(--border-color);
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 12rpx;
+  color: var(--text-muted);
+  font-size: 22rpx;
+  font-weight: 800;
+}
+
+.nickname-input {
+  width: 100%;
+  min-height: 58rpx;
+  color: var(--text-primary);
+  font-size: 30rpx;
+  font-weight: 900;
+}
+
+.input-placeholder {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.secondary-action {
+  color: var(--text-secondary);
+  background: var(--control-bg);
+  border: 1rpx solid var(--border-color);
+  border-radius: 999rpx;
+  font-size: 26rpx;
+  font-weight: 900;
 }
 
 .theme-panel {
