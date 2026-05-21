@@ -1,5 +1,5 @@
 <template>
-  <view :class="['app-tabbar', `theme-${themeState.theme}`]">
+  <view :class="['app-tabbar', themeClass]">
     <button
       v-for="item in tabs"
       :key="item.key"
@@ -13,7 +13,7 @@
 </template>
 
 <script setup lang="ts">
-import { themeState } from '../stores/theme';
+import { themeState, themeClass } from '../stores/theme';
 
 type TabKey = 'home' | 'sector' | 'news' | 'analysis';
 
@@ -22,9 +22,9 @@ defineProps<{
 }>();
 
 const tabs: Array<{ key: TabKey; icon: string; label: string }> = [
-  { key: 'home', icon: '🛡️', label: '持仓' },
-  { key: 'sector', icon: '📈', label: '板块' },
-  { key: 'news', icon: '📰', label: '资讯' },
+  { key: 'home', icon: '💼', label: '持仓' },
+  { key: 'sector', icon: '🔥', label: '板块' },
+  { key: 'news', icon: '📡', label: '资讯' },
   { key: 'analysis', icon: '📊', label: '盈亏' }
 ];
 
@@ -48,10 +48,11 @@ function handleTap(key: TabKey) {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10rpx;
-  backdrop-filter: blur(20rpx);
-  background: var(--tab-bg, rgba(10, 18, 36, 0.88));
-  border-color: var(--border-color, rgba(255, 255, 255, 0.12));
-  box-shadow: 0 28rpx 76rpx var(--shadow-color, rgba(3, 7, 18, 0.42)), 0 0 28rpx rgba(139, 92, 246, 0.12);
+  backdrop-filter: blur(24rpx);
+  -webkit-backdrop-filter: blur(24rpx);
+  background: var(--tab-bg);
+  border-color: var(--border-color);
+  box-shadow: var(--card-shadow);
 }
 
 .tab-item {
@@ -59,15 +60,14 @@ function handleTap(key: TabKey) {
   height: 124rpx;
   padding: 0 8rpx;
   border-radius: 62rpx;
-  color: var(--text-muted, #{$text-muted});
-  background: var(--card-bg-strong, rgba(18, 28, 56, 0.66));
+  color: var(--text-muted);
+  background: rgba(243, 244, 248, 0.7);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 8rpx;
   line-height: 1;
-  box-shadow: inset 0 1rpx 0 rgba(255, 255, 255, 0.05);
 }
 
 .tab-item::after {
@@ -75,9 +75,9 @@ function handleTap(key: TabKey) {
 }
 
 .tab-item.active {
-  background: var(--tab-active-bg, $rainbow-gradient);
-  color: var(--button-primary-text, #fff);
-  box-shadow: 0 12rpx 30rpx rgba(139, 92, 246, 0.18), 0 0 22rpx rgba(56, 189, 248, 0.12), inset 0 1rpx 0 rgba(255, 255, 255, 0.18);
+  background: var(--tab-active-bg);
+  color: #fff;
+  box-shadow: $shadow-glow;
 }
 
 .tab-icon {
