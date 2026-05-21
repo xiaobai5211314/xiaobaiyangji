@@ -117,7 +117,7 @@ namespace 估值助手.Controllers
             if (fund.HoldShares <= 0) return 0;
 
             double baseAmount = GetEffectiveBaseAmount(fund, settleDate);
-            if (fund.LastTradeDate == settleDate && fund.LastAddAmount < 0 && fund.HoldAmount > 0)
+            if (fund.LastTradeDate == settleDate && Math.Abs(fund.LastAddAmount) > 0.000001 && fund.HoldAmount > 0)
             {
                 return Math.Max(0, fund.HoldShares * (baseAmount / fund.HoldAmount));
             }
@@ -821,16 +821,10 @@ namespace 估值助手.Controllers
 
                 string calcMethod = "识别提取";
 
+                // OCR 截图里的持仓金额是平台当前完整持仓金额，份额校准必须使用完整金额。
+                // 如果扣掉最近加仓金额，确认导入后 HoldAmount 会是新值，但 HoldShares 仍是旧份额，
+                // 下一次真实净值清算会用“旧份额 × 单位净值”把加仓金额冲掉。
                 double effectiveAmountForShares = holdAmount;
-
-                if (userFundDict.TryGetValue(best.fund.Code, out var existingFund) &&
-                    DateTime.TryParse(existingFund.LastTradeDate, out DateTime lastTradeDate) &&
-                    (ChinaNow() - lastTradeDate).TotalDays <= 4 &&
-                    existingFund.LastAddAmount > 0 &&
-                    holdAmount > existingFund.LastAddAmount)
-                {
-                    effectiveAmountForShares = holdAmount - existingFund.LastAddAmount;
-                }
 
                 double navCalibratedShares = await CalibrateSharesByOfficialNavAsync(
                     navClient,

@@ -37,7 +37,7 @@ namespace 估值助手.Services
             if (fund.HoldShares <= 0) return 0;
 
             double baseAmount = GetEffectiveBaseAmount(fund, settleDate);
-            if (fund.LastTradeDate == settleDate && fund.LastAddAmount < 0 && fund.HoldAmount > 0)
+            if (fund.LastTradeDate == settleDate && Math.Abs(fund.LastAddAmount) > 0.000001 && fund.HoldAmount > 0)
             {
                 return Math.Max(0, fund.HoldShares * (baseAmount / fund.HoldAmount));
             }
@@ -70,8 +70,20 @@ namespace 估值助手.Services
         {
             if (addAmount <= 0) throw new ArgumentOutOfRangeException(nameof(addAmount), "加仓金额必须大于 0。");
 
+            double previousAmount = fund.HoldAmount;
+            double previousShares = fund.HoldShares;
+
             fund.HoldAmount = Math.Round(fund.HoldAmount + addAmount, 2);
             fund.CostAmount = Math.Round(fund.CostAmount + addAmount, 2);
+
+            if (previousAmount > 0 && previousShares > 0)
+            {
+                double estimatedAddShares = addAmount / (previousAmount / previousShares);
+                if (estimatedAddShares > 0 && !double.IsNaN(estimatedAddShares) && !double.IsInfinity(estimatedAddShares))
+                {
+                    fund.HoldShares = Math.Round(previousShares + estimatedAddShares, 6);
+                }
+            }
 
             if (fund.LastTradeDate == tradeDate)
             {

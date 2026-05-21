@@ -65,7 +65,7 @@ namespace 估值助手.Services
             if (fund.HoldShares <= 0) return 0;
 
             double baseAmount = GetEffectiveBaseAmount(fund, settleDate);
-            if (fund.LastTradeDate == settleDate && fund.LastAddAmount < 0 && fund.HoldAmount > 0)
+            if (fund.LastTradeDate == settleDate && Math.Abs(fund.LastAddAmount) > 0.000001 && fund.HoldAmount > 0)
             {
                 return Math.Max(0, fund.HoldShares * (baseAmount / fund.HoldAmount));
             }
