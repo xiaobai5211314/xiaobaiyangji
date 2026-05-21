@@ -1,50 +1,67 @@
+@keyframes shimmer {
+0% {
+    background-position: 100% 0;
+}
+100% {
+    background-position: 0% 0;
+}
+}
+@keyframes fadeInUp {
+from {
+    opacity: 0;
+    transform: translateY(16rpx);
+}
+to {
+    opacity: 1;
+    transform: translateY(0);
+}
+}
+@keyframes pulseGlow {
+0%, 100% {
+    box-shadow: 0 8rpx 32rpx rgba(79, 110, 247, 0.18);
+}
+50% {
+    box-shadow: 0 8rpx 48rpx rgba(124, 92, 252, 0.28);
+}
+}
 .page-shell {
-  --page-bg:
-    radial-gradient(circle at 12% 6%, rgba(255, 95, 162, 0.18), transparent 28%),
-    radial-gradient(circle at 86% 2%, rgba(56, 189, 248, 0.16), transparent 30%),
-    radial-gradient(circle at 70% 78%, rgba(139, 92, 246, 0.12), transparent 34%),
-    linear-gradient(155deg, #08111f 0%, #101b38 44%, #20285f 100%);
-  --page-bg-soft: rgba(13, 23, 44, 0.78);
-  --card-bg:
-    radial-gradient(circle at 20% 0%, rgba(255, 95, 162, 0.14), transparent 30%),
-    radial-gradient(circle at 90% 10%, rgba(56, 189, 248, 0.12), transparent 28%),
-    rgba(18, 28, 56, 0.78);
-  --card-bg-strong: rgba(11, 18, 36, 0.86);
-  --text-primary: #f8fafc;
-  --text-secondary: #d2def0;
-  --text-muted: #91a4c2;
+  --page-bg: radial-gradient(circle at 0% 0%, rgba(79, 110, 247, 0.06), transparent 40%), radial-gradient(circle at 100% 30%, rgba(255, 107, 107, 0.04), transparent 35%), radial-gradient(circle at 50% 100%, rgba(247, 166, 65, 0.05), transparent 40%), #f2f4f8;
+  --page-bg-soft: rgba(242, 244, 248, 0.88);
+  --card-bg: rgba(255, 255, 255, 0.92);
+  --card-bg-strong: rgba(255, 255, 255, 0.98);
+  --text-primary: #1a1d2e;
+  --text-secondary: #5a5e78;
+  --text-muted: #9498ae;
   --text-inverse: #ffffff;
-  --border-color: rgba(255, 255, 255, 0.1);
-  --shadow-color: rgba(3, 7, 18, 0.42);
+  --border-color: rgba(79, 110, 247, 0.1);
+  --shadow-color: rgba(26, 29, 46, 0.06);
   --tab-bg:
-    radial-gradient(circle at 16% 0%, rgba(255, 95, 162, 0.18), transparent 32%),
-    radial-gradient(circle at 88% 8%, rgba(56, 189, 248, 0.16), transparent 30%),
-    rgba(10, 18, 36, 0.88);
+    linear-gradient(135deg, rgba(255,255,255,0.96), rgba(248,250,252,0.92));
   --tab-active-bg:
-    radial-gradient(circle at 30% 12%, rgba(255, 255, 255, 0.22), transparent 30%),
-    linear-gradient(135deg, #ff5fa2 0%, #8b5cf6 52%, #38bdf8 100%);
+    linear-gradient(135deg, rgba(255,255,255,0.24), transparent 40%),
+    linear-gradient(135deg, #4f6ef7 0%, #7c5cfc 60%, #a78bfa 100%);
   --button-primary-bg:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 42%),
-    linear-gradient(135deg, #ff5fa2 0%, #8b5cf6 52%, #38bdf8 100%);
+    linear-gradient(135deg, rgba(255,255,255,0.24), transparent 40%),
+    linear-gradient(135deg, #4f6ef7 0%, #7c5cfc 60%, #a78bfa 100%);
   --button-primary-text: #ffffff;
-  --input-bg: rgba(18, 28, 56, 0.68);
-  --input-text: #f8fafc;
-  --input-placeholder: #91a4c2;
-  --toast-bg: rgba(15, 23, 42, 0.94);
+  --input-bg: rgba(255, 255, 255, 0.88);
+  --input-text: #1a1d2e;
+  --input-placeholder: #9498ae;
+  --toast-bg: rgba(26, 29, 46, 0.94);
   --toast-text: #ffffff;
-  --profit-color: #ff6b6b;
-  --loss-color: #2dd4bf;
+  --profit-color: #ff4d5a;
+  --loss-color: #12b886;
   --warning-color: #f59e0b;
-  --panel-soft: rgba(15, 23, 42, 0.36);
-  --control-bg: rgba(18, 28, 56, 0.66);
+  --panel-soft: rgba(242, 244, 248, 0.92);
+  --control-bg: rgba(242, 244, 248, 0.96);
   --button-radius: 999rpx;
-  --card-radius: 42rpx;
-  --card-shadow: 0 24rpx 64rpx rgba(3, 7, 18, 0.22), 0 12rpx 34rpx rgba(139, 92, 246, 0.08);
+  --card-radius: 32rpx;
+  --card-shadow: 0 12rpx 40rpx rgba(26, 29, 46, 0.06);
   --primary-gradient: var(--button-primary-bg);
-  --secondary-gradient: linear-gradient(135deg, rgba(255, 95, 162, 0.12), rgba(139, 92, 246, 0.14), rgba(56, 189, 248, 0.1));
-  --accent-pink: #ff5fa2;
-  --accent-purple: #8b5cf6;
-  --accent-blue: #38bdf8;
+  --secondary-gradient: linear-gradient(135deg, rgba(79,110,247,0.06), rgba(124,92,252,0.08), rgba(255,107,107,0.04));
+  --accent-pink: #ff6b6b;
+  --accent-purple: #7c5cfc;
+  --accent-blue: #4f6ef7;
   --theme-page-bg: var(--page-bg);
   --theme-card-bg: var(--card-bg);
   --theme-card-border: var(--border-color);
@@ -68,41 +85,6 @@
   padding: 28rpx 28rpx calc(222rpx + env(safe-area-inset-bottom));
   background: var(--page-bg);
   color: var(--text-primary);
-}
-.page-shell.theme-light {
-  --page-bg:
-    radial-gradient(circle at 18% 0%, rgba(255, 95, 162, 0.06), transparent 30%),
-    radial-gradient(circle at 92% 6%, rgba(56, 189, 248, 0.07), transparent 32%),
-    linear-gradient(180deg, #f8fafc 0%, #f1f5f9 50%, #f8fafc 100%);
-  --page-bg-soft: rgba(241, 245, 249, 0.92);
-  --card-bg:
-    rgba(255, 255, 255, 0.96);
-  --card-bg-strong: rgba(255, 255, 255, 0.98);
-  --text-primary: #172033;
-  --text-secondary: #334155;
-  --text-muted: #64748b;
-  --text-inverse: #ffffff;
-  --border-color: rgba(100, 116, 139, 0.16);
-  --shadow-color: rgba(31, 41, 85, 0.12);
-  --tab-bg:
-    rgba(255, 255, 255, 0.96);
-  --tab-active-bg:
-    radial-gradient(circle at 28% 12%, rgba(255, 255, 255, 0.26), transparent 30%),
-    linear-gradient(135deg, #ff5fa2 0%, #8b5cf6 52%, #38bdf8 100%);
-  --button-primary-bg: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
-  --button-primary-text: #ffffff;
-  --input-bg: rgba(255, 255, 255, 0.94);
-  --input-text: #172033;
-  --input-placeholder: #94a3b8;
-  --toast-bg: rgba(23, 32, 51, 0.96);
-  --toast-text: #ffffff;
-  --profit-color: #dc3f55;
-  --loss-color: #0f9f8c;
-  --warning-color: #b45309;
-  --panel-soft: rgba(248, 250, 252, 0.92);
-  --control-bg: rgba(255, 255, 255, 0.86);
-  --card-radius: 44rpx;
-  --card-shadow: 0 22rpx 54rpx rgba(31, 41, 85, 0.12), 0 8rpx 26rpx rgba(139, 92, 246, 0.1);
 }
 .page-shell.theme-neon {
   --page-bg:
@@ -146,11 +128,48 @@
   --card-radius: 44rpx;
   --card-shadow: 0 24rpx 62rpx rgba(3, 7, 18, 0.34), 0 0 34rpx rgba(139, 92, 246, 0.16);
 }
+.page-shell.theme-light {
+  --page-bg:
+    radial-gradient(circle at 18% 0%, rgba(79, 110, 247, 0.04), transparent 30%),
+    radial-gradient(circle at 92% 6%, rgba(124, 92, 252, 0.03), transparent 32%),
+    linear-gradient(180deg, #f8fafc 0%, #f1f5f9 50%, #f8fafc 100%);
+  --page-bg-soft: rgba(241, 245, 249, 0.92);
+  --card-bg: rgba(255, 255, 255, 0.96);
+  --card-bg-strong: rgba(255, 255, 255, 0.98);
+  --text-primary: #172033;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-inverse: #ffffff;
+  --border-color: rgba(100, 116, 139, 0.14);
+  --shadow-color: rgba(31, 41, 85, 0.10);
+  --tab-bg: rgba(255, 255, 255, 0.96);
+  --tab-active-bg:
+    radial-gradient(circle at 28% 12%, rgba(255, 255, 255, 0.26), transparent 30%),
+    linear-gradient(135deg, #4f6ef7 0%, #7c5cfc 60%, #a78bfa 100%);
+  --button-primary-bg:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.24), transparent 40%),
+    linear-gradient(135deg, #4f6ef7 0%, #7c5cfc 60%, #a78bfa 100%);
+  --button-primary-text: #ffffff;
+  --input-bg: rgba(255, 255, 255, 0.94);
+  --input-text: #172033;
+  --input-placeholder: #94a3b8;
+  --toast-bg: rgba(23, 32, 51, 0.96);
+  --toast-text: #ffffff;
+  --profit-color: #dc3f55;
+  --loss-color: #0f9f8c;
+  --warning-color: #b45309;
+  --panel-soft: rgba(248, 250, 252, 0.92);
+  --control-bg: rgba(255, 255, 255, 0.86);
+  --card-radius: 32rpx;
+  --card-shadow: 0 12rpx 40rpx rgba(31, 41, 85, 0.08);
+}
 .glass-card {
-  background: radial-gradient(circle at 20% 0%, rgba(255, 95, 162, 0.14), transparent 30%), radial-gradient(circle at 90% 10%, rgba(56, 189, 248, 0.12), transparent 28%), rgba(18, 28, 56, 0.78);
-  border: 1rpx solid rgba(255, 255, 255, 0.1);
-  border-radius: 42rpx;
-  box-shadow: 0 24rpx 64rpx rgba(3, 7, 18, 0.22), 0 12rpx 34rpx rgba(139, 92, 246, 0.08);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(20rpx);
+  -webkit-backdrop-filter: blur(20rpx);
+  border: 1rpx solid rgba(79, 110, 247, 0.1);
+  border-radius: 32rpx;
+  box-shadow: 0 12rpx 40rpx rgba(26, 29, 46, 0.06);
   background: var(--card-bg);
   border-color: var(--border-color);
   border-radius: var(--card-radius);
@@ -158,30 +177,27 @@
   color: var(--text-primary);
 }
 .primary-gradient-button {
-  color: var(--button-primary-text, #fff);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 42%), linear-gradient(135deg, #ff5fa2 0%, #8b5cf6 52%, #38bdf8 100%);
-  box-shadow: 0 16rpx 40rpx rgba(139, 92, 246, 0.2), 0 0 24rpx rgba(56, 189, 248, 0.12), inset 0 1rpx 0 rgba(255, 255, 255, 0.22);
+  color: #fff;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.24), transparent 40%), linear-gradient(135deg, #4f6ef7 0%, #7c5cfc 60%, #a78bfa 100%);
+  box-shadow: 0 8rpx 32rpx rgba(79, 110, 247, 0.18), 0 0 16rpx rgba(124, 92, 252, 0.08);
   background: var(--button-primary-bg);
   border-radius: var(--button-radius);
   color: var(--button-primary-text);
   min-height: 86rpx;
   font-size: 27rpx;
-  font-weight: 900;
+  font-weight: 700;
 }
 .finance-number {
-  font-family: "Microsoft YaHei", "微软雅黑", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
-  font-weight: 900;
+  font-family: "DIN Alternate", "DIN", "Microsoft YaHei", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+  font-weight: 700;
   letter-spacing: 0;
   white-space: nowrap;
   word-break: keep-all;
+  font-variant-numeric: tabular-nums;
   max-width: 100%;
   display: inline-flex;
   align-items: baseline;
   color: inherit;
-  white-space: nowrap;
-  word-break: keep-all;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .profit-text {
   color: var(--profit-color);
@@ -192,7 +208,7 @@
 .section-title {
   color: var(--text-primary);
   font-size: 32rpx;
-  font-weight: 900;
+  font-weight: 700;
 }
 .muted-text {
   color: var(--text-muted);
@@ -206,13 +222,13 @@
   align-items: center;
   justify-content: space-between;
   gap: 24rpx;
-  padding: 8rpx 2rpx 2rpx;
+  padding: 8rpx 2rpx 18rpx;
 }
 .page-title {
   display: block;
   color: var(--text-primary);
   font-size: 46rpx;
-  font-weight: 900;
+  font-weight: 800;
   line-height: 1.1;
 }
 .page-subtitle {
@@ -224,7 +240,7 @@
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18rpx;
+  gap: 16rpx;
 }
 .stat-card {
   min-height: 146rpx;
@@ -242,7 +258,7 @@
 .stat-value {
   color: var(--text-primary);
   font-size: 34rpx;
-  font-weight: 900;
+  font-weight: 700;
   line-height: 1.2;
 }
 .chip {
@@ -252,14 +268,14 @@
   min-height: 48rpx;
   padding: 0 18rpx;
   border-radius: 999rpx;
-  color: var(--text-secondary);
-  background: var(--secondary-gradient);
-  border: 1rpx solid var(--border-color);
+  color: var(--brand-blue);
+  background: rgba(79, 110, 247, 0.08);
+  border: 1rpx solid rgba(79, 110, 247, 0.1);
   font-size: 22rpx;
-  font-weight: 800;
+  font-weight: 700;
 }
 .empty-card {
-  padding: 46rpx 30rpx;
+  padding: 60rpx 30rpx;
   color: var(--text-muted);
   text-align: center;
   font-size: 25rpx;
@@ -366,7 +382,7 @@ textarea::placeholder {
 .history-button {
   color: var(--button-primary-text) !important;
   background: var(--button-primary-bg) !important;
-  box-shadow: 0 16rpx 38rpx rgba(139, 92, 246, 0.18), 0 0 22rpx rgba(56, 189, 248, 0.12);
+  box-shadow: 0 8rpx 32rpx rgba(79, 110, 247, 0.18), 0 0 16rpx rgba(124, 92, 252, 0.08);
 }
 .secondary-action,
 .back-button,
@@ -391,25 +407,26 @@ textarea::placeholder {
 .theme-option.active text {
   color: var(--button-primary-text) !important;
 }
-
-/* theme-light: home page hard-coded overrides */
-.page-shell.theme-light .confidence-row {
-  background: rgba(241, 245, 249, 0.92);
+.status-pill.settled {
+  color: #12b886 !important;
+  background: rgba(18, 184, 134, 0.1) !important;
+  border-color: rgba(18, 184, 134, 0.2) !important;
+}
+.status-pill.holiday {
+  color: #f59e0b !important;
+  background: rgba(245, 158, 11, 0.1) !important;
+  border-color: rgba(245, 158, 11, 0.2) !important;
+}
+.status-pill.tracking {
+  color: #4f6ef7 !important;
+  background: rgba(79, 110, 247, 0.08) !important;
+  border-color: rgba(79, 110, 247, 0.2) !important;
 }
 .page-shell.theme-light .fund-card {
   background: var(--card-bg);
 }
-.page-shell.theme-light .status-pill.settled {
-  color: #059669;
-  background: rgba(16, 185, 129, 0.12);
-}
-.page-shell.theme-light .status-pill.holiday {
-  color: #b45309;
-  background: rgba(245, 158, 11, 0.12);
-}
-.page-shell.theme-light .status-pill.tracking {
-  color: #2563eb;
-  background: rgba(59, 130, 246, 0.12);
+.page-shell.theme-light .confidence-row {
+  background: rgba(241, 245, 249, 0.92);
 }
 .page-shell.theme-light .calibration-strip {
   color: #6d28d9;
@@ -467,23 +484,82 @@ textarea::placeholder {
   border-color: rgba(100, 116, 139, 0.12);
 }
 .page-shell.theme-light .kline-tab.active {
-  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  background: linear-gradient(135deg, #4f6ef7 0%, #7c5cfc 60%, #a78bfa 100%);
   color: #fff;
   border-color: transparent;
 }
 .page-shell.theme-light .modal-mask {
   background: rgba(0, 0, 0, 0.32);
 }
+.page-shell:not(.theme-neon):not(.theme-light) .hero-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.24), transparent 50%), linear-gradient(135deg, #4f6ef7 0%, #7c5cfc 60%, #a78bfa 100%) !important;
+  color: #ffffff !important;
+  border-color: transparent !important;
+  box-shadow: 0 8rpx 32rpx rgba(79, 110, 247, 0.18), 0 0 16rpx rgba(124, 92, 252, 0.08) !important;
+}
+.page-shell:not(.theme-neon):not(.theme-light) .hero-card .muted-text,
+.page-shell:not(.theme-neon):not(.theme-light) .hero-card .hero-sub,
+.page-shell:not(.theme-neon):not(.theme-light) .hero-card .hero-subtitle {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+.page-shell:not(.theme-neon):not(.theme-light) .hero-card .metric-label {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+.page-shell:not(.theme-neon):not(.theme-light) .hero-card .metric-value {
+  color: #ffffff !important;
+}
+.page-shell:not(.theme-neon):not(.theme-light) .action-card {
+  background: linear-gradient(135deg, rgba(79, 110, 247, 0.04), rgba(124, 92, 252, 0.06)) !important;
+  border-color: rgba(79, 110, 247, 0.12) !important;
+}
+.page-shell:not(.theme-neon):not(.theme-light) .asset-switch {
+  border-radius: 36rpx;
+  background: rgba(79, 110, 247, 0.05) !important;
+  border-color: rgba(79, 110, 247, 0.12) !important;
+}
+.page-shell:not(.theme-neon):not(.theme-light) .asset-switch-btn {
+  border-radius: 28rpx !important;
+  font-weight: 700;
+}
+.page-shell:not(.theme-neon):not(.theme-light) .fund-card {
+  border-left: 6rpx solid rgba(79, 110, 247, 0.4);
+  transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s ease;
+}
+.page-shell:not(.theme-neon):not(.theme-light) .fund-card:active {
+  transform: scale(0.98);
+}
+.page-shell:not(.theme-neon):not(.theme-light) .rank-card:first-of-type {
+  border-top: 4rpx solid #ff4d5a;
+}
+.page-shell:not(.theme-neon):not(.theme-light) .rank-card:last-of-type {
+  border-top: 4rpx solid #12b886;
+}
+.page-shell:not(.theme-neon):not(.theme-light) .status-pill.tracking {
+  color: #4f6ef7 !important;
+  background: rgba(79, 110, 247, 0.08) !important;
+}
+.page-shell:not(.theme-neon):not(.theme-light) .chip {
+  color: #4f6ef7;
+  background: rgba(79, 110, 247, 0.08);
+  font-weight: 700;
+}
+.page-shell:not(.theme-neon):not(.theme-light) .notice-card {
+  background: rgba(79, 110, 247, 0.03) !important;
+  border-color: rgba(79, 110, 247, 0.08) !important;
+}
+.page-shell:not(.theme-neon):not(.theme-light) .page-header {
+  padding-bottom: 22rpx;
+}
 page {
   min-height: 100%;
-  background: radial-gradient(circle at 12% 6%, rgba(255, 95, 162, 0.18), transparent 28%), radial-gradient(circle at 86% 2%, rgba(56, 189, 248, 0.16), transparent 30%), radial-gradient(circle at 70% 78%, rgba(139, 92, 246, 0.12), transparent 34%), linear-gradient(155deg, #08111f 0%, #101b38 44%, #20285f 100%);
-  color: #f8fafc;
+  background: radial-gradient(circle at 0% 0%, rgba(79, 110, 247, 0.06), transparent 40%), radial-gradient(circle at 100% 30%, rgba(255, 107, 107, 0.04), transparent 35%), radial-gradient(circle at 50% 100%, rgba(247, 166, 65, 0.05), transparent 40%), #f2f4f8;
+  color: #1a1d2e;
   font-family: "Microsoft YaHei", "微软雅黑", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
 }
 .page {
   min-height: 100vh;
   box-sizing: border-box;
-  color: #f8fafc;
+  color: #1a1d2e;
 }
 button {
   border: 0;
@@ -493,7 +569,7 @@ button::after {
   border: 0;
 }
 input {
-  color: #f8fafc;
+  color: #1a1d2e;
   font-family: "Microsoft YaHei", "微软雅黑", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
 }
 view,

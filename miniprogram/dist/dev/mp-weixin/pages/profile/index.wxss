@@ -48,7 +48,7 @@
   color: var(--button-primary-text);
   font-size: 58rpx;
   font-weight: 900;
-  background: linear-gradient(135deg, #5aa7ff, #8b7cf6);
+  background: linear-gradient(135deg, #4f6ef7, #7c5cfc);
 }
 .profile-name.data-v-f97f9319 {
   max-width: 100%;
@@ -67,6 +67,46 @@
 .logout-button.data-v-f97f9319 {
   width: 100%;
   min-height: 88rpx;
+}
+.profile-form.data-v-f97f9319 {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+.profile-field.data-v-f97f9319 {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 22rpx 24rpx;
+  border-radius: 30rpx;
+  background: var(--control-bg);
+  border: 1rpx solid var(--border-color);
+}
+.field-label.data-v-f97f9319 {
+  display: block;
+  margin-bottom: 12rpx;
+  color: var(--text-muted);
+  font-size: 22rpx;
+  font-weight: 800;
+}
+.nickname-input.data-v-f97f9319 {
+  width: 100%;
+  min-height: 58rpx;
+  color: var(--text-primary);
+  font-size: 30rpx;
+  font-weight: 900;
+}
+.input-placeholder.data-v-f97f9319 {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.secondary-action.data-v-f97f9319 {
+  color: var(--text-secondary);
+  background: var(--control-bg);
+  border: 1rpx solid var(--border-color);
+  border-radius: 999rpx;
+  font-size: 26rpx;
+  font-weight: 900;
 }
 .theme-panel.data-v-f97f9319 {
   width: 100%;

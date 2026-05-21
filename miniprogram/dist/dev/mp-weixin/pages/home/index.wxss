@@ -69,7 +69,7 @@
   color: var(--button-primary-text);
   font-size: 28rpx;
   font-weight: 900;
-  background: linear-gradient(135deg, #ff5fa2 0%, #8b5cf6 52%, #38bdf8 100%);
+  background: linear-gradient(135deg, #4f6ef7 0%, #7c5cfc 60%, #a78bfa 100%);
 }
 .account-copy.data-v-2c5296db {
   min-width: 0;
@@ -115,9 +115,9 @@
   max-width: 300rpx;
 }
 .ocr-button.data-v-2c5296db {
-  color: var(--button-primary-text, #fff);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 42%), linear-gradient(135deg, #ff5fa2 0%, #8b5cf6 52%, #38bdf8 100%);
-  box-shadow: 0 16rpx 40rpx rgba(139, 92, 246, 0.2), 0 0 24rpx rgba(56, 189, 248, 0.12), inset 0 1rpx 0 rgba(255, 255, 255, 0.22);
+  color: #fff;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.24), transparent 40%), linear-gradient(135deg, #4f6ef7 0%, #7c5cfc 60%, #a78bfa 100%);
+  box-shadow: 0 8rpx 32rpx rgba(79, 110, 247, 0.18), 0 0 16rpx rgba(124, 92, 252, 0.08);
   min-height: 80rpx;
   border-radius: 999rpx;
   font-size: 24rpx;
@@ -150,7 +150,7 @@
 }
 .asset-switch-btn.active.data-v-2c5296db {
   color: var(--text-primary);
-  background: linear-gradient(135deg, #ff5fa2 0%, #8b5cf6 52%, #38bdf8 100%);
+  background: linear-gradient(135deg, #4f6ef7 0%, #7c5cfc 60%, #a78bfa 100%);
   box-shadow: 0 16rpx 42rpx rgba(139, 92, 246, 0.2);
 }
 .notice-card.data-v-2c5296db {
@@ -331,7 +331,7 @@
   color: #fbbf24;
 }
 .confidence-low.data-v-2c5296db {
-  color: #ff6b6b;
+  color: #ff4d5a;
 }
 .small-section-title.data-v-2c5296db {
   font-size: 28rpx;
@@ -529,9 +529,9 @@
   color: rgba(180, 198, 232, 0.48);
 }
 .stock-primary-button.data-v-2c5296db {
-  color: var(--button-primary-text, #fff);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 42%), linear-gradient(135deg, #ff5fa2 0%, #8b5cf6 52%, #38bdf8 100%);
-  box-shadow: 0 16rpx 40rpx rgba(139, 92, 246, 0.2), 0 0 24rpx rgba(56, 189, 248, 0.12), inset 0 1rpx 0 rgba(255, 255, 255, 0.22);
+  color: #fff;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.24), transparent 40%), linear-gradient(135deg, #4f6ef7 0%, #7c5cfc 60%, #a78bfa 100%);
+  box-shadow: 0 8rpx 32rpx rgba(79, 110, 247, 0.18), 0 0 16rpx rgba(124, 92, 252, 0.08);
   width: 132rpx;
   min-height: 76rpx;
   border-radius: 999rpx;

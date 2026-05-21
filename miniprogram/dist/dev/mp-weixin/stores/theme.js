@@ -2,18 +2,21 @@
 const common_vendor = require("../common/vendor.js");
 const THEME_STORAGE_KEY = "valuation_assistant_theme";
 const themeOptions = [
+  { value: "vivid", label: "活力渐变", description: "蓝紫渐变、年轻活泼、默认主题" },
   { value: "light", label: "浅色主题", description: "浅色卡片、高对比文字" },
-  { value: "neon", label: "彩虹渐变主题", description: "深色底、粉紫蓝高亮" }
+  { value: "neon", label: "霓虹渐变", description: "深色底、粉紫蓝赛博风" }
 ];
 const themeState = common_vendor.reactive({
   theme: readStoredTheme()
 });
-const themeClass = common_vendor.computed(() => `theme-${themeState.theme}`);
+const themeClass = common_vendor.computed(() => themeState.theme === "vivid" ? "" : `theme-${themeState.theme}`);
 function normalizeTheme(value) {
   const raw = String(value || "").toLowerCase();
-  if (raw === "neon" || raw === "rainbow" || raw === "gradient")
+  if (raw === "neon" || raw === "rainbow")
     return "neon";
-  return "light";
+  if (raw === "light")
+    return "light";
+  return "vivid";
 }
 function loadTheme() {
   themeState.theme = readStoredTheme();

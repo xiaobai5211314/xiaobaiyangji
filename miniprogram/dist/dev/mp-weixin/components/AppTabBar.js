@@ -8,9 +8,9 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
   },
   setup(__props) {
     const tabs = [
-      { key: "home", icon: "🛡️", label: "持仓" },
-      { key: "sector", icon: "📈", label: "板块" },
-      { key: "news", icon: "📰", label: "资讯" },
+      { key: "home", icon: "💼", label: "持仓" },
+      { key: "sector", icon: "🔥", label: "板块" },
+      { key: "news", icon: "📡", label: "资讯" },
       { key: "analysis", icon: "📊", label: "盈亏" }
     ];
     function handleTap(key) {
@@ -33,7 +33,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
             e: common_vendor.o(($event) => handleTap(item.key), item.key)
           };
         }),
-        b: common_vendor.n(`theme-${common_vendor.unref(stores_theme.themeState).theme}`)
+        b: common_vendor.n(common_vendor.unref(stores_theme.themeClass))
       };
     };
   }

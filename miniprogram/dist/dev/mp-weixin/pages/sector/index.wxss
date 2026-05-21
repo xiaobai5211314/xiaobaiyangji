@@ -32,7 +32,7 @@
   padding: 26rpx;
   border-radius: 38rpx;
   border: 1rpx solid rgba(255, 255, 255, 0.1);
-  background: radial-gradient(circle at 14% 0%, rgba(255, 95, 162, 0.18), transparent 30%), radial-gradient(circle at 86% 4%, rgba(56, 189, 248, 0.16), transparent 30%), rgba(18, 28, 56, 0.7);
+  background: radial-gradient(circle at 14% 0%, rgba(255, 107, 107, 0.08), transparent 30%), radial-gradient(circle at 86% 4%, rgba(79, 110, 247, 0.08), transparent 30%), rgba(18, 28, 56, 0.7);
   box-shadow: 0 18rpx 48rpx rgba(3, 7, 18, 0.2);
 }
 .hero-title.data-v-4c2bd136 {

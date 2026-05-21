@@ -18,7 +18,7 @@ function normalizeSession(value) {
     return null;
   return {
     username,
-    displayName: String((value == null ? void 0 : value.displayName) || username),
+    displayName: String((value == null ? void 0 : value.displayName) || "").trim(),
     avatarDataUrl: String((value == null ? void 0 : value.avatarDataUrl) || ""),
     avatarUrl: String((value == null ? void 0 : value.avatarUrl) || ""),
     loginTime: Number((value == null ? void 0 : value.loginTime) || Date.now())

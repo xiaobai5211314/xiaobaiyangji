@@ -43,7 +43,7 @@
 }
 .mode-button.active.data-v-c6aadd33 {
   color: var(--button-primary-text);
-  background: linear-gradient(135deg, #ff5fa2 0%, #8b5cf6 52%, #38bdf8 100%);
+  background: linear-gradient(135deg, #4f6ef7 0%, #7c5cfc 60%, #a78bfa 100%);
   box-shadow: 0 12rpx 28rpx rgba(139, 92, 246, 0.18);
 }
 .overview-head.data-v-c6aadd33,

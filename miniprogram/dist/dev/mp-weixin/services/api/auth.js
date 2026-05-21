@@ -30,13 +30,26 @@ function getProfile(username) {
     fallbackData: { success: false, username }
   });
 }
+function updateProfile(payload) {
+  return services_request.postJson("/api/auth/profile/update", payload, {
+    loadingText: "保存资料",
+    showErrorToast: false
+  });
+}
 function pickUsername(response, fallback = "") {
   var _a, _b;
   return ((_a = response.user) == null ? void 0 : _a.username) || ((_b = response.user) == null ? void 0 : _b.userName) || response.username || response.userName || fallback;
 }
+function isGeneratedWechatUsername(value) {
+  return /^wx_[0-9a-f]{8,32}$/i.test(String(value || "").trim());
+}
 function pickDisplayName(response, fallback = "") {
   var _a;
-  return ((_a = response.user) == null ? void 0 : _a.displayName) || response.displayName || pickUsername(response, fallback);
+  const candidate = String(((_a = response.user) == null ? void 0 : _a.displayName) || response.displayName || "").trim();
+  if (candidate && !isGeneratedWechatUsername(candidate))
+    return candidate;
+  const fallbackName = String(fallback || "").trim();
+  return isGeneratedWechatUsername(fallbackName) ? "" : fallbackName;
 }
 function pickAvatar(response) {
   var _a, _b;
@@ -87,10 +100,12 @@ async function uploadAvatar(username, filePath) {
   throw lastError instanceof Error ? lastError : new Error("头像上传失败");
 }
 exports.getProfile = getProfile;
+exports.isGeneratedWechatUsername = isGeneratedWechatUsername;
 exports.login = login;
 exports.pickAvatar = pickAvatar;
 exports.pickDisplayName = pickDisplayName;
 exports.pickUsername = pickUsername;
 exports.register = register;
+exports.updateProfile = updateProfile;
 exports.uploadAvatar = uploadAvatar;
 exports.wechatLogin = wechatLogin;
