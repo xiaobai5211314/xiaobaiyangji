@@ -188,9 +188,9 @@
         }
 
             .control-panel input {
-                background: rgba(15, 23, 42, 0.6);
-                border: 1px solid rgba(255,255,255,0.15);
-                color: #00e5ff;
+                background: rgba(255,255,255,.92);
+                border: 1px solid var(--card-border);
+                color: var(--text-main);
                 padding: 8px 15px;
                 border-radius: 20px;
                 outline: none;
@@ -200,9 +200,9 @@
 
         /* 借鉴的新版按钮体系 */
         .btn {
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.15);
-            color: white;
+            background: rgba(15,23,42,0.06);
+            border: 1px solid rgba(15,23,42,0.12);
+            color: var(--text-main);
             padding: 8px 16px;
             border-radius: var(--button-radius);
             font-size: 14px;
@@ -215,7 +215,7 @@
         }
 
             .btn:hover:not(:disabled) {
-                background: rgba(255,255,255,0.2);
+                background: rgba(15,23,42,0.1);
                 transform: translateY(-1px);
             }
 
@@ -246,16 +246,17 @@
         }
 
         .btn:disabled {
-            background: #475569;
-            cursor: not-allowed;
-            opacity: 0.7;
-        }
-
-        :root[data-theme="light"] .btn:disabled {
             background: #e2e8f0;
             color: #94a3b8;
             cursor: not-allowed;
             opacity: 1;
+        }
+
+        :root[data-theme="rainbow"] .btn:disabled {
+            background: #475569;
+            color: #cbd5e1;
+            cursor: not-allowed;
+            opacity: 0.7;
         }
 
         :root[data-theme="light"] .glass-panel,
@@ -398,7 +399,31 @@
 
         html[data-theme="light"] .fund-card [style*="color: #fff"],
         html[data-theme="light"] .fund-card [style*="color:#fff"],
-        html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
+        /* Vivid theme (default): force dark text on light cards */
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .fund-card [style*="color: #f8fafc"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .fund-card [style*="color:#f8fafc"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .stock-card [style*="color: #f8fafc"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .stock-card [style*="color:#f8fafc"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .sector-row [style*="color:#f8fafc"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .sector-row [style*="color: #f8fafc"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .exposure-row [style*="color:#f8fafc"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .exposure-row [style*="color: #f8fafc"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .calibration-card-row [style*="color:#f8fafc"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .calibration-card-row [style*="color: #f8fafc"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .profit-list-row [style*="color:#f8fafc"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .profit-list-row [style*="color: #f8fafc"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .glass-panel [style*="color: #f8fafc"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .glass-panel [style*="color:#f8fafc"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .feature-card [style*="color: #f8fafc"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .feature-card [style*="color:#f8fafc"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .quick-holding-card [style*="color:#f8fafc"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .quick-holding-card [style*="color: #f8fafc"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .bottom-tabbar [style*="color:#f8fafc"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .bottom-tabbar [style*="color: #f8fafc"] {
+            color: #1a1d2e !important;
+        }
+
+html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         html[data-theme="light"] .fund-card [style*="color:#f8fafc"],
         html[data-theme="light"] .stock-card [style*="color: #fff"],
         html[data-theme="light"] .stock-card [style*="color:#fff"],
@@ -479,7 +504,7 @@
         }
 
             .fund-card:hover {
-                background: rgba(30, 41, 59, 0.8);
+                background: rgba(79, 110, 247, 0.06);
             }
 
         /* 新版状态标签 */
@@ -883,19 +908,20 @@
         .feature-card {
             padding: 14px;
             border-radius: 16px;
-            background: rgba(15, 23, 42, .45);
-            border: 1px solid rgba(148, 163, 184, .16);
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            box-shadow: var(--card-shadow);
         }
 
         .feature-title {
-            color: #f8fafc;
+            color: var(--text-main);
             font-size: 16px;
             font-weight: 900;
             margin-bottom: 6px;
         }
 
         .feature-subtitle {
-            color: #94a3b8;
+            color: var(--text-muted);
             font-size: 12px;
             line-height: 1.5;
         }
@@ -1120,8 +1146,9 @@
         .stock-card {
             padding: 12px;
             border-radius: 16px;
-            background: rgba(15,23,42,.45);
-            border: 1px solid rgba(148,163,184,.14);
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            box-shadow: var(--card-shadow);
             margin-bottom: 10px;
         }
 
@@ -1136,8 +1163,8 @@
             display: inline-flex;
             padding: 2px 7px;
             border-radius: 6px;
-            background: rgba(0,0,0,.26);
-            color: #94a3b8;
+            background: rgba(15,23,42,.08);
+            color: var(--text-muted);
             font-family: monospace;
             font-size: 11px;
             margin-top: 4px;
@@ -1383,6 +1410,10 @@
         .page-shell {
             margin: 15px;
             padding: 16px;
+            background: var(--card-bg);
+            border-radius: var(--card-radius);
+            border: 1px solid var(--card-border);
+            box-shadow: var(--card-shadow);
         }
 
         .page-topbar {
@@ -1397,7 +1428,7 @@
         .page-title {
             font-size: 22px;
             font-weight: 900;
-            color: #f8fafc;
+            color: var(--text-main);
             display: flex;
             align-items: center;
             gap: 8px;
@@ -1405,7 +1436,7 @@
 
         .page-subtitle {
             font-size: 12px;
-            color: #94a3b8;
+            color: var(--text-muted);
             margin-top: 4px;
         }
 
@@ -1421,9 +1452,9 @@
             gap: 6px;
             padding: 7px;
             border-radius: 24px;
-            background: rgba(15,23,42,.86);
-            border: 1px solid rgba(148,163,184,.22);
-            box-shadow: 0 16px 45px rgba(0,0,0,.45);
+            background: rgba(255,255,255,.94);
+            border: 1px solid var(--card-border);
+            box-shadow: var(--card-shadow);
             backdrop-filter: blur(18px);
             -webkit-backdrop-filter: blur(18px);
         }
@@ -1599,7 +1630,7 @@
             }
 
         .calendar-date {
-            color: #cbd5e1;
+            color: var(--text-muted);
             font-size: 12px;
             font-weight: 800;
         }
@@ -1707,8 +1738,8 @@
             display: inline-flex;
             padding: 2px 7px;
             border-radius: 6px;
-            background: rgba(0,0,0,.26);
-            color: #94a3b8;
+            background: rgba(15,23,42,.08);
+            color: var(--text-muted);
             font-family: monospace;
             font-size: 11px;
             margin-top: 4px;
@@ -2074,12 +2105,12 @@
         .profile-name {
             font-size: 20px;
             font-weight: 900;
-            color: #f8fafc;
+            color: var(--text-main);
         }
 
         .profile-note {
             font-size: 12px;
-            color: #94a3b8;
+            color: var(--text-muted);
             margin-top: 6px;
         }
 
@@ -2180,8 +2211,8 @@
             display: inline-flex;
             padding: 2px 7px;
             border-radius: 6px;
-            background: rgba(0,0,0,.26);
-            color: #94a3b8;
+            background: rgba(15,23,42,.08);
+            color: var(--text-muted);
             font-family: monospace;
             font-size: 11px;
             margin-top: 4px;
@@ -2521,8 +2552,8 @@
             display: inline-flex;
             padding: 2px 7px;
             border-radius: 6px;
-            background: rgba(0,0,0,.26);
-            color: #94a3b8;
+            background: rgba(15,23,42,.08);
+            color: var(--text-muted);
             font-family: monospace;
             font-size: 11px;
             margin-top: 4px;
@@ -2922,8 +2953,8 @@
             display: inline-flex;
             padding: 2px 7px;
             border-radius: 6px;
-            background: rgba(0,0,0,.26);
-            color: #94a3b8;
+            background: rgba(15,23,42,.08);
+            color: var(--text-muted);
             font-family: monospace;
             font-size: 11px;
             margin-top: 4px;
@@ -3215,8 +3246,8 @@
             display: inline-flex;
             padding: 2px 7px;
             border-radius: 6px;
-            background: rgba(0,0,0,.26);
-            color: #94a3b8;
+            background: rgba(15,23,42,.08);
+            color: var(--text-muted);
             font-family: monospace;
             font-size: 11px;
             margin-top: 4px;
@@ -3611,11 +3642,123 @@
             min-width: 118px;
             white-space: nowrap;
         }
+    
+        /* Rainbow theme overrides for elements changed for vivid base */
+        :root[data-theme="rainbow"] .btn {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.15);
+            color: white;
+        }
+        :root[data-theme="rainbow"] .btn:hover:not(:disabled) {
+            background: rgba(255,255,255,0.2);
+        }
+        :root[data-theme="rainbow"] .page-title {
+            color: #f8fafc;
+        }
+        :root[data-theme="rainbow"] .page-subtitle {
+            color: #94a3b8;
+        }
+        :root[data-theme="rainbow"] .profile-name {
+            color: #f8fafc;
+        }
+        :root[data-theme="rainbow"] .profile-note {
+            color: #94a3b8;
+        }
+        :root[data-theme="rainbow"] .bottom-tabbar {
+            background: rgba(15,23,42,.86);
+            border: 1px solid rgba(148,163,184,.22);
+            box-shadow: 0 16px 45px rgba(0,0,0,.45);
+        }
+        :root[data-theme="rainbow"] .bottom-tab {
+            color: #94a3b8;
+        }
+    
+        /* Rainbow theme: restore dark background for hardcoded-dark elements */
+        :root[data-theme="rainbow"] .feature-card {
+            background: rgba(15, 23, 42, .45) !important;
+            border: 1px solid rgba(148, 163, 184, .16) !important;
+            box-shadow: none !important;
+        }
+        :root[data-theme="rainbow"] .feature-title {
+            color: #f8fafc;
+        }
+        :root[data-theme="rainbow"] .feature-subtitle {
+            color: #94a3b8;
+        }
+        :root[data-theme="rainbow"] .stock-card {
+            background: rgba(15,23,42,.45) !important;
+            border: 1px solid rgba(148,163,184,.14) !important;
+            box-shadow: none !important;
+        }
+        :root[data-theme="rainbow"] .stock-code-chip {
+            background: rgba(0,0,0,.26);
+            color: #94a3b8;
+        }
+        :root[data-theme="rainbow"] .stock-metric .label {
+            color: #94a3b8;
+        }
+        :root[data-theme="rainbow"] .stock-metric .value {
+            color: #f8fafc;
+        }
+        :root[data-theme="rainbow"] .fund-card:hover {
+            background: rgba(30, 41, 59, 0.8);
+        }
+        :root[data-theme="rainbow"] .report-line {
+            color: #cbd5e1;
+        }
+        :root[data-theme="rainbow"] .control-panel input {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255,255,255,0.15);
+            color: #00e5ff;
+        }
+        :root[data-theme="rainbow"] .asset-mode-switch {
+            background: rgba(15,23,42,.52);
+            border: none;
+        }
+        :root[data-theme="rainbow"] .asset-mode-btn {
+            color: #cbd5e1;
+        }
+        :root[data-theme="rainbow"] .metric-label {
+            color: #94a3b8;
+        }
+        :root[data-theme="rainbow"] .calendar-date {
+            color: #cbd5e1;
+        }
+        :root[data-theme="rainbow"] .analysis-toolbar input,
+        :root[data-theme="rainbow"] .analysis-toolbar select {
+            background: transparent;
+            border: 1px solid rgba(148, 163, 184, .22);
+            color: #e2e8f0;
+        }
+        :root[data-theme="rainbow"] .stock-search-input {
+            background: rgba(15,23,42,.44);
+            border: 1px solid rgba(148,163,184,.18);
+            color: #00e5ff;
+        }
+        :root[data-theme="rainbow"] .stock-ocr-value-input {
+            background: rgba(15,23,42,.68);
+            border: 1px solid rgba(148,163,184,.22);
+            color: #00e5ff;
+        }
+        :root[data-theme="rainbow"] .page-shell {
+            background: transparent;
+            border: none;
+            box-shadow: none;
+        }
+        :root[data-theme="rainbow"] .capital-box-title {
+            color: #f8fafc;
+        }
+        :root[data-theme="rainbow"] .capital-name {
+            color: #f8fafc;
+        }
+        :root[data-theme="rainbow"] .page-topbar {
+            background: transparent;
+        }
     </style>
 </head>
-<body data-theme="light">
+<body>
     <script>
-        document.body.setAttribute('data-theme', document.documentElement.getAttribute('data-theme') || 'light');
+        document.body.setAttribute('data-theme', document.documentElement.getAttribute('data-theme') || 'vivid');
     </script>
     <div id="app" v-cloak>
         <div v-if="activePage === 'home' && (pullRefresh.show || pullRefresh.loading)" class="pull-refresh-indicator" :style="{ opacity: activePage === 'home' && (pullRefresh.show || pullRefresh.loading) ? 1 : 0 }">
@@ -3771,7 +3914,7 @@
                     <div class="divider"></div>
                     <div style="text-align: center;">
                         <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">💎 昨日总市值 <span @click="showPrivacyModal = true" style="cursor:pointer">{{ privacyMode === 0 ? '👁️' : '🙈' }}</span></div>
-                        <div class="number-display" style="color: #f8fafc;">{{ privacyMode === 0 ? '¥ ' + totalPrincipal.toFixed(2) : '****' }}</div>
+                        <div class="number-display" style="color: var(--text-main); font-weight: 900;">{{ privacyMode === 0 ? '¥ ' + totalPrincipal.toFixed(2) : '****' }}</div>
                     </div>
                     <div class="divider"></div>
                     <div style="text-align: center;">
@@ -3809,7 +3952,7 @@
                         <div class="feature-title">📡 估值可信度雷达</div>
                         <div class="feature-subtitle">根据净值确认、估算偏离、是否休市、数据新鲜度给出可读评分。</div>
                         <div v-for="item in confidenceRows.slice(0, 4)" :key="'conf-'+item.code" class="confidence-strip">
-                            <div style="min-width:0;"><div style="font-weight:900;color:#f8fafc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px;">{{ item.name }}</div><div style="color:#94a3b8;">{{ item.reason }}</div></div>
+                            <div style="min-width:0;"><div style="font-weight:900;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px;">{{ item.name }}</div><div style="color:#94a3b8;">{{ item.reason }}</div></div>
                             <div class="confidence-meter"><span :style="{width:item.score+'%'}"></span></div>
                             <strong :style="{color:item.color}">{{ item.score }}</strong>
                         </div>
@@ -3831,7 +3974,7 @@
                         <div class="compact-scroll-list" style="margin-top:8px;">
                             <div v-if="calibrationRows.length===0" class="feature-subtitle" style="padding:14px 0;">暂无校准样本。等盘中估值和盘后净值都出现后自动积累。</div>
                             <div v-for="row in calibrationRows.slice(0, 8)" :key="'calib-'+row.code" class="calibration-card-row">
-                                <div style="min-width:0;"><div style="font-weight:900;color:#f8fafc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ row.name }}</div><div style="color:#94a3b8;">样本 {{ row.samples }} 天 · {{ row.confidence }}可信</div></div>
+                                <div style="min-width:0;"><div style="font-weight:900;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ row.name }}</div><div style="color:#94a3b8;">样本 {{ row.samples }} 天 · {{ row.confidence }}可信</div></div>
                                 <span class="calibration-pill">{{ row.offset >= 0 ? '+' : '' }}{{ row.offset.toFixed(2) }}%</span>
                                 <strong :style="{color: row.lastError >= 0 ? '#ff4d4f' : '#10b981', textAlign:'right'}">{{ row.lastError >= 0 ? '+' : '' }}{{ row.lastError.toFixed(2) }}%</strong>
                             </div>
@@ -3840,7 +3983,7 @@
                 </div>
 
                 <div v-show="assetMode === 'fund'" style="margin: 0 15px 10px 15px; display: flex; justify-content: space-between; align-items: center;">
-                    <div style="font-size: 16px; font-weight: bold; color: #e2e8f0; display: flex; align-items: center; gap: 8px;">
+                    <div style="font-size: 16px; font-weight: bold; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
                         🛡️ 总持仓
                         <span style="font-size: 12px; font-weight: normal; color: #94a3b8;">(共 {{ fundsList.length }} 支)</span>
                     </div>
@@ -3849,7 +3992,7 @@
                 <div v-show="assetMode === 'fund'" class="fund-list-container">
                     <div v-for="fund in fundsList" :key="fund.code" class="glass-panel fund-card">
                         <div style="display: flex; justify-content: space-between; align-items: start;">
-                            <span style="font-weight: bold; color: #fff; font-size: 15px; max-width: 80%; display: flex; flex-direction: column;">
+                            <span style="font-weight: bold; color: var(--text-main); font-size: 15px; max-width: 80%; display: flex; flex-direction: column;">
                                 <span>{{ fund.name }}</span>
                                 <span style="font-size:11px; color:#64748b; font-weight: normal; margin-top: 4px; font-family: monospace; background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; width: fit-content;">
                                     {{ fund.code }}
