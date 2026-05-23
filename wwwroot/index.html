@@ -26,14 +26,14 @@
     </script>
     <style>
                                 :root {
-            --page-bg: linear-gradient(175deg, #fdf2f8 0%, #ffffff 36%, #fce7f3 100%);
+            --page-bg: linear-gradient(175deg, #fce4ec 0%, #fdf2f8 30%, #f8bbd0 100%);
             --page-bg-color: #fdf2f8;
-            --card-bg: rgba(255, 255, 255, 0.95);
+            --card-bg: rgba(255, 244, 249, 0.94);
             --card-border: rgba(244, 114, 182, 0.08);
             --card-shadow: 0 0 0 0.5px rgba(236, 72, 153, 0.06), 0 2px 20px rgba(219, 39, 119, 0.06);
             --card-bg-hero: linear-gradient(135deg, #db2777 0%, #ec4899 50%, #f472b6 100%);
-            --card-bg-report: rgba(255, 255, 255, 0.95);
-            --card-bg-list: rgba(255, 255, 255, 0.94);
+            --card-bg-report: rgba(255, 244, 249, 0.94);
+            --card-bg-list: rgba(255, 244, 249, 0.93);
             --card-bg-soft: rgba(253, 242, 248, 0.88);
             --card-border-glow: rgba(244, 114, 182, 0.14);
             --primary-gradient: linear-gradient(135deg, #ec4899, #f472b6);
@@ -91,12 +91,12 @@
                                                 :root[data-theme="light"] {
                 --page-bg: linear-gradient(175deg, #f0f4f0 0%, #f5f7f5 38%, #f0f4f0 100%);
                 --page-bg-color: #f0f4f0;
-                --card-bg: rgba(255, 255, 255, 0.90);
+                --card-bg: rgba(243, 249, 241, 0.94);
                 --card-border: rgba(139, 195, 72, 0.08);
                 --card-shadow: 0 0 0 0.5px rgba(27, 94, 32, 0.05), 0 1px 3px rgba(0, 0, 0, 0.03), 0 4px 24px rgba(27, 94, 32, 0.05);
                 --card-bg-hero: linear-gradient(160deg, #1b5e20, #2e7d32);
-                --card-bg-report: rgba(255, 255, 255, 0.90);
-                --card-bg-list: rgba(255, 255, 255, 0.86);
+                --card-bg-report: rgba(243, 249, 241, 0.92);
+                --card-bg-list: rgba(243, 249, 241, 0.88);
                 --card-bg-soft: linear-gradient(145deg, rgba(245,248,244,0.95), rgba(240,244,240,0.90));
                 --card-border-glow: rgba(139, 195, 72, 0.08);
                 --primary-gradient: linear-gradient(135deg, #8bc348, #4caf50);
@@ -418,6 +418,11 @@
         :root[data-theme="light"] .fund-card:hover {
             background: rgba(139, 195, 72, 0.06) !important;
         }
+        :root[data-theme="light"] .home-ocr-main {
+            background: var(--primary-gradient) !important;
+            box-shadow: 0 10px 26px rgba(139, 195, 72, 0.32) !important;
+        }
+
 
 html[data-theme="light"] .page-title,
         html[data-theme="light"] .feature-title,
@@ -944,8 +949,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             font-size: 11px;
             border-radius: 999px;
             padding: 3px 7px;
-            background: #eef2ff;
-            color: #4f46e5;
+            background: var(--card-bg-soft);
+            color: var(--accent-purple);
             font-weight: 800;
         }
 
@@ -2126,9 +2131,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             min-height: 50px;
             border-radius: 999px;
             justify-content: center;
-            background: linear-gradient(135deg, #8b5cf6 0%, #2563eb 100%);
+            background: var(--primary-gradient);
             border: 0;
-            box-shadow: 0 10px 26px rgba(99,102,241,.30);
+            box-shadow: 0 10px 26px rgba(236, 72, 153, 0.32);
             font-size: 16px;
         }
 
@@ -2785,6 +2790,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
             .home-ocr-main {
                 min-height: 52px;
+            background: var(--primary-gradient);
+                box-shadow: 0 10px 26px rgba(236, 72, 153, 0.32);
             }
 
             .analysis-grid {
@@ -3244,6 +3251,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 margin: 0 !important;
                 justify-content: center;
                 border-radius: 999px;
+            background: var(--primary-gradient);
+                box-shadow: 0 10px 26px rgba(236, 72, 153, 0.32);
             }
 
 
@@ -3488,7 +3497,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 .home-quick-actions.avatar-import-action .home-ocr-main {
                     min-height: 46px;
                     font-size: 14px;
-                }
+                background: var(--primary-gradient);
+                box-shadow: 0 10px 26px rgba(236, 72, 153, 0.32);
+            }
         }
 
         .theme-settings {
