@@ -28,13 +28,13 @@
                                 :root {
             --page-bg: linear-gradient(165deg, #f0e8d8 0%, #e8dcc8 40%, #e0d4b8 100%);
             --page-bg-color: #f0e8d8;
-            --card-bg: rgba(255, 252, 243, 0.96);
+            --card-bg: rgba(255, 255, 255, 0.96);
             --card-border: rgba(0, 0, 0, 0.06);
-            --card-shadow: 0 2px 12px rgba(120, 90, 40, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.03);
+            --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.02);
             --card-bg-hero: linear-gradient(135deg, #b8945a 0%, #d4a76a 50%, #c49b5e 100%);
-            --card-bg-report: rgba(255, 252, 243, 0.96);
-            --card-bg-list: rgba(255, 252, 243, 0.96);
-            --card-bg-soft: rgba(255, 250, 238, 0.88);
+            --card-bg-report: rgba(255, 255, 255, 0.96);
+            --card-bg-list: rgba(255, 255, 255, 0.96);
+            --card-bg-soft: rgba(255, 255, 255, 0.88);
             --card-border-glow: rgba(180, 148, 90, 0.15);
             --primary-gradient: linear-gradient(135deg, #b8945a, #d4a76a);
             --logo-gradient: linear-gradient(to right, #b8945a, #c49b5e);
@@ -43,47 +43,32 @@
             --accent-purple: #b8945a;
             --accent-blue: #c49b5e;
             --text-main: #2c2416;
-            --text-muted: #4a4030;
+            --text-muted: #7a7265;
             --profit-color: #d45a3a;
             --loss-color: #4a8c5c;
             --button-radius: 10px;
             --card-radius: 16px;
-        /* === Typography Scale === */
-        --font-display: "Microsoft YaHei", "微软雅黑", "PingFang SC", "PingFang HK", -apple-system, BlinkMacSystemFont, sans-serif;
-        --font-body: "Microsoft YaHei", "微软雅黑", "PingFang SC", "PingFang HK", -apple-system, BlinkMacSystemFont, sans-serif;
-        --font-number: "DIN Alternate", "DIN", "Microsoft YaHei", "PingFang SC", "Helvetica Neue", sans-serif;
-        --text-size-xs: 0.7rem;
-        --text-size-sm: 0.8rem;
-        --text-size-base: 0.925rem;
-        --text-size-lg: 1.05rem;
-        --text-size-xl: 1.2rem;
-        --text-size-2xl: 1.45rem;
-        --text-size-3xl: 1.8rem;
-        --text-soft: #8a7e6a;
         }
 
                                                 :root[data-theme="light"] {
                 --page-bg: linear-gradient(165deg, #f4f7fc 0%, #ecf1f8 40%, #eef2f9 100%);
                 --page-bg-color: #f4f7fc;
-                --page-bg: linear-gradient(165deg, #f6f9fd 0%, #eef3f9 40%, #f0f5fb 100%);
-                --page-bg-color: #f6f9fd;
-                --card-bg: rgba(248, 251, 255, 0.97);
-                --card-border: rgba(37, 99, 235, 0.08);
-                --card-shadow: 0 2px 16px rgba(30, 58, 110, 0.07), 0 0 0 1px rgba(37, 99, 235, 0.04);
+                --card-bg: rgba(255, 255, 255, 0.98);
+                --card-border: rgba(0, 0, 0, 0.05);
+                --card-shadow: 0 6px 24px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.02);
                 --card-bg-hero: linear-gradient(135deg, #2563eb, #3b82f6);
-                --card-bg-report: rgba(248, 251, 255, 0.97);
-                --card-bg-list: rgba(248, 251, 255, 0.97);
-                --card-bg-soft: linear-gradient(145deg, rgba(246,250,254,0.95), rgba(234,241,250,0.9));
-                --card-border-glow: rgba(37, 99, 235, 0.12);
+                --card-bg-report: rgba(255, 255, 255, 0.98);
+                --card-bg-list: rgba(255, 255, 255, 0.98);
+                --card-bg-soft: linear-gradient(145deg, rgba(255,255,255,0.95), rgba(241,245,249,0.9));
+                --card-border-glow: rgba(37, 99, 235, 0.1);
                 --primary-gradient: linear-gradient(135deg, #2563eb, #3b82f6);
                 --logo-gradient: linear-gradient(to right, #2563eb, #6366f1);
-                --secondary-gradient: linear-gradient(135deg, rgba(37, 99, 235, 0.06), rgba(99, 102, 241, 0.04));
+                --secondary-gradient: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(99, 102, 241, 0.06));
                 --accent-pink: #ff5fa2;
                 --accent-purple: #6366f1;
                 --accent-blue: #2563eb;
                 --text-main: #0f172a;
-                --text-muted: #475569;
-                --text-soft: #94a3b8;
+                --text-muted: #64748b;
                 --profit-color: #dc2626;
                 --loss-color: #059669;
                 --button-radius: 12px;
@@ -124,7 +109,7 @@
             padding: 0;
             background: var(--page-bg);
             color: var(--text-main);
-            font-family: "Microsoft YaHei", "微软雅黑", "PingFang SC", "苹方", "PingFang HK", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-family: "Microsoft YaHei", "微软雅黑", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             overflow-x: hidden;
             min-height: 100vh;
             overscroll-behavior-y: contain;
@@ -267,14 +252,14 @@
 
         .btn:disabled {
             background: #e2e8f0;
-            color: var(--text-muted);
+            color: #94a3b8;
             cursor: not-allowed;
             opacity: 1;
         }
 
         :root[data-theme="rainbow"] .btn:disabled {
             background: #475569;
-            color: var(--text-muted);
+            color: #cbd5e1;
             cursor: not-allowed;
             opacity: 0.7;
         }
@@ -580,7 +565,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
         .metric-label {
             font-size: 11px;
-            color: var(--text-muted);
+            color: #94a3b8;
             margin-bottom: 3px;
         }
 
@@ -771,7 +756,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             font-size: 15px;
             font-weight: 900;
             background: #e5e7eb;
-            color: var(--text-muted);
+            color: #64748b;
             cursor: pointer;
         }
 
@@ -906,11 +891,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
             .news-badge.neutral {
                 background: #f1f5f9;
-                color: var(--text-muted);
+                color: #64748b;
             }
 
         .news-empty {
-            color: var(--text-muted);
+            color: #94a3b8;
             text-align: center;
             padding: 60px 0;
             font-weight: 800;
@@ -1075,7 +1060,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             box-sizing: border-box;
             border: 1px solid rgba(96, 165, 250, .35);
             background: rgba(15, 23, 42, .65);
-            color: var(--text-main);
+            color: #f8fafc;
             border-radius: 12px;
             padding: 10px 12px;
             font-size: 15px;
@@ -1090,7 +1075,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             gap: 10px;
             padding: 8px 0;
             border-bottom: 1px dashed rgba(255,255,255,.06);
-            color: var(--text-muted);
+            color: #cbd5e1;
             font-size: 13px;
         }
 
@@ -1124,7 +1109,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             border: 0;
             border-radius: 14px;
             min-height: 42px;
-            color: var(--text-muted);
+            color: #cbd5e1;
             background: rgba(255,255,255,.08);
             font-weight: 900;
             cursor: pointer;
@@ -1154,7 +1139,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         .stock-search-input {
             border: 1px solid rgba(96,165,250,.32);
             background: rgba(15,23,42,.72);
-            color: var(--text-main);
+            color: #f8fafc;
             border-radius: 14px;
             min-height: 42px;
             padding: 0 12px;
@@ -1205,7 +1190,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
             .stock-metric .label {
-                color: var(--text-muted);
+                color: #94a3b8;
                 font-size: 11px;
             }
 
@@ -1213,7 +1198,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 margin-top: 3px;
                 font-weight: 900;
                 font-family: 'Courier New', monospace;
-                color: var(--text-main);
+                color: #f8fafc;
             }
 
         .stock-actions {
@@ -1250,7 +1235,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             border-radius: 12px;
             min-height: 36px;
             background: rgba(255,255,255,.08);
-            color: var(--text-muted);
+            color: #94a3b8;
             font-weight: 900;
             cursor: pointer;
         }
@@ -1291,7 +1276,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
             .stock-ocr-value-item .label {
-                color: var(--text-muted);
+                color: #94a3b8;
                 font-size: 11px;
                 margin-bottom: 4px;
             }
@@ -1299,7 +1284,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             .stock-ocr-value-item .value {
                 font-family: 'Courier New', monospace;
                 font-weight: 900;
-                color: var(--text-main);
+                color: #f8fafc;
                 word-break: break-all;
             }
 
@@ -1308,7 +1293,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             box-sizing: border-box;
             border: 1px solid rgba(96,165,250,.3);
             background: rgba(15,23,42,.68);
-            color: var(--text-main);
+            color: #f8fafc;
             border-radius: 10px;
             min-height: 32px;
             padding: 0 8px;
@@ -1483,7 +1468,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             border: 0;
             border-radius: 18px;
             background: transparent;
-            color: var(--text-muted);
+            color: #94a3b8;
             height: 48px;
             display: flex;
             flex-direction: column;
@@ -1540,7 +1525,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
         .sector-table-head {
-            color: var(--text-muted);
+            color: #94a3b8;
             font-size: 12px;
             padding: 8px 6px;
             border-bottom: 1px solid rgba(255,255,255,.08);
@@ -1613,7 +1598,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
         .calendar-week {
-            color: var(--text-muted);
+            color: #94a3b8;
             font-size: 12px;
             text-align: center;
             padding: 6px 0;
@@ -1700,7 +1685,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             border: 0;
             border-radius: 14px;
             min-height: 42px;
-            color: var(--text-muted);
+            color: #cbd5e1;
             background: rgba(255,255,255,.08);
             font-weight: 900;
             cursor: pointer;
@@ -1730,7 +1715,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         .stock-search-input {
             border: 1px solid rgba(96,165,250,.32);
             background: rgba(15,23,42,.72);
-            color: var(--text-main);
+            color: #f8fafc;
             border-radius: 14px;
             min-height: 42px;
             padding: 0 12px;
@@ -1780,7 +1765,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
             .stock-metric .label {
-                color: var(--text-muted);
+                color: #94a3b8;
                 font-size: 11px;
             }
 
@@ -1788,7 +1773,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 margin-top: 3px;
                 font-weight: 900;
                 font-family: 'Courier New', monospace;
-                color: var(--text-main);
+                color: #f8fafc;
             }
 
         .stock-actions {
@@ -1825,7 +1810,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             border-radius: 12px;
             min-height: 36px;
             background: rgba(255,255,255,.08);
-            color: var(--text-muted);
+            color: #94a3b8;
             font-weight: 900;
             cursor: pointer;
         }
@@ -1866,7 +1851,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
             .stock-ocr-value-item .label {
-                color: var(--text-muted);
+                color: #94a3b8;
                 font-size: 11px;
                 margin-bottom: 4px;
             }
@@ -1874,7 +1859,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             .stock-ocr-value-item .value {
                 font-family: 'Courier New', monospace;
                 font-weight: 900;
-                color: var(--text-main);
+                color: #f8fafc;
                 word-break: break-all;
             }
 
@@ -1883,7 +1868,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             box-sizing: border-box;
             border: 1px solid rgba(96,165,250,.3);
             background: rgba(15,23,42,.68);
-            color: var(--text-main);
+            color: #f8fafc;
             border-radius: 10px;
             min-height: 32px;
             padding: 0 8px;
@@ -2051,7 +2036,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             }
 
         .home-subtitle {
-            color: var(--text-muted);
+            color: #94a3b8;
             font-size: 12px;
             margin-top: 6px;
             white-space: nowrap;
@@ -2173,7 +2158,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             border: 0;
             border-radius: 14px;
             min-height: 42px;
-            color: var(--text-muted);
+            color: #cbd5e1;
             background: rgba(255,255,255,.08);
             font-weight: 900;
             cursor: pointer;
@@ -2203,7 +2188,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         .stock-search-input {
             border: 1px solid rgba(96,165,250,.32);
             background: rgba(15,23,42,.72);
-            color: var(--text-main);
+            color: #f8fafc;
             border-radius: 14px;
             min-height: 42px;
             padding: 0 12px;
@@ -2253,7 +2238,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
             .stock-metric .label {
-                color: var(--text-muted);
+                color: #94a3b8;
                 font-size: 11px;
             }
 
@@ -2261,7 +2246,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 margin-top: 3px;
                 font-weight: 900;
                 font-family: 'Courier New', monospace;
-                color: var(--text-main);
+                color: #f8fafc;
             }
 
         .stock-actions {
@@ -2298,7 +2283,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             border-radius: 12px;
             min-height: 36px;
             background: rgba(255,255,255,.08);
-            color: var(--text-muted);
+            color: #94a3b8;
             font-weight: 900;
             cursor: pointer;
         }
@@ -2339,7 +2324,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
             .stock-ocr-value-item .label {
-                color: var(--text-muted);
+                color: #94a3b8;
                 font-size: 11px;
                 margin-bottom: 4px;
             }
@@ -2347,7 +2332,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             .stock-ocr-value-item .value {
                 font-family: 'Courier New', monospace;
                 font-weight: 900;
-                color: var(--text-main);
+                color: #f8fafc;
                 word-break: break-all;
             }
 
@@ -2356,7 +2341,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             box-sizing: border-box;
             border: 1px solid rgba(96,165,250,.3);
             background: rgba(15,23,42,.68);
-            color: var(--text-main);
+            color: #f8fafc;
             border-radius: 10px;
             min-height: 32px;
             padding: 0 8px;
@@ -2452,12 +2437,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
         .capital-head {
-            color: var(--text-muted);
+            color: #94a3b8;
             font-size: 12px;
         }
 
         .capital-name {
-            color: var(--text-main);
+            color: #f8fafc;
             font-weight: 900;
             white-space: nowrap;
             overflow: hidden;
@@ -2465,7 +2450,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
         .capital-sub {
-            color: var(--text-muted);
+            color: #64748b;
             font-size: 11px;
             margin-top: 3px;
         }
@@ -2514,7 +2499,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             border: 0;
             border-radius: 14px;
             min-height: 42px;
-            color: var(--text-muted);
+            color: #cbd5e1;
             background: rgba(255,255,255,.08);
             font-weight: 900;
             cursor: pointer;
@@ -2544,7 +2529,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         .stock-search-input {
             border: 1px solid rgba(96,165,250,.32);
             background: rgba(15,23,42,.72);
-            color: var(--text-main);
+            color: #f8fafc;
             border-radius: 14px;
             min-height: 42px;
             padding: 0 12px;
@@ -2594,7 +2579,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
             .stock-metric .label {
-                color: var(--text-muted);
+                color: #94a3b8;
                 font-size: 11px;
             }
 
@@ -2602,7 +2587,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 margin-top: 3px;
                 font-weight: 900;
                 font-family: 'Courier New', monospace;
-                color: var(--text-main);
+                color: #f8fafc;
             }
 
         .stock-actions {
@@ -2639,7 +2624,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             border-radius: 12px;
             min-height: 36px;
             background: rgba(255,255,255,.08);
-            color: var(--text-muted);
+            color: #94a3b8;
             font-weight: 900;
             cursor: pointer;
         }
@@ -2680,7 +2665,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
             .stock-ocr-value-item .label {
-                color: var(--text-muted);
+                color: #94a3b8;
                 font-size: 11px;
                 margin-bottom: 4px;
             }
@@ -2688,7 +2673,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             .stock-ocr-value-item .value {
                 font-family: 'Courier New', monospace;
                 font-weight: 900;
-                color: var(--text-main);
+                color: #f8fafc;
                 word-break: break-all;
             }
 
@@ -2697,7 +2682,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             box-sizing: border-box;
             border: 1px solid rgba(96,165,250,.3);
             background: rgba(15,23,42,.68);
-            color: var(--text-main);
+            color: #f8fafc;
             border-radius: 10px;
             min-height: 32px;
             padding: 0 8px;
@@ -2848,7 +2833,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             justify-content: space-between;
             gap: 8px;
             margin-bottom: 8px;
-            color: var(--text-main);
+            color: #f8fafc;
             font-weight: 900;
             font-size: 15px;
         }
@@ -2867,12 +2852,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             }
 
         .capital-head {
-            color: var(--text-muted);
+            color: #94a3b8;
             font-size: 12px;
         }
 
         .capital-name {
-            color: var(--text-main);
+            color: #f8fafc;
             font-weight: 900;
             white-space: nowrap;
             overflow: hidden;
@@ -2880,7 +2865,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
         .capital-sub {
-            color: var(--text-muted);
+            color: #64748b;
             font-size: 11px;
             margin-top: 3px;
         }
@@ -2893,7 +2878,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
         .num-font, .capital-value, .metric-value, .number-display, .calendar-profit, .profit-list-row > div:last-child, .sector-row span, .news-time {
-            font-family: "Microsoft YaHei", "微软雅黑", "PingFang SC", "苹方", "PingFang HK", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+            font-family: "Microsoft YaHei", "微软雅黑", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
             font-variant-numeric: tabular-nums;
             font-feature-settings: "tnum" 1;
         }
@@ -2915,7 +2900,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             border: 0;
             border-radius: 14px;
             min-height: 42px;
-            color: var(--text-muted);
+            color: #cbd5e1;
             background: rgba(255,255,255,.08);
             font-weight: 900;
             cursor: pointer;
@@ -2945,7 +2930,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         .stock-search-input {
             border: 1px solid rgba(96,165,250,.32);
             background: rgba(15,23,42,.72);
-            color: var(--text-main);
+            color: #f8fafc;
             border-radius: 14px;
             min-height: 42px;
             padding: 0 12px;
@@ -2995,7 +2980,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
             .stock-metric .label {
-                color: var(--text-muted);
+                color: #94a3b8;
                 font-size: 11px;
             }
 
@@ -3003,7 +2988,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 margin-top: 3px;
                 font-weight: 900;
                 font-family: 'Courier New', monospace;
-                color: var(--text-main);
+                color: #f8fafc;
             }
 
         .stock-actions {
@@ -3040,7 +3025,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             border-radius: 12px;
             min-height: 36px;
             background: rgba(255,255,255,.08);
-            color: var(--text-muted);
+            color: #94a3b8;
             font-weight: 900;
             cursor: pointer;
         }
@@ -3081,7 +3066,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
             .stock-ocr-value-item .label {
-                color: var(--text-muted);
+                color: #94a3b8;
                 font-size: 11px;
                 margin-bottom: 4px;
             }
@@ -3089,7 +3074,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             .stock-ocr-value-item .value {
                 font-family: 'Courier New', monospace;
                 font-weight: 900;
-                color: var(--text-main);
+                color: #f8fafc;
                 word-break: break-all;
             }
 
@@ -3098,7 +3083,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             box-sizing: border-box;
             border: 1px solid rgba(96,165,250,.3);
             background: rgba(15,23,42,.68);
-            color: var(--text-main);
+            color: #f8fafc;
             border-radius: 10px;
             min-height: 32px;
             padding: 0 8px;
@@ -3208,7 +3193,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             border: 0;
             border-radius: 14px;
             min-height: 42px;
-            color: var(--text-muted);
+            color: #cbd5e1;
             background: rgba(255,255,255,.08);
             font-weight: 900;
             cursor: pointer;
@@ -3238,7 +3223,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         .stock-search-input {
             border: 1px solid rgba(96,165,250,.32);
             background: rgba(15,23,42,.72);
-            color: var(--text-main);
+            color: #f8fafc;
             border-radius: 14px;
             min-height: 42px;
             padding: 0 12px;
@@ -3288,7 +3273,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
             .stock-metric .label {
-                color: var(--text-muted);
+                color: #94a3b8;
                 font-size: 11px;
             }
 
@@ -3296,7 +3281,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 margin-top: 3px;
                 font-weight: 900;
                 font-family: 'Courier New', monospace;
-                color: var(--text-main);
+                color: #f8fafc;
             }
 
         .stock-actions {
@@ -3333,7 +3318,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             border-radius: 12px;
             min-height: 36px;
             background: rgba(255,255,255,.08);
-            color: var(--text-muted);
+            color: #94a3b8;
             font-weight: 900;
             cursor: pointer;
         }
@@ -3374,7 +3359,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
             .stock-ocr-value-item .label {
-                color: var(--text-muted);
+                color: #94a3b8;
                 font-size: 11px;
                 margin-bottom: 4px;
             }
@@ -3382,7 +3367,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             .stock-ocr-value-item .value {
                 font-family: 'Courier New', monospace;
                 font-weight: 900;
-                color: var(--text-main);
+                color: #f8fafc;
                 word-break: break-all;
             }
 
@@ -3391,7 +3376,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             box-sizing: border-box;
             border: 1px solid rgba(96,165,250,.3);
             background: rgba(15,23,42,.68);
-            color: var(--text-main);
+            color: #f8fafc;
             border-radius: 10px;
             min-height: 32px;
             padding: 0 8px;
@@ -3673,16 +3658,16 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             background: rgba(255,255,255,0.2);
         }
         :root[data-theme="rainbow"] .page-title {
-            color: var(--text-main);
+            color: #f8fafc;
         }
         :root[data-theme="rainbow"] .page-subtitle {
-            color: var(--text-muted);
+            color: #94a3b8;
         }
         :root[data-theme="rainbow"] .profile-name {
-            color: var(--text-main);
+            color: #f8fafc;
         }
         :root[data-theme="rainbow"] .profile-note {
-            color: var(--text-muted);
+            color: #94a3b8;
         }
         :root[data-theme="rainbow"] .bottom-tabbar {
             background: rgba(15,23,42,.86);
@@ -3690,7 +3675,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             box-shadow: 0 16px 45px rgba(0,0,0,.45);
         }
         :root[data-theme="rainbow"] .bottom-tab {
-            color: var(--text-muted);
+            color: #94a3b8;
         }
     
         /* Rainbow theme: restore dark background for hardcoded-dark elements */
@@ -3700,10 +3685,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             box-shadow: none !important;
         }
         :root[data-theme="rainbow"] .feature-title {
-            color: var(--text-main);
+            color: #f8fafc;
         }
         :root[data-theme="rainbow"] .feature-subtitle {
-            color: var(--text-muted);
+            color: #94a3b8;
         }
         :root[data-theme="rainbow"] .stock-card {
             background: rgba(15,23,42,.45) !important;
@@ -3712,19 +3697,19 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
         :root[data-theme="rainbow"] .stock-code-chip {
             background: rgba(0,0,0,.26);
-            color: var(--text-muted);
+            color: #94a3b8;
         }
         :root[data-theme="rainbow"] .stock-metric .label {
-            color: var(--text-muted);
+            color: #94a3b8;
         }
         :root[data-theme="rainbow"] .stock-metric .value {
-            color: var(--text-main);
+            color: #f8fafc;
         }
         :root[data-theme="rainbow"] .fund-card:hover {
             background: rgba(30, 41, 59, 0.8);
         }
         :root[data-theme="rainbow"] .report-line {
-            color: var(--text-muted);
+            color: #cbd5e1;
         }
         :root[data-theme="rainbow"] .control-panel input {
             background: rgba(15, 23, 42, 0.6);
@@ -3736,13 +3721,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             border: none;
         }
         :root[data-theme="rainbow"] .asset-mode-btn {
-            color: var(--text-muted);
+            color: #cbd5e1;
         }
         :root[data-theme="rainbow"] .metric-label {
-            color: var(--text-muted);
+            color: #94a3b8;
         }
         :root[data-theme="rainbow"] .calendar-date {
-            color: var(--text-muted);
+            color: #cbd5e1;
         }
         :root[data-theme="rainbow"] .analysis-toolbar input,
         :root[data-theme="rainbow"] .analysis-toolbar select {
@@ -3766,10 +3751,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             box-shadow: none;
         }
         :root[data-theme="rainbow"] .capital-box-title {
-            color: var(--text-main);
+            color: #f8fafc;
         }
         :root[data-theme="rainbow"] .capital-name {
-            color: var(--text-main);
+            color: #f8fafc;
         }
         :root[data-theme="rainbow"] .page-topbar {
             background: transparent;
@@ -3926,34 +3911,34 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                 <div v-show="assetMode === 'fund'" class="glass-panel total-panel" style="margin: 0 15px 15px 15px; padding: 20px 30px; display: flex; justify-content: space-around; align-items: center; flex-wrap: wrap; row-gap: 15px;">
                     <div style="text-align: center;">
-                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">⏱️ 系统雷达</div>
+                        <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">⏱️ 系统雷达</div>
                         <div :style="{ fontSize: '18px', fontWeight: '900', color: isNight ? '#10b981' : '#f59e0b', margin: '5px 0' }">
                             {{ isNight ? '🌙 夜间休市' : '☀️ 盘中盯盘' }}
                         </div>
                     </div>
                     <div class="divider"></div>
                     <div style="text-align: center;">
-                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">💎 昨日总市值 <span @click="showPrivacyModal = true" style="cursor:pointer">{{ privacyMode === 0 ? '👁️' : '🙈' }}</span></div>
+                        <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">💎 昨日总市值 <span @click="showPrivacyModal = true" style="cursor:pointer">{{ privacyMode === 0 ? '👁️' : '🙈' }}</span></div>
                         <div class="number-display" style="color: var(--text-main); font-weight: 900;">{{ privacyMode === 0 ? '¥ ' + totalPrincipal.toFixed(2) : '****' }}</div>
                     </div>
                     <div class="divider"></div>
                     <div style="text-align: center;">
-                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">🌟 今日总收益</div>
+                        <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">🌟 今日总收益</div>
                         <div class="number-display" :style="{ color: privacyMode <= 1 ? (totalTodayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 1 ? (totalTodayProfit >= 0 ? '+' : '') + totalTodayProfit.toFixed(2) : '****' }}</div>
                     </div>
                     <div class="divider"></div>
                     <div style="text-align: center;">
-                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">🚀 今日收益率</div>
+                        <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">🚀 今日收益率</div>
                         <div class="number-display" :style="{ color: privacyMode <= 2 ? (totalTodayRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 2 ? (totalTodayRate > 0 ? '+' : '') + totalTodayRate.toFixed(2) + '%' : '****' }}</div>
                     </div>
                     <div class="divider"></div>
                     <div style="text-align: center;">
-                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">💰 累计总盈亏</div>
+                        <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">💰 累计总盈亏</div>
                         <div class="number-display" :style="{ color: privacyMode <= 1 ? (totalProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 1 ? (totalProfit >= 0 ? '+' : '') + totalProfit.toFixed(2) : '****' }}</div>
                     </div>
                     <div class="divider"></div>
                     <div style="text-align: center;">
-                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">📈 累计收益率</div>
+                        <div style="font-size: 13px; color: #94a3b8; margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">📈 累计收益率</div>
                         <div class="number-display" :style="{ color: privacyMode <= 2 ? (totalRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 2 ? (totalRate > 0 ? '+' : '') + totalRate.toFixed(2) + '%' : '****' }}</div>
                     </div>
                     <div class="total-archive-entry"></div>
@@ -3972,7 +3957,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <div class="feature-title">📡 估值可信度雷达</div>
                         <div class="feature-subtitle">根据净值确认、估算偏离、是否休市、数据新鲜度给出可读评分。</div>
                         <div v-for="item in confidenceRows.slice(0, 4)" :key="'conf-'+item.code" class="confidence-strip">
-                            <div style="min-width:0;"><div style="font-weight:900;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px;">{{ item.name }}</div><div style="color:var(--text-muted);">{{ item.reason }}</div></div>
+                            <div style="min-width:0;"><div style="font-weight:900;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px;">{{ item.name }}</div><div style="color:#94a3b8;">{{ item.reason }}</div></div>
                             <div class="confidence-meter"><span :style="{width:item.score+'%'}"></span></div>
                             <strong :style="{color:item.color}">{{ item.score }}</strong>
                         </div>
@@ -3994,7 +3979,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <div class="compact-scroll-list" style="margin-top:8px;">
                             <div v-if="calibrationRows.length===0" class="feature-subtitle" style="padding:14px 0;">暂无校准样本。等盘中估值和盘后净值都出现后自动积累。</div>
                             <div v-for="row in calibrationRows.slice(0, 8)" :key="'calib-'+row.code" class="calibration-card-row">
-                                <div style="min-width:0;"><div style="font-weight:900;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ row.name }}</div><div style="color:var(--text-muted);">样本 {{ row.samples }} 天 · {{ row.confidence }}可信</div></div>
+                                <div style="min-width:0;"><div style="font-weight:900;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ row.name }}</div><div style="color:#94a3b8;">样本 {{ row.samples }} 天 · {{ row.confidence }}可信</div></div>
                                 <span class="calibration-pill">{{ row.offset >= 0 ? '+' : '' }}{{ row.offset.toFixed(2) }}%</span>
                                 <strong :style="{color: row.lastError >= 0 ? '#ff4d4f' : '#10b981', textAlign:'right'}">{{ row.lastError >= 0 ? '+' : '' }}{{ row.lastError.toFixed(2) }}%</strong>
                             </div>
@@ -4005,7 +3990,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 <div v-show="assetMode === 'fund'" style="margin: 0 15px 10px 15px; display: flex; justify-content: space-between; align-items: center;">
                     <div style="font-size: 16px; font-weight: bold; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
                         🛡️ 总持仓
-                        <span style="font-size: 12px; font-weight: normal; color:var(--text-muted);">(共 {{ fundsList.length }} 支)</span>
+                        <span style="font-size: 12px; font-weight: normal; color: #94a3b8;">(共 {{ fundsList.length }} 支)</span>
                     </div>
                 </div>
 
@@ -4014,7 +3999,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <div style="display: flex; justify-content: space-between; align-items: start;">
                             <span style="font-weight: bold; color: var(--text-main); font-size: 15px; max-width: 80%; display: flex; flex-direction: column;">
                                 <span>{{ fund.name }}</span>
-                                <span style="font-size:11px; color:var(--text-muted); font-weight: normal; margin-top: 4px; font-family: monospace; background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; width: fit-content;">
+                                <span style="font-size:11px; color:#64748b; font-weight: normal; margin-top: 4px; font-family: monospace; background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; width: fit-content;">
                                     {{ fund.code }}
                                 </span>
                                 <div style="margin-top: 6px; display: flex; gap: 5px; flex-wrap: wrap;">
@@ -4043,7 +4028,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                     {{ fund.isSettled ? '✅ 净值确认' : '⏱️ 盘中侦测' }}
                                 </span>
 
-                                <span v-if="fund.isHoliday" style="color:var(--text-muted); font-weight: bold; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-size: 11px;">☕ 休市</span>
+                                <span v-if="fund.isHoliday" style="color: #94a3b8; font-weight: bold; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-size: 11px;">☕ 休市</span>
                                 <span v-else :style="{color: fund.currentRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold'}">{{ fund.currentRate > 0 ? '+' : ''}}{{ fund.currentRate }}%</span>
 
                                 <span v-if="fund.calibrationOffset && Math.abs(fund.calibrationOffset) > 0 && !fund.isHoliday" style="font-size: 10px; color: #8b5cf6; border: 1px solid #8b5cf6; padding: 1px 4px; border-radius: 4px;">
@@ -4054,12 +4039,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         </div>
 
                         <div class="confidence-strip">
-                            <div style="min-width:0;"><strong :style="{color:getConfidence(fund).color}">可信度 {{ getConfidence(fund).score }}/100</strong><div style="color:var(--text-muted);margin-top:2px;">{{ getConfidence(fund).reason }}</div></div>
+                            <div style="min-width:0;"><strong :style="{color:getConfidence(fund).color}">可信度 {{ getConfidence(fund).score }}/100</strong><div style="color:#94a3b8;margin-top:2px;">{{ getConfidence(fund).reason }}</div></div>
                             <div class="confidence-meter"><span :style="{width:getConfidence(fund).score+'%'}"></span></div>
                         </div>
 
                         <div v-if="fund.calibrationSamples > 0 || Math.abs(Number(fund.calibrationOffset || 0)) > 0" class="confidence-strip" style="border-color:rgba(139,92,246,.28);background:rgba(88,28,135,.16);">
-                            <div style="min-width:0;"><strong style="color:#c4b5fd;">估值修正 {{ fund.calibrationOffset >= 0 ? '+' : '' }}{{ Number(fund.calibrationOffset || 0).toFixed(2) }}%</strong><div style="color:var(--text-muted);margin-top:2px;">{{ fund.calibrationNote || '滚动误差校准' }}</div></div>
+                            <div style="min-width:0;"><strong style="color:#c4b5fd;">估值修正 {{ fund.calibrationOffset >= 0 ? '+' : '' }}{{ Number(fund.calibrationOffset || 0).toFixed(2) }}%</strong><div style="color:#94a3b8;margin-top:2px;">{{ fund.calibrationNote || '滚动误差校准' }}</div></div>
                             <span class="calibration-pill">{{ fund.calibrationSamples || 0 }}天</span>
                         </div>
 
@@ -4070,7 +4055,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             </div>
                             <div class="metric-item" style="background: rgba(16, 185, 129, 0.1); padding: 2px; border-radius: 4px;">
                                 <span class="metric-label" style="color: #10b981;">💎 今日市值</span>
-                                <span class="metric-value" style="color:var(--text-main); font-weight: bold;">
+                                <span class="metric-value" style="color: #f8fafc; font-weight: bold;">
                                     {{ privacyMode === 0 ? fund.todayAmount : '****' }}
                                 </span>
                             </div>
@@ -4092,7 +4077,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             </div>
                         </div>
                     </div>
-                    <span v-if="fundsList.length === 0 && !isLoading" style="color:var(--text-muted); font-size:13px; width: 100%; text-align: center; padding: 20px;">暂无持仓，请手动添加代码，或点击上方「📷 智能截图导入」自动扫描</span>
+                    <span v-if="fundsList.length === 0 && !isLoading" style="color:#64748b; font-size:13px; width: 100%; text-align: center; padding: 20px;">暂无持仓，请手动添加代码，或点击上方「📷 智能截图导入」自动扫描</span>
                 </div>
 
                 <div v-show="assetMode === 'fund' && isLoading" class="glass-panel" style="height: calc(100vh - 280px); margin: 15px; display: flex; flex-direction: column; padding: 20px; box-sizing: border-box; gap: 20px;">
@@ -4115,12 +4100,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 <div class="sector-page-layout">
                     <div class="glass-panel" style="padding:16px;">
                         <div style="display:flex;gap:10px;margin-bottom:12px;"><button @click="sectorMode='top'" :class="['btn', sectorMode==='top' ? 'btn-danger' : '']" style="flex:1;justify-content:center;border-radius:14px;">领涨</button><button @click="sectorMode='bottom'" :class="['btn', sectorMode==='bottom' ? 'btn-success' : '']" style="flex:1;justify-content:center;border-radius:14px;">领跌</button></div>
-                        <div v-if="isSectorLoading" style="color:var(--text-muted);text-align:center;padding:50px 0;">📡 正在扫描板块基金池...</div>
+                        <div v-if="isSectorLoading" style="color:#94a3b8;text-align:center;padding:50px 0;">📡 正在扫描板块基金池...</div>
                         <div v-else>
                             <div class="sector-table-head"><span>板块名称</span><span style="text-align:right;">涨跌幅</span><span style="text-align:right;">方向</span><span style="text-align:right;">基金数</span></div>
                             <div v-for="(item,index) in (sectorMode==='top' ? sectorTopList : sectorBottomList)" :key="item.key || item.name" class="sector-row" @click="fetchSectorDetails(item)">
-                                <div style="display:flex;align-items:center;gap:10px;min-width:0;"><span :style="{color: sectorMode==='top' ? '#ef4444' : '#10b981',fontSize:'13px',fontWeight:'bold',width:'22px'}">{{ index + 1 }}</span><div style="display:flex;flex-direction:column;min-width:0;"><span style="color:var(--text-main);font-weight:bold;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.name }}</span><span style="font-size:11px;color:var(--text-muted);">已更新 · {{ item.fundCount || item.quotedCount || 0 }}只基金</span></div></div>
-                                <span :style="{textAlign:'right',color:item.rate>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New',fontSize:'18px'}">{{ item.rate>0?'+':'' }}{{ item.rate }}%</span><span :style="{textAlign:'right',color:item.rate>=0?'#ff4d4f':'#10b981',fontWeight:'bold'}">{{ item.rate>=0?'连涨':'连跌' }}</span><span style="text-align:right;color:var(--text-muted);font-weight:bold;">{{ item.fundCount || item.quotedCount || 0 }}</span>
+                                <div style="display:flex;align-items:center;gap:10px;min-width:0;"><span :style="{color: sectorMode==='top' ? '#ef4444' : '#10b981',fontSize:'13px',fontWeight:'bold',width:'22px'}">{{ index + 1 }}</span><div style="display:flex;flex-direction:column;min-width:0;"><span style="color:#f8fafc;font-weight:bold;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.name }}</span><span style="font-size:11px;color:#64748b;">已更新 · {{ item.fundCount || item.quotedCount || 0 }}只基金</span></div></div>
+                                <span :style="{textAlign:'right',color:item.rate>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New',fontSize:'18px'}">{{ item.rate>0?'+':'' }}{{ item.rate }}%</span><span :style="{textAlign:'right',color:item.rate>=0?'#ff4d4f':'#10b981',fontWeight:'bold'}">{{ item.rate>=0?'连涨':'连跌' }}</span><span style="text-align:right;color:#cbd5e1;font-weight:bold;">{{ item.fundCount || item.quotedCount || 0 }}</span>
                             </div>
                         </div>
                     </div>
@@ -4131,7 +4116,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             <div v-if="portfolioExposure.length===0" class="news-empty">暂无可分析持仓</div>
                             <div v-for="item in portfolioExposure" :key="item.name" class="exposure-row">
                                 <div style="min-width:0;">
-                                    <div style="display:flex;justify-content:space-between;gap:8px;"><strong style="color:var(--text-main);">{{ item.name }}</strong><span style="color:var(--text-muted);font-size:12px;">{{ item.count }}只</span></div>
+                                    <div style="display:flex;justify-content:space-between;gap:8px;"><strong style="color:#f8fafc;">{{ item.name }}</strong><span style="color:#94a3b8;font-size:12px;">{{ item.count }}只</span></div>
                                     <div class="exposure-bar"><span :style="{width:item.ratio+'%'}"></span></div>
                                 </div>
                                 <strong style="color:#93c5fd;text-align:right;">{{ item.ratio.toFixed(1) }}%</strong>
@@ -4152,7 +4137,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     <div v-if="isCapitalLoading" class="news-empty">📡 正在同步主力资金...</div>
                     <div v-else class="capital-two-col">
                         <div class="capital-box">
-                            <div class="capital-box-title"><span>🔴 行业板块流入</span><span style="color:var(--text-muted);font-size:11px;">TOP {{ capitalFlowInRows.length }}</span></div>
+                            <div class="capital-box-title"><span>🔴 行业板块流入</span><span style="color:#94a3b8;font-size:11px;">TOP {{ capitalFlowInRows.length }}</span></div>
                             <div class="capital-row capital-head"><span>板块</span><span class="capital-value">净流入</span><span class="capital-value">净占比</span></div>
                             <div v-for="item in capitalFlowInRows.slice(0, 12)" :key="'in-'+item.code" class="capital-row">
                                 <div style="min-width:0;"><div class="capital-name">{{ item.name }}</div><div class="capital-sub">涨跌 {{ item.rate > 0 ? '+' : '' }}{{ item.rate }}%</div></div>
@@ -4161,7 +4146,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             </div>
                         </div>
                         <div class="capital-box">
-                            <div class="capital-box-title"><span>🟢 行业板块流出</span><span style="color:var(--text-muted);font-size:11px;">TOP {{ capitalFlowOutRows.length }}</span></div>
+                            <div class="capital-box-title"><span>🟢 行业板块流出</span><span style="color:#94a3b8;font-size:11px;">TOP {{ capitalFlowOutRows.length }}</span></div>
                             <div class="capital-row capital-head"><span>板块</span><span class="capital-value">净流出</span><span class="capital-value">净占比</span></div>
                             <div v-for="item in capitalFlowOutRows.slice(0, 12)" :key="'out-'+item.code" class="capital-row">
                                 <div style="min-width:0;"><div class="capital-name">{{ item.name }}</div><div class="capital-sub">涨跌 {{ item.rate > 0 ? '+' : '' }}{{ item.rate }}%</div></div>
@@ -4174,7 +4159,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             </div>
 
             <div v-show="activePage === 'news'" class="app-page">
-                <div class="page-topbar glass-panel"><div><div class="page-title">📰 资讯</div><div class="page-subtitle">{{ newsSource || '东方财富7x24快讯' }} · {{ newsUpdatedAt || '待更新' }}</div></div><div class="analysis-toolbar"><label style="font-size:12px;color:var(--text-muted);"><input type="checkbox" v-model="newsOnlyImportant" @change="fetchNews(newsMode, true)"> 只看重要</label><button class="btn" @click="fetchNews(newsMode, true)">🔄 刷新</button></div></div>
+                <div class="page-topbar glass-panel"><div><div class="page-title">📰 资讯</div><div class="page-subtitle">{{ newsSource || '东方财富7x24快讯' }} · {{ newsUpdatedAt || '待更新' }}</div></div><div class="analysis-toolbar"><label style="font-size:12px;color:#cbd5e1;"><input type="checkbox" v-model="newsOnlyImportant" @change="fetchNews(newsMode, true)"> 只看重要</label><button class="btn" @click="fetchNews(newsMode, true)">🔄 刷新</button></div></div>
                 <div class="news-page-layout">
                     <div class="glass-panel" style="padding:16px;">
                         <div class="news-tabs" style="margin-bottom:12px;"><button :class="['news-tab', newsMode==='global'?'active':'']" @click="switchNewsMode('global')">7x24快讯</button><button :class="['news-tab', newsMode==='holding'?'active':'']" @click="switchNewsMode('holding')">持仓资讯</button></div><div class="news-toolbar" style="border-radius:14px;margin-bottom:12px;"><span>{{ newsMode === 'holding' ? '只显示和你持仓基金主题相关的消息' : '全市场财经快讯时间线' }}</span></div><div v-if="isNewsLoading" class="news-empty">📡 正在同步资讯...</div><div v-else-if="newsList.length === 0" class="news-empty">暂无匹配资讯</div><div v-else class="news-list news-page-list">
@@ -4189,8 +4174,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <div style="margin-top:12px;">
                             <div v-if="newsImpactSummary.length===0" class="news-empty">切到“持仓资讯”后自动生成</div>
                             <div v-for="item in newsImpactSummary" :key="item.name" class="quick-holding-card">
-                                <div style="display:flex;justify-content:space-between;gap:8px;"><strong style="color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.name }}</strong><span :style="{color:item.score>=0?'#ff4d4f':'#10b981',fontWeight:'900'}">{{ item.score>=0?'+':'' }}{{ item.score }}</span></div>
-                                <div style="color:var(--text-muted);font-size:12px;margin-top:6px;line-height:1.45;">{{ item.latestTitle || '暂无明确匹配资讯' }}</div>
+                                <div style="display:flex;justify-content:space-between;gap:8px;"><strong style="color:#f8fafc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.name }}</strong><span :style="{color:item.score>=0?'#ff4d4f':'#10b981',fontWeight:'900'}">{{ item.score>=0?'+':'' }}{{ item.score }}</span></div>
+                                <div style="color:#94a3b8;font-size:12px;margin-top:6px;line-height:1.45;">{{ item.latestTitle || '暂无明确匹配资讯' }}</div>
                             </div>
                         </div>
                     </div>
@@ -4226,7 +4211,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 <div v-else>
                                     <div v-for="(item,index) in selectedDayFundRecords" :key="item.fundCode" class="profit-list-row">
                                         <span class="rank-badge">{{ index+1 }}</span>
-                                        <div style="min-width:0;"><div style="color:var(--text-main);font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.fundName }}</div><div style="color:var(--text-muted);font-size:11px;font-family:monospace;">{{ item.fundCode }} · 市值 {{ Number(item.assets || 0).toFixed(2) }}</div></div>
+                                        <div style="min-width:0;"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.fundName }}</div><div style="color:#64748b;font-size:11px;font-family:monospace;">{{ item.fundCode }} · 市值 {{ Number(item.assets || 0).toFixed(2) }}</div></div>
                                         <div :style="{textAlign:'right',color:item.dailyProfit>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New'}">{{ item.dailyProfit>0?'+':'' }}{{ Number(item.dailyProfit||0).toFixed(2) }}<br><span style="font-size:12px;">{{ item.dailyRate>0?'+':'' }}{{ Number(item.dailyRate||0).toFixed(2) }}%</span></div>
                                     </div>
                                 </div>
@@ -4240,20 +4225,20 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 <div v-else>
                                     <div v-for="(item,index) in selectedDayTotalProfitRecords" :key="'total-'+item.fundCode" class="profit-list-row">
                                         <span class="rank-badge">{{ index+1 }}</span>
-                                        <div style="min-width:0;"><div style="color:var(--text-main);font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.fundName }}</div><div style="color:var(--text-muted);font-size:11px;font-family:monospace;">{{ item.fundCode }} · 市值 {{ Number(item.assets || 0).toFixed(2) }}</div></div>
+                                        <div style="min-width:0;"><div style="color:#f8fafc;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.fundName }}</div><div style="color:#64748b;font-size:11px;font-family:monospace;">{{ item.fundCode }} · 市值 {{ Number(item.assets || 0).toFixed(2) }}</div></div>
                                         <div :style="{textAlign:'right',color:item.totalProfit>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New'}">{{ item.totalProfit>0?'+':'' }}{{ Number(item.totalProfit||0).toFixed(2) }}<br><span style="font-size:12px;">{{ item.totalRate>0?'+':'' }}{{ Number(item.totalRate||0).toFixed(2) }}%</span></div>
                                     </div>
                                 </div>
                             </div>
                         </template>
-                    </div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">盈利 TOP5</div><div v-for="(item,index) in analysisProfitTop" :key="'p'+item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="color:var(--text-main);font-weight:800;">{{ item.fundName }}</div><div style="text-align:right;color:#ff4d4f;font-weight:900;">+{{ Number(item.dailyProfit||0).toFixed(2) }}</div></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">亏损 TOP5</div><div v-for="(item,index) in analysisLossTop" :key="'l'+item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="color:var(--text-main);font-weight:800;">{{ item.fundName }}</div><div style="text-align:right;color:#10b981;font-weight:900;">{{ Number(item.dailyProfit||0).toFixed(2) }}</div></div></div>
+                    </div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">盈利 TOP5</div><div v-for="(item,index) in analysisProfitTop" :key="'p'+item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="color:#f8fafc;font-weight:800;">{{ item.fundName }}</div><div style="text-align:right;color:#ff4d4f;font-weight:900;">+{{ Number(item.dailyProfit||0).toFixed(2) }}</div></div></div><div class="glass-panel" style="padding:16px;"><div class="page-title" style="font-size:18px;">亏损 TOP5</div><div v-for="(item,index) in analysisLossTop" :key="'l'+item.fundCode" class="profit-list-row"><span class="rank-badge">{{ index+1 }}</span><div style="color:#f8fafc;font-weight:800;">{{ item.fundName }}</div><div style="text-align:right;color:#10b981;font-weight:900;">{{ Number(item.dailyProfit||0).toFixed(2) }}</div></div></div>
                 </div>
             </div>
 
             <div v-if="recoveryModal.show" class="modal-mask" @click.self="recoveryModal.show=false">
                 <div class="modal-content" style="max-width:520px;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><h3 style="margin:0;color:#fbbf24;">🧭 回本路径模拟器</h3><span @click="recoveryModal.show=false" style="font-size:24px;color:var(--text-muted);cursor:pointer;">&times;</span></div>
-                    <div style="color:var(--text-muted);font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ recoveryModal.name }}</div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><h3 style="margin:0;color:#fbbf24;">🧭 回本路径模拟器</h3><span @click="recoveryModal.show=false" style="font-size:24px;color:#94a3b8;cursor:pointer;">&times;</span></div>
+                    <div style="color:#cbd5e1;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ recoveryModal.name }}</div>
                     <div class="feature-subtitle" style="margin:6px 0 12px;">当前亏损 {{ recoveryModal.loss.toFixed(2) }} 元，回本需要上涨 {{ recoveryModal.breakEvenRate }}%。输入计划加仓金额后，实时估算新的回本涨幅。</div>
                     <div class="recovery-input-row">
                         <strong style="color:#93c5fd;">加仓金额</strong>
@@ -4306,20 +4291,20 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
             <div v-if="showPrivacyModal" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 5000;" @click.self="showPrivacyModal = false">
                 <div style="background: #1e293b; width: 85%; max-width: 320px; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.5);">
-                    <div style="text-align: center; padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); font-weight: bold; color:var(--text-main); font-size: 16px;">闭眼模式选择</div>
+                    <div style="text-align: center; padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); font-weight: bold; color: #f8fafc; font-size: 16px;">闭眼模式选择</div>
                     <div style="padding: 10px;">
                         <div @click="setPrivacyMode(0)" style="padding: 15px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer; color: #38bdf8; font-weight: bold;">👁️ 睁眼模式 (全部显示)</div>
                         <div @click="setPrivacyMode(1)" style="padding: 15px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; align-items: center;">
-                            <div style="font-weight: bold; color:var(--text-main); margin-bottom: 6px;">🛡️ 半遮蔽模式</div>
-                            <div style="font-size: 11px; color:var(--text-muted); background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px;">仅隐藏【持有金额】</div>
+                            <div style="font-weight: bold; color: #f8fafc; margin-bottom: 6px;">🛡️ 半遮蔽模式</div>
+                            <div style="font-size: 11px; color: #94a3b8; background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px;">仅隐藏【持有金额】</div>
                         </div>
                         <div @click="setPrivacyMode(2)" style="padding: 15px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; align-items: center;">
-                            <div style="font-weight: bold; color:var(--text-main); margin-bottom: 6px;">🙈 全遮蔽模式</div>
-                            <div style="font-size: 11px; color:var(--text-muted); background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px;">隐藏【持有金额】【收益金额】</div>
+                            <div style="font-weight: bold; color: #f8fafc; margin-bottom: 6px;">🙈 全遮蔽模式</div>
+                            <div style="font-size: 11px; color: #94a3b8; background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px;">隐藏【持有金额】【收益金额】</div>
                         </div>
                         <div @click="setPrivacyMode(3)" style="padding: 15px; cursor: pointer; display: flex; flex-direction: column; align-items: center;">
-                            <div style="font-weight: bold; color:var(--text-main); margin-bottom: 6px;">🚫 极致隐匿</div>
-                            <div style="font-size: 11px; color:var(--text-muted); background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px;">隐藏【持有金额】【收益金额】【收益率】</div>
+                            <div style="font-weight: bold; color: #f8fafc; margin-bottom: 6px;">🚫 极致隐匿</div>
+                            <div style="font-size: 11px; color: #94a3b8; background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px;">隐藏【持有金额】【收益金额】【收益率】</div>
                         </div>
                     </div>
                 </div>
@@ -4328,12 +4313,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             <div v-if="editForm.show" class="modal-mask">
                 <div class="modal-content">
                     <h3 style="margin-top: 0; color:var(--text-main);">🔧 后勤补给配置</h3>
-                    <p style="font-size: 13px; color:var(--text-muted); margin-bottom: 15px;">基金: <strong>{{ editForm.name }}</strong></p>
-                    <div style="font-size: 12px; color:var(--text-muted); margin-bottom: 5px;">💰 持仓本金 (人民币)</div>
+                    <p style="font-size: 13px; color: #94a3b8; margin-bottom: 15px;">基金: <strong>{{ editForm.name }}</strong></p>
+                    <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">💰 持仓本金 (人民币)</div>
                     <input v-model="editForm.cost" type="number" placeholder="必填" class="modal-input">
                     <div style="font-size: 12px; color: #10b981; font-weight: bold; margin-bottom: 5px;">🌟 持仓份额 (最高精度，强烈建议)</div>
                     <input v-model="editForm.shares" type="number" placeholder="持仓份额" class="modal-input" style="border-color: #10b981;">
-                    <div style="font-size: 12px; color:var(--text-muted); margin-bottom: 5px;">东财代码</div>
+                    <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">东财代码</div>
                     <input v-model="editForm.code" type="text" placeholder="6 位代码" class="modal-input">
                     <div style="display: flex; gap: 10px; margin-top: 10px;">
                         <button class="btn btn-primary" @click="handleSaveDetails" style="flex: 1; justify-content: center;">确认配置</button>
@@ -4345,12 +4330,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             <div v-if="addModal.show" class="modal-mask">
                 <div class="modal-content">
                     <h3 style="margin-top: 0; color: #3b82f6;">💰 加仓</h3>
-                    <p style="font-size: 13px; color:var(--text-muted); margin-bottom: 15px; display: flex; justify-content: space-between; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 6px;">
-                        <span>当前市值: <strong style="color:var(--text-main);">{{ addModal.currentAmount }}</strong></span>
-                        <span>持仓本金: <strong style="color:var(--text-muted);">{{ addModal.currentCost }}</strong></span>
+                    <p style="font-size: 13px; color: #94a3b8; margin-bottom: 15px; display: flex; justify-content: space-between; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 6px;">
+                        <span>当前市值: <strong style="color: #f8fafc;">{{ addModal.currentAmount }}</strong></span>
+                        <span>持仓本金: <strong style="color: #cbd5e1;">{{ addModal.currentCost }}</strong></span>
                     </p>
 
-                    <div style="font-size: 12px; color:var(--text-muted); margin-bottom: 5px;">原平台买入时间</div>
+                    <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">原平台买入时间</div>
                     <div style="display: flex; gap: 10px; margin-bottom: 15px;">
                         <input v-model="addModal.rawDate" type="date" class="modal-input" style="flex: 2; margin-bottom: 0;">
                         <select v-model="addModal.timeSlot" class="modal-input" style="flex: 1; margin-bottom: 0; padding-left: 5px;">
@@ -4363,7 +4348,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <span>⚠️</span> 系统将自动推演 T 日，15:00后及周末买入自动顺延。
                     </div>
 
-                    <div style="font-size: 12px; color:var(--text-muted); margin-bottom: 5px;">加仓金额 (¥)</div>
+                    <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">加仓金额 (¥)</div>
                     <input v-model="addModal.amount" type="number" placeholder="只需输入金额，如: 1000" class="modal-input">
                     <div style="display: flex; gap: 10px; margin-top: 10px;">
                         <button class="btn btn-primary" @click="handleAddPosition" style="flex: 1; justify-content: center;">确认加仓</button>
@@ -4375,12 +4360,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             <div v-show="reduceModal.show" class="modal-mask">
                 <div class="modal-content">
                     <h3 style="margin-top: 0; color: #10b981;">🛒 减仓</h3>
-                    <p style="font-size: 13px; color:var(--text-muted); margin-bottom: 15px; display: flex; justify-content: space-between; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 6px;">
-                        <span>当前市值: <strong style="color:var(--text-main);">{{ reduceModal.currentAmount }}</strong></span>
+                    <p style="font-size: 13px; color: #94a3b8; margin-bottom: 15px; display: flex; justify-content: space-between; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 6px;">
+                        <span>当前市值: <strong style="color: #f8fafc;">{{ reduceModal.currentAmount }}</strong></span>
                         <span>持仓份额: <strong style="color: #10b981;">{{ reduceModal.currentShares }}</strong></span>
                     </p>
 
-                    <div style="font-size: 12px; color:var(--text-muted); margin-bottom: 5px;">原平台卖出时间</div>
+                    <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">原平台卖出时间</div>
                     <div style="display: flex; gap: 10px; margin-bottom: 15px;">
                         <input v-model="reduceModal.rawDate" type="date" class="modal-input" style="flex: 2; margin-bottom: 0;">
                         <select v-model="reduceModal.timeSlot" class="modal-input" style="flex: 1; margin-bottom: 0; padding-left: 5px;">
@@ -4395,11 +4380,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                     <div style="display: flex; gap: 10px;">
                         <div style="flex: 1;">
-                            <div style="font-size: 12px; color:var(--text-muted); margin-bottom: 5px;">卖出份额</div>
+                            <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">卖出份额</div>
                             <input v-model="reduceModal.shares" type="number" placeholder="如: 5708" class="modal-input">
                         </div>
                         <div style="flex: 1;">
-                            <div style="font-size: 12px; color:var(--text-muted); margin-bottom: 5px;">换回金额</div>
+                            <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 5px;">换回金额</div>
                             <input v-model="reduceModal.amount" type="number" placeholder="选填,推演留空" class="modal-input">
                         </div>
                     </div>
@@ -4416,11 +4401,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
                         <div>
                             <h3 style="color:var(--text-main);margin:0;font-size:22px;">🎯 板块基金雷达</h3>
-                            <div style="font-size:11px;color:var(--text-muted);margin-top:5px;">
+                            <div style="font-size:11px;color:#64748b;margin-top:5px;">
                                 {{ sectorSource || '基金名称主题归类 + 实时估值均值' }} · {{ sectorUpdatedAt || '待更新' }}
                             </div>
                         </div>
-                        <span @click="showSectorRadar=false" style="font-size:28px;color:var(--text-muted);cursor:pointer;">&times;</span>
+                        <span @click="showSectorRadar=false" style="font-size:28px;color:#94a3b8;cursor:pointer;">&times;</span>
                     </div>
 
                     <div style="display:flex;gap:10px;margin-bottom:12px;">
@@ -4429,9 +4414,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <button @click="fetchSectors(true)" class="btn" style="justify-content:center;border-radius:14px;">🔄</button>
                     </div>
 
-                    <div v-if="isSectorLoading" style="color:var(--text-muted);text-align:center;margin-top:50px;">📡 正在扫描板块基金池...</div>
+                    <div v-if="isSectorLoading" style="color:#94a3b8;text-align:center;margin-top:50px;">📡 正在扫描板块基金池...</div>
                     <div v-else style="overflow-y:auto;flex:1;padding-right:4px;">
-                        <div style="display:grid;grid-template-columns:1.4fr 0.8fr 0.8fr 0.7fr;gap:8px;color:var(--text-muted);font-size:12px;padding:8px 6px;border-bottom:1px solid rgba(255,255,255,0.08);">
+                        <div style="display:grid;grid-template-columns:1.4fr 0.8fr 0.8fr 0.7fr;gap:8px;color:#94a3b8;font-size:12px;padding:8px 6px;border-bottom:1px solid rgba(255,255,255,0.08);">
                             <span>板块名称</span>
                             <span style="text-align:right;">涨跌幅</span>
                             <span style="text-align:right;">方向</span>
@@ -4441,13 +4426,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             <div style="display:flex;align-items:center;gap:10px;min-width:0;">
                                 <span :style="{color: sectorMode==='top' ? '#ef4444' : '#10b981',fontSize:'13px',fontWeight:'bold',width:'22px'}">{{ index + 1 }}</span>
                                 <div style="display:flex;flex-direction:column;min-width:0;">
-                                    <span style="color:var(--text-main);font-weight:bold;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.name }}</span>
-                                    <span style="font-size:11px;color:var(--text-muted);">已更新 · {{ item.fundCount || item.quotedCount || 0 }}只基金</span>
+                                    <span style="color:#f8fafc;font-weight:bold;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.name }}</span>
+                                    <span style="font-size:11px;color:#64748b;">已更新 · {{ item.fundCount || item.quotedCount || 0 }}只基金</span>
                                 </div>
                             </div>
                             <span :style="{textAlign:'right',color:item.rate>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New',fontSize:'18px'}">{{ item.rate>0?'+':'' }}{{ item.rate }}%</span>
                             <span :style="{textAlign:'right',color:item.streakDays>=0?'#ff4d4f':'#10b981',fontWeight:'bold'}">{{ item.streakDays>0?'+':'' }}{{ item.streakDays || 0 }}天</span>
-                            <span style="text-align:right;color:var(--text-muted);font-weight:bold;">{{ item.holdingRank || '-' }}</span>
+                            <span style="text-align:right;color:#94a3b8;font-weight:bold;">{{ item.holdingRank || '-' }}</span>
                         </div>
                     </div>
                 </div>
@@ -4458,22 +4443,22 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #334155; padding-bottom: 10px;">
                         <div>
                             <h3 style="color: #38bdf8; margin: 0; font-size: 18px;">📦 {{ detailsTitle }}</h3>
-                            <div style="font-size:11px;color:var(--text-muted);margin-top:5px;">
+                            <div style="font-size:11px;color:#64748b;margin-top:5px;">
                                 今日均值 {{ sectorDetailMeta.rate > 0 ? '+' : '' }}{{ sectorDetailMeta.rate }}% · {{ sectorDetailMeta.fundCount }}只 · {{ sectorDetailMeta.updatedAt }}
                             </div>
                         </div>
-                        <span @click="showSectorDetails = false" style="font-size: 26px; color:var(--text-muted); cursor: pointer;">&times;</span>
+                        <span @click="showSectorDetails = false" style="font-size: 26px; color: #94a3b8; cursor: pointer;">&times;</span>
                     </div>
-                    <div v-if="isDetailsLoading" style="color:var(--text-muted); text-align: center; padding: 28px 0;">📡 正在拉取板块基金...</div>
-                    <div v-else-if="detailsList.length === 0" style="color:var(--text-muted); text-align: center; padding: 28px 0;">该板块暂无匹配基金</div>
+                    <div v-if="isDetailsLoading" style="color: #94a3b8; text-align: center; padding: 28px 0;">📡 正在拉取板块基金...</div>
+                    <div v-else-if="detailsList.length === 0" style="color: #94a3b8; text-align: center; padding: 28px 0;">该板块暂无匹配基金</div>
                     <div v-else style="overflow-y: auto; padding-right: 5px;">
-                        <div style="display:grid;grid-template-columns:1.5fr 0.75fr 0.75fr;gap:8px;color:var(--text-muted);font-size:12px;margin-bottom:8px;padding:0 4px;">
+                        <div style="display:grid;grid-template-columns:1.5fr 0.75fr 0.75fr;gap:8px;color:#64748b;font-size:12px;margin-bottom:8px;padding:0 4px;">
                             <span>基金名称 / 代码</span><span style="text-align:right;">当日涨幅</span><span style="text-align:right;">近一月</span>
                         </div>
                         <div v-for="fund in detailsList" :key="fund.code" style="display:grid;grid-template-columns:1.5fr 0.75fr 0.75fr;gap:8px;align-items:center;padding:12px 4px;border-bottom:1px dashed rgba(255,255,255,0.06);">
                             <div style="display:flex;flex-direction:column;min-width:0;">
-                                <span style="color:var(--text-main);font-weight:bold;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ fund.name }}</span>
-                                <span style="color:var(--text-muted);font-size:11px;font-family:monospace;">{{ fund.code }} <span v-if="fund.hasQuote" style="color:#60a5fa;">已更新</span></span>
+                                <span style="color:#f8fafc;font-weight:bold;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ fund.name }}</span>
+                                <span style="color:#64748b;font-size:11px;font-family:monospace;">{{ fund.code }} <span v-if="fund.hasQuote" style="color:#60a5fa;">已更新</span></span>
                             </div>
                             <div :style="{ textAlign:'right', color: fund.rate >= 0 ? '#ff4d4f' : '#10b981', fontWeight:'900', fontFamily:'Courier New', fontSize:'16px' }">{{ fund.rate > 0 ? '+' : '' }}{{ fund.rate }}%</div>
                             <div :style="{ textAlign:'right', color: (fund.monthRate || 0) >= 0 ? '#ff4d4f' : '#10b981', fontWeight:'bold', fontFamily:'Courier New', fontSize:'15px' }">{{ fund.monthRate == null ? '--' : ((fund.monthRate > 0 ? '+' : '') + fund.monthRate + '%') }}</div>
@@ -4490,11 +4475,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <div style="display:flex;align-items:center;justify-content:space-between;">
                             <div>
                                 <div style="font-size:24px;font-weight:900;color:#0f172a;">📰 资讯雷达</div>
-                                <div style="font-size:12px;color:var(--text-muted);margin-top:5px;">{{ newsSource || '东方财富7x24快讯' }} · {{ newsUpdatedAt || '待更新' }}</div>
+                                <div style="font-size:12px;color:#64748b;margin-top:5px;">{{ newsSource || '东方财富7x24快讯' }} · {{ newsUpdatedAt || '待更新' }}</div>
                             </div>
                             <div style="display:flex;align-items:center;gap:12px;">
                                 <button @click="fetchNews(newsMode, true)" class="btn" style="background:#e0f2fe;color:#0369a1;border-color:#bae6fd;border-radius:14px;">🔄</button>
-                                <span @click="showNewsPanel=false" style="font-size:30px;color:var(--text-muted);cursor:pointer;line-height:1;">&times;</span>
+                                <span @click="showNewsPanel=false" style="font-size:30px;color:#64748b;cursor:pointer;line-height:1;">&times;</span>
                             </div>
                         </div>
                         <div class="news-tabs">
@@ -4535,13 +4520,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 <div class="global-indices-modal" style="background: #1e293b; width: 100%; height: 80vh; border-radius: 20px 20px 0 0; padding: 20px; display: flex; flex-direction: column;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                         <h3 style="color:var(--text-main); margin: 0;">🌍 全球大盘雷达</h3>
-                        <span @click="showGlobalIndices = false" style="font-size: 24px; color:var(--text-muted); cursor: pointer;">&times;</span>
+                        <span @click="showGlobalIndices = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
                     </div>
-                    <div v-if="isIndicesLoading" style="color:var(--text-muted); text-align: center; margin-top: 50px;">📡 正在接入全球卫星数据...</div>
+                    <div v-if="isIndicesLoading" style="color: #94a3b8; text-align: center; margin-top: 50px;">📡 正在接入全球卫星数据...</div>
                     <div v-else style="overflow-y: auto; flex: 1; padding-right: 5px;">
-                        <div style="display: flex; justify-content: space-between; color:var(--text-muted); font-size: 12px; margin-bottom: 8px;"><span>指数名称</span><span style="text-align: right;">今日 / 近1年</span></div>
+                        <div style="display: flex; justify-content: space-between; color: #64748b; font-size: 12px; margin-bottom: 8px;"><span>指数名称</span><span style="text-align: right;">今日 / 近1年</span></div>
                         <div v-for="item in globalIndices" :key="item.code || item.name" @click="viewIndexHistory(item)" style="display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px dashed #334155; cursor: pointer;">
-                            <div style="display: flex; flex-direction: column;"><span style="color:var(--text-main); font-weight: bold; font-size: 16px;">{{ item.name }}</span><span style="color:var(--text-muted); font-size: 13px;">点位: {{ formatIndexPoint(item.latest) }}</span></div>
+                            <div style="display: flex; flex-direction: column;"><span style="color: #f8fafc; font-weight: bold; font-size: 16px;">{{ item.name }}</span><span style="color: #94a3b8; font-size: 13px;">点位: {{ formatIndexPoint(item.latest) }}</span></div>
                             <div style="display: flex; flex-direction: column; align-items: flex-end;">
                                 <span :style="{ color: item.todayRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold', fontSize: '16px' }">今: {{ formatIndexRate(item.todayRate) }}</span>
                                 <span :style="{ color: item.yearRate >= 0 ? '#ff4d4f' : '#10b981', fontSize: '13px', marginTop: '4px' }">1年: {{ formatIndexRate(item.yearRate) }}</span>
@@ -4555,14 +4540,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 <div style="background: #1e293b; width: 100%; height: 75vh; border-radius: 20px 20px 0 0; padding: 20px; display: flex; flex-direction: column;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                         <h3 style="color:var(--text-main); margin: 0; font-size: 18px;">📈 {{ historyModal.name }} (官方净值走势)</h3>
-                        <span @click="historyModal.show = false" style="font-size: 24px; color:var(--text-muted); cursor: pointer;">&times;</span>
+                        <span @click="historyModal.show = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
                     </div>
                     <div v-if="historyModal.isLoading" style="color: #4facfe; text-align: center; margin-top: 50px; font-weight: bold; letter-spacing: 1px;">📡 正在提取...</div>
-                    <div v-else-if="historyModal.data.length === 0" style="color:var(--text-muted); text-align: center; margin-top: 50px;">暂无走势数据</div>
+                    <div v-else-if="historyModal.data.length === 0" style="color: #64748b; text-align: center; margin-top: 50px;">暂无走势数据</div>
                     <div v-else style="overflow-y: auto; flex: 1; padding-right: 5px;">
-                        <div style="display: flex; justify-content: space-between; color:var(--text-muted); font-size: 13px; margin-bottom: 10px;"><span>日期</span><span>单日涨跌幅</span></div>
+                        <div style="display: flex; justify-content: space-between; color: #64748b; font-size: 13px; margin-bottom: 10px;"><span>日期</span><span>单日涨跌幅</span></div>
                         <div v-for="(item, index) in historyModal.data" :key="index" style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px dashed #334155;">
-                            <span style="color:var(--text-muted); font-family: monospace; font-size: 14px;">{{ item.date }}</span>
+                            <span style="color: #cbd5e1; font-family: monospace; font-size: 14px;">{{ item.date }}</span>
                             <span :style="{ color: item.rate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold', fontSize: '15px' }">{{ item.rate > 0 ? '+' : '' }}{{ item.rate }}%</span>
                         </div>
                     </div>
@@ -4573,25 +4558,25 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 <div style="background: #0f172a; width: 90%; max-width: 500px; height: 75vh; border-radius: 15px; border: 1px solid #38bdf8; box-shadow: 0 0 30px rgba(56, 189, 248, 0.2); padding: 20px; display: flex; flex-direction: column;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px;">
                         <h3 style="color: #38bdf8; margin: 0;">🗄️ {{ archiveModal.targetName }} - 专属收益</h3>
-                        <span @click="archiveModal.show = false" style="font-size: 24px; color:var(--text-muted); cursor: pointer;">&times;</span>
+                        <span @click="archiveModal.show = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
                     </div>
                     <div v-if="archiveModal.isLoading" style="color: #4facfe; text-align: center; margin-top: 50px;">📡 正在提取...</div>
-                    <div v-else-if="archiveModal.data.length === 0" style="color:var(--text-muted); text-align: center; margin-top: 50px;">暂无收益</div>
+                    <div v-else-if="archiveModal.data.length === 0" style="color: #64748b; text-align: center; margin-top: 50px;">暂无收益</div>
                     <div v-else style="overflow-y: auto; flex: 1; padding-right: 5px;">
-                        <div style="display: flex; justify-content: space-between; color:var(--text-muted); font-size: 12px; margin-bottom: 10px;"><span>封存日期</span><span style="text-align: right;">当日收益 / 累计盈亏</span></div>
+                        <div style="display: flex; justify-content: space-between; color: #64748b; font-size: 12px; margin-bottom: 10px;"><span>封存日期</span><span style="text-align: right;">当日收益 / 累计盈亏</span></div>
                         <div v-for="(item, index) in archiveModal.data" :key="index" style="background: #1e293b; border-radius: 10px; padding: 12px; margin-bottom: 10px; border-left: 4px solid #38bdf8;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                                 <div style="display: flex; flex-direction: column;">
-                                    <span style="color:var(--text-main); font-family: monospace; font-size: 14px; font-weight: bold;">{{ item.recordDate.split('T')[0] }}</span>
-                                    <span style="color:var(--text-muted); font-size: 11px;">市值: {{ item.assets.toFixed(2) }}</span>
+                                    <span style="color: #f8fafc; font-family: monospace; font-size: 14px; font-weight: bold;">{{ item.recordDate.split('T')[0] }}</span>
+                                    <span style="color: #94a3b8; font-size: 11px;">市值: {{ item.assets.toFixed(2) }}</span>
                                 </div>
                                 <div style="display: flex; flex-direction: column; align-items: flex-end;">
-                                    <span style="color:var(--text-muted); font-size: 10px; margin-bottom: 2px;">今日盈亏</span>
+                                    <span style="color: #64748b; font-size: 10px; margin-bottom: 2px;">今日盈亏</span>
                                     <span :style="{ color: item.dailyProfit >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold', fontSize: '15px', fontFamily: 'Courier New' }">{{ item.dailyProfit > 0 ? '+' : '' }}{{ item.dailyProfit.toFixed(2) }} ({{ item.dailyRate > 0 ? '+' : '' }}{{ item.dailyRate.toFixed(2) }}%)</span>
                                 </div>
                             </div>
                             <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 8px;">
-                                <span style="color:var(--text-muted); font-size: 11px;">历史累计总盈亏</span>
+                                <span style="color: #94a3b8; font-size: 11px;">历史累计总盈亏</span>
                                 <span :style="{ color: item.totalProfit >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold', fontSize: '13px' }">{{ item.totalProfit > 0 ? '+' : '' }}{{ item.totalProfit ? item.totalProfit.toFixed(2) : '0.00' }} ({{ item.totalRate > 0 ? '+' : '' }}{{ item.totalRate ? item.totalRate.toFixed(2) : '0.00' }}%)</span>
                             </div>
                         </div>
@@ -4603,20 +4588,20 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 <div style="background: #1e293b; width: 85%; max-width: 400px; border-radius: 15px; border: 1px solid #10b981; padding: 20px; display: flex; flex-direction: column;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px;">
                         <h3 style="color: #10b981; margin: 0; font-size: 18px;">✅ OCR 导入预览</h3>
-                        <span @click="ocrModal.show = false" style="font-size: 24px; color:var(--text-muted); cursor: pointer;">&times;</span>
+                        <span @click="ocrModal.show = false" style="font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</span>
                     </div>
-                    <div style="color:var(--text-muted); font-size: 13px; line-height: 1.8; max-height: 60vh; overflow-y: auto;">
+                    <div style="color: #cbd5e1; font-size: 13px; line-height: 1.8; max-height: 60vh; overflow-y: auto;">
 
                         <template v-if="ocrModal.data && ocrModal.data.success">
                             <div style="font-size:16px;font-weight:900;color:#34d399;margin-bottom:12px;">
                                 ✅ 成功识别 {{ ocrModal.data.count || 0 }} 只基金
                             </div>
                             <div style="background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.24);border-radius:12px;padding:10px;margin-bottom:12px;">
-                                <div style="font-size:12px;color:var(--text-muted);">OCR 识别合计金额</div>
-                                <div style="font-size:20px;font-weight:900;color:var(--text-main);">
+                                <div style="font-size:12px;color:#94a3b8;">OCR 识别合计金额</div>
+                                <div style="font-size:20px;font-weight:900;color:#f8fafc;">
                                     ¥ {{ ocrPreviewTotal.toFixed(2) }}
                                 </div>
-                                <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
+                                <div style="font-size:12px;color:#94a3b8;margin-top:4px;">
                                     识别金额为截图平台持仓金额，持仓页会根据当日估值刷新今日市值。
                                 </div>
                             </div>
@@ -4627,10 +4612,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                                 <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
                                     <div style="min-width:0;">
-                                        <div style="font-size:15px;font-weight:900;color:var(--text-main);">
+                                        <div style="font-size:15px;font-weight:900;color:#f8fafc;">
                                             {{ index + 1 }}. {{ item.name || item.ocrName }}
                                         </div>
-                                        <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
+                                        <div style="font-size:12px;color:#94a3b8;margin-top:4px;">
                                             代码：{{ item.code || '--' }}
                                         </div>
                                     </div>
@@ -4642,32 +4627,32 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                                 <div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
                                     <div style="background:rgba(255,255,255,.05);border-radius:10px;padding:8px;">
-                                        <div style="font-size:11px;color:var(--text-muted);">识别金额</div>
-                                        <div style="font-size:15px;font-weight:900;color:var(--text-main);">
+                                        <div style="font-size:11px;color:#94a3b8;">识别金额</div>
+                                        <div style="font-size:15px;font-weight:900;color:#f8fafc;">
                                             {{ Number(item.holdAmount || 0).toFixed(2) }}
                                         </div>
                                     </div>
 
                                     <div style="background:rgba(255,255,255,.05);border-radius:10px;padding:8px;">
-                                        <div style="font-size:11px;color:var(--text-muted);">金额来源</div>
-                                        <div style="font-size:12px;font-weight:700;color:var(--text-muted);">
+                                        <div style="font-size:11px;color:#94a3b8;">金额来源</div>
+                                        <div style="font-size:12px;font-weight:700;color:#cbd5e1;">
                                             {{ item.costSource || 'OCR识别' }}
                                         </div>
                                     </div>
                                     <div style="background:rgba(255,255,255,.05);border-radius:10px;padding:8px;">
-                                        <div style="font-size:11px;color:var(--text-muted);">持仓收益</div>
+                                        <div style="font-size:11px;color:#94a3b8;">持仓收益</div>
                                         <div :style="{ fontSize:'15px', fontWeight:'900', color: Number(item.holdingIncome || 0) >= 0 ? '#ff4d4f' : '#10b981' }">
                                             {{ Number(item.holdingIncome || 0) > 0 ? '+' : '' }}{{ Number(item.holdingIncome || 0).toFixed(2) }}
                                         </div>
                                     </div>
                                     <div style="background:rgba(255,255,255,.05);border-radius:10px;padding:8px;">
-                                        <div style="font-size:11px;color:var(--text-muted);">昨日收益</div>
+                                        <div style="font-size:11px;color:#94a3b8;">昨日收益</div>
                                         <div :style="{ fontSize:'15px', fontWeight:'900', color: Number(item.yesterdayIncome || 0) >= 0 ? '#ff4d4f' : '#10b981' }">
                                             {{ Number(item.yesterdayIncome || 0) > 0 ? '+' : '' }}{{ Number(item.yesterdayIncome || 0).toFixed(2) }}
                                         </div>
                                     </div>
                                     <div style="background:rgba(255,255,255,.05);border-radius:10px;padding:8px;">
-                                        <div style="font-size:11px;color:var(--text-muted);">持仓收益率</div>
+                                        <div style="font-size:11px;color:#94a3b8;">持仓收益率</div>
                                         <div :style="{ fontSize:'15px', fontWeight:'900', color: Number(item.holdingRate || 0) >= 0 ? '#ff4d4f' : '#10b981' }">
                                             {{ Number(item.holdingRate || 0) > 0 ? '+' : '' }}{{ Number(item.holdingRate || 0).toFixed(2) }}%
                                         </div>
@@ -4688,7 +4673,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             </button>
 
                             <div v-if="ocrModal.showDiagnostics"
-                                 style="margin-top:10px;color:var(--text-muted);font-size:12px;white-space:pre-wrap;font-family:monospace;background:rgba(0,0,0,.25);border-radius:10px;padding:10px;">
+                                 style="margin-top:10px;color:#94a3b8;font-size:12px;white-space:pre-wrap;font-family:monospace;background:rgba(0,0,0,.25);border-radius:10px;padding:10px;">
                                 {{ (ocrModal.data.diagnostics || []).join('\n') }}
                             </div>
                         </template>
@@ -6504,7 +6489,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         backgroundColor: 'transparent',
                         tooltip: {
                             trigger: 'axis', backgroundColor: 'rgba(15, 23, 42, 0.9)', borderColor: '#334155', textStyle: { color: '#f8fafc' }, formatter: function (params) {
-                                let html = `<div style="margin-bottom:5px;color:var(--text-muted);">${params[0].axisValueLabel}</div>`;
+                                let html = `<div style="margin-bottom:5px;color:#94a3b8;">${params[0].axisValueLabel}</div>`;
                                 params.forEach(p => {
                                     let profit = (holdAmounts[p.seriesName] * p.data[1] / 100).toFixed(2); let color = profit >= 0 ? '#ff4d4f' : '#10b981'; let originalFund = apiData.find(f => f.name === p.seriesName); let labelSuffix = '估';
                                     if (isNight.value && originalFund && originalFund.data && p.dataIndex === originalFund.data.length - 1) { labelSuffix = originalFund.isSettled ? '✅ 真' : '⏳ 待更新'; }
