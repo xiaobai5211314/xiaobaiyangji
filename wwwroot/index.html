@@ -443,6 +443,21 @@
             color: #1a1d2e !important;
         }
 
+        /* warm theme: override hardcoded #cbd5e1 (pale blue-gray) with warm dark tone */
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .total-panel [style*="color:#cbd5e1"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .total-panel [style*="color: #cbd5e1"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .fund-card [style*="color:#cbd5e1"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .fund-card [style*="color: #cbd5e1"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .number-display [style*="color:#cbd5e1"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .number-display [style*="color: #cbd5e1"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .metric-value [style*="color:#cbd5e1"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .metric-value [style*="color: #cbd5e1"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .metric-item [style*="color:#cbd5e1"],
+        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .metric-item [style*="color: #cbd5e1"] {
+            color: #4a4030 !important;
+            -webkit-text-fill-color: #4a4030 !important;
+        }
+
 html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         html[data-theme="light"] .fund-card [style*="color:#f8fafc"],
         html[data-theme="light"] .stock-card [style*="color: #fff"],
