@@ -6,7 +6,7 @@
     <title>估值助手</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2064%2064%27%3E%3Cdefs%3E%3ClinearGradient%20id%3D%27g%27%20x1%3D%270%27%20y1%3D%270%27%20x2%3D%271%27%20y2%3D%271%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27%232563eb%27/%3E%3Cstop%20offset%3D%27100%25%27%20stop-color%3D%27%237c3aed%27/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20width%3D%2764%27%20height%3D%2764%27%20rx%3D%2716%27%20fill%3D%27url%28%23g%29%27/%3E%3Ctext%20x%3D%2732%27%20y%3D%2742%27%20text-anchor%3D%27middle%27%20font-size%3D%2732%27%3E%F0%9F%92%B9%3C/text%3E%3C/svg%3E">
     <base href="/" />
-    <meta name="theme-color" content="#b8945a">
+    <meta name="theme-color" content="#db2777">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -26,28 +26,28 @@
     </script>
     <style>
                                 :root {
-            --page-bg: linear-gradient(165deg, #eef1f9 0%, #e2e7f4 40%, #e8ecf6 100%);
-            --page-bg-color: #eef1f9;
-            --card-bg: rgba(255, 255, 255, 0.94);
-            --card-border: rgba(99, 102, 241, 0.08);
-            --card-shadow: 0 2px 16px rgba(67, 56, 202, 0.07), 0 0 0 1px rgba(99, 102, 241, 0.04);
-            --card-bg-hero: linear-gradient(135deg, #6366f1 0%, #818cf8 50%, #7c3aed 100%);
-            --card-bg-report: rgba(255, 255, 255, 0.94);
+            --page-bg: linear-gradient(175deg, #fdf2f8 0%, #ffffff 36%, #fce7f3 100%);
+            --page-bg-color: #fdf2f8;
+            --card-bg: rgba(255, 255, 255, 0.95);
+            --card-border: rgba(244, 114, 182, 0.08);
+            --card-shadow: 0 0 0 0.5px rgba(236, 72, 153, 0.06), 0 2px 20px rgba(219, 39, 119, 0.06);
+            --card-bg-hero: linear-gradient(135deg, #db2777 0%, #ec4899 50%, #f472b6 100%);
+            --card-bg-report: rgba(255, 255, 255, 0.95);
             --card-bg-list: rgba(255, 255, 255, 0.94);
-            --card-bg-soft: rgba(245, 246, 255, 0.88);
-            --card-border-glow: rgba(99, 102, 241, 0.14);
-            --primary-gradient: linear-gradient(135deg, #6366f1, #818cf8);
-            --logo-gradient: linear-gradient(to right, #6366f1, #8b5cf6);
-            --secondary-gradient: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(139, 92, 246, 0.06));
+            --card-bg-soft: rgba(253, 242, 248, 0.88);
+            --card-border-glow: rgba(244, 114, 182, 0.14);
+            --primary-gradient: linear-gradient(135deg, #ec4899, #f472b6);
+            --logo-gradient: linear-gradient(to right, #db2777, #ec4899);
+            --secondary-gradient: linear-gradient(135deg, rgba(244, 114, 182, 0.08), rgba(236, 72, 153, 0.05));
             --accent-pink: #f472b6;
             --accent-purple: #8b5cf6;
-            --accent-blue: #6366f1;
-            --text-main: #1e1b4b;
-            --text-muted: #4c4a6e;
-            --profit-color: #ef4444;
-            --loss-color: #10b981;
-            --button-radius: 10px;
-            --card-radius: 16px;
+            --accent-blue: #ec4899;
+            --text-main: #1f2937;
+            --text-muted: #6b7280;
+            --profit-color: #e11d48;
+            --loss-color: #059669;
+            --button-radius: 12px;
+            --card-radius: 18px;
         /* === Typography Scale === */
         --font-display: "Microsoft YaHei", "微软雅黑", "PingFang SC", "PingFang HK", -apple-system, BlinkMacSystemFont, sans-serif;
         --font-body: "Microsoft YaHei", "微软雅黑", "PingFang SC", "PingFang HK", -apple-system, BlinkMacSystemFont, sans-serif;
@@ -89,27 +89,27 @@
             }
 
                                                 :root[data-theme="light"] {
-                --page-bg: linear-gradient(175deg, #f5f5f7 0%, #fafafa 38%, #f5f5f7 100%);
-                --page-bg-color: #f5f5f7;
-                --card-bg: rgba(255, 255, 255, 0.88);
-                --card-border: rgba(0, 0, 0, 0.05);
-                --card-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.03), 0 4px 28px rgba(0, 0, 0, 0.04);
-                --card-bg-hero: linear-gradient(160deg, #1d1d1f, #2d2d2f);
+                --page-bg: linear-gradient(175deg, #f0f4f0 0%, #f5f7f5 38%, #f0f4f0 100%);
+                --page-bg-color: #f0f4f0;
+                --card-bg: rgba(255, 255, 255, 0.90);
+                --card-border: rgba(139, 195, 72, 0.08);
+                --card-shadow: 0 0 0 0.5px rgba(27, 94, 32, 0.05), 0 1px 3px rgba(0, 0, 0, 0.03), 0 4px 24px rgba(27, 94, 32, 0.05);
+                --card-bg-hero: linear-gradient(160deg, #1b5e20, #2e7d32);
                 --card-bg-report: rgba(255, 255, 255, 0.90);
-                --card-bg-list: rgba(255, 255, 255, 0.85);
-                --card-bg-soft: linear-gradient(145deg, rgba(250,250,252,0.95), rgba(245,245,247,0.90));
-                --card-border-glow: rgba(0, 113, 227, 0.07);
-                --primary-gradient: linear-gradient(135deg, #0071e3, #2997ff);
-                --logo-gradient: linear-gradient(to right, #1d1d1f, #3a3a3c);
-                --secondary-gradient: linear-gradient(135deg, rgba(0, 113, 227, 0.04), rgba(41, 151, 255, 0.03));
-                --accent-pink: #ff375f;
-                --accent-purple: #8944ab;
-                --accent-blue: #0071e3;
-                --text-main: #1d1d1f;
-                --text-muted: #6e6e73;
-                --text-soft: #aeaeb2;
-                --profit-color: #ff3b30;
-                --loss-color: #30b158;
+                --card-bg-list: rgba(255, 255, 255, 0.86);
+                --card-bg-soft: linear-gradient(145deg, rgba(245,248,244,0.95), rgba(240,244,240,0.90));
+                --card-border-glow: rgba(139, 195, 72, 0.08);
+                --primary-gradient: linear-gradient(135deg, #8bc348, #4caf50);
+                --logo-gradient: linear-gradient(to right, #1b5e20, #2e7d32);
+                --secondary-gradient: linear-gradient(135deg, rgba(139, 195, 72, 0.06), rgba(76, 175, 80, 0.04));
+                --accent-pink: #e57373;
+                --accent-purple: #7e57c2;
+                --accent-blue: #4caf50;
+                --text-main: #1a1a1a;
+                --text-muted: #5a6b5a;
+                --text-soft: #8a9a8a;
+                --profit-color: #e53935;
+                --loss-color: #2e7d32;
                 --button-radius: 10px;
                 --card-radius: 16px;
             }
@@ -369,7 +369,7 @@
         }
 
         :root[data-theme="light"] .metrics-grid {
-            background: rgba(245, 245, 247, .88);
+            background: rgba(240, 244, 240, .86);
         }
 
         :root[data-theme="light"] .metric-label {
@@ -378,30 +378,30 @@
 
         :root[data-theme="light"] .modal-content {
             background: #ffffff;
-            border-color: rgba(0, 0, 0, .08);
-            box-shadow: 0 0 0 0.5px rgba(0, 0, 0, .06), 0 8px 40px rgba(0, 0, 0, .12);
+            border-color: rgba(27, 94, 32, .08);
+            box-shadow: 0 0 0 0.5px rgba(27, 94, 32, .06), 0 8px 40px rgba(27, 94, 32, .10);
         }
 
         :root[data-theme="light"] .modal-input {
             background: #ffffff;
-            border-color: rgba(0, 0, 0, .08);
-            color: #1d1d1f;
+            border-color: rgba(27, 94, 32, .08);
+            color: #1a1a1a;
         }
 
         :root[data-theme="light"] .badge-estimate {
-            color: #0071e3;
-            background: rgba(0, 113, 227, .08);
-            border-color: rgba(0, 113, 227, .16);
+            color: #5a8a3c;
+            background: rgba(139, 195, 72, .10);
+            border-color: rgba(139, 195, 72, .20);
         }
 
         :root[data-theme="light"] .badge-actual {
-            color: #30b158;
-            background: rgba(48, 177, 88, .08);
-            border-color: rgba(48, 177, 88, .16);
+            color: #2e7d32;
+            background: rgba(46, 125, 50, .10);
+            border-color: rgba(46, 125, 50, .20);
         }
 
         :root[data-theme="light"] .divider {
-            background: rgba(0, 0, 0, .06);
+            background: rgba(27, 94, 32, .06);
         }
 
         :root[data-theme="light"] .skeleton-box {
@@ -423,14 +423,14 @@
         html[data-theme="light"] .profit-list-row > div:not(:last-child),
         html[data-theme="light"] .metric-value:not([style]),
         html[data-theme="light"] .stock-metric .value:not([style]) {
-            color: #1d1d1f;
-            -webkit-text-fill-color: #1d1d1f;
+            color: #1a1a1a;
+            -webkit-text-fill-color: #1a1a1a;
         }
 
         html[data-theme="light"] .fund-card > div:first-child > span:first-child,
         html[data-theme="light"] .fund-card > div:first-child > span:first-child > span:first-child {
-            color: #1d1d1f !important;
-            -webkit-text-fill-color: #1d1d1f !important;
+            color: #1a1a1a !important;
+            -webkit-text-fill-color: #1a1a1a !important;
             opacity: 1 !important;
             text-shadow: none !important;
         }
@@ -443,8 +443,8 @@
         html[data-theme="light"] .sector-table-head,
         html[data-theme="light"] .calendar-week,
         html[data-theme="light"] .news-empty {
-            color: #6e6e73;
-            -webkit-text-fill-color: #6e6e73;
+            color: #5a6b5a;
+            -webkit-text-fill-color: #5a6b5a;
         }
 
         html[data-theme="light"] .fund-card [style*="color: #fff"],
@@ -502,8 +502,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         html[data-theme="light"] .calibration-card-row [style*="color: #f8fafc"],
         html[data-theme="light"] .profit-list-row [style*="color:#f8fafc"],
         html[data-theme="light"] .profit-list-row [style*="color: #f8fafc"] {
-            color: #1d1d1f !important;
-            -webkit-text-fill-color: #1d1d1f !important;
+            color: #1a1a1a !important;
+            -webkit-text-fill-color: #1a1a1a !important;
         }
 
         html[data-theme="light"] .glass-panel [style*="color: #fff"],
@@ -518,8 +518,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         html[data-theme="light"] .modal-content [style*="color:#fff"],
         html[data-theme="light"] .modal-content [style*="color: #f8fafc"],
         html[data-theme="light"] .modal-content [style*="color:#f8fafc"] {
-            color: #1d1d1f !important;
-            -webkit-text-fill-color: #1d1d1f !important;
+            color: #1a1a1a !important;
+            -webkit-text-fill-color: #1a1a1a !important;
         }
 
         html[data-theme="light"] .fund-card [style*="color:#cbd5e1"],
@@ -528,25 +528,25 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         html[data-theme="light"] .stock-card [style*="color: #cbd5e1"],
         html[data-theme="light"] .sector-row [style*="color:#cbd5e1"],
         html[data-theme="light"] .sector-row [style*="color: #cbd5e1"] {
-            color: #6e6e73 !important;
-            -webkit-text-fill-color: #6e6e73 !important;
+            color: #5a6b5a !important;
+            -webkit-text-fill-color: #5a6b5a !important;
         }
 
         html[data-theme="light"] .stock-code-chip {
-            color: #6e6e73;
-            background: rgba(0, 0, 0, .04);
-            border: 1px solid rgba(0, 0, 0, .06);
+            color: #5a6b5a;
+            background: rgba(27, 94, 32, .05);
+            border: 1px solid rgba(27, 94, 32, .08);
         }
 
         html[data-theme="light"] .stock-metric,
         html[data-theme="light"] .quick-holding-card,
         html[data-theme="light"] .calendar-day {
-            background: rgba(245, 245, 247, .86);
-            border-color: rgba(0, 0, 0, .06);
+            background: rgba(240, 244, 240, .84);
+            border-color: rgba(27, 94, 32, .06);
         }
 
         html[data-theme="light"] .calendar-date {
-            color: #3a3a3c;
+            color: #1a1a1a;
         }
 
         .fund-list-container {
@@ -4333,9 +4333,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     <div class="theme-settings">
                         <div class="theme-settings-title">主题设置</div>
                         <div class="theme-choice-row">
-                            <button :class="['btn', 'theme-choice-btn', appTheme === 'vivid' ? 'active' : '']" @click="setAppTheme('vivid')">活力渐变</button>
+                            <button :class="['btn', 'theme-choice-btn', appTheme === 'vivid' ? 'active' : '']" @click="setAppTheme('vivid')">Ruby Pink</button>
                             <button :class="['btn', 'theme-choice-btn', appTheme === 'warm' ? 'active' : '']" @click="setAppTheme('warm')">暖金主题</button>
-                            <button :class="['btn', 'theme-choice-btn', appTheme === 'light' ? 'active' : '']" @click="setAppTheme('light')">浅色主题</button>
+                            <button :class="['btn', 'theme-choice-btn', appTheme === 'light' ? 'active' : '']" @click="setAppTheme('light')">绿色能源</button>
                             <button :class="['btn', 'theme-choice-btn', appTheme === 'rainbow' ? 'active' : '']" @click="setAppTheme('rainbow')">彩虹渐变</button>
                         </div>
                     </div>
@@ -4853,7 +4853,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     document.documentElement.setAttribute('data-theme', safeTheme);
                     if (document.body) document.body.setAttribute('data-theme', safeTheme);
                     const metaTheme = document.querySelector('meta[name="theme-color"]');
-                    if (metaTheme) metaTheme.setAttribute('content', safeTheme === 'rainbow' ? '#151d3f' : safeTheme === 'light' ? '#f8fafc' : safeTheme === 'warm' ? '#f0e8d8' : '#eef1f9');
+                    if (metaTheme) metaTheme.setAttribute('content', safeTheme === 'rainbow' ? '#151d3f' : safeTheme === 'light' ? '#f0f4f0' : safeTheme === 'warm' ? '#f0e8d8' : '#fdf2f8');
                 };
                 const appTheme = ref(normalizeTheme(localStorage.getItem(THEME_STORAGE_KEY)));
                 applyAppTheme(appTheme.value);
