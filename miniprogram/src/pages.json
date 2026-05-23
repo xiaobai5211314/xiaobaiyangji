@@ -3,7 +3,7 @@
     {
       "path": "pages/home/index",
       "style": {
-        "navigationBarTitleText": "估值助手",
+        "navigationBarTitleText": "小白养基",
         "enablePullDownRefresh": true
       }
     },
@@ -50,7 +50,7 @@
   ],
   "globalStyle": {
     "navigationBarTextStyle": "white",
-    "navigationBarTitleText": "估值助手",
+    "navigationBarTitleText": "小白养基",
     "navigationBarBackgroundColor": "#111827",
     "backgroundColor": "#0f172a"
   },

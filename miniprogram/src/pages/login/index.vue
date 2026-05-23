@@ -2,9 +2,9 @@
   <view :class="['page-shell', 'login-page', themeClass]">
     <view class="brand">
       <view class="brand-mark">
-        <text>估</text>
+        <text>养</text>
       </view>
-      <text class="brand-title">估值助手</text>
+      <text class="brand-title">小白养基</text>
       <text class="brand-subtitle">看清持仓与收益节奏</text>
     </view>
 

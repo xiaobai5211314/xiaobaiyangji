@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-SERVICE_NAME="guzhi-assistant.service"
+SERVICE_NAME="xiaobaiyangji.service"
 PORT="7084"
 
 cmd="${1:-}"

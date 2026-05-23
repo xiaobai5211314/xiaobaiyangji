@@ -135,24 +135,24 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
       return common_vendor.e({
         a: common_vendor.t(wechatSubmitting.value ? "微信登录中..." : "微信一键登录"),
         b: wechatSubmitting.value || submitting.value || registering.value,
-        c: common_vendor.o(wechatOneTapLogin, "8d"),
+        c: common_vendor.o(wechatOneTapLogin, "00"),
         d: form.username,
         e: common_vendor.o(common_vendor.m(($event) => form.username = $event.detail.value, {
           trim: true
-        }), "06"),
-        f: common_vendor.o(submit, "d9"),
+        }), "ad"),
+        f: common_vendor.o(submit, "e6"),
         g: form.password,
-        h: common_vendor.o(($event) => form.password = $event.detail.value, "e7"),
+        h: common_vendor.o(($event) => form.password = $event.detail.value, "a8"),
         i: errorMessage.value
       }, errorMessage.value ? {
         j: common_vendor.t(errorMessage.value)
       } : {}, {
         k: common_vendor.t(submitting.value ? "登录中..." : "登录"),
         l: submitting.value,
-        m: common_vendor.o(submit, "d5"),
+        m: common_vendor.o(submit, "b9"),
         n: common_vendor.t(registering.value ? "注册中..." : "注册账号"),
         o: registering.value || submitting.value,
-        p: common_vendor.o(registerAccount, "d2"),
+        p: common_vendor.o(registerAccount, "c6"),
         q: common_vendor.n(common_vendor.unref(stores_theme.themeClass))
       });
     };

@@ -3,8 +3,7 @@ const common_vendor = require("../common/vendor.js");
 const THEME_STORAGE_KEY = "valuation_assistant_theme";
 const themeOptions = [
   { value: "vivid", label: "活力渐变", description: "蓝紫渐变、年轻活泼、默认主题" },
-  { value: "warm", label: "暖金主题", description: "暖色米黄底、金色质感卡片" },
-  { value: "light", label: "浅色主题", description: "冷调浅蓝底、冰感高级灰" },
+  { value: "light", label: "浅色主题", description: "浅色卡片、高对比文字" },
   { value: "neon", label: "霓虹渐变", description: "深色底、粉紫蓝赛博风" }
 ];
 const themeState = common_vendor.reactive({
@@ -17,8 +16,6 @@ function normalizeTheme(value) {
     return "neon";
   if (raw === "light")
     return "light";
-  if (raw === "warm" || raw === "vivid_gold")
-    return "warm";
   return "vivid";
 }
 function loadTheme() {

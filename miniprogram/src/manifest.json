@@ -1,7 +1,7 @@
 {
-    "name" : "估值助手小程序",
+    "name" : "小白养基小程序",
     "appid" : "__UNI__1C55542",
-    "description" : "估值助手微信小程序迁移",
+    "description" : "小白养基微信小程序",
     "versionName" : "0.1.0",
     "versionCode" : "1",
     "mp-weixin" : {

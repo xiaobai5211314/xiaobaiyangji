@@ -1377,7 +1377,7 @@ function populateParameters(fromRes, toRes) {
   const hostLanguage = (language || "").replace(/_/g, "-");
   const parameters = {
     appId: "__UNI__1C55542",
-    appName: "估值助手小程序",
+    appName: "小白养基小程序",
     appVersion: "0.1.0",
     appVersionCode: "1",
     appLanguage: getAppLanguage(hostLanguage),
@@ -1521,7 +1521,7 @@ const getAppBaseInfo = {
     let hostLanguage = (language || "").replace(/_/g, "-");
     const parameters = {
       appId: "__UNI__1C55542",
-      appName: "估值助手小程序",
+      appName: "小白养基小程序",
       appVersion: "0.1.0",
       appVersionCode: "1",
       appLanguage: getAppLanguage(hostLanguage),
