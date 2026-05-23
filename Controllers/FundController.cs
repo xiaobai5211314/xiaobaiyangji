@@ -247,6 +247,7 @@ namespace 估值助手.Controllers
      double? exactProfit = null,
      double? exactAssets = null)
         {
+            double beforeHoldAmount = fund.HoldAmount;
             double baseAmount = GetDailyBaseAmount(fund, settleDate);
             double pending = GetPendingTradeAmount(fund, settleDate);
 
@@ -270,6 +271,9 @@ namespace 估值助手.Controllers
                 settledProfit = Math.Round(exactProfit ?? (baseAmount * (actualRate / 100.0)), 2);
                 newHoldAmount = Math.Round(baseAmount + settledProfit + pending, 2);
             }
+
+            Console.WriteLine(
+                $"[夜间清算] code={fund.FundCode}, beforeHoldAmount={beforeHoldAmount:F2}, baseAmount={baseAmount:F2}, pending={pending:F2}, settledProfit={settledProfit:F2}, newHoldAmount={newHoldAmount:F2}");
 
             bool changed = fund.LastSettledDate != settleDate ||
                            Math.Abs(fund.LastSettledRate - actualRate) > 0.0001 ||
@@ -1055,7 +1059,12 @@ namespace 估值助手.Controllers
                         FundName = item.Name,
                         HoldAmount = Math.Round(item.HoldAmount, 2),
                         CostAmount = item.CostAmount > 0 ? Math.Round(item.CostAmount, 2) : Math.Round(item.HoldAmount, 2),
-                        HoldShares = Math.Round(item.HoldShares, 2)
+                        HoldShares = Math.Round(item.HoldShares, 6),
+                        LastTradeDate = null,
+                        LastAddAmount = 0,
+                        LastSettledDate = null,
+                        LastSettledProfit = 0,
+                        LastSettledRate = 0
                     };
                     _context.MyFunds.Add(newFund);
                     userFundDict[newFund.FundCode] = newFund;
@@ -1070,29 +1079,28 @@ namespace 估值助手.Controllers
 
         private static void ApplyOcrRowToExistingFund(MyFundConfig exist, OcrImportPreviewItem item)
         {
+            Console.WriteLine(
+                $"[OCR校准前] code={exist.FundCode}, oldHoldAmount={exist.HoldAmount:F2}, oldLastTradeDate={exist.LastTradeDate ?? "null"}, oldLastAddAmount={exist.LastAddAmount:F2}");
+
             if (item.HoldAmount > 0)
             {
-                bool isRecentAdd = false;
-                if (DateTime.TryParse(exist.LastTradeDate, out DateTime lastTradeDate))
-                {
-                    isRecentAdd = (ChinaNow() - lastTradeDate).TotalDays <= 4;
-                }
-
-                if (isRecentAdd && exist.LastAddAmount > 0 && (exist.HoldAmount - item.HoldAmount) > exist.LastAddAmount * 0.5)
-                {
-                    exist.HoldAmount = Math.Round(item.HoldAmount + exist.LastAddAmount, 2);
-                }
-                else
-                {
-                    exist.HoldAmount = Math.Round(item.HoldAmount, 2);
-                }
+                exist.HoldAmount = Math.Round(item.HoldAmount, 2);
             }
 
             if (item.CostAmount > 0) exist.CostAmount = Math.Round(item.CostAmount, 2);
-            if (item.HoldShares > 0 && (exist.HoldShares == 0 || Math.Abs(exist.HoldShares - item.HoldShares) > 1))
+            if (item.HoldShares > 0)
             {
-                exist.HoldShares = Math.Round(item.HoldShares, 2);
+                exist.HoldShares = Math.Round(item.HoldShares, 6);
             }
+
+            exist.LastTradeDate = null;
+            exist.LastAddAmount = 0;
+            exist.LastSettledDate = null;
+            exist.LastSettledProfit = 0;
+            exist.LastSettledRate = 0;
+
+            Console.WriteLine(
+                $"[OCR校准后] code={exist.FundCode}, newHoldAmount={exist.HoldAmount:F2}, newLastTradeDate={exist.LastTradeDate ?? "null"}, newLastAddAmount={exist.LastAddAmount:F2}");
         }
 
         private async Task UpsertOcrCorrectionAsync(string username, OcrImportPreviewItem item)

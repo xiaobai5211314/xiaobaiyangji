@@ -166,6 +166,7 @@ namespace 估值助手.Services
       double? exactProfit = null,
       double? exactAssets = null)
         {
+            double beforeHoldAmount = fund.HoldAmount;
             double baseAmount = GetDailyBaseAmount(fund, settleDate);
             double pending = GetPendingTradeAmount(fund, settleDate);
 
@@ -184,6 +185,9 @@ namespace 估值助手.Services
                 settledProfit = Math.Round(exactProfit ?? (baseAmount * (actualRate / 100.0)), 2);
                 newHoldAmount = Math.Round(baseAmount + settledProfit + pending, 2);
             }
+
+            Console.WriteLine(
+                $"[夜间清算] code={fund.FundCode}, beforeHoldAmount={beforeHoldAmount:F2}, baseAmount={baseAmount:F2}, pending={pending:F2}, settledProfit={settledProfit:F2}, newHoldAmount={newHoldAmount:F2}");
 
             bool changed = fund.LastSettledDate != settleDate ||
                            Math.Abs(fund.LastSettledRate - actualRate) > 0.0001 ||
