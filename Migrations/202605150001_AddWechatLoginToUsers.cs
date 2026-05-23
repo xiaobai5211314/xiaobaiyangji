@@ -1,10 +1,10 @@
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
-using 估值助手.Models;
+using 小白养基.Models;
 
 #nullable disable
 
-namespace 估值助手.Migrations
+namespace 小白养基.Migrations
 {
     [DbContext(typeof(AppDbContext))]
     [Migration("202605150001_AddWechatLoginToUsers")]

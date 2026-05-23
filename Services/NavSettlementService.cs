@@ -1,9 +1,9 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
-using 估值助手.Models;
+using 小白养基.Models;
 
-namespace 估值助手.Services
+namespace 小白养基.Services
 {
     public class NavSettlementService : BackgroundService
     {

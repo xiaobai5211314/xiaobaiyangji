@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace 估值助手.Services
+namespace 小白养基.Services
 {
     public record StockOcrCandidate(
         string StockCode,

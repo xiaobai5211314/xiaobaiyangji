@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace 估值助手.Models
+namespace 小白养基.Models
 {
     /// <summary>
     /// 盘后校准样本：真实净值涨跌幅与盘中估算涨跌幅的误差样本。

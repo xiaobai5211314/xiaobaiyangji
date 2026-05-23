@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace 估值助手.Models
+namespace 小白养基.Models
 {
     // 🗄️ 历史战略档案表
     public class DailyArchive

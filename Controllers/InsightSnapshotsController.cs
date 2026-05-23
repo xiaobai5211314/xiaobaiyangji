@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
-using 估值助手.Models;
+using 小白养基.Models;
 
-namespace 估值助手.Controllers
+namespace 小白养基.Controllers
 {
     [ApiController]
     [Route("api/fund/insight-snapshots")]

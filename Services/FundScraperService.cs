@@ -1,9 +1,9 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
-using 估值助手.Models;
+using 小白养基.Models;
 
-namespace 估值助手.Services
+namespace 小白养基.Services
 {
     public class FundScraperService : BackgroundService
     {

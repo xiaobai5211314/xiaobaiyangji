@@ -8,13 +8,13 @@ using StackExchange.Redis;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
-using 估值助手.Models;
-using 估值助手.Services;
+using 小白养基.Models;
+using 小白养基.Services;
 using Color = SixLabors.ImageSharp.Color;
 using Image = SixLabors.ImageSharp.Image;
 using Microsoft.Extensions.Caching.Memory;
 
-namespace 估值助手.Controllers
+namespace 小白养基.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]

@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace 估值助手.Models
+namespace 小白养基.Models
 {
     public class StockKLineCache
     {

@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace 估值助手.Models
+namespace 小白养基.Models
 {
     /// <summary>
     /// 盘中估值快照：保存某天某只基金在盘中的原始估算涨跌幅，供盘后净值确认后做误差校准。

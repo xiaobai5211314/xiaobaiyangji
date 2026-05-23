@@ -5,8 +5,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Net.Http.Headers;
 using System.IO.Compression;
 using System.Text.Json;
-using 估值助手.Models;
-using 估值助手.Services;
+using 小白养基.Models;
+using 小白养基.Services;
 using StackExchange.Redis;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;

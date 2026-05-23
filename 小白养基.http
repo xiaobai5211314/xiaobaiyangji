@@ -1,0 +1,6 @@
+@小白养基_HostAddress = http://localhost:5194
+
+GET {{小白养基_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

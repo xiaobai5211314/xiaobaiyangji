@@ -1,8 +1,8 @@
 --- a/.github/workflows/deploy-backend.yml
 +++ b/.github/workflows/deploy-backend.yml
 @@ -153,8 +153,27 @@
-           if [ -f "$APP_DIR/估值助手.dll" ]; then
-             cp -f "$APP_DIR/估值助手.dll" "$APP_DIR/估值助手.dll.bak"
+           if [ -f "$APP_DIR/小白养基.dll" ]; then
+             cp -f "$APP_DIR/小白养基.dll" "$APP_DIR/小白养基.dll.bak"
            fi
  
 +          CONFIG_BACKUP="/tmp/guzhi_appsettings.Production.json"

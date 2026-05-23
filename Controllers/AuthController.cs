@@ -5,9 +5,9 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
-using 估值助手.Models;
+using 小白养基.Models;
 
-namespace 估值助手.Controllers
+namespace 小白养基.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]

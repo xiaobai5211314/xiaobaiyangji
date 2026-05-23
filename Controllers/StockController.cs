@@ -2,10 +2,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json.Linq;
 using System.Text.Json;
-using 估值助手.Models;
-using 估值助手.Services;
+using 小白养基.Models;
+using 小白养基.Services;
 
-namespace 估值助手.Controllers
+namespace 小白养基.Controllers
 {
     [ApiController]
     [Route("api/stock")]

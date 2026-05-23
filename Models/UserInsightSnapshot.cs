@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace 估值助手.Models
+namespace 小白养基.Models
 {
     /// <summary>
     /// 前端产品化面板快照：战报、回本榜、赛道暴露、可信度雷达等可保存为跨设备可复用快照。

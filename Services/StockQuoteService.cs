@@ -3,9 +3,9 @@ using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
-using 估值助手.Models;
+using 小白养基.Models;
 
-namespace 估值助手.Services
+namespace 小白养基.Services
 {
     public record StockQuoteDto(
         string Code,

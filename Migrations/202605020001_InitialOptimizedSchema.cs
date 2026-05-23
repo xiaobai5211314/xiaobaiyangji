@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace 估值助手.Migrations
+namespace 小白养基.Migrations
 {
     public partial class InitialOptimizedSchema : Migration
     {

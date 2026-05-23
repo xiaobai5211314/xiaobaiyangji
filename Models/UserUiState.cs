@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace 估值助手.Models
+namespace 小白养基.Models
 {
     /// <summary>
     /// 用户 UI 偏好持久化：隐私模式、盈亏页视图、回本模拟默认金额等轻量前端状态。

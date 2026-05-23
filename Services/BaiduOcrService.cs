@@ -2,7 +2,7 @@ using Baidu.Aip.Ocr;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json.Linq;
 
-namespace 估值助手.Services
+namespace 小白养基.Services
 {
     public interface IBaiduOcrService
     {
