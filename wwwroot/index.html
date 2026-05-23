@@ -26,26 +26,26 @@
     </script>
     <style>
                                 :root {
-            --page-bg: linear-gradient(165deg, #f0e8d8 0%, #e8dcc8 40%, #e0d4b8 100%);
-            --page-bg-color: #f0e8d8;
-            --card-bg: rgba(255, 252, 243, 0.96);
-            --card-border: rgba(0, 0, 0, 0.06);
-            --card-shadow: 0 2px 12px rgba(120, 90, 40, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.03);
-            --card-bg-hero: linear-gradient(135deg, #b8945a 0%, #d4a76a 50%, #c49b5e 100%);
-            --card-bg-report: rgba(255, 252, 243, 0.96);
-            --card-bg-list: rgba(255, 252, 243, 0.96);
-            --card-bg-soft: rgba(255, 250, 238, 0.88);
-            --card-border-glow: rgba(180, 148, 90, 0.15);
-            --primary-gradient: linear-gradient(135deg, #b8945a, #d4a76a);
-            --logo-gradient: linear-gradient(to right, #b8945a, #c49b5e);
-            --secondary-gradient: linear-gradient(135deg, rgba(180, 148, 90, 0.08), rgba(200, 168, 110, 0.06));
-            --accent-pink: #d4856a;
-            --accent-purple: #b8945a;
-            --accent-blue: #c49b5e;
-            --text-main: #2c2416;
-            --text-muted: #4a4030;
-            --profit-color: #d45a3a;
-            --loss-color: #4a8c5c;
+            --page-bg: linear-gradient(165deg, #eef1f9 0%, #e2e7f4 40%, #e8ecf6 100%);
+            --page-bg-color: #eef1f9;
+            --card-bg: rgba(255, 255, 255, 0.94);
+            --card-border: rgba(99, 102, 241, 0.08);
+            --card-shadow: 0 2px 16px rgba(67, 56, 202, 0.07), 0 0 0 1px rgba(99, 102, 241, 0.04);
+            --card-bg-hero: linear-gradient(135deg, #6366f1 0%, #818cf8 50%, #7c3aed 100%);
+            --card-bg-report: rgba(255, 255, 255, 0.94);
+            --card-bg-list: rgba(255, 255, 255, 0.94);
+            --card-bg-soft: rgba(245, 246, 255, 0.88);
+            --card-border-glow: rgba(99, 102, 241, 0.14);
+            --primary-gradient: linear-gradient(135deg, #6366f1, #818cf8);
+            --logo-gradient: linear-gradient(to right, #6366f1, #8b5cf6);
+            --secondary-gradient: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(139, 92, 246, 0.06));
+            --accent-pink: #f472b6;
+            --accent-purple: #8b5cf6;
+            --accent-blue: #6366f1;
+            --text-main: #1e1b4b;
+            --text-muted: #4c4a6e;
+            --profit-color: #ef4444;
+            --loss-color: #10b981;
             --button-radius: 10px;
             --card-radius: 16px;
         /* === Typography Scale === */
@@ -59,35 +59,59 @@
         --text-size-xl: 1.2rem;
         --text-size-2xl: 1.45rem;
         --text-size-3xl: 1.8rem;
-        --text-soft: #8a7e6a;
+        --text-soft: #6b7280;
         }
 
+            :root[data-theme="warm"] {
+                --page-bg: linear-gradient(165deg, #f0e8d8 0%, #e8dcc8 40%, #e0d4b8 100%);
+                --page-bg-color: #f0e8d8;
+                --card-bg: rgba(255, 252, 243, 0.96);
+                --card-border: rgba(0, 0, 0, 0.06);
+                --card-shadow: 0 2px 12px rgba(120, 90, 40, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.03);
+                --card-bg-hero: linear-gradient(135deg, #b8945a 0%, #d4a76a 50%, #c49b5e 100%);
+                --card-bg-report: rgba(255, 252, 243, 0.96);
+                --card-bg-list: rgba(255, 252, 243, 0.96);
+                --card-bg-soft: rgba(255, 250, 238, 0.88);
+                --card-border-glow: rgba(180, 148, 90, 0.15);
+                --primary-gradient: linear-gradient(135deg, #b8945a, #d4a76a);
+                --logo-gradient: linear-gradient(to right, #b8945a, #c49b5e);
+                --secondary-gradient: linear-gradient(135deg, rgba(180, 148, 90, 0.08), rgba(200, 168, 110, 0.06));
+                --accent-pink: #d4856a;
+                --accent-purple: #b8945a;
+                --accent-blue: #c49b5e;
+                --text-main: #2c2416;
+                --text-muted: #4a4030;
+                --text-soft: #8a7e6a;
+                --profit-color: #d45a3a;
+                --loss-color: #4a8c5c;
+                --button-radius: 10px;
+                --card-radius: 16px;
+            }
+
                                                 :root[data-theme="light"] {
-                --page-bg: linear-gradient(165deg, #f4f7fc 0%, #ecf1f8 40%, #eef2f9 100%);
-                --page-bg-color: #f4f7fc;
-                --page-bg: linear-gradient(165deg, #f6f9fd 0%, #eef3f9 40%, #f0f5fb 100%);
-                --page-bg-color: #f6f9fd;
-                --card-bg: rgba(248, 251, 255, 0.97);
-                --card-border: rgba(37, 99, 235, 0.08);
-                --card-shadow: 0 2px 16px rgba(30, 58, 110, 0.07), 0 0 0 1px rgba(37, 99, 235, 0.04);
-                --card-bg-hero: linear-gradient(135deg, #2563eb, #3b82f6);
-                --card-bg-report: rgba(248, 251, 255, 0.97);
-                --card-bg-list: rgba(248, 251, 255, 0.97);
-                --card-bg-soft: linear-gradient(145deg, rgba(246,250,254,0.95), rgba(234,241,250,0.9));
-                --card-border-glow: rgba(37, 99, 235, 0.12);
-                --primary-gradient: linear-gradient(135deg, #2563eb, #3b82f6);
-                --logo-gradient: linear-gradient(to right, #2563eb, #6366f1);
-                --secondary-gradient: linear-gradient(135deg, rgba(37, 99, 235, 0.06), rgba(99, 102, 241, 0.04));
-                --accent-pink: #ff5fa2;
-                --accent-purple: #6366f1;
-                --accent-blue: #2563eb;
-                --text-main: #0f172a;
-                --text-muted: #475569;
-                --text-soft: #94a3b8;
-                --profit-color: #dc2626;
-                --loss-color: #059669;
-                --button-radius: 12px;
-                --card-radius: 18px;
+                --page-bg: linear-gradient(175deg, #f5f5f7 0%, #fafafa 38%, #f5f5f7 100%);
+                --page-bg-color: #f5f5f7;
+                --card-bg: rgba(255, 255, 255, 0.88);
+                --card-border: rgba(0, 0, 0, 0.05);
+                --card-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.03), 0 4px 28px rgba(0, 0, 0, 0.04);
+                --card-bg-hero: linear-gradient(160deg, #1d1d1f, #2d2d2f);
+                --card-bg-report: rgba(255, 255, 255, 0.90);
+                --card-bg-list: rgba(255, 255, 255, 0.85);
+                --card-bg-soft: linear-gradient(145deg, rgba(250,250,252,0.95), rgba(245,245,247,0.90));
+                --card-border-glow: rgba(0, 113, 227, 0.07);
+                --primary-gradient: linear-gradient(135deg, #0071e3, #2997ff);
+                --logo-gradient: linear-gradient(to right, #1d1d1f, #3a3a3c);
+                --secondary-gradient: linear-gradient(135deg, rgba(0, 113, 227, 0.04), rgba(41, 151, 255, 0.03));
+                --accent-pink: #ff375f;
+                --accent-purple: #8944ab;
+                --accent-blue: #0071e3;
+                --text-main: #1d1d1f;
+                --text-muted: #6e6e73;
+                --text-soft: #aeaeb2;
+                --profit-color: #ff3b30;
+                --loss-color: #30b158;
+                --button-radius: 10px;
+                --card-radius: 16px;
             }
 
             :root[data-theme="rainbow"] {
@@ -298,9 +322,11 @@
         :root[data-theme="light"] .stock-kline-tab:not(.active),
         :root[data-theme="light"] .theme-choice-btn:not(.active),
         :root[data-theme="light"] .bottom-tab {
-            background: rgba(255, 255, 255, .78) !important;
-            border-color: rgba(15, 23, 42, .12) !important;
-            color: #334155 !important;
+            background: rgba(255, 255, 255, .72) !important;
+            border-color: rgba(0, 0, 0, .08) !important;
+            color: #3a3a3c !important;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
         }
 
             :root[data-theme="light"] .btn-primary,
@@ -322,60 +348,64 @@
         :root[data-theme="light"] .recovery-input,
         :root[data-theme="light"] .analysis-toolbar input,
         :root[data-theme="light"] .analysis-toolbar select {
-            background: rgba(255, 255, 255, .86) !important;
-            border-color: rgba(15, 23, 42, .14) !important;
+            background: rgba(255, 255, 255, .82) !important;
+            border-color: rgba(0, 0, 0, .08) !important;
             color: var(--text-main) !important;
         }
 
         :root[data-theme="light"] .bottom-tabbar {
-            background: rgba(255, 255, 255, .90) !important;
-            border-color: rgba(15, 23, 42, .10) !important;
-            box-shadow: 0 14px 34px rgba(15, 23, 42, .12) !important;
+            background: rgba(255, 255, 255, .82) !important;
+            border-color: rgba(0, 0, 0, .06) !important;
+            box-shadow: 0 -1px 0 rgba(0, 0, 0, .05), 0 -4px 24px rgba(0, 0, 0, .06) !important;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
         }
 
         :root[data-theme="light"] .theme-settings {
-            background: rgba(248, 250, 252, .82);
-            border-color: rgba(15, 23, 42, .10);
+            background: rgba(250, 250, 252, .80);
+            border-color: rgba(0, 0, 0, .06);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
         }
 
         :root[data-theme="light"] .metrics-grid {
-            background: rgba(241, 245, 249, 0.92);
+            background: rgba(245, 245, 247, .88);
         }
 
         :root[data-theme="light"] .metric-label {
-            color: #64748b;
+            color: var(--text-soft);
         }
 
         :root[data-theme="light"] .modal-content {
             background: #ffffff;
-            border-color: rgba(15, 23, 42, 0.12);
-            box-shadow: 0 10px 40px rgba(15, 23, 42, 0.18);
+            border-color: rgba(0, 0, 0, .08);
+            box-shadow: 0 0 0 0.5px rgba(0, 0, 0, .06), 0 8px 40px rgba(0, 0, 0, .12);
         }
 
         :root[data-theme="light"] .modal-input {
             background: #ffffff;
-            border-color: rgba(15, 23, 42, 0.14);
-            color: #172033;
+            border-color: rgba(0, 0, 0, .08);
+            color: #1d1d1f;
         }
 
         :root[data-theme="light"] .badge-estimate {
-            color: #2563eb;
-            background: rgba(37, 99, 235, 0.10);
-            border-color: rgba(37, 99, 235, 0.20);
+            color: #0071e3;
+            background: rgba(0, 113, 227, .08);
+            border-color: rgba(0, 113, 227, .16);
         }
 
         :root[data-theme="light"] .badge-actual {
-            color: #059669;
-            background: rgba(5, 150, 105, 0.10);
-            border-color: rgba(5, 150, 105, 0.20);
+            color: #30b158;
+            background: rgba(48, 177, 88, .08);
+            border-color: rgba(48, 177, 88, .16);
         }
 
         :root[data-theme="light"] .divider {
-            background: rgba(15, 23, 42, 0.10);
+            background: rgba(0, 0, 0, .06);
         }
 
         :root[data-theme="light"] .skeleton-box {
-            background: linear-gradient(90deg, rgba(226, 232, 240, 0.6) 25%, rgba(241, 245, 249, 0.9) 37%, rgba(226, 232, 240, 0.6) 63%);
+            background: linear-gradient(90deg, rgba(0, 0, 0, .04) 25%, rgba(0, 0, 0, .08) 37%, rgba(0, 0, 0, .04) 63%);
             background-size: 400% 100%;
         }
 
@@ -393,14 +423,14 @@
         html[data-theme="light"] .profit-list-row > div:not(:last-child),
         html[data-theme="light"] .metric-value:not([style]),
         html[data-theme="light"] .stock-metric .value:not([style]) {
-            color: #172033;
-            -webkit-text-fill-color: #172033;
+            color: #1d1d1f;
+            -webkit-text-fill-color: #1d1d1f;
         }
 
         html[data-theme="light"] .fund-card > div:first-child > span:first-child,
         html[data-theme="light"] .fund-card > div:first-child > span:first-child > span:first-child {
-            color: #0f172a !important;
-            -webkit-text-fill-color: #0f172a !important;
+            color: #1d1d1f !important;
+            -webkit-text-fill-color: #1d1d1f !important;
             opacity: 1 !important;
             text-shadow: none !important;
         }
@@ -413,8 +443,8 @@
         html[data-theme="light"] .sector-table-head,
         html[data-theme="light"] .calendar-week,
         html[data-theme="light"] .news-empty {
-            color: #64748b;
-            -webkit-text-fill-color: #64748b;
+            color: #6e6e73;
+            -webkit-text-fill-color: #6e6e73;
         }
 
         html[data-theme="light"] .fund-card [style*="color: #fff"],
@@ -472,8 +502,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         html[data-theme="light"] .calibration-card-row [style*="color: #f8fafc"],
         html[data-theme="light"] .profit-list-row [style*="color:#f8fafc"],
         html[data-theme="light"] .profit-list-row [style*="color: #f8fafc"] {
-            color: #0f172a !important;
-            -webkit-text-fill-color: #0f172a !important;
+            color: #1d1d1f !important;
+            -webkit-text-fill-color: #1d1d1f !important;
         }
 
         html[data-theme="light"] .glass-panel [style*="color: #fff"],
@@ -488,8 +518,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         html[data-theme="light"] .modal-content [style*="color:#fff"],
         html[data-theme="light"] .modal-content [style*="color: #f8fafc"],
         html[data-theme="light"] .modal-content [style*="color:#f8fafc"] {
-            color: #0f172a !important;
-            -webkit-text-fill-color: #0f172a !important;
+            color: #1d1d1f !important;
+            -webkit-text-fill-color: #1d1d1f !important;
         }
 
         html[data-theme="light"] .fund-card [style*="color:#cbd5e1"],
@@ -498,25 +528,25 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         html[data-theme="light"] .stock-card [style*="color: #cbd5e1"],
         html[data-theme="light"] .sector-row [style*="color:#cbd5e1"],
         html[data-theme="light"] .sector-row [style*="color: #cbd5e1"] {
-            color: #334155 !important;
-            -webkit-text-fill-color: #334155 !important;
+            color: #6e6e73 !important;
+            -webkit-text-fill-color: #6e6e73 !important;
         }
 
         html[data-theme="light"] .stock-code-chip {
-            color: #475569;
-            background: rgba(15, 23, 42, .06);
-            border: 1px solid rgba(15, 23, 42, .08);
+            color: #6e6e73;
+            background: rgba(0, 0, 0, .04);
+            border: 1px solid rgba(0, 0, 0, .06);
         }
 
         html[data-theme="light"] .stock-metric,
         html[data-theme="light"] .quick-holding-card,
         html[data-theme="light"] .calendar-day {
-            background: rgba(241, 245, 249, .86);
-            border-color: rgba(15, 23, 42, .08);
+            background: rgba(245, 245, 247, .86);
+            border-color: rgba(0, 0, 0, .06);
         }
 
         html[data-theme="light"] .calendar-date {
-            color: #334155;
+            color: #3a3a3c;
         }
 
         .fund-list-container {
@@ -4304,6 +4334,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <div class="theme-settings-title">主题设置</div>
                         <div class="theme-choice-row">
                             <button :class="['btn', 'theme-choice-btn', appTheme === 'vivid' ? 'active' : '']" @click="setAppTheme('vivid')">活力渐变</button>
+                            <button :class="['btn', 'theme-choice-btn', appTheme === 'warm' ? 'active' : '']" @click="setAppTheme('warm')">暖金主题</button>
                             <button :class="['btn', 'theme-choice-btn', appTheme === 'light' ? 'active' : '']" @click="setAppTheme('light')">浅色主题</button>
                             <button :class="['btn', 'theme-choice-btn', appTheme === 'rainbow' ? 'active' : '']" @click="setAppTheme('rainbow')">彩虹渐变</button>
                         </div>
@@ -4813,14 +4844,16 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     const value = String(theme || '').toLowerCase();
                     return value === 'rainbow' || value === 'neon' || value === 'gradient' ? 'rainbow'
                          : value === 'light' ? 'light'
-                         : 'vivid';
+                         : value === 'warm' || value === 'vivid_gold' ? 'warm'
+                         : value === 'vivid' ? 'vivid'
+                         : 'rainbow';
                 };
                 const applyAppTheme = (theme) => {
                     const safeTheme = normalizeTheme(theme);
                     document.documentElement.setAttribute('data-theme', safeTheme);
                     if (document.body) document.body.setAttribute('data-theme', safeTheme);
                     const metaTheme = document.querySelector('meta[name="theme-color"]');
-                    if (metaTheme) metaTheme.setAttribute('content', safeTheme === 'rainbow' ? '#151d3f' : safeTheme === 'light' ? '#f8fafc' : '#b8945a');
+                    if (metaTheme) metaTheme.setAttribute('content', safeTheme === 'rainbow' ? '#151d3f' : safeTheme === 'light' ? '#f8fafc' : safeTheme === 'warm' ? '#f0e8d8' : '#eef1f9');
                 };
                 const appTheme = ref(normalizeTheme(localStorage.getItem(THEME_STORAGE_KEY)));
                 applyAppTheme(appTheme.value);
