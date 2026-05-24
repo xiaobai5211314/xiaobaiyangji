@@ -15,9 +15,9 @@
         (function () {
             try {
                 var rawTheme = String(localStorage.getItem('guzhi_web_theme') || '').toLowerCase();
-                var theme = rawTheme === 'rainbow' || rawTheme === 'neon' || rawTheme === 'gradient' ? 'rainbow'
+                var theme = rawTheme === 'vivid' ? 'vivid'
                           : rawTheme === 'light' ? 'light'
-                          : 'vivid';
+                          : 'rainbow';
                 document.documentElement.setAttribute('data-theme', theme);
             } catch (e) {
                 document.documentElement.setAttribute('data-theme', 'vivid');

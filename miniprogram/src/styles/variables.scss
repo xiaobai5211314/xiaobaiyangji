@@ -1,41 +1,36 @@
 // ============================================================
-// 小白养基 · 年轻活力风 色彩系统
+// 小白养基 · Ruby Pink 色彩系统
 // 设计语言：圆润 / 通透 / 轻拟物 / 支付宝理财氛围
 // ============================================================
 
-// ─── 品牌主色（蓝紫渐变）──────────────────────────────
-$brand-blue:   #4f6ef7;
-$brand-purple: #7c5cfc;
-$brand-light:  #8b9dff;
-$brand-soft:   rgba(79, 110, 247, 0.08);
+// ─── 品牌主色（粉色系 Ruby Pink）────────────────────
+$brand-blue:   #ec4899;
+$brand-purple: #f472b6;
+$brand-light:  #f9a8d4;
+$brand-soft:   rgba(236, 72, 153, 0.08);
 
 // ─── 辅助渐变色 ──────────────────────────────────────
-$warm-red:     #ff6b6b;
-$warm-red-light: #ff8e8e;
-$warm-red-soft:  rgba(255, 107, 107, 0.08);
+$warm-red:     #e57373;
+$warm-red-light: #ef9a9a;
+$warm-red-soft:  rgba(229, 115, 115, 0.08);
 
 $amber:        #f7a641;
 $amber-light:  #ffc56d;
 $amber-soft:   rgba(247, 166, 65, 0.10);
 
 // ─── 页面底色 ──────────────────────────────────────
-$page-bg-light:    #f2f4f8;
-$page-bg-gradient:
-  radial-gradient(circle at 0% 0%, rgba(79, 110, 247, 0.06), transparent 40%),
-  radial-gradient(circle at 100% 30%, rgba(255, 107, 107, 0.04), transparent 35%),
-  radial-gradient(circle at 50% 100%, rgba(247, 166, 65, 0.05), transparent 40%),
-  $page-bg-light;
+$page-bg-light:    #fdf2f8;
+$page-bg-gradient: linear-gradient(175deg, #fce4ec 0%, #fdf2f8 30%, #f8bbd0 100%);
 
 // ─── 卡片 ─────────────────────────────────────────
-$card-bg:          rgba(255, 255, 255, 0.92);
+$card-bg:          rgba(255, 244, 249, 0.94);
 $card-bg-strong:   rgba(255, 255, 255, 0.98);
-$card-border:      rgba(79, 110, 247, 0.10);
+$card-border:      rgba(244, 114, 182, 0.08);
 $card-radius:      32rpx;
 $card-radius-sm:   20rpx;
 
 // ─── 主渐变 ───────────────────────────────────────
-$primary-gradient:
-  linear-gradient(135deg, $brand-blue 0%, $brand-purple 60%, #a78bfa 100%);
+$primary-gradient: linear-gradient(135deg, #ec4899, #f472b6);
 
 $warm-gradient:
   linear-gradient(135deg, $warm-red 0%, $warm-red-light 100%);
@@ -44,10 +39,10 @@ $amber-gradient:
   linear-gradient(135deg, $amber 0%, $amber-light 100%);
 
 // ─── 功能色 ───────────────────────────────────────
-$profit-red:    #ff4d5a;
-$loss-green:    #12b886;
+$profit-red:    #e53935;
+$loss-green:    #2e7d32;
 $warning-yellow: #f59e0b;
-$info-blue:     #4f6ef7;
+$info-blue:     #ec4899;
 
 // ─── 文本 ─────────────────────────────────────────
 $text-primary:    #1a1d2e;
@@ -59,7 +54,7 @@ $text-inverse:    #ffffff;
 $shadow-sm:  0 4rpx 16rpx rgba(26, 29, 46, 0.04);
 $shadow-md:  0 12rpx 40rpx rgba(26, 29, 46, 0.06);
 $shadow-lg:  0 20rpx 60rpx rgba(26, 29, 46, 0.08);
-$shadow-glow: 0 8rpx 32rpx rgba(79, 110, 247, 0.18), 0 0 16rpx rgba(124, 92, 252, 0.08);
+$shadow-glow: 0 8rpx 32rpx rgba(236, 72, 153, 0.18), 0 0 16rpx rgba(244, 114, 182, 0.08);
 
 // ─── 布局 ─────────────────────────────────────────
 $page-padding: 28rpx;
@@ -71,26 +66,26 @@ $safe-bottom-padding: env(safe-area-inset-bottom);
 // ─── 兼容别名（旧页面不报错） ───────────────────────
 $bg-deep-blue: $page-bg-light;
 $bg-purple: $brand-purple;
-$rainbow-pink: $warm-red;
-$rainbow-purple: $brand-purple;
-$rainbow-cyan: $brand-blue;
-$soft-pink: $warm-red-soft;
-$soft-purple: $brand-soft;
-$soft-cyan: rgba(79, 110, 247, 0.08);
+$rainbow-pink: #f472b6;
+$rainbow-purple: #8b5cf6;
+$rainbow-cyan: #ec4899;
+$soft-pink: rgba(244, 114, 182, 0.08);
+$soft-purple: rgba(236, 72, 153, 0.08);
+$soft-cyan: rgba(139, 92, 246, 0.08);
 $rainbow-gradient: $primary-gradient;
 $bg-panel: rgba(255, 255, 255, 0.92);
 $bg-panel-strong: $card-bg-strong;
 $card-shadow: $shadow-md;
 
-$primary-blue: $brand-blue;
-$primary-purple: $brand-purple;
+$primary-blue: #ec4899;
+$primary-purple: #f472b6;
 
 $page-bg: $page-bg-light;
 $panel-bg: $bg-panel;
 $panel-border: $card-border;
 $text-primary: $text-primary;
 $text-secondary: $text-secondary;
-$accent: $brand-blue;
-$danger: $profit-red;
-$success: $loss-green;
+$accent: #ec4899;
+$danger: #e53935;
+$success: #2e7d32;
 $warning: $warning-yellow;

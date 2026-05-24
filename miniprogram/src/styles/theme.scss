@@ -2,7 +2,7 @@
 @import './mixins.scss';
 
 // ============================================================
-// 主题系统 · 年轻活力风为默认主题
+// 主题系统 · 赛博暗色 neon 为默认主题
 // ============================================================
 
 @keyframes shimmer {
@@ -16,14 +16,14 @@
 }
 
 @keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 8rpx 32rpx rgba(79, 110, 247, 0.18); }
-  50%      { box-shadow: 0 8rpx 48rpx rgba(124, 92, 252, 0.28); }
+  0%, 100% { box-shadow: 0 8rpx 32rpx rgba(255, 95, 162, 0.24); }
+  50%      { box-shadow: 0 8rpx 48rpx rgba(139, 92, 246, 0.36); }
 }
 
 // ═══════════════════════════════════════════════════════════
-// 默认主题：年轻活力风 vivid（原 neon 升级）
+// Ruby Pink 主题 vivid
 // ═══════════════════════════════════════════════════════════
-.page-shell {
+.page-shell.theme-vivid {
   --page-bg: #{$page-bg-gradient};
   --page-bg-soft: rgba(242, 244, 248, 0.88);
   --card-bg: #{$card-bg};
@@ -56,43 +56,12 @@
   --button-radius: #{$button-radius};
   --card-radius: #{$card-radius};
   --card-shadow: #{$shadow-md};
-  --primary-gradient: var(--button-primary-bg);
-  --secondary-gradient: linear-gradient(135deg, rgba(79,110,247,0.06), rgba(124,92,252,0.08), rgba(255,107,107,0.04));
-  --accent-pink: #{$warm-red};
-  --accent-purple: #{$brand-purple};
-  --accent-blue: #{$brand-blue};
-
-  // 兼容别名
-  --theme-page-bg: var(--page-bg);
-  --theme-card-bg: var(--card-bg);
-  --theme-card-border: var(--border-color);
-  --theme-card-shadow: var(--card-shadow);
-  --theme-primary-gradient: var(--button-primary-bg);
-  --theme-secondary-gradient: var(--secondary-gradient);
-  --theme-accent-pink: var(--accent-pink);
-  --theme-accent-purple: var(--accent-purple);
-  --theme-accent-blue: var(--accent-blue);
-  --theme-text-main: var(--text-primary);
-  --theme-text-muted: var(--text-muted);
-  --theme-text-soft: var(--text-secondary);
-  --theme-profit-color: var(--profit-color);
-  --theme-loss-color: var(--loss-color);
-  --theme-panel-soft: var(--panel-soft);
-  --theme-control-bg: var(--control-bg);
-  --theme-button-radius: var(--button-radius);
-  --theme-card-radius: var(--card-radius);
-
-  min-height: 100vh;
-  box-sizing: border-box;
-  padding: $page-padding $page-padding calc($tabbar-height + 62rpx + env(safe-area-inset-bottom));
-  background: var(--page-bg);
-  color: var(--text-primary);
 }
 
 // ═══════════════════════════════════════════════════════════
-// 深色霓虹主题 neon（保留，原版风味）
+// 默认主题：赛博暗色 neon
 // ═══════════════════════════════════════════════════════════
-.page-shell.theme-neon {
+.page-shell {
   --page-bg:
     radial-gradient(circle at 12% 5%, rgba(255, 95, 162, 0.24), transparent 30%),
     radial-gradient(circle at 90% 6%, rgba(56, 189, 248, 0.22), transparent 32%),
@@ -133,45 +102,101 @@
   --control-bg: rgba(18, 28, 56, 0.74);
   --card-radius: 44rpx;
   --card-shadow: 0 24rpx 62rpx rgba(3, 7, 18, 0.34), 0 0 34rpx rgba(139, 92, 246, 0.16);
+  --primary-gradient: var(--button-primary-bg);
+  --secondary-gradient: linear-gradient(135deg, rgba(255,95,162,0.06), rgba(139,92,246,0.08), rgba(56,189,248,0.04));
+  --accent-pink: #ff5fa2;
+  --accent-purple: #8b5cf6;
+  --accent-blue: #38bdf8;
+
+  // 兼容别名
+  --theme-page-bg: var(--page-bg);
+  --theme-card-bg: var(--card-bg);
+  --theme-card-border: var(--border-color);
+  --theme-card-shadow: var(--card-shadow);
+  --theme-primary-gradient: var(--button-primary-bg);
+  --theme-secondary-gradient: var(--secondary-gradient);
+  --theme-accent-pink: var(--accent-pink);
+  --theme-accent-purple: var(--accent-purple);
+  --theme-accent-blue: var(--accent-blue);
+  --theme-text-main: var(--text-primary);
+  --theme-text-muted: var(--text-muted);
+  --theme-text-soft: var(--text-secondary);
+  --theme-profit-color: var(--profit-color);
+  --theme-loss-color: var(--loss-color);
+  --theme-panel-soft: var(--panel-soft);
+  --theme-control-bg: var(--control-bg);
+  --theme-button-radius: var(--button-radius);
+  --theme-card-radius: var(--card-radius);
+
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: $page-padding $page-padding calc($tabbar-height + 62rpx + env(safe-area-inset-bottom));
+  background: var(--page-bg);
+  color: var(--text-primary);
 }
 
+
 // ═══════════════════════════════════════════════════════════
-// 浅色主题 light（保留）
+// 暖色米黄主题 warm
+// ═══════════════════════════════════════════════════════════
+.page-shell.theme-warm {
+  --page-bg: linear-gradient(165deg, #f0e8d8 0%, #e8dcc8 40%, #e0d4b8 100%);
+  --page-bg-soft: rgba(240, 232, 216, 0.92);
+  --card-bg: rgba(255, 252, 243, 0.96);
+  --card-bg-strong: rgba(255, 250, 238, 0.98);
+  --text-primary: #2c2416;
+  --text-secondary: #4a4030;
+  --text-muted: #8a7e6a;
+  --text-inverse: #ffffff;
+  --border-color: rgba(180, 148, 90, 0.12);
+  --shadow-color: rgba(120, 90, 40, 0.08);
+  --tab-bg: rgba(255, 252, 243, 0.96);
+  --tab-active-bg: radial-gradient(circle at 28% 12%, rgba(255,255,255,0.22), transparent 30%), linear-gradient(135deg, #b8945a, #d4a76a);
+  --button-primary-bg: linear-gradient(135deg, rgba(255,255,255,0.22), transparent 40%), linear-gradient(135deg, #b8945a, #d4a76a);
+  --button-primary-text: #ffffff;
+  --input-bg: rgba(255, 252, 243, 0.94);
+  --input-text: #2c2416;
+  --input-placeholder: #8a7e6a;
+  --toast-bg: rgba(44, 36, 22, 0.96);
+  --toast-text: #ffffff;
+  --profit-color: #d45a3a;
+  --loss-color: #4a8c5c;
+  --warning-color: #b45309;
+  --panel-soft: rgba(248, 242, 228, 0.92);
+  --control-bg: rgba(255, 252, 243, 0.88);
+  --card-radius: 32rpx;
+  --card-shadow: 0 12rpx 40rpx rgba(120, 90, 40, 0.08);
+}
+// ═══════════════════════════════════════════════════════════
+// 浅色主题 light（绿色能源）
 // ═══════════════════════════════════════════════════════════
 .page-shell.theme-light {
-  --page-bg:
-    radial-gradient(circle at 18% 0%, rgba(79, 110, 247, 0.04), transparent 30%),
-    radial-gradient(circle at 92% 6%, rgba(124, 92, 252, 0.03), transparent 32%),
-    linear-gradient(180deg, #f8fafc 0%, #f1f5f9 50%, #f8fafc 100%);
-  --page-bg-soft: rgba(241, 245, 249, 0.92);
-  --card-bg: rgba(255, 255, 255, 0.96);
-  --card-bg-strong: rgba(255, 255, 255, 0.98);
-  --text-primary: #172033;
-  --text-secondary: #334155;
-  --text-muted: #64748b;
+  --page-bg: radial-gradient(circle at 18% 0%, rgba(76, 175, 80, 0.06), transparent 36%), radial-gradient(circle at 92% 6%, rgba(139, 195, 72, 0.05), transparent 38%), linear-gradient(175deg, #f0f4f0 0%, #f5f7f5 38%, #f0f4f0 100%);
+  --page-bg-soft: rgba(240, 244, 240, 0.92);
+  --card-bg: rgba(243, 249, 241, 0.94);
+  --card-bg-strong: rgba(245, 250, 244, 0.96);
+  --text-primary: #1a1a1a;
+  --text-secondary: #3d4f3d;
+  --text-muted: #5a6b5a;
   --text-inverse: #ffffff;
-  --border-color: rgba(100, 116, 139, 0.14);
-  --shadow-color: rgba(31, 41, 85, 0.10);
-  --tab-bg: rgba(255, 255, 255, 0.96);
-  --tab-active-bg:
-    radial-gradient(circle at 28% 12%, rgba(255, 255, 255, 0.26), transparent 30%),
-    #{$primary-gradient};
-  --button-primary-bg:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.24), transparent 40%),
-    #{$primary-gradient};
+  --border-color: rgba(76, 175, 80, 0.10);
+  --shadow-color: rgba(27, 94, 32, 0.08);
+  --tab-bg: rgba(245, 250, 244, 0.96);
+  --tab-active-bg: radial-gradient(circle at 28% 12%, rgba(255,255,255,0.24), transparent 30%), linear-gradient(135deg, #8bc348, #4caf50);
+  --button-primary-bg: linear-gradient(135deg, rgba(255,255,255,0.22), transparent 40%), linear-gradient(135deg, #8bc348, #4caf50);
   --button-primary-text: #ffffff;
-  --input-bg: rgba(255, 255, 255, 0.94);
-  --input-text: #172033;
-  --input-placeholder: #94a3b8;
-  --toast-bg: rgba(23, 32, 51, 0.96);
+  --input-bg: rgba(255, 255, 255, 0.90);
+  --input-text: #1a1a1a;
+  --input-placeholder: #8a9a8a;
+  --toast-bg: rgba(26, 26, 26, 0.96);
   --toast-text: #ffffff;
-  --profit-color: #dc3f55;
-  --loss-color: #0f9f8c;
-  --warning-color: #b45309;
-  --panel-soft: rgba(248, 250, 252, 0.92);
-  --control-bg: rgba(255, 255, 255, 0.86);
+  --profit-color: #e53935;
+  --loss-color: #2e7d32;
+  --warning-color: #f59e0b;
+  --panel-soft: rgba(240, 245, 240, 0.92);
+  --control-bg: rgba(245, 250, 244, 0.92);
   --card-radius: 32rpx;
-  --card-shadow: 0 12rpx 40rpx rgba(31, 41, 85, 0.08);
+  --card-shadow: 0 12rpx 40rpx rgba(27, 94, 32, 0.06);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -456,41 +481,41 @@ textarea::placeholder {
 .status-pill.tracking {
   color: $brand-blue !important;
   background: $brand-soft !important;
-  border-color: rgba(79, 110, 247, 0.20) !important;
+  border-color: rgba(255, 95, 162, 0.20) !important;
 }
 
 // ═══════════════════════════════════════════════════════════
-// 浅色主题特殊覆盖（保留旧版兼容）
+// 浅色主题特殊覆盖（绿色能源）
 // ═══════════════════════════════════════════════════════════
 .page-shell.theme-light .fund-card {
   background: var(--card-bg);
 }
 
 .page-shell.theme-light .confidence-row {
-  background: rgba(241, 245, 249, 0.92);
+  background: rgba(240, 245, 240, 0.92);
 }
 
 .page-shell.theme-light .calibration-strip {
-  color: #6d28d9;
-  background: rgba(139, 92, 246, 0.08);
+  color: #2e7d32;
+  background: rgba(76, 175, 80, 0.08);
 }
 
 .page-shell.theme-light .trend-panel,
 .page-shell.theme-light .history-chart-block {
-  background: rgba(241, 245, 249, 0.92);
-  border-color: rgba(100, 116, 139, 0.12);
+  background: rgba(240, 245, 240, 0.92);
+  border-color: rgba(76, 175, 80, 0.10);
 }
 
 .page-shell.theme-light .history-button {
-  color: #2563eb;
-  background: rgba(59, 130, 246, 0.10);
-  border-color: rgba(59, 130, 246, 0.20);
+  color: #2e7d32;
+  background: rgba(76, 175, 80, 0.10);
+  border-color: rgba(76, 175, 80, 0.20);
 }
 
 .page-shell.theme-light .expand-trend-button {
-  color: #334155;
-  background: rgba(241, 245, 249, 0.92);
-  border-color: rgba(100, 116, 139, 0.12);
+  color: #3d4f3d;
+  background: rgba(240, 245, 240, 0.92);
+  border-color: rgba(76, 175, 80, 0.10);
 }
 
 .page-shell.theme-light .stock-search-card,
@@ -503,14 +528,14 @@ textarea::placeholder {
 .page-shell.theme-light .holding-form input,
 .page-shell.theme-light .stock-ocr-grid input {
   background: rgba(255, 255, 255, 0.86);
-  border-color: rgba(100, 116, 139, 0.14);
+  border-color: rgba(76, 175, 80, 0.14);
 }
 
 .page-shell.theme-light .stock-actions button,
 .page-shell.theme-light .stock-inline-actions button {
-  color: #2563eb;
-  background: rgba(59, 130, 246, 0.10);
-  border-color: rgba(59, 130, 246, 0.20);
+  color: #2e7d32;
+  background: rgba(76, 175, 80, 0.10);
+  border-color: rgba(76, 175, 80, 0.20);
 }
 
 .page-shell.theme-light .stock-actions button.danger,
@@ -528,16 +553,16 @@ textarea::placeholder {
 .page-shell.theme-light .stock-metric-grid view,
 .page-shell.theme-light .stock-ocr-grid view,
 .page-shell.theme-light .holding-form view {
-  background: rgba(241, 245, 249, 0.92);
+  background: rgba(240, 245, 240, 0.92);
 }
 
 .page-shell.theme-light .kline-tab {
-  background: rgba(241, 245, 249, 0.92);
-  border-color: rgba(100, 116, 139, 0.12);
+  background: rgba(240, 245, 240, 0.92);
+  border-color: rgba(76, 175, 80, 0.10);
 }
 
 .page-shell.theme-light .kline-tab.active {
-  background: $primary-gradient;
+  background: linear-gradient(135deg, #8bc348, #4caf50);
   color: #fff;
   border-color: transparent;
 }
@@ -549,7 +574,7 @@ textarea::placeholder {
 // ═══════════════════════════════════════════════════════════
 // 活力主题 · 特殊元素升级
 // ═══════════════════════════════════════════════════════════
-.page-shell:not(.theme-neon):not(.theme-light) {
+.page-shell.theme-vivid {
 
   // Hero 卡 → 蓝紫渐变纯色大卡
   .hero-card {
@@ -570,15 +595,15 @@ textarea::placeholder {
   // Action 区域 → 柔和渐变
   .action-card {
     background:
-      linear-gradient(135deg, rgba(79, 110, 247, 0.04), rgba(124, 92, 252, 0.06)) !important;
-    border-color: rgba(79, 110, 247, 0.12) !important;
+      linear-gradient(135deg, rgba(236, 72, 153, 0.04), rgba(244, 114, 182, 0.06)) !important;
+    border-color: rgba(236, 72, 153, 0.12) !important;
   }
 
   // 板块切换按钮
   .asset-switch {
     border-radius: 36rpx;
-    background: rgba(79, 110, 247, 0.05) !important;
-    border-color: rgba(79, 110, 247, 0.12) !important;
+    background: rgba(236, 72, 153, 0.05) !important;
+    border-color: rgba(236, 72, 153, 0.12) !important;
   }
 
   .asset-switch-btn {
@@ -588,7 +613,7 @@ textarea::placeholder {
 
   // 基金卡片 → 白色 + 左边色条
   .fund-card {
-    border-left: 6rpx solid rgba(79, 110, 247, 0.4);
+    border-left: 6rpx solid rgba(236, 72, 153, 0.4);
     @include card-hover;
   }
 
@@ -615,8 +640,8 @@ textarea::placeholder {
 
   // 免责卡片柔和化
   .notice-card {
-    background: rgba(79, 110, 247, 0.03) !important;
-    border-color: rgba(79, 110, 247, 0.08) !important;
+    background: rgba(236, 72, 153, 0.03) !important;
+    border-color: rgba(236, 72, 153, 0.08) !important;
   }
 
   // 页面头部加间距
