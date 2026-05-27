@@ -1006,6 +1006,145 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             line-height: 1.5;
         }
 
+        .performance-card {
+            grid-column: 1 / -1;
+            min-width: 0;
+            overflow: hidden;
+            border: 1px solid rgba(96, 165, 250, .32);
+            background:
+                linear-gradient(135deg, rgba(255,255,255,.10), rgba(255,255,255,.04)) padding-box,
+                linear-gradient(135deg, rgba(255,77,143,.55), rgba(56,189,248,.34)) border-box;
+        }
+
+        .performance-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            min-width: 0;
+        }
+
+        .performance-select {
+            width: 128px;
+            max-width: 40vw;
+            min-height: 34px;
+            border-radius: 12px;
+            border: 1px solid rgba(148, 163, 184, .25);
+            background: rgba(15, 23, 42, .55);
+            color: var(--text-main);
+            font-weight: 800;
+            padding: 0 10px;
+            outline: none;
+        }
+
+        .performance-period-tabs {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin: 12px 0;
+        }
+
+        .performance-period-tabs button {
+            border: 1px solid rgba(148, 163, 184, .22);
+            background: rgba(15, 23, 42, .36);
+            color: var(--text-muted);
+            border-radius: 999px;
+            padding: 7px 12px;
+            font-size: 12px;
+            font-weight: 900;
+            cursor: pointer;
+        }
+
+        .performance-period-tabs button.active {
+            color: #fff;
+            border-color: rgba(255, 77, 143, .55);
+            background: linear-gradient(135deg, rgba(255,77,143,.78), rgba(56,189,248,.42));
+            box-shadow: 0 10px 22px rgba(255,77,143,.16);
+        }
+
+        .performance-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .performance-metric {
+            min-width: 0;
+            border-radius: 14px;
+            background: rgba(15, 23, 42, .32);
+            border: 1px solid rgba(148, 163, 184, .16);
+            padding: 10px;
+        }
+
+        .performance-metric span {
+            display: block;
+            color: var(--text-muted);
+            font-size: 11px;
+            margin-bottom: 4px;
+            white-space: nowrap;
+        }
+
+        .performance-metric strong {
+            display: block;
+            font-family: 'Courier New', monospace;
+            font-size: 20px;
+            line-height: 1.1;
+            white-space: nowrap;
+        }
+
+        .performance-chart-box {
+            width: 100%;
+            height: 220px;
+            min-width: 0;
+            border-radius: 16px;
+            background: rgba(0, 0, 0, .14);
+        }
+
+        .performance-status {
+            margin-top: 8px;
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .performance-status.win,
+        .metric-up {
+            color: #ff4d4f;
+        }
+
+        .performance-status.loss,
+        .metric-down {
+            color: #10b981;
+        }
+
+        .performance-status.flat {
+            color: #fbbf24;
+        }
+
+        @media (max-width: 640px) {
+            .performance-head {
+                flex-direction: column;
+            }
+
+            .performance-select {
+                width: 100%;
+                max-width: none;
+            }
+
+            .performance-period-tabs button {
+                flex: 1 1 72px;
+            }
+
+            .performance-metrics {
+                grid-template-columns: 1fr;
+            }
+
+            .performance-metric strong {
+                font-size: 18px;
+            }
+        }
+
 
 
         .compact-scroll-list {
@@ -4026,6 +4165,38 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 </div>
 
                 <div v-show="assetMode === 'fund'" class="feature-grid">
+                    <div class="glass-panel feature-card performance-card">
+                        <div class="performance-head">
+                            <div style="min-width:0;">
+                                <div class="feature-title">📈 日收益曲线</div>
+                                <div class="feature-subtitle">我的收益率 vs {{ selectedPerformanceIndexName }}</div>
+                            </div>
+                            <select class="performance-select" v-model="performanceIndex" @change="fetchPerformanceCurve">
+                                <option v-for="item in performanceIndices" :key="item.value" :value="item.value">{{ item.label }}</option>
+                            </select>
+                        </div>
+                        <div class="performance-period-tabs">
+                            <button v-for="item in performancePeriods" :key="item.value" type="button" :class="{active: performancePeriod === item.value}" @click="switchPerformancePeriod(item.value)">{{ item.label }}</button>
+                        </div>
+                        <div v-if="performanceCurve && performanceCurve.hasMyData" class="performance-metrics">
+                            <div class="performance-metric">
+                                <span>本周期收益</span>
+                                <strong :class="Number(performanceCurve.myTotalRate || 0) >= 0 ? 'metric-up' : 'metric-down'">{{ formatPerformancePercent(performanceCurve.myTotalRate) }}</strong>
+                            </div>
+                            <div class="performance-metric">
+                                <span>对比指数</span>
+                                <strong :class="Number(performanceCurve.indexTotalRate || 0) >= 0 ? 'metric-up' : 'metric-down'">{{ performanceCurve.indexAvailable ? formatPerformancePercent(performanceCurve.indexTotalRate) : '--' }}</strong>
+                            </div>
+                            <div class="performance-metric">
+                                <span>超额收益</span>
+                                <strong :class="Number(performanceCurve.excessRate || 0) >= 0 ? 'metric-up' : 'metric-down'">{{ performanceCurve.indexAvailable ? formatPerformancePercent(performanceCurve.excessRate) : '--' }}</strong>
+                            </div>
+                        </div>
+                        <div ref="performanceChartRef" class="performance-chart-box"></div>
+                        <div v-if="performanceLoading" class="performance-status">收益曲线加载中...</div>
+                        <div v-else-if="performanceMessage" class="performance-status">{{ performanceMessage }}</div>
+                        <div v-else-if="performanceCurve && performanceCurve.hasMyData" :class="['performance-status', performanceExcessClass]">{{ performanceVerdict }}</div>
+                    </div>
                     <div class="glass-panel feature-card">
                         <div class="feature-title">🧾 今日收盘战报</div>
                         <div class="feature-subtitle">{{ dailyBattleReport.summary }}</div>
@@ -4885,6 +5056,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     applyAppTheme(safeTheme);
                     nextTick(() => {
                         if (chartInstance.value) chartInstance.value.resize();
+                        if (performanceChartInstance.value) {
+                            performanceChartInstance.value.resize();
+                            renderPerformanceChart();
+                        }
                         if (stockChartInstance.value) {
                             stockChartInstance.value.resize();
                             renderStockChart(lastStockKlineRows.value || []);
@@ -4912,6 +5087,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const userDisplayName = ref(localStorage.getItem('fund_display_name') || '');
                 const fundsList = ref([]);
                 const chartRef = ref(null);
+                const performanceChartRef = ref(null);
                 const isLoading = ref(true);
                 const isNight = ref(false);
                 const totalPrincipal = ref(0);
@@ -4923,6 +5099,45 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const profileForm = reactive({ displayName: '', saving: false });
                 const fundForm = reactive({ code: '', amount: '' });
                 const chartInstance = shallowRef(null);
+                const performanceChartInstance = shallowRef(null);
+                const performanceCurve = ref(null);
+                const performancePeriod = ref('7d');
+                const performanceIndex = ref('hs300');
+                const performanceLoading = ref(false);
+                const performanceMessage = ref('');
+                const performancePeriods = [
+                    { value: '7d', label: '近7日' },
+                    { value: '1m', label: '近1月' },
+                    { value: '3m', label: '近3月' },
+                    { value: '1y', label: '近1年' }
+                ];
+                const performanceIndices = [
+                    { value: 'hs300', label: '沪深300' },
+                    { value: 'sz50', label: '上证50' },
+                    { value: 'cyb', label: '创业板' },
+                    { value: 'kc50', label: '科创50' }
+                ];
+                const selectedPerformanceIndexName = computed(() => performanceCurve.value?.indexName || performanceIndices.find(item => item.value === performanceIndex.value)?.label || '沪深300');
+                const formatPerformancePercent = (value) => {
+                    const n = Number(value);
+                    if (!Number.isFinite(n)) return '--';
+                    return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
+                };
+                const performanceExcessClass = computed(() => {
+                    if (!performanceCurve.value?.indexAvailable) return 'flat';
+                    const n = Number(performanceCurve.value.excessRate || 0);
+                    if (n > 0) return 'win';
+                    if (n < 0) return 'loss';
+                    return 'flat';
+                });
+                const performanceVerdict = computed(() => {
+                    const data = performanceCurve.value;
+                    if (!data?.hasMyData) return '暂无收益曲线数据';
+                    if (!data.indexAvailable) return '指数暂不可用';
+                    const excess = Number(data.excessRate || 0);
+                    if (excess === 0) return `跑平 ${data.indexName || selectedPerformanceIndexName.value}`;
+                    return `${excess > 0 ? '跑赢' : '跑输'} ${data.indexName || selectedPerformanceIndexName.value} ${formatPerformancePercent(excess)}`;
+                });
                 let timer = null;
                 let isFetchingData = false;
                 let lastDataFetchAt = 0;
@@ -6205,6 +6420,122 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     return echartsLoadingPromise;
                 };
 
+                const renderPerformanceChart = async () => {
+                    if (!performanceChartRef.value || activePage.value !== 'home') return;
+                    const points = Array.isArray(performanceCurve.value?.points) ? performanceCurve.value.points : [];
+                    if (points.length === 0) {
+                        if (performanceChartInstance.value) performanceChartInstance.value.clear();
+                        return;
+                    }
+
+                    try { await ensureEcharts(); }
+                    catch (e) {
+                        performanceMessage.value = 'ECharts 未加载，收益曲线暂不可用';
+                        return;
+                    }
+
+                    if (!performanceChartInstance.value) {
+                        performanceChartInstance.value = echarts.init(performanceChartRef.value, 'dark');
+                    }
+
+                    const hasIndexLine = points.some(p => p.indexRate !== null && p.indexRate !== undefined && Number.isFinite(Number(p.indexRate)));
+                    const series = [
+                        {
+                            name: '我的收益率',
+                            type: 'line',
+                            smooth: true,
+                            symbol: 'circle',
+                            symbolSize: 5,
+                            data: points.map(p => Number(p.myRate || 0)),
+                            lineStyle: { width: 3, color: '#ff4d8f' },
+                            itemStyle: { color: '#ff4d8f' },
+                            areaStyle: { color: 'rgba(255,77,143,.10)' }
+                        }
+                    ];
+
+                    if (hasIndexLine) {
+                        series.push({
+                            name: performanceCurve.value?.indexName || selectedPerformanceIndexName.value,
+                            type: 'line',
+                            smooth: true,
+                            symbol: 'circle',
+                            symbolSize: 4,
+                            connectNulls: true,
+                            data: points.map(p => (p.indexRate === null || p.indexRate === undefined) ? null : Number(p.indexRate)),
+                            lineStyle: { width: 2, color: '#38bdf8' },
+                            itemStyle: { color: '#38bdf8' }
+                        });
+                    }
+
+                    performanceChartInstance.value.setOption({
+                        backgroundColor: 'transparent',
+                        animationDuration: 450,
+                        tooltip: {
+                            trigger: 'axis',
+                            backgroundColor: 'rgba(15, 23, 42, .94)',
+                            borderColor: 'rgba(148, 163, 184, .35)',
+                            textStyle: { color: '#f8fafc' },
+                            formatter(params) {
+                                const row = points[params[0]?.dataIndex || 0] || {};
+                                let html = `<div style="font-weight:900;margin-bottom:6px;">${row.date || ''}</div>`;
+                                params.forEach(p => {
+                                    html += `<div>${p.marker} ${p.seriesName}: <strong>${formatPerformancePercent(p.value)}</strong></div>`;
+                                });
+                                html += `<div style="margin-top:6px;color:#94a3b8;">日收益 ${privacyMode.value <= 1 ? Number(row.dailyProfit || 0).toFixed(2) : '****'} · 资产 ${privacyMode.value === 0 ? Number(row.myAssets || 0).toFixed(2) : '****'}</div>`;
+                                return html;
+                            }
+                        },
+                        legend: {
+                            top: 0,
+                            right: 0,
+                            textStyle: { color: '#cbd5e1', fontSize: 11 }
+                        },
+                        grid: { left: 8, right: 10, top: 34, bottom: 8, containLabel: true },
+                        xAxis: {
+                            type: 'category',
+                            boundaryGap: false,
+                            data: points.map(p => p.date),
+                            axisLabel: { color: '#94a3b8', hideOverlap: true },
+                            axisLine: { lineStyle: { color: 'rgba(148,163,184,.22)' } },
+                            axisTick: { show: false }
+                        },
+                        yAxis: {
+                            type: 'value',
+                            axisLabel: { color: '#94a3b8', formatter: '{value}%' },
+                            splitLine: { lineStyle: { color: 'rgba(148,163,184,.12)', type: 'dashed' } }
+                        },
+                        series
+                    }, true);
+                };
+
+                const fetchPerformanceCurve = async () => {
+                    if (!currentUser.value) return;
+                    performanceLoading.value = true;
+                    performanceMessage.value = '';
+                    try {
+                        const url = `/api/fund/performance-curve?username=${encodeURIComponent(currentUser.value)}&period=${encodeURIComponent(performancePeriod.value)}&index=${encodeURIComponent(performanceIndex.value)}&_t=${Date.now()}`;
+                        const res = await apiFetch(url, { cache: 'no-store' });
+                        if (!res.ok) throw new Error(await res.text());
+                        const data = await res.json();
+                        performanceCurve.value = data || null;
+                        performanceMessage.value = data?.message || '';
+                        await nextTick();
+                        await renderPerformanceChart();
+                    } catch (e) {
+                        performanceCurve.value = null;
+                        performanceMessage.value = '暂无收益曲线数据，请先保存每日档案';
+                        if (performanceChartInstance.value) performanceChartInstance.value.clear();
+                    } finally {
+                        performanceLoading.value = false;
+                    }
+                };
+
+                const switchPerformancePeriod = (period) => {
+                    if (performancePeriod.value === period) return;
+                    performancePeriod.value = period;
+                    fetchPerformanceCurve();
+                };
+
                 const syncRealNavIfNeeded = async () => {
                     if (!currentUser.value) return;
                     const now = new Date();
@@ -6378,7 +6709,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     if (page === 'sector') { await fetchSectors(false, false); fetchCapitalFlow(false); }
                     if (page === 'news') fetchNews(newsMode.value, false);
                     if (page === 'analysis') { persistAnalysisPreferences(); await fetchAnalysis(false); }
-                    if (page === 'home') nextTick(() => { if (chartInstance.value) chartInstance.value.resize(); });
+                    if (page === 'home') nextTick(() => {
+                        if (chartInstance.value) chartInstance.value.resize();
+                        if (performanceChartInstance.value) {
+                            performanceChartInstance.value.resize();
+                            renderPerformanceChart();
+                        }
+                    });
                 };
 
                 const fetchData = async (options = {}) => {
@@ -6531,6 +6868,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const runChart = () => renderChart(apiData);
                         if ('requestIdleCallback' in window) requestIdleCallback(runChart, { timeout: 800 });
                         else requestAnimationFrame(runChart);
+                        fetchPerformanceCurve();
                     } catch (e) {
                         isLoading.value = false;
                         if (!silent) showToast("🌐 数据刷新失败", "error");
@@ -6539,7 +6877,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     }
                 };
 
-                const handleResize = () => { if (chartInstance.value) chartInstance.value.resize(); };
+                const handleResize = () => {
+                    if (chartInstance.value) chartInstance.value.resize();
+                    if (performanceChartInstance.value) performanceChartInstance.value.resize();
+                };
                 let lastChartDataHash = '';
                 const renderChart = async (apiData) => {
                     if (!chartRef.value || activePage.value !== 'home') return;
@@ -6642,12 +6983,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                 const handleReducePosition = async () => { if (!reduceModal.shares || !reduceModal.rawDate) return showToast("情报不完整，请检查份额或日期", "error"); const tradeDate = calculateTradeDate(reduceModal.rawDate, reduceModal.timeSlot); const fd = new FormData(); fd.append('username', currentUser.value); fd.append('code', reduceModal.code); fd.append('reduceShares', reduceModal.shares); fd.append('reduceAmount', reduceModal.amount || 0); fd.append('tradeDate', tradeDate); try { const res = await fetch(API_BASE + '/api/Fund/reduce-position', { method: 'POST', body: fd }); const result = await res.json(); if (res.ok) { showToast(result.msg || "结转成功", "success"); reduceModal.show = false; fetchData({ force: true, silent: true }); } else showToast(result.msg || "核算失败", "error"); } catch (e) { showToast("网络异常", "error"); } };
 
-                onUnmounted(() => { if (timer) clearInterval(timer); window.removeEventListener('resize', handleResize); document.removeEventListener('visibilitychange', handleVisibilityChange); window.removeEventListener('touchstart', onPullStart); window.removeEventListener('touchmove', onPullMove); window.removeEventListener('touchend', onPullEnd); if (chartInstance.value) chartInstance.value.dispose(); if (stockChartInstance.value) stockChartInstance.value.dispose(); });
+                onUnmounted(() => { if (timer) clearInterval(timer); window.removeEventListener('resize', handleResize); document.removeEventListener('visibilitychange', handleVisibilityChange); window.removeEventListener('touchstart', onPullStart); window.removeEventListener('touchmove', onPullMove); window.removeEventListener('touchend', onPullEnd); if (chartInstance.value) chartInstance.value.dispose(); if (performanceChartInstance.value) performanceChartInstance.value.dispose(); if (stockChartInstance.value) stockChartInstance.value.dispose(); });
 
                 return {
                     appTheme, setAppTheme,
-                    toasts, isLoggedIn, currentUser, userDisplayName, fundsList, chartRef, loginForm, profileForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, refreshSectorPage, activePage, switchPage, showProfileModal, userAvatar, smartOcrBusy, smartOcrText,
+                    toasts, isLoggedIn, currentUser, userDisplayName, fundsList, chartRef, performanceChartRef, loginForm, profileForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, refreshSectorPage, activePage, switchPage, showProfileModal, userAvatar, smartOcrBusy, smartOcrText,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
+                    performanceCurve, performancePeriod, performanceIndex, performanceLoading, performancePeriods, performanceIndices, selectedPerformanceIndexName, performanceMessage, performanceVerdict, performanceExcessClass, fetchPerformanceCurve, renderPerformanceChart, switchPerformancePeriod, formatPerformancePercent,
                     handleLogin, handleRegister, handleLogout, saveUserProfile, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, confirmOcrImport, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
                     sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, isCapitalLoading, fetchCapitalFlow,

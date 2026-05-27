@@ -5,6 +5,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Processing;
 using StackExchange.Redis;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -1347,6 +1348,265 @@ namespace 小白养基.Controllers
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         };
+
+        private sealed record PerformanceIndexDefinition(string Key, string Name, string Secid);
+
+        private sealed record PerformanceArchivePoint(DateTime Date, double TotalRate, double Assets, double DailyProfit);
+
+        private sealed record PerformanceIndexClose(DateTime Date, double Close);
+
+        private sealed record PerformanceCurvePoint(
+            string Date,
+            double MyRate,
+            double? IndexRate,
+            double MyAssets,
+            double DailyProfit);
+
+        private static readonly IReadOnlyDictionary<string, PerformanceIndexDefinition> PerformanceIndexDefinitions =
+            new Dictionary<string, PerformanceIndexDefinition>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["hs300"] = new("hs300", "沪深300", "1.000300"),
+                ["sz50"] = new("sz50", "上证50", "1.000016"),
+                ["cyb"] = new("cyb", "创业板", "0.399006"),
+                ["kc50"] = new("kc50", "科创50", "1.000688")
+            };
+
+        private static DateTime GetPerformanceStartDate(string period, DateTime today)
+        {
+            return period switch
+            {
+                "7d" => today.AddDays(-6),
+                "1m" => today.AddMonths(-1),
+                "3m" => today.AddMonths(-3),
+                "1y" => today.AddYears(-1),
+                _ => today.AddDays(-6)
+            };
+        }
+
+        [HttpGet("performance-curve")]
+        public async Task<IActionResult> GetPerformanceCurve(
+            [FromQuery] string username,
+            [FromQuery] string period = "7d",
+            [FromQuery(Name = "index")] string indexKey = "hs300")
+        {
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                return BadRequest(new { error = "缺少 username 参数" });
+            }
+
+            var normalizedPeriod = period?.Trim().ToLowerInvariant() ?? "7d";
+            if (normalizedPeriod is not ("7d" or "1m" or "3m" or "1y"))
+            {
+                normalizedPeriod = "7d";
+            }
+
+            var normalizedIndex = indexKey?.Trim().ToLowerInvariant() ?? "hs300";
+            if (!PerformanceIndexDefinitions.TryGetValue(normalizedIndex, out var indexDefinition))
+            {
+                normalizedIndex = "hs300";
+                indexDefinition = PerformanceIndexDefinitions[normalizedIndex];
+            }
+
+            var today = ChinaNow().Date;
+            var startDate = GetPerformanceStartDate(normalizedPeriod, today);
+            var endExclusive = today.AddDays(1);
+
+            var archiveRows = await _context.DailyArchives
+                .AsNoTracking()
+                .Where(a => a.Username == username && a.RecordDate >= startDate && a.RecordDate < endExclusive)
+                .ToListAsync();
+
+            var myArchives = BuildPerformanceArchivePoints(archiveRows);
+            if (myArchives.Count == 0)
+            {
+                return Ok(new
+                {
+                    period = normalizedPeriod,
+                    index = normalizedIndex,
+                    indexName = indexDefinition.Name,
+                    hasMyData = false,
+                    indexAvailable = false,
+                    myTotalRate = 0d,
+                    indexTotalRate = 0d,
+                    excessRate = 0d,
+                    message = "暂无收益曲线数据，请先保存每日档案",
+                    points = Array.Empty<PerformanceCurvePoint>()
+                });
+            }
+
+            var indexCloses = Array.Empty<PerformanceIndexClose>();
+            var indexAvailable = false;
+            try
+            {
+                var http = _httpClientFactory.CreateClient("EastMoneyQuote");
+                indexCloses = (await FetchPerformanceIndexClosesAsync(http, indexDefinition, startDate, today)).ToArray();
+                indexAvailable = indexCloses.Length > 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[performance-curve] index failed: {indexDefinition.Key} {ex.Message}");
+            }
+
+            var indexRatesByDate = indexAvailable
+                ? BuildAlignedIndexRates(myArchives.Select(a => a.Date), indexCloses)
+                : new Dictionary<DateTime, double?>();
+
+            var baseMyRate = myArchives[0].TotalRate;
+            var points = myArchives
+                .Select(a =>
+                {
+                    indexRatesByDate.TryGetValue(a.Date, out var indexRate);
+                    return new PerformanceCurvePoint(
+                        a.Date.ToString("yyyy-MM-dd"),
+                        Math.Round(a.TotalRate - baseMyRate, 2),
+                        indexRate.HasValue ? Math.Round(indexRate.Value, 2) : null,
+                        Math.Round(a.Assets, 2),
+                        Math.Round(a.DailyProfit, 2));
+                })
+                .ToList();
+
+            var myTotalRate = points.Count > 0 ? points[^1].MyRate : 0d;
+            var hasIndexRate = points.Any(p => p.IndexRate.HasValue);
+            var indexTotalRate = hasIndexRate
+                ? points.Where(p => p.IndexRate.HasValue).Select(p => p.IndexRate!.Value).Last()
+                : 0d;
+
+            return Ok(new
+            {
+                period = normalizedPeriod,
+                index = normalizedIndex,
+                indexName = indexDefinition.Name,
+                hasMyData = true,
+                indexAvailable = hasIndexRate,
+                myTotalRate = Math.Round(myTotalRate, 2),
+                indexTotalRate = Math.Round(indexTotalRate, 2),
+                excessRate = hasIndexRate ? Math.Round(myTotalRate - indexTotalRate, 2) : 0d,
+                message = hasIndexRate ? "" : "指数暂不可用",
+                points
+            });
+        }
+
+        private static List<PerformanceArchivePoint> BuildPerformanceArchivePoints(List<DailyArchive> archiveRows)
+        {
+            var totalRows = archiveRows
+                .Where(a => string.Equals(a.FundCode, "TOTAL", StringComparison.OrdinalIgnoreCase))
+                .GroupBy(a => a.RecordDate.Date)
+                .Select(g => g.OrderByDescending(a => a.Id).First())
+                .OrderBy(a => a.RecordDate)
+                .Select(a => new PerformanceArchivePoint(a.RecordDate.Date, a.TotalRate, a.Assets, a.DailyProfit))
+                .ToList();
+
+            if (totalRows.Count > 0)
+            {
+                return totalRows;
+            }
+
+            // DailyArchives 是收盘后的每日档案；缺失日期不插值，避免制造不存在的组合收益。
+            return archiveRows
+                .Where(a => !string.Equals(a.FundCode, "TOTAL", StringComparison.OrdinalIgnoreCase))
+                .GroupBy(a => a.RecordDate.Date)
+                .Select(g =>
+                {
+                    var assets = g.Sum(a => a.Assets);
+                    var totalProfit = g.Sum(a => a.TotalProfit);
+                    var cost = assets - totalProfit;
+                    var totalRate = cost > 0 ? totalProfit / cost * 100 : 0d;
+                    var dailyProfit = g.Sum(a => a.DailyProfit);
+                    return new PerformanceArchivePoint(g.Key, totalRate, assets, dailyProfit);
+                })
+                .OrderBy(a => a.Date)
+                .ToList();
+        }
+
+        private static async Task<List<PerformanceIndexClose>> FetchPerformanceIndexClosesAsync(
+            HttpClient http,
+            PerformanceIndexDefinition index,
+            DateTime startDate,
+            DateTime endDate)
+        {
+            var limit = Math.Clamp((endDate - startDate).Days + 40, 80, 430);
+            var url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={Uri.EscapeDataString(index.Secid)}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt={limit}";
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var response = await http.GetStringAsync(url, cts.Token);
+            using var doc = JsonDocument.Parse(response);
+
+            if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null ||
+                !data.TryGetProperty("klines", out var klines) || klines.ValueKind != JsonValueKind.Array)
+            {
+                return new List<PerformanceIndexClose>();
+            }
+
+            var result = new List<PerformanceIndexClose>();
+            foreach (var kline in klines.EnumerateArray())
+            {
+                var raw = kline.GetString();
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    continue;
+                }
+
+                var parts = raw.Split(',');
+                if (parts.Length < 3 ||
+                    !DateTime.TryParse(parts[0], CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ||
+                    !TryParseInvariantDouble(parts[2], out var close))
+                {
+                    continue;
+                }
+
+                var archiveDate = date.Date;
+                if (archiveDate >= startDate && archiveDate <= endDate)
+                {
+                    result.Add(new PerformanceIndexClose(archiveDate, close));
+                }
+            }
+
+            return result
+                .OrderBy(p => p.Date)
+                .ToList();
+        }
+
+        private static Dictionary<DateTime, double?> BuildAlignedIndexRates(
+            IEnumerable<DateTime> targetDates,
+            IReadOnlyList<PerformanceIndexClose> indexCloses)
+        {
+            var result = new Dictionary<DateTime, double?>();
+            var orderedTargets = targetDates
+                .Select(d => d.Date)
+                .Distinct()
+                .OrderBy(d => d)
+                .ToList();
+
+            if (indexCloses.Count == 0 || orderedTargets.Count == 0)
+            {
+                return result;
+            }
+
+            var cursor = 0;
+            double? latestClose = null;
+            double? baseClose = null;
+
+            foreach (var targetDate in orderedTargets)
+            {
+                // 指数周末/节假日没有 K 线时，用最近一个交易日收盘价延续指数线；第一条可对齐数据作为 0 点。
+                while (cursor < indexCloses.Count && indexCloses[cursor].Date <= targetDate)
+                {
+                    latestClose = indexCloses[cursor].Close;
+                    cursor++;
+                }
+
+                if (!latestClose.HasValue)
+                {
+                    result[targetDate] = null;
+                    continue;
+                }
+
+                baseClose ??= latestClose.Value;
+                result[targetDate] = baseClose > 0 ? (latestClose.Value - baseClose.Value) / baseClose.Value * 100 : null;
+            }
+
+            return result;
+        }
 
         [HttpGet("global-indices")]
         public async Task<IActionResult> GetGlobalIndices([FromQuery] bool force = false)
