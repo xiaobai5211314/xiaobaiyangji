@@ -1037,6 +1037,32 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             outline: none;
         }
 
+        .performance-head-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .performance-amount-toggle {
+            min-height: 34px;
+            border-radius: 12px;
+            border: 1px solid rgba(148, 163, 184, .25);
+            background: rgba(15, 23, 42, .38);
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 900;
+            padding: 0 10px;
+            cursor: pointer;
+        }
+
+        .performance-amount-toggle.active {
+            color: #fff;
+            border-color: rgba(251, 191, 36, .42);
+            background: rgba(251, 191, 36, .18);
+        }
+
         .performance-period-tabs {
             display: flex;
             gap: 8px;
@@ -1130,6 +1156,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             .performance-select {
                 width: 100%;
                 max-width: none;
+            }
+
+            .performance-head-actions {
+                width: 100%;
+            }
+
+            .performance-amount-toggle {
+                flex: 1 1 96px;
             }
 
             .performance-period-tabs button {
@@ -4171,16 +4205,21 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 <div class="feature-title">📈 日总收益曲线</div>
                                 <div class="feature-subtitle">我的收益率 vs {{ selectedPerformanceIndexName }}</div>
                             </div>
-                            <select class="performance-select" v-model="performanceIndex" @change="fetchPerformanceCurve">
-                                <option v-for="item in performanceIndices" :key="item.value" :value="item.value">{{ item.label }}</option>
-                            </select>
+                            <div class="performance-head-actions">
+                                <select class="performance-select" v-model="performanceIndex" @change="fetchPerformanceCurve">
+                                    <option v-for="item in performanceIndices" :key="item.value" :value="item.value">{{ item.label }}</option>
+                                </select>
+                                <button v-if="privacyMode === 0" type="button" :class="['performance-amount-toggle', showPerformanceAmount ? 'active' : '']" @click="togglePerformanceAmount">
+                                    {{ showPerformanceAmount ? '隐藏金额' : '显示金额' }}
+                                </button>
+                            </div>
                         </div>
                         <div class="performance-period-tabs">
                             <button v-for="item in performancePeriods" :key="item.value" type="button" :class="{active: performancePeriod === item.value}" @click="switchPerformancePeriod(item.value)">{{ item.label }}</button>
                         </div>
                         <div v-if="performanceCurve && performanceCurve.hasMyData" class="performance-metrics">
-                            <div v-if="performanceIsToday" class="performance-metric">
-                                <span>今日收益</span>
+                            <div v-if="performanceIsToday && canShowPerformanceAmount" class="performance-metric">
+                                <span>今日收益金额</span>
                                 <strong :class="Number(performanceCurve.myTotalProfit || 0) >= 0 ? 'metric-up' : 'metric-down'">{{ formatPerformanceMoney(performanceCurve.myTotalProfit) }}</strong>
                             </div>
                             <div class="performance-metric">
@@ -5109,6 +5148,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const performanceIndex = ref('hs300');
                 const performanceLoading = ref(false);
                 const performanceMessage = ref('');
+                const showPerformanceAmount = ref(false);
                 const performancePeriods = [
                     { value: 'today', label: '今日' },
                     { value: '7d', label: '近7日' },
@@ -5124,6 +5164,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 ];
                 const selectedPerformanceIndexName = computed(() => performanceCurve.value?.indexName || performanceIndices.find(item => item.value === performanceIndex.value)?.label || '沪深300');
                 const performanceIsToday = computed(() => performancePeriod.value === 'today' || performanceCurve.value?.period === 'today');
+                const canShowPerformanceAmount = computed(() => privacyMode.value === 0 && showPerformanceAmount.value === true);
+                const togglePerformanceAmount = () => { if (privacyMode.value === 0) showPerformanceAmount.value = !showPerformanceAmount.value; };
                 const formatPerformancePercent = (value) => {
                     const n = Number(value);
                     if (!Number.isFinite(n)) return '--';
@@ -6493,10 +6535,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 params.forEach(p => {
                                     html += `<div>${p.marker} ${p.seriesName}: <strong>${formatPerformancePercent(p.value)}</strong></div>`;
                                 });
-                                const myProfit = Number(row.myProfit ?? row.dailyProfit ?? 0);
                                 const excess = row.indexRate === null || row.indexRate === undefined ? null : Number(row.myRate || 0) - Number(row.indexRate || 0);
-                                html += `<div style="margin-top:6px;color:#94a3b8;">收益金额 ${privacyMode.value <= 1 ? formatPerformanceMoney(myProfit) : '****'} · 资产 ${privacyMode.value === 0 ? Number(row.assets || 0).toFixed(2) : '****'}</div>`;
                                 if (excess !== null && Number.isFinite(excess)) html += `<div style="color:#94a3b8;">超额收益 ${formatPerformancePercent(excess)}</div>`;
+                                if (canShowPerformanceAmount.value) {
+                                    const myProfit = Number(row.myProfit ?? row.dailyProfit ?? 0);
+                                    html += `<div style="margin-top:6px;color:#94a3b8;">收益金额 ${formatPerformanceMoney(myProfit)}</div>`;
+                                }
                                 return html;
                             }
                         },
@@ -6947,8 +6991,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 };
 
                 watch(privacyMode, () => {
+                    if (privacyMode.value !== 0) {
+                        showPerformanceAmount.value = false;
+                    }
                     if (fundsList.value.length > 0) {
                         nextTick(() => renderChart(fundsList.value));
+                    }
+                    if (performanceChartInstance.value) {
+                        nextTick(() => renderPerformanceChart());
                     }
                 });
 
@@ -7006,7 +7056,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     appTheme, setAppTheme,
                     toasts, isLoggedIn, currentUser, userDisplayName, fundsList, chartRef, performanceChartRef, loginForm, profileForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, refreshSectorPage, activePage, switchPage, showProfileModal, userAvatar, smartOcrBusy, smartOcrText,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
-                    performanceCurve, performancePeriod, performanceIndex, performanceLoading, performancePeriods, performanceIndices, selectedPerformanceIndexName, performanceIsToday, performanceMessage, performanceVerdict, performanceExcessClass, fetchPerformanceCurve, renderPerformanceChart, switchPerformancePeriod, formatPerformancePercent, formatPerformanceMoney,
+                    performanceCurve, performancePeriod, performanceIndex, performanceLoading, performancePeriods, performanceIndices, selectedPerformanceIndexName, performanceIsToday, showPerformanceAmount, canShowPerformanceAmount, togglePerformanceAmount, performanceMessage, performanceVerdict, performanceExcessClass, fetchPerformanceCurve, renderPerformanceChart, switchPerformancePeriod, formatPerformancePercent, formatPerformanceMoney,
                     handleLogin, handleRegister, handleLogout, saveUserProfile, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, confirmOcrImport, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
                     sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, isCapitalLoading, fetchCapitalFlow,
