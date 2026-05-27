@@ -1359,8 +1359,9 @@ namespace 小白养基.Controllers
             string Date,
             double MyRate,
             double? IndexRate,
-            double MyAssets,
-            double DailyProfit);
+            double Assets,
+            double DailyProfit,
+            double TotalRate);
 
         private static readonly IReadOnlyDictionary<string, PerformanceIndexDefinition> PerformanceIndexDefinitions =
             new Dictionary<string, PerformanceIndexDefinition>(StringComparer.OrdinalIgnoreCase)
@@ -1461,7 +1462,8 @@ namespace 小白养基.Controllers
                         Math.Round(a.TotalRate - baseMyRate, 2),
                         indexRate.HasValue ? Math.Round(indexRate.Value, 2) : null,
                         Math.Round(a.Assets, 2),
-                        Math.Round(a.DailyProfit, 2));
+                        Math.Round(a.DailyProfit, 2),
+                        Math.Round(a.TotalRate, 2));
                 })
                 .ToList();
 

@@ -4168,7 +4168,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     <div class="glass-panel feature-card performance-card">
                         <div class="performance-head">
                             <div style="min-width:0;">
-                                <div class="feature-title">📈 日收益曲线</div>
+                                <div class="feature-title">📈 收益分析曲线</div>
                                 <div class="feature-subtitle">我的收益率 vs {{ selectedPerformanceIndexName }}</div>
                             </div>
                             <select class="performance-select" v-model="performanceIndex" @change="fetchPerformanceCurve">
@@ -5101,12 +5101,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const chartInstance = shallowRef(null);
                 const performanceChartInstance = shallowRef(null);
                 const performanceCurve = ref(null);
-                const performancePeriod = ref('today');
+                const performancePeriod = ref('7d');
                 const performanceIndex = ref('hs300');
                 const performanceLoading = ref(false);
                 const performanceMessage = ref('');
                 const performancePeriods = [
-                    { value: 'today', label: '今日' },
                     { value: '7d', label: '近7日' },
                     { value: '1m', label: '近1月' },
                     { value: '3m', label: '近3月' },
@@ -5118,8 +5117,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     { value: 'cyb', label: '创业板' },
                     { value: 'kc50', label: '科创50' }
                 ];
-                const getPerformanceIndexLabel = (value = performanceIndex.value) => performanceIndices.find(item => item.value === value)?.label || '沪深300';
-                const selectedPerformanceIndexName = computed(() => performanceCurve.value?.indexName || getPerformanceIndexLabel());
+                const selectedPerformanceIndexName = computed(() => performanceCurve.value?.indexName || performanceIndices.find(item => item.value === performanceIndex.value)?.label || '沪深300');
                 const formatPerformancePercent = (value) => {
                     const n = Number(value);
                     if (!Number.isFinite(n)) return '--';
@@ -6422,114 +6420,6 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     return echartsLoadingPromise;
                 };
 
-                const parseFundPointTime = (raw) => {
-                    const text = String(raw || '').trim();
-                    const match = text.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
-                    if (!match) return null;
-                    const year = Number(match[1]);
-                    const month = Number(match[2]);
-                    const day = Number(match[3]);
-                    const hour = Number(match[4] || 0);
-                    const minute = Number(match[5] || 0);
-                    const second = Number(match[6] || 0);
-                    const date = new Date(year, month - 1, day, hour, minute, second);
-                    if (!Number.isFinite(date.getTime())) return null;
-                    const dash = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                    const time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-                    return { ms: date.getTime(), dash, time };
-                };
-
-                const buildTodayPerformanceCurve = () => {
-                    const today = getLocalTodayDash();
-                    const baseStart = (() => {
-                        const [year, month, day] = today.split('-').map(Number);
-                        return new Date(year, month - 1, day, 9, 30, 0).getTime();
-                    })();
-
-                    const series = fundsList.value
-                        .map(fund => {
-                            const isUnconfirmed = fund.lastTradeDate && fund.lastTradeDate >= today;
-                            const baseAmount = Math.max(0, Number(fund.amount || 0) - (isUnconfirmed ? Number(fund.lastAddAmount || 0) : 0));
-                            const rows = Array.isArray(fund.data) ? fund.data : [];
-                            const points = rows
-                                .map(row => {
-                                    const stamp = parseFundPointTime(row?.[0]);
-                                    const rate = Number(row?.[1]);
-                                    if (!stamp || stamp.dash !== today || !Number.isFinite(rate)) return null;
-                                    return { ms: stamp.ms, time: stamp.time, rate };
-                                })
-                                .filter(Boolean)
-                                .sort((a, b) => a.ms - b.ms);
-                            return baseAmount > 0 && points.length > 0 && !fund.isHoliday
-                                ? { baseAmount, points, cursor: -1 }
-                                : null;
-                        })
-                        .filter(Boolean);
-
-                    const timeline = [...new Set(series.flatMap(item => item.points.map(p => p.ms)))]
-                        .filter(ms => ms >= baseStart)
-                        .sort((a, b) => a - b);
-                    if (timeline.length === 0) {
-                        return {
-                            period: 'today',
-                            index: performanceIndex.value,
-                            indexName: getPerformanceIndexLabel(),
-                            hasMyData: false,
-                            indexAvailable: false,
-                            myTotalRate: 0,
-                            indexTotalRate: 0,
-                            excessRate: 0,
-                            message: '暂无今日收益曲线数据，请等待盘中估值刷新',
-                            points: []
-                        };
-                    }
-
-                    const chartPoints = [{
-                        date: '09:30',
-                        myRate: 0,
-                        indexRate: null,
-                        myAssets: Number(totalPrincipal.value || 0),
-                        dailyProfit: 0
-                    }];
-
-                    timeline.forEach(ms => {
-                        let baseTotal = 0;
-                        let profitTotal = 0;
-                        series.forEach(item => {
-                            while (item.cursor + 1 < item.points.length && item.points[item.cursor + 1].ms <= ms) {
-                                item.cursor++;
-                            }
-                            if (item.cursor < 0) return;
-                            baseTotal += item.baseAmount;
-                            profitTotal += item.baseAmount * item.points[item.cursor].rate / 100;
-                        });
-                        if (baseTotal <= 0) return;
-                        const t = new Date(ms);
-                        chartPoints.push({
-                            date: `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`,
-                            myRate: Number((profitTotal / baseTotal * 100).toFixed(2)),
-                            indexRate: null,
-                            myAssets: Number((baseTotal + profitTotal).toFixed(2)),
-                            dailyProfit: Number(profitTotal.toFixed(2))
-                        });
-                    });
-
-                    const compactPoints = chartPoints.filter((point, index, arr) => index === 0 || point.date !== arr[index - 1].date || point.myRate !== arr[index - 1].myRate);
-                    const myTotalRate = compactPoints.length > 0 ? compactPoints[compactPoints.length - 1].myRate : 0;
-                    return {
-                        period: 'today',
-                        index: performanceIndex.value,
-                        indexName: getPerformanceIndexLabel(),
-                        hasMyData: compactPoints.length > 1,
-                        indexAvailable: false,
-                        myTotalRate,
-                        indexTotalRate: 0,
-                        excessRate: 0,
-                        message: '今日曲线使用盘中估值合成，指数暂不可用',
-                        points: compactPoints
-                    };
-                };
-
                 const renderPerformanceChart = async () => {
                     if (!performanceChartRef.value || activePage.value !== 'home') return;
                     const points = Array.isArray(performanceCurve.value?.points) ? performanceCurve.value.points : [];
@@ -6591,7 +6481,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 params.forEach(p => {
                                     html += `<div>${p.marker} ${p.seriesName}: <strong>${formatPerformancePercent(p.value)}</strong></div>`;
                                 });
-                                html += `<div style="margin-top:6px;color:#94a3b8;">日收益 ${privacyMode.value <= 1 ? Number(row.dailyProfit || 0).toFixed(2) : '****'} · 资产 ${privacyMode.value === 0 ? Number(row.myAssets || 0).toFixed(2) : '****'}</div>`;
+                                html += `<div style="margin-top:6px;color:#94a3b8;">当日收益 ${privacyMode.value <= 1 ? Number(row.dailyProfit || 0).toFixed(2) : '****'} · 资产 ${privacyMode.value === 0 ? Number(row.assets || 0).toFixed(2) : '****'}</div>`;
                                 return html;
                             }
                         },
@@ -6623,15 +6513,6 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     performanceLoading.value = true;
                     performanceMessage.value = '';
                     try {
-                        if (performancePeriod.value === 'today') {
-                            const data = buildTodayPerformanceCurve();
-                            performanceCurve.value = data;
-                            performanceMessage.value = data.message || '';
-                            await nextTick();
-                            await renderPerformanceChart();
-                            return;
-                        }
-
                         const url = `/api/fund/performance-curve?username=${encodeURIComponent(currentUser.value)}&period=${encodeURIComponent(performancePeriod.value)}&index=${encodeURIComponent(performanceIndex.value)}&_t=${Date.now()}`;
                         const res = await apiFetch(url, { cache: 'no-store' });
                         if (!res.ok) throw new Error(await res.text());
