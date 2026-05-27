@@ -1355,9 +1355,17 @@ namespace 小白养基.Controllers
 
         private sealed record PerformanceIndexClose(DateTime Date, double Close);
 
+        private sealed record PerformanceIndexTick(DateTime Time, double Price);
+
+        private sealed record PerformanceFundIntradayPoint(DateTime Time, double Rate, double? ProfitOverride);
+
+        private sealed record PerformanceFundIntradaySeries(double Amount, List<PerformanceFundIntradayPoint> Points);
+
         private sealed record PerformanceCurvePoint(
+            string Time,
             string Date,
             double MyRate,
+            double MyProfit,
             double? IndexRate,
             double Assets,
             double DailyProfit,
@@ -1387,7 +1395,7 @@ namespace 小白养基.Controllers
         [HttpGet("performance-curve")]
         public async Task<IActionResult> GetPerformanceCurve(
             [FromQuery] string username,
-            [FromQuery] string period = "7d",
+            [FromQuery] string period = "today",
             [FromQuery(Name = "index")] string indexKey = "hs300")
         {
             if (string.IsNullOrWhiteSpace(username))
@@ -1395,10 +1403,10 @@ namespace 小白养基.Controllers
                 return BadRequest(new { error = "缺少 username 参数" });
             }
 
-            var normalizedPeriod = period?.Trim().ToLowerInvariant() ?? "7d";
-            if (normalizedPeriod is not ("7d" or "1m" or "3m" or "1y"))
+            var normalizedPeriod = period?.Trim().ToLowerInvariant() ?? "today";
+            if (normalizedPeriod is not ("today" or "7d" or "1m" or "3m" or "1y"))
             {
-                normalizedPeriod = "7d";
+                normalizedPeriod = "today";
             }
 
             var normalizedIndex = indexKey?.Trim().ToLowerInvariant() ?? "hs300";
@@ -1406,6 +1414,11 @@ namespace 小白养基.Controllers
             {
                 normalizedIndex = "hs300";
                 indexDefinition = PerformanceIndexDefinitions[normalizedIndex];
+            }
+
+            if (normalizedPeriod == "today")
+            {
+                return await GetTodayPerformanceCurveAsync(username, normalizedIndex, indexDefinition);
             }
 
             var today = ChinaNow().Date;
@@ -1430,7 +1443,8 @@ namespace 小白养基.Controllers
                     myTotalRate = 0d,
                     indexTotalRate = 0d,
                     excessRate = 0d,
-                    message = "暂无收益曲线数据，请先保存每日档案",
+                    myTotalProfit = 0d,
+                    message = "暂无历史收益曲线数据，请先保存每日档案",
                     points = Array.Empty<PerformanceCurvePoint>()
                 });
             }
@@ -1459,7 +1473,9 @@ namespace 小白养基.Controllers
                     indexRatesByDate.TryGetValue(a.Date, out var indexRate);
                     return new PerformanceCurvePoint(
                         a.Date.ToString("yyyy-MM-dd"),
+                        a.Date.ToString("yyyy-MM-dd"),
                         Math.Round(a.TotalRate - baseMyRate, 2),
+                        Math.Round(a.DailyProfit, 2),
                         indexRate.HasValue ? Math.Round(indexRate.Value, 2) : null,
                         Math.Round(a.Assets, 2),
                         Math.Round(a.DailyProfit, 2),
@@ -1483,9 +1499,327 @@ namespace 小白养基.Controllers
                 myTotalRate = Math.Round(myTotalRate, 2),
                 indexTotalRate = Math.Round(indexTotalRate, 2),
                 excessRate = hasIndexRate ? Math.Round(myTotalRate - indexTotalRate, 2) : 0d,
-                message = hasIndexRate ? "" : "指数暂不可用",
+                myTotalProfit = points.Count > 0 ? points[^1].MyProfit : 0d,
+                message = hasIndexRate ? "" : "指数数据暂不可用",
                 points
             });
+        }
+
+        private async Task<IActionResult> GetTodayPerformanceCurveAsync(
+            string username,
+            string normalizedIndex,
+            PerformanceIndexDefinition indexDefinition)
+        {
+            var localTime = ChinaNow();
+            var today = localTime.Date;
+            var todayDash = localTime.ToString("yyyy-MM-dd");
+
+            var myFunds = await _context.MyFunds
+                .AsNoTracking()
+                .Where(f => f.Username == username)
+                .ToListAsync();
+
+            var fundCodes = myFunds.Select(f => f.FundCode).ToList();
+            if (fundCodes.Count == 0)
+            {
+                return Ok(new
+                {
+                    period = "today",
+                    index = normalizedIndex,
+                    indexName = indexDefinition.Name,
+                    hasMyData = false,
+                    indexAvailable = false,
+                    myTotalRate = 0d,
+                    indexTotalRate = 0d,
+                    excessRate = 0d,
+                    myTotalProfit = 0d,
+                    message = "暂无今日盘中收益数据",
+                    points = Array.Empty<PerformanceCurvePoint>()
+                });
+            }
+
+            var recentStart = today.AddDays(-10);
+            var recentRecords = await _context.FundRecords
+                .AsNoTracking()
+                .Where(r => fundCodes.Contains(r.FundCode) && r.FetchTime >= recentStart)
+                .OrderBy(r => r.FetchTime)
+                .ToListAsync();
+
+            var todayRecords = recentRecords
+                .Where(r => r.FetchTime >= today)
+                .ToList();
+
+            var lastRecordDict = recentRecords
+                .Where(r => r.FetchTime < today)
+                .GroupBy(r => r.FundCode)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).First());
+
+            var pastActualDict = recentRecords
+                .Where(r => r.ActualRate != 0)
+                .GroupBy(r => r.FundCode)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).Take(3).ToList());
+
+            var series = BuildTodayPerformanceSeries(myFunds, todayRecords, lastRecordDict, pastActualDict, today, todayDash);
+            var totalPrincipal = series.Sum(s => s.Amount);
+            var timeline = series
+                .SelectMany(s => s.Points.Select(p => p.Time))
+                .Distinct()
+                .OrderBy(t => t)
+                .ToList();
+
+            if (series.Count == 0 || totalPrincipal <= 0 || timeline.Count == 0)
+            {
+                return Ok(new
+                {
+                    period = "today",
+                    index = normalizedIndex,
+                    indexName = indexDefinition.Name,
+                    hasMyData = false,
+                    indexAvailable = false,
+                    myTotalRate = 0d,
+                    indexTotalRate = 0d,
+                    excessRate = 0d,
+                    myTotalProfit = 0d,
+                    message = "暂无今日盘中收益数据",
+                    points = Array.Empty<PerformanceCurvePoint>()
+                });
+            }
+
+            var indexTicks = Array.Empty<PerformanceIndexTick>();
+            var indexAvailable = false;
+            try
+            {
+                var http = _httpClientFactory.CreateClient("EastMoneyQuote");
+                indexTicks = (await FetchPerformanceIndexTicksAsync(http, indexDefinition, today)).ToArray();
+                indexAvailable = indexTicks.Length > 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[performance-curve] intraday index failed: {indexDefinition.Key} {ex.Message}");
+            }
+
+            var indexRatesByTime = indexAvailable
+                ? BuildAlignedIntradayIndexRates(timeline, indexTicks)
+                : new Dictionary<DateTime, double?>();
+
+            var cursors = new int[series.Count];
+            Array.Fill(cursors, -1);
+            var points = new List<PerformanceCurvePoint>();
+
+            foreach (var time in timeline)
+            {
+                var totalProfit = 0d;
+                for (var i = 0; i < series.Count; i++)
+                {
+                    var item = series[i];
+                    while (cursors[i] + 1 < item.Points.Count && item.Points[cursors[i] + 1].Time <= time)
+                    {
+                        cursors[i]++;
+                    }
+
+                    if (cursors[i] < 0)
+                    {
+                        continue;
+                    }
+
+                    var point = item.Points[cursors[i]];
+                    totalProfit += point.ProfitOverride ?? item.Amount * point.Rate / 100d;
+                }
+
+                indexRatesByTime.TryGetValue(time, out var indexRate);
+                var myRate = totalPrincipal > 0 ? totalProfit / totalPrincipal * 100d : 0d;
+                points.Add(new PerformanceCurvePoint(
+                    time.ToString("yyyy-MM-dd HH:mm"),
+                    time.ToString("yyyy-MM-dd"),
+                    Math.Round(myRate, 2),
+                    Math.Round(totalProfit, 2),
+                    indexRate.HasValue ? Math.Round(indexRate.Value, 2) : null,
+                    Math.Round(totalPrincipal + totalProfit, 2),
+                    Math.Round(totalProfit, 2),
+                    Math.Round(myRate, 2)));
+            }
+
+            var compactPoints = points
+                .GroupBy(p => p.Time)
+                .Select(g => g.Last())
+                .ToList();
+            var hasIndexRate = compactPoints.Any(p => p.IndexRate.HasValue);
+            var myTotalRate = compactPoints.Count > 0 ? compactPoints[^1].MyRate : 0d;
+            var myTotalProfit = compactPoints.Count > 0 ? compactPoints[^1].MyProfit : 0d;
+            var indexTotalRate = hasIndexRate
+                ? compactPoints.Where(p => p.IndexRate.HasValue).Select(p => p.IndexRate!.Value).Last()
+                : 0d;
+
+            return Ok(new
+            {
+                period = "today",
+                index = normalizedIndex,
+                indexName = indexDefinition.Name,
+                hasMyData = compactPoints.Count > 0,
+                indexAvailable = hasIndexRate,
+                myTotalRate = Math.Round(myTotalRate, 2),
+                indexTotalRate = Math.Round(indexTotalRate, 2),
+                excessRate = hasIndexRate ? Math.Round(myTotalRate - indexTotalRate, 2) : 0d,
+                myTotalProfit = Math.Round(myTotalProfit, 2),
+                message = hasIndexRate ? "" : "指数盘中数据暂不可用",
+                points = compactPoints
+            });
+        }
+
+        private static List<PerformanceFundIntradaySeries> BuildTodayPerformanceSeries(
+            List<MyFundConfig> myFunds,
+            List<FundData> todayRecords,
+            Dictionary<string, FundData> lastRecordDict,
+            Dictionary<string, List<FundData>> pastActualDict,
+            DateTime today,
+            string todayDash)
+        {
+            var result = new List<PerformanceFundIntradaySeries>();
+            foreach (var config in myFunds)
+            {
+                var amount = Math.Max(0d, config.HoldAmount);
+                if (amount <= 0)
+                {
+                    continue;
+                }
+
+                var fundRecords = todayRecords
+                    .Where(r => r.FundCode == config.FundCode)
+                    .OrderBy(r => r.FetchTime)
+                    .ToList();
+                lastRecordDict.TryGetValue(config.FundCode, out var lastRecord);
+
+                var past3DaysRecords = pastActualDict.TryGetValue(config.FundCode, out var pastList)
+                    ? pastList
+                    : new List<FundData>();
+
+                var avgDiff = 0d;
+                if (past3DaysRecords.Count > 0)
+                {
+                    avgDiff = past3DaysRecords.Average(r => r.ActualRate - r.EstimatedRate);
+                    avgDiff = Math.Clamp(avgDiff, -0.5, 0.5);
+                }
+
+                var points = new List<PerformanceFundIntradayPoint>();
+                if (lastRecord != null)
+                {
+                    points.Add(new PerformanceFundIntradayPoint(today.AddHours(9).AddMinutes(30), Math.Round(lastRecord.EstimatedRate + avgDiff, 2), null));
+                }
+
+                points.AddRange(fundRecords.Select(r =>
+                    new PerformanceFundIntradayPoint(r.FetchTime, Math.Round(r.EstimatedRate + avgDiff, 2), null)));
+
+                if (config.LastSettledDate == todayDash)
+                {
+                    var settledProfit = config.LastSettledProfit;
+                    var settledRate = amount > 0
+                        ? settledProfit / amount * 100d
+                        : config.LastSettledRate;
+                    points.Add(new PerformanceFundIntradayPoint(today.AddHours(15), Math.Round(settledRate, 2), Math.Round(settledProfit, 2)));
+                }
+
+                if (points.Count == 0)
+                {
+                    continue;
+                }
+
+                var normalizedPoints = points
+                    .GroupBy(p => p.Time)
+                    .Select(g => g.Last())
+                    .OrderBy(p => p.Time)
+                    .ToList();
+                result.Add(new PerformanceFundIntradaySeries(amount, normalizedPoints));
+            }
+
+            return result;
+        }
+
+        private static async Task<List<PerformanceIndexTick>> FetchPerformanceIndexTicksAsync(
+            HttpClient http,
+            PerformanceIndexDefinition index,
+            DateTime today)
+        {
+            var fields1 = "f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11";
+            var fields2 = "f51,f52,f53,f54,f55,f56,f57,f58";
+            var url = $"https://push2his.eastmoney.com/api/qt/stock/trends2/get?secid={Uri.EscapeDataString(index.Secid)}&fields1={fields1}&fields2={fields2}&iscr=0&iscca=0";
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var response = await http.GetStringAsync(url, cts.Token);
+            using var doc = JsonDocument.Parse(response);
+            if (!doc.RootElement.TryGetProperty("data", out var data) ||
+                data.ValueKind == JsonValueKind.Null ||
+                !data.TryGetProperty("trends", out var trends) ||
+                trends.ValueKind != JsonValueKind.Array)
+            {
+                return new List<PerformanceIndexTick>();
+            }
+
+            var result = new List<PerformanceIndexTick>();
+            foreach (var trend in trends.EnumerateArray())
+            {
+                var raw = trend.GetString();
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    continue;
+                }
+
+                var parts = raw.Split(',');
+                if (parts.Length < 3 ||
+                    !DateTime.TryParse(parts[0], CultureInfo.InvariantCulture, DateTimeStyles.None, out var time) ||
+                    !TryParseInvariantDouble(parts[2], out var price) ||
+                    price <= 0)
+                {
+                    continue;
+                }
+
+                if (time.Date == today)
+                {
+                    result.Add(new PerformanceIndexTick(time, price));
+                }
+            }
+
+            return result
+                .OrderBy(p => p.Time)
+                .ToList();
+        }
+
+        private static Dictionary<DateTime, double?> BuildAlignedIntradayIndexRates(
+            IEnumerable<DateTime> targetTimes,
+            IReadOnlyList<PerformanceIndexTick> indexTicks)
+        {
+            var result = new Dictionary<DateTime, double?>();
+            var orderedTargets = targetTimes
+                .Distinct()
+                .OrderBy(t => t)
+                .ToList();
+            if (indexTicks.Count == 0 || orderedTargets.Count == 0)
+            {
+                return result;
+            }
+
+            var cursor = 0;
+            double? latestPrice = null;
+            double? basePrice = null;
+
+            foreach (var targetTime in orderedTargets)
+            {
+                while (cursor < indexTicks.Count && indexTicks[cursor].Time <= targetTime)
+                {
+                    latestPrice = indexTicks[cursor].Price;
+                    cursor++;
+                }
+
+                if (!latestPrice.HasValue)
+                {
+                    result[targetTime] = null;
+                    continue;
+                }
+
+                basePrice ??= latestPrice.Value;
+                result[targetTime] = basePrice > 0 ? (latestPrice.Value - basePrice.Value) / basePrice.Value * 100d : null;
+            }
+
+            return result;
         }
 
         private static List<PerformanceArchivePoint> BuildPerformanceArchivePoints(List<DailyArchive> archiveRows)

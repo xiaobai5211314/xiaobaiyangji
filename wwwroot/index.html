@@ -1064,7 +1064,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
         .performance-metrics {
             display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
             gap: 10px;
             margin-bottom: 10px;
         }
@@ -4168,7 +4168,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     <div class="glass-panel feature-card performance-card">
                         <div class="performance-head">
                             <div style="min-width:0;">
-                                <div class="feature-title">📈 收益分析曲线</div>
+                                <div class="feature-title">📈 日总收益曲线</div>
                                 <div class="feature-subtitle">我的收益率 vs {{ selectedPerformanceIndexName }}</div>
                             </div>
                             <select class="performance-select" v-model="performanceIndex" @change="fetchPerformanceCurve">
@@ -4179,8 +4179,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             <button v-for="item in performancePeriods" :key="item.value" type="button" :class="{active: performancePeriod === item.value}" @click="switchPerformancePeriod(item.value)">{{ item.label }}</button>
                         </div>
                         <div v-if="performanceCurve && performanceCurve.hasMyData" class="performance-metrics">
+                            <div v-if="performanceIsToday" class="performance-metric">
+                                <span>今日收益</span>
+                                <strong :class="Number(performanceCurve.myTotalProfit || 0) >= 0 ? 'metric-up' : 'metric-down'">{{ formatPerformanceMoney(performanceCurve.myTotalProfit) }}</strong>
+                            </div>
                             <div class="performance-metric">
-                                <span>本周期收益</span>
+                                <span>{{ performanceIsToday ? '今日收益率' : '本周期收益' }}</span>
                                 <strong :class="Number(performanceCurve.myTotalRate || 0) >= 0 ? 'metric-up' : 'metric-down'">{{ formatPerformancePercent(performanceCurve.myTotalRate) }}</strong>
                             </div>
                             <div class="performance-metric">
@@ -5101,11 +5105,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const chartInstance = shallowRef(null);
                 const performanceChartInstance = shallowRef(null);
                 const performanceCurve = ref(null);
-                const performancePeriod = ref('7d');
+                const performancePeriod = ref('today');
                 const performanceIndex = ref('hs300');
                 const performanceLoading = ref(false);
                 const performanceMessage = ref('');
                 const performancePeriods = [
+                    { value: 'today', label: '今日' },
                     { value: '7d', label: '近7日' },
                     { value: '1m', label: '近1月' },
                     { value: '3m', label: '近3月' },
@@ -5118,10 +5123,16 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     { value: 'kc50', label: '科创50' }
                 ];
                 const selectedPerformanceIndexName = computed(() => performanceCurve.value?.indexName || performanceIndices.find(item => item.value === performanceIndex.value)?.label || '沪深300');
+                const performanceIsToday = computed(() => performancePeriod.value === 'today' || performanceCurve.value?.period === 'today');
                 const formatPerformancePercent = (value) => {
                     const n = Number(value);
                     if (!Number.isFinite(n)) return '--';
                     return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
+                };
+                const formatPerformanceMoney = (value) => {
+                    const n = Number(value);
+                    if (!Number.isFinite(n)) return '--';
+                    return `${n > 0 ? '+' : ''}${n.toFixed(2)}`;
                 };
                 const performanceExcessClass = computed(() => {
                     if (!performanceCurve.value?.indexAvailable) return 'flat';
@@ -5133,7 +5144,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const performanceVerdict = computed(() => {
                     const data = performanceCurve.value;
                     if (!data?.hasMyData) return '暂无收益曲线数据';
-                    if (!data.indexAvailable) return '指数暂不可用';
+                    if (!data.indexAvailable) return data.period === 'today' ? '指数盘中数据暂不可用' : '指数数据暂不可用';
                     const excess = Number(data.excessRate || 0);
                     if (excess === 0) return `跑平 ${data.indexName || selectedPerformanceIndexName.value}`;
                     return `${excess > 0 ? '跑赢' : '跑输'} ${data.indexName || selectedPerformanceIndexName.value} ${formatPerformancePercent(excess)}`;
@@ -6477,11 +6488,15 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             textStyle: { color: '#f8fafc' },
                             formatter(params) {
                                 const row = points[params[0]?.dataIndex || 0] || {};
-                                let html = `<div style="font-weight:900;margin-bottom:6px;">${row.date || ''}</div>`;
+                                const title = row.time || row.date || '';
+                                let html = `<div style="font-weight:900;margin-bottom:6px;">${title}</div>`;
                                 params.forEach(p => {
                                     html += `<div>${p.marker} ${p.seriesName}: <strong>${formatPerformancePercent(p.value)}</strong></div>`;
                                 });
-                                html += `<div style="margin-top:6px;color:#94a3b8;">当日收益 ${privacyMode.value <= 1 ? Number(row.dailyProfit || 0).toFixed(2) : '****'} · 资产 ${privacyMode.value === 0 ? Number(row.assets || 0).toFixed(2) : '****'}</div>`;
+                                const myProfit = Number(row.myProfit ?? row.dailyProfit ?? 0);
+                                const excess = row.indexRate === null || row.indexRate === undefined ? null : Number(row.myRate || 0) - Number(row.indexRate || 0);
+                                html += `<div style="margin-top:6px;color:#94a3b8;">收益金额 ${privacyMode.value <= 1 ? formatPerformanceMoney(myProfit) : '****'} · 资产 ${privacyMode.value === 0 ? Number(row.assets || 0).toFixed(2) : '****'}</div>`;
+                                if (excess !== null && Number.isFinite(excess)) html += `<div style="color:#94a3b8;">超额收益 ${formatPerformancePercent(excess)}</div>`;
                                 return html;
                             }
                         },
@@ -6494,7 +6509,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         xAxis: {
                             type: 'category',
                             boundaryGap: false,
-                            data: points.map(p => p.date),
+                            data: points.map(p => p.time || p.date),
                             axisLabel: { color: '#94a3b8', hideOverlap: true },
                             axisLine: { lineStyle: { color: 'rgba(148,163,184,.22)' } },
                             axisTick: { show: false }
@@ -6523,7 +6538,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         await renderPerformanceChart();
                     } catch (e) {
                         performanceCurve.value = null;
-                        performanceMessage.value = '暂无收益曲线数据，请先保存每日档案';
+                        performanceMessage.value = performancePeriod.value === 'today'
+                            ? '暂无今日盘中收益数据'
+                            : '暂无历史收益曲线数据，请先保存每日档案';
                         if (performanceChartInstance.value) performanceChartInstance.value.clear();
                     } finally {
                         performanceLoading.value = false;
@@ -6989,7 +7006,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     appTheme, setAppTheme,
                     toasts, isLoggedIn, currentUser, userDisplayName, fundsList, chartRef, performanceChartRef, loginForm, profileForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, refreshSectorPage, activePage, switchPage, showProfileModal, userAvatar, smartOcrBusy, smartOcrText,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
-                    performanceCurve, performancePeriod, performanceIndex, performanceLoading, performancePeriods, performanceIndices, selectedPerformanceIndexName, performanceMessage, performanceVerdict, performanceExcessClass, fetchPerformanceCurve, renderPerformanceChart, switchPerformancePeriod, formatPerformancePercent,
+                    performanceCurve, performancePeriod, performanceIndex, performanceLoading, performancePeriods, performanceIndices, selectedPerformanceIndexName, performanceIsToday, performanceMessage, performanceVerdict, performanceExcessClass, fetchPerformanceCurve, renderPerformanceChart, switchPerformancePeriod, formatPerformancePercent, formatPerformanceMoney,
                     handleLogin, handleRegister, handleLogout, saveUserProfile, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, confirmOcrImport, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
                     sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, isCapitalLoading, fetchCapitalFlow,
