@@ -45,6 +45,18 @@ namespace 小白养基.Controllers
             public double BigNet { get; set; }
         }
 
+        public class CapitalFlowPayloadDto
+        {
+            public string Source { get; set; } = string.Empty;
+            public string UpdatedAt { get; set; } = string.Empty;
+            public bool IsFallback { get; set; }
+            public bool IsStale { get; set; }
+            public string Message { get; set; } = string.Empty;
+            public List<CapitalFlowRowDto> Rows { get; set; } = new();
+            public List<CapitalFlowRowDto> Inflow { get; set; } = new();
+            public List<CapitalFlowRowDto> Outflow { get; set; } = new();
+        }
+
         public class FundInfoCache
         {
             public string Code { get; set; }
@@ -56,6 +68,8 @@ namespace 小白养基.Controllers
         private static Dictionary<string, FundInfoCache> _exactMatchDict = null;
         private static readonly SemaphoreSlim _sectorsRefreshLock = new(1, 1);
         private static readonly SemaphoreSlim _capitalFlowRefreshLock = new(1, 1);
+        private const string CapitalFlowLatestCacheKey = "capital_flow_latest";
+        private static readonly TimeSpan _capitalFlowFallbackTtl = TimeSpan.FromHours(2);
         private static readonly TimeSpan _staleExternalDataTtl = TimeSpan.FromHours(6);
 
         private static TimeSpan GetExternalDataFreshTtl()
@@ -2069,11 +2083,19 @@ namespace 小白养基.Controllers
             var indexTicks = Array.Empty<PerformanceIndexTick>();
             var indexAvailable = false;
             double? fallbackIndexRate = null;
+            var indexFallback = false;
+            var indexStale = false;
+            var indexMessage = string.Empty;
+            var indexTicksCacheKey = $"performance_index_ticks:{indexDefinition.Key}:{snapshot.Today:yyyyMMdd}";
             try
             {
                 var http = _httpClientFactory.CreateClient("EastMoneyQuote");
                 indexTicks = (await FetchPerformanceIndexTicksAsync(http, indexDefinition, snapshot.Today)).ToArray();
                 indexAvailable = indexTicks.Length > 0;
+                if (indexAvailable)
+                {
+                    _cache.Set(indexTicksCacheKey, indexTicks, _staleExternalDataTtl);
+                }
             }
             catch (Exception ex)
             {
@@ -2085,10 +2107,32 @@ namespace 小白养基.Controllers
                 {
                     var http = _httpClientFactory.CreateClient("EastMoneyQuote");
                     fallbackIndexRate = await FetchPerformanceIndexQuoteRateAsync(http, indexDefinition);
+                    if (fallbackIndexRate.HasValue)
+                    {
+                        indexFallback = true;
+                        indexMessage = "指数使用当前报价兜底";
+                    }
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"[performance-curve] intraday index quote fallback failed: {indexDefinition.Key} {ex.Message}");
+                }
+            }
+            if (!indexAvailable && !fallbackIndexRate.HasValue)
+            {
+                if (_cache.TryGetValue(indexTicksCacheKey, out PerformanceIndexTick[]? cachedTicks) &&
+                    cachedTicks != null &&
+                    cachedTicks.Length > 0)
+                {
+                    indexTicks = cachedTicks;
+                    indexAvailable = true;
+                    indexFallback = true;
+                    indexStale = true;
+                    indexMessage = "指数使用缓存数据";
+                }
+                else
+                {
+                    indexMessage = "指数盘中数据暂不可用";
                 }
             }
 
@@ -2180,6 +2224,9 @@ namespace 小白养基.Controllers
                 indexName = indexDefinition.Name,
                 hasMyData = compactPoints.Count > 0,
                 indexAvailable = hasIndexRate,
+                indexFallback = hasIndexRate && indexFallback,
+                indexStale = hasIndexRate && indexStale,
+                indexMessage = hasIndexRate ? indexMessage : "指数盘中数据暂不可用",
                 myTotalRate = Math.Round(myTotalRate, 2),
                 indexTotalRate = Math.Round(indexTotalRate, 2),
                 excessRate = hasIndexRate ? Math.Round(myTotalRate - indexTotalRate, 2) : 0d,
@@ -2188,17 +2235,22 @@ namespace 小白养基.Controllers
                 allSettled = snapshot.AllSettled,
                 hasStale = snapshot.HasStale,
                 hasMissing = snapshot.HasMissing,
-                message = BuildTodayPerformanceMessage(hasIndexRate, snapshot.StaleFundCodes, snapshot.MissingFundCodes),
+                message = BuildTodayPerformanceMessage(hasIndexRate, indexMessage, snapshot.StaleFundCodes, snapshot.MissingFundCodes),
                 staleFundCodes = snapshot.StaleFundCodes,
                 missingFundCodes = snapshot.MissingFundCodes,
                 points = compactPoints
             });
         }
 
-        private static string BuildTodayPerformanceMessage(bool hasIndexRate, IReadOnlyList<string> staleFundCodes, IReadOnlyList<string> missingFundCodes)
+        private static string BuildTodayPerformanceMessage(
+            bool hasIndexRate,
+            string indexMessage,
+            IReadOnlyList<string> staleFundCodes,
+            IReadOnlyList<string> missingFundCodes)
         {
             var parts = new List<string>();
-            if (!hasIndexRate) parts.Add("指数盘中数据暂不可用");
+            if (!string.IsNullOrWhiteSpace(indexMessage)) parts.Add(indexMessage);
+            else if (!hasIndexRate) parts.Add("指数盘中数据暂不可用");
             if (staleFundCodes.Count > 0) parts.Add($"包含旧估值：{string.Join(",", staleFundCodes.Take(5))}");
             if (missingFundCodes.Count > 0) parts.Add($"已跳过缺失估值：{string.Join(",", missingFundCodes.Take(5))}");
             return string.Join("；", parts);
@@ -3715,21 +3767,33 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 return Ok(fresh);
             }
 
-            if (_cache.TryGetValue(staleKey, out object stale))
+            if (!force &&
+                _cache.TryGetValue(staleKey, out CapitalFlowPayloadDto? stale) &&
+                stale != null)
             {
                 _ = Task.Run(() => RefreshCapitalFlowCacheQuietlyAsync(limit));
-                return Ok(stale);
+                return Ok(CloneCapitalFlowPayload(stale, true, true, "主力资金流使用缓存数据", "cache"));
             }
 
             if (!await _capitalFlowRefreshLock.WaitAsync(0))
             {
-                return StatusCode(503, "主力资金流向正在刷新，请稍后重试");
+                if (TryGetCapitalFlowFallback(limit, out var cachedWhileBusy))
+                {
+                    return Ok(CloneCapitalFlowPayload(cachedWhileBusy, true, true, "主力资金流使用缓存数据", "cache"));
+                }
+
+                return Ok(CreateUnavailableCapitalFlowPayload());
             }
 
             try
             {
                 if (!force && _cache.TryGetValue(freshKey, out fresh)) return Ok(fresh);
-                if (_cache.TryGetValue(staleKey, out stale)) return Ok(stale);
+                if (!force &&
+                    _cache.TryGetValue(staleKey, out stale) &&
+                    stale != null)
+                {
+                    return Ok(CloneCapitalFlowPayload(stale, true, true, "主力资金流使用缓存数据", "cache"));
+                }
 
                 var payload = await BuildCapitalFlowPayloadAsync(limit);
                 SetCapitalFlowCache(limit, payload);
@@ -3737,7 +3801,13 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"主力资金流向获取失败: {ex.Message}");
+                Console.WriteLine($"[capital-flow] external failed: {ex.Message}");
+                if (TryGetCapitalFlowFallback(limit, out var cached))
+                {
+                    return Ok(CloneCapitalFlowPayload(cached, true, true, "主力资金流使用缓存数据", "cache"));
+                }
+
+                return Ok(CreateUnavailableCapitalFlowPayload());
             }
             finally
             {
@@ -3764,13 +3834,69 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             }
         }
 
-        private void SetCapitalFlowCache(int limit, object payload)
+        private void SetCapitalFlowCache(int limit, CapitalFlowPayloadDto payload)
         {
             _cache.Set($"CapitalFlowV3_{limit}", payload, GetExternalDataFreshTtl());
-            _cache.Set($"CapitalFlowV3_{limit}_Stale", payload, _staleExternalDataTtl);
+            _cache.Set($"CapitalFlowV3_{limit}_Stale", payload, _capitalFlowFallbackTtl);
+            _cache.Set(CapitalFlowLatestCacheKey, payload, _capitalFlowFallbackTtl);
         }
 
-        private async Task<object> BuildCapitalFlowPayloadAsync(int limit)
+        private bool TryGetCapitalFlowFallback(int limit, out CapitalFlowPayloadDto payload)
+        {
+            if (_cache.TryGetValue($"CapitalFlowV3_{limit}_Stale", out CapitalFlowPayloadDto? stalePayload) &&
+                stalePayload != null)
+            {
+                payload = stalePayload;
+                return true;
+            }
+
+            if (_cache.TryGetValue(CapitalFlowLatestCacheKey, out CapitalFlowPayloadDto? latestPayload) &&
+                latestPayload != null)
+            {
+                payload = latestPayload;
+                return true;
+            }
+
+            payload = null!;
+            return false;
+        }
+
+        private static CapitalFlowPayloadDto CloneCapitalFlowPayload(
+            CapitalFlowPayloadDto payload,
+            bool isFallback,
+            bool isStale,
+            string message,
+            string? sourceOverride = null)
+        {
+            return new CapitalFlowPayloadDto
+            {
+                Source = sourceOverride ?? payload.Source,
+                UpdatedAt = payload.UpdatedAt,
+                IsFallback = isFallback,
+                IsStale = isStale,
+                Message = message,
+                Rows = payload.Rows.ToList(),
+                Inflow = payload.Inflow.ToList(),
+                Outflow = payload.Outflow.ToList()
+            };
+        }
+
+        private static CapitalFlowPayloadDto CreateUnavailableCapitalFlowPayload()
+        {
+            return new CapitalFlowPayloadDto
+            {
+                Source = string.Empty,
+                UpdatedAt = string.Empty,
+                IsFallback = false,
+                IsStale = true,
+                Message = "主力资金流暂不可用",
+                Rows = new List<CapitalFlowRowDto>(),
+                Inflow = new List<CapitalFlowRowDto>(),
+                Outflow = new List<CapitalFlowRowDto>()
+            };
+        }
+
+        private async Task<CapitalFlowPayloadDto> BuildCapitalFlowPayloadAsync(int limit)
         {
             async Task<List<CapitalFlowRowDto>> FetchRowsAsync(int po)
             {
@@ -3834,13 +3960,16 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 .OrderByDescending(x => x.MainNet)
                 .ToList();
 
-            return new
+            return new CapitalFlowPayloadDto
             {
-                source = "东方财富行业板块资金流向",
-                updatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
-                rows,
-                inflow,
-                outflow
+                Source = "东方财富行业板块资金流向",
+                UpdatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
+                IsFallback = false,
+                IsStale = false,
+                Message = string.Empty,
+                Rows = rows,
+                Inflow = inflow,
+                Outflow = outflow
             };
         }
         [HttpGet("sector-details")]

@@ -940,7 +940,10 @@
                     capitalFlowOutRows.value = normalizeCapitalRows(data.outflow || rows).filter(x => (x.mainNet || 0) < 0).sort((a, b) => (a.mainNet || 0) - (b.mainNet || 0));
                     capitalFlowSource.value = data.source || '东方财富板块资金流向';
                     capitalFlowUpdatedAt.value = data.updatedAt || '';
-                    capitalFlowError.value = '';
+                    const message = String(data.message || '');
+                    capitalFlowError.value = data.isFallback
+                        ? '使用缓存数据'
+                        : (message || '');
                     capitalCacheTime = Date.now();
                 };
                 const fetchCapitalFlow = async (force = false) => {

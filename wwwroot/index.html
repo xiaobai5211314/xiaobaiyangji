@@ -4435,27 +4435,30 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <button class="btn" @click="fetchCapitalFlow(true)">🔄</button>
                     </div>
                     <div v-if="isCapitalLoading" class="news-empty">📡 正在同步主力资金...</div>
-                    <div v-else-if="capitalFlowRows.length === 0" class="news-empty">{{ capitalFlowError || '主力资金流暂不可用' }}</div>
-                    <div v-else class="capital-two-col">
-                        <div class="capital-box">
-                            <div class="capital-box-title"><span>🔴 行业板块流入</span><span style="color:var(--text-muted);font-size:11px;">TOP {{ capitalFlowInRows.length }}</span></div>
-                            <div class="capital-row capital-head"><span>板块</span><span class="capital-value">净流入</span><span class="capital-value">净占比</span></div>
-                            <div v-for="item in capitalFlowInRows.slice(0, 12)" :key="'in-'+item.code" class="capital-row">
-                                <div style="min-width:0;"><div class="capital-name">{{ item.name }}</div><div class="capital-sub">涨跌 {{ item.rate > 0 ? '+' : '' }}{{ item.rate }}%</div></div>
-                                <div class="capital-value" style="color:#ff4d4f;">{{ item.mainNetText }}</div>
-                                <div class="capital-value" :style="{color:item.mainRatio>=0?'#ff4d4f':'#10b981'}">{{ item.mainRatio > 0 ? '+' : '' }}{{ item.mainRatio }}%</div>
+                    <template v-else>
+                        <div v-if="capitalFlowRows.length > 0 && capitalFlowError" class="performance-status">{{ capitalFlowError }}</div>
+                        <div v-if="capitalFlowRows.length === 0" class="news-empty">{{ capitalFlowError || '主力资金流暂不可用' }}</div>
+                        <div v-else class="capital-two-col">
+                            <div class="capital-box">
+                                <div class="capital-box-title"><span>🔴 行业板块流入</span><span style="color:var(--text-muted);font-size:11px;">TOP {{ capitalFlowInRows.length }}</span></div>
+                                <div class="capital-row capital-head"><span>板块</span><span class="capital-value">净流入</span><span class="capital-value">净占比</span></div>
+                                <div v-for="item in capitalFlowInRows.slice(0, 12)" :key="'in-'+item.code" class="capital-row">
+                                    <div style="min-width:0;"><div class="capital-name">{{ item.name }}</div><div class="capital-sub">涨跌 {{ item.rate > 0 ? '+' : '' }}{{ item.rate }}%</div></div>
+                                    <div class="capital-value" style="color:#ff4d4f;">{{ item.mainNetText }}</div>
+                                    <div class="capital-value" :style="{color:item.mainRatio>=0?'#ff4d4f':'#10b981'}">{{ item.mainRatio > 0 ? '+' : '' }}{{ item.mainRatio }}%</div>
+                                </div>
+                            </div>
+                            <div class="capital-box">
+                                <div class="capital-box-title"><span>🟢 行业板块流出</span><span style="color:var(--text-muted);font-size:11px;">TOP {{ capitalFlowOutRows.length }}</span></div>
+                                <div class="capital-row capital-head"><span>板块</span><span class="capital-value">净流出</span><span class="capital-value">净占比</span></div>
+                                <div v-for="item in capitalFlowOutRows.slice(0, 12)" :key="'out-'+item.code" class="capital-row">
+                                    <div style="min-width:0;"><div class="capital-name">{{ item.name }}</div><div class="capital-sub">涨跌 {{ item.rate > 0 ? '+' : '' }}{{ item.rate }}%</div></div>
+                                    <div class="capital-value" style="color:#10b981;">{{ item.mainNetText }}</div>
+                                    <div class="capital-value" :style="{color:item.mainRatio>=0?'#ff4d4f':'#10b981'}">{{ item.mainRatio > 0 ? '+' : '' }}{{ item.mainRatio }}%</div>
+                                </div>
                             </div>
                         </div>
-                        <div class="capital-box">
-                            <div class="capital-box-title"><span>🟢 行业板块流出</span><span style="color:var(--text-muted);font-size:11px;">TOP {{ capitalFlowOutRows.length }}</span></div>
-                            <div class="capital-row capital-head"><span>板块</span><span class="capital-value">净流出</span><span class="capital-value">净占比</span></div>
-                            <div v-for="item in capitalFlowOutRows.slice(0, 12)" :key="'out-'+item.code" class="capital-row">
-                                <div style="min-width:0;"><div class="capital-name">{{ item.name }}</div><div class="capital-sub">涨跌 {{ item.rate > 0 ? '+' : '' }}{{ item.rate }}%</div></div>
-                                <div class="capital-value" style="color:#10b981;">{{ item.mainNetText }}</div>
-                                <div class="capital-value" :style="{color:item.mainRatio>=0?'#ff4d4f':'#10b981'}">{{ item.mainRatio > 0 ? '+' : '' }}{{ item.mainRatio }}%</div>
-                            </div>
-                        </div>
-                    </div>
+                    </template>
                 </div>
             </div>
 
@@ -6553,7 +6556,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     capitalFlowOutRows.value = normalizeCapitalRows(data.outflow || rows).filter(x => (x.mainNet || 0) < 0).sort((a, b) => (a.mainNet || 0) - (b.mainNet || 0));
                     capitalFlowSource.value = data.source || '东方财富板块资金流向';
                     capitalFlowUpdatedAt.value = data.updatedAt || '';
-                    capitalFlowError.value = '';
+                    const message = String(data.message || '');
+                    capitalFlowError.value = data.isFallback
+                        ? '使用缓存数据'
+                        : (message || '');
                     capitalCacheTime = Date.now();
                 };
                 const fetchCapitalFlow = async (force = false) => {
