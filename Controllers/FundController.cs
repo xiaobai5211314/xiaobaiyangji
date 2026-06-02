@@ -4359,12 +4359,16 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             try
             {
                 var today = ChinaNow().Date;
-                var latestRecords = await _context.FundRecords
+                var rawRecords = await _context.FundRecords
                     .AsNoTracking()
                     .Where(f => f.FetchTime >= today)
+                    .Select(f => new { f.FundCode, f.FundName, f.EstimatedRate, f.FetchTime })
+                    .ToListAsync();
+
+                var latestRecords = rawRecords
                     .GroupBy(f => f.FundCode)
                     .Select(g => g.OrderByDescending(f => f.FetchTime).First())
-                    .ToListAsync();
+                    .ToList();
 
                 if (latestRecords.Count == 0)
                 {
