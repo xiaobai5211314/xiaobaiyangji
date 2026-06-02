@@ -4144,6 +4144,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             string lastExternalUrl = "";
             int externalStatusCode = 0;
             string externalError = "";
+            string rawPreview = "";
             int rawInflowCount = 0, rawOutflowCount = 0;
 
             async Task<List<CapitalFlowRowDto>> FetchRowsAsync(int po)
@@ -4164,17 +4165,32 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 response.EnsureSuccessStatusCode();
                 string body = await response.Content.ReadAsStringAsync();
 
+                if (string.IsNullOrEmpty(rawPreview) && body.Length > 0)
+                {
+                    rawPreview = body.Length > 300 ? body[..300] : body;
+                }
+
+                Console.WriteLine($"[CapitalFlow] po={po} status={externalStatusCode} bodyLen={body.Length} preview={rawPreview[..Math.Min(rawPreview.Length, 120)]}");
+
                 using var doc = JsonDocument.Parse(body);
                 if (!doc.RootElement.TryGetProperty("data", out var data) ||
-                    data.ValueKind == JsonValueKind.Null ||
-                    !data.TryGetProperty("diff", out var list) ||
-                    list.ValueKind != JsonValueKind.Array)
+                    data.ValueKind == JsonValueKind.Null)
                 {
-                    externalError = "data.diff missing or not array";
-                    Console.WriteLine($"[CapitalFlow] externalStatus={externalStatusCode} rows=0 cacheHit=false error={externalError}");
+                    externalError = $"data is null or missing (bodyLen={body.Length})";
+                    Console.WriteLine($"[CapitalFlow] externalStatus={externalStatusCode} rawLen={body.Length} error={externalError}");
                     return new List<CapitalFlowRowDto>();
                 }
 
+                if (!data.TryGetProperty("diff", out var list) ||
+                    list.ValueKind != JsonValueKind.Array)
+                {
+                    var diffKind = data.TryGetProperty("diff", out var diffEl) ? diffEl.ValueKind.ToString() : "missing";
+                    externalError = $"data.diff is {diffKind}, not array";
+                    Console.WriteLine($"[CapitalFlow] externalStatus={externalStatusCode} rawLen={body.Length} error={externalError}");
+                    return new List<CapitalFlowRowDto>();
+                }
+
+                int arrayLen = list.GetArrayLength();
                 var result = new List<CapitalFlowRowDto>();
                 foreach (var item in list.EnumerateArray())
                 {
@@ -4201,8 +4217,9 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                     });
                 }
 
-                if (po == 1) rawInflowCount = result.Count;
-                else rawOutflowCount = result.Count;
+                if (po == 1) rawInflowCount = arrayLen;
+                else rawOutflowCount = arrayLen;
+                Console.WriteLine($"[CapitalFlow] po={po} diffArrayLen={arrayLen} parsedRows={result.Count}");
                 return result;
             }
 
@@ -4274,6 +4291,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                     externalError,
                     cacheHit = false,
                     cacheAgeSeconds = (int?)null,
+                    rawPreview = rawPreview.Length > 200 ? rawPreview[..200] : rawPreview,
                     rawInflowCount,
                     rawOutflowCount,
                     returnedRowsCount = rows.Count

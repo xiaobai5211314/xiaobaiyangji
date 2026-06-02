@@ -6573,9 +6573,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     }
                     isCapitalLoading.value = capitalFlowRows.value.length === 0;
                     try {
-                        const res = await fetch(`${API_BASE}/api/fund/capital-flow?limit=40${force ? '&force=true' : ''}&_t=${Date.now()}`, { cache: 'no-store' });
+                        const res = await fetch(`${API_BASE}/api/fund/capital-flow?limit=40&debug=true${force ? '&force=true' : ''}&_t=${Date.now()}`, { cache: 'no-store' });
                         if (!res.ok) throw new Error(await res.text());
                         const data = await res.json();
+                        if (data.debug) console.log('[capital-flow debug]', data.debug);
                         applyCapitalPayload(data);
                         writeJsonCache('capital_flow_cache_v1', data);
                     } catch (e) {
@@ -6724,10 +6725,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     performanceLoading.value = true;
                     performanceMessage.value = '';
                     try {
-                        const url = `/api/fund/performance-curve?username=${encodeURIComponent(currentUser.value)}&period=${encodeURIComponent(performancePeriod.value)}&index=${encodeURIComponent(performanceIndex.value)}&_t=${Date.now()}`;
+                        const url = `/api/fund/performance-curve?username=${encodeURIComponent(currentUser.value)}&period=${encodeURIComponent(performancePeriod.value)}&index=${encodeURIComponent(performanceIndex.value)}&debug=true&_t=${Date.now()}`;
                         const res = await apiFetch(url, { cache: 'no-store' });
                         if (!res.ok) throw new Error(await res.text());
                         const data = await res.json();
+                        if (data.debug) console.log('[performance-curve debug]', data.debug);
                         performanceCurve.value = data || null;
                         performanceMessage.value = normalizePerformanceMessage(data);
                         await nextTick();
