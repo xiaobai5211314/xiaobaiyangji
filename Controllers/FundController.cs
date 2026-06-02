@@ -1847,6 +1847,11 @@ namespace 小白养基.Controllers
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         };
 
+        private static readonly JsonSerializerOptions ExternalFallbackJsonOptions = new()
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
+
         private sealed record PerformanceIndexDefinition(string Key, string Name, string Secid);
 
         private sealed record PerformanceArchivePoint(DateTime Date, double TotalRate, double Assets, double DailyProfit);
@@ -1854,6 +1859,12 @@ namespace 小白养基.Controllers
         private sealed record PerformanceIndexClose(DateTime Date, double Close);
 
         private sealed record PerformanceIndexTick(DateTime Time, double Price);
+
+        private sealed class PerformanceIndexTickCacheDto
+        {
+            public DateTime Time { get; set; }
+            public double Price { get; set; }
+        }
 
         private sealed record PerformanceFundIntradayPoint(DateTime Time, double Rate, double? ProfitOverride);
 
@@ -2094,12 +2105,24 @@ namespace 小白养基.Controllers
                 indexAvailable = indexTicks.Length > 0;
                 if (indexAvailable)
                 {
-                    _cache.Set(indexTicksCacheKey, indexTicks, _staleExternalDataTtl);
+                    await SetPerformanceIndexTicksCacheAsync(indexTicksCacheKey, indexTicks);
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[performance-curve] intraday index failed: {indexDefinition.Key} {ex.Message}");
+            }
+            if (!indexAvailable)
+            {
+                var cachedTicks = await TryGetPerformanceIndexTicksCacheAsync(indexTicksCacheKey);
+                if (cachedTicks.Length > 0)
+                {
+                    indexTicks = cachedTicks;
+                    indexAvailable = true;
+                    indexFallback = true;
+                    indexStale = true;
+                    indexMessage = "指数使用缓存数据";
+                }
             }
             if (!indexAvailable)
             {
@@ -2110,7 +2133,7 @@ namespace 小白养基.Controllers
                     if (fallbackIndexRate.HasValue)
                     {
                         indexFallback = true;
-                        indexMessage = "指数使用当前报价兜底";
+                        indexMessage = "指数仅使用当前涨跌幅";
                     }
                 }
                 catch (Exception ex)
@@ -2120,20 +2143,7 @@ namespace 小白养基.Controllers
             }
             if (!indexAvailable && !fallbackIndexRate.HasValue)
             {
-                if (_cache.TryGetValue(indexTicksCacheKey, out PerformanceIndexTick[]? cachedTicks) &&
-                    cachedTicks != null &&
-                    cachedTicks.Length > 0)
-                {
-                    indexTicks = cachedTicks;
-                    indexAvailable = true;
-                    indexFallback = true;
-                    indexStale = true;
-                    indexMessage = "指数使用缓存数据";
-                }
-                else
-                {
-                    indexMessage = "指数盘中数据暂不可用";
-                }
+                indexMessage = "指数盘中数据暂不可用";
             }
 
             var indexRatesByTime = indexAvailable
@@ -2405,6 +2415,69 @@ namespace 小白养基.Controllers
             }
 
             return null;
+        }
+
+        private async Task SetPerformanceIndexTicksCacheAsync(string cacheKey, PerformanceIndexTick[] ticks)
+        {
+            if (ticks.Length == 0) return;
+
+            _cache.Set(cacheKey, ticks, _staleExternalDataTtl);
+
+            try
+            {
+                var rows = ticks
+                    .Select(t => new PerformanceIndexTickCacheDto
+                    {
+                        Time = t.Time,
+                        Price = t.Price
+                    })
+                    .ToList();
+                var db = _redis.GetDatabase();
+                string json = JsonSerializer.Serialize(rows, ExternalFallbackJsonOptions);
+                await db.StringSetAsync(cacheKey, json, _staleExternalDataTtl);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[performance-curve] index redis cache write failed: {ex.Message}");
+            }
+        }
+
+        private async Task<PerformanceIndexTick[]> TryGetPerformanceIndexTicksCacheAsync(string cacheKey)
+        {
+            if (_cache.TryGetValue(cacheKey, out PerformanceIndexTick[]? cachedTicks) &&
+                cachedTicks != null &&
+                cachedTicks.Length > 0)
+            {
+                return cachedTicks;
+            }
+
+            try
+            {
+                var db = _redis.GetDatabase();
+                var cached = await db.StringGetAsync(cacheKey);
+                if (!cached.HasValue) return Array.Empty<PerformanceIndexTick>();
+
+                var rows = JsonSerializer.Deserialize<List<PerformanceIndexTickCacheDto>>(
+                    cached.ToString(),
+                    ExternalFallbackJsonOptions);
+                var ticks = rows?
+                    .Where(t => t.Time != default && t.Price > 0)
+                    .Select(t => new PerformanceIndexTick(t.Time, t.Price))
+                    .OrderBy(t => t.Time)
+                    .ToArray() ?? Array.Empty<PerformanceIndexTick>();
+
+                if (ticks.Length > 0)
+                {
+                    _cache.Set(cacheKey, ticks, _staleExternalDataTtl);
+                }
+
+                return ticks;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[performance-curve] index redis cache read failed: {ex.Message}");
+                return Array.Empty<PerformanceIndexTick>();
+            }
         }
 
         private static Dictionary<DateTime, double?> BuildAlignedIntradayIndexRates(
@@ -3777,7 +3850,8 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
             if (!await _capitalFlowRefreshLock.WaitAsync(0))
             {
-                if (TryGetCapitalFlowFallback(limit, out var cachedWhileBusy))
+                var cachedWhileBusy = await TryGetCapitalFlowFallbackAsync(limit);
+                if (cachedWhileBusy != null)
                 {
                     return Ok(CloneCapitalFlowPayload(cachedWhileBusy, true, true, "主力资金流使用缓存数据", "cache"));
                 }
@@ -3796,13 +3870,14 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 }
 
                 var payload = await BuildCapitalFlowPayloadAsync(limit);
-                SetCapitalFlowCache(limit, payload);
+                await SetCapitalFlowCacheAsync(limit, payload);
                 return Ok(payload);
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[capital-flow] external failed: {ex.Message}");
-                if (TryGetCapitalFlowFallback(limit, out var cached))
+                var cached = await TryGetCapitalFlowFallbackAsync(limit);
+                if (cached != null)
                 {
                     return Ok(CloneCapitalFlowPayload(cached, true, true, "主力资金流使用缓存数据", "cache"));
                 }
@@ -3822,7 +3897,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             try
             {
                 var payload = await BuildCapitalFlowPayloadAsync(limit);
-                SetCapitalFlowCache(limit, payload);
+                await SetCapitalFlowCacheAsync(limit, payload);
             }
             catch (Exception ex)
             {
@@ -3834,11 +3909,12 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             }
         }
 
-        private void SetCapitalFlowCache(int limit, CapitalFlowPayloadDto payload)
+        private async Task SetCapitalFlowCacheAsync(int limit, CapitalFlowPayloadDto payload)
         {
             _cache.Set($"CapitalFlowV3_{limit}", payload, GetExternalDataFreshTtl());
             _cache.Set($"CapitalFlowV3_{limit}_Stale", payload, _capitalFlowFallbackTtl);
             _cache.Set(CapitalFlowLatestCacheKey, payload, _capitalFlowFallbackTtl);
+            await TryWriteCapitalFlowRedisCacheAsync(payload);
         }
 
         private bool TryGetCapitalFlowFallback(int limit, out CapitalFlowPayloadDto payload)
@@ -3861,6 +3937,68 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             return false;
         }
 
+        private async Task<CapitalFlowPayloadDto?> TryGetCapitalFlowFallbackAsync(int limit)
+        {
+            if (TryGetCapitalFlowFallback(limit, out var memoryPayload))
+            {
+                return memoryPayload;
+            }
+
+            var redisPayload = await TryReadCapitalFlowRedisCacheAsync();
+            if (redisPayload == null) return null;
+
+            _cache.Set($"CapitalFlowV3_{limit}_Stale", redisPayload, _capitalFlowFallbackTtl);
+            _cache.Set(CapitalFlowLatestCacheKey, redisPayload, _capitalFlowFallbackTtl);
+            return redisPayload;
+        }
+
+        private async Task TryWriteCapitalFlowRedisCacheAsync(CapitalFlowPayloadDto payload)
+        {
+            try
+            {
+                var db = _redis.GetDatabase();
+                string json = JsonSerializer.Serialize(payload, ExternalFallbackJsonOptions);
+                await db.StringSetAsync(CapitalFlowLatestCacheKey, json, _capitalFlowFallbackTtl);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[capital-flow] redis cache write failed: {ex.Message}");
+            }
+        }
+
+        private async Task<CapitalFlowPayloadDto?> TryReadCapitalFlowRedisCacheAsync()
+        {
+            try
+            {
+                var db = _redis.GetDatabase();
+                var cached = await db.StringGetAsync(CapitalFlowLatestCacheKey);
+                if (!cached.HasValue) return null;
+
+                var payload = JsonSerializer.Deserialize<CapitalFlowPayloadDto>(
+                    cached.ToString(),
+                    ExternalFallbackJsonOptions);
+                if (payload == null) return null;
+
+                payload.Rows ??= new List<CapitalFlowRowDto>();
+                payload.Inflow ??= new List<CapitalFlowRowDto>();
+                payload.Outflow ??= new List<CapitalFlowRowDto>();
+
+                if (payload.Rows.Count == 0 &&
+                    payload.Inflow.Count == 0 &&
+                    payload.Outflow.Count == 0)
+                {
+                    return null;
+                }
+
+                return payload;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[capital-flow] redis cache read failed: {ex.Message}");
+                return null;
+            }
+        }
+
         private static CapitalFlowPayloadDto CloneCapitalFlowPayload(
             CapitalFlowPayloadDto payload,
             bool isFallback,
@@ -3875,9 +4013,9 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 IsFallback = isFallback,
                 IsStale = isStale,
                 Message = message,
-                Rows = payload.Rows.ToList(),
-                Inflow = payload.Inflow.ToList(),
-                Outflow = payload.Outflow.ToList()
+                Rows = payload.Rows?.ToList() ?? new List<CapitalFlowRowDto>(),
+                Inflow = payload.Inflow?.ToList() ?? new List<CapitalFlowRowDto>(),
+                Outflow = payload.Outflow?.ToList() ?? new List<CapitalFlowRowDto>()
             };
         }
 
@@ -3959,6 +4097,11 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 .Select(g => g.OrderByDescending(x => Math.Abs(x.MainNet)).First())
                 .OrderByDescending(x => x.MainNet)
                 .ToList();
+
+            if (rows.Count == 0)
+            {
+                throw new InvalidOperationException("主力资金流实时数据为空");
+            }
 
             return new CapitalFlowPayloadDto
             {

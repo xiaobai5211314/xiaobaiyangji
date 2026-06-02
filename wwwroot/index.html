@@ -5211,6 +5211,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     const parts = [];
                     if (raw.includes('旧估值') || raw.includes('快照')) parts.push('含旧估值，曲线为估算值');
                     if (raw.includes('缺失估值') || raw.includes('暂缺')) parts.push('部分估值暂缺');
+                    if (raw.includes('指数使用缓存数据')) parts.push('指数使用缓存数据');
+                    if (raw.includes('指数仅使用当前涨跌幅')) parts.push('指数仅使用当前涨跌幅');
                     if (raw.includes('指数盘中数据暂不可用')) parts.push('指数盘中数据暂不可用');
                     if (raw.includes('指数数据暂不可用')) parts.push('指数数据暂不可用');
                     return parts.length > 0 ? Array.from(new Set(parts)).join(' · ') : raw;
