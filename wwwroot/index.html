@@ -4240,6 +4240,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             </div>
                         </div>
                         <div ref="performanceChartRef" class="performance-chart-box"></div>
+                        <div v-if="performanceCurve?.indexFallback && performanceCurve?.indexAvailable" class="performance-status" style="background:rgba(255,170,0,.15);border:1px solid rgba(255,170,0,.35);border-radius:8px;padding:6px 12px;margin:6px 0;font-size:13px;color:#ffaa00;">指数使用备用源，仅供参考</div>
+                        <div v-if="!performanceCurve?.indexAvailable && !performanceLoading && performanceCurve?.hasMyData" class="performance-status" style="background:rgba(100,100,100,.15);border:1px solid rgba(100,100,100,.3);border-radius:8px;padding:6px 12px;margin:6px 0;font-size:13px;color:var(--text-muted);">当前仅显示我的收益率；指数盘中数据暂不可用</div>
                         <div v-if="performanceLoading" class="performance-status">收益曲线加载中...</div>
                         <div v-else-if="performanceMessage" class="performance-status">{{ performanceMessage }}</div>
                         <div v-else-if="performanceCurve && performanceCurve.hasMyData" :class="['performance-status', performanceExcessClass]">{{ performanceVerdict }}</div>
@@ -5213,6 +5215,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     if (raw.includes('缺失估值') || raw.includes('暂缺')) parts.push('部分估值暂缺');
                     if (raw.includes('指数使用缓存数据')) parts.push('指数使用缓存数据');
                     if (raw.includes('指数仅使用当前涨跌幅')) parts.push('指数仅使用当前涨跌幅');
+                    if (raw.includes('指数使用 AKShare 备用源')) parts.push('指数使用备用源，仅供参考');
+                    if (raw.includes('指数仅使用 AKShare 当前涨跌幅')) parts.push('指数仅使用 AKShare 当前涨跌幅');
                     if (raw.includes('指数盘中数据暂不可用')) parts.push('指数盘中数据暂不可用');
                     if (raw.includes('指数数据暂不可用')) parts.push('指数数据暂不可用');
                     return parts.length > 0 ? Array.from(new Set(parts)).join(' · ') : raw;

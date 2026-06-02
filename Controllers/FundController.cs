@@ -1887,7 +1887,9 @@ namespace 小白养基.Controllers
                 ["hs300"] = new("hs300", "沪深300", "1.000300"),
                 ["sz50"] = new("sz50", "上证50", "1.000016"),
                 ["cyb"] = new("cyb", "创业板", "0.399006"),
-                ["kc50"] = new("kc50", "科创50", "1.000688")
+                ["kc50"] = new("kc50", "科创50", "1.000688"),
+                ["sse50"] = new("sz50", "上证50", "1.000016"),
+                ["star50"] = new("kc50", "科创50", "1.000688")
             };
 
         private static DateTime GetPerformanceStartDate(string period, DateTime today)
@@ -2110,6 +2112,9 @@ namespace 小白养基.Controllers
             var indexStale = false;
             var indexMessage = string.Empty;
             var indexTicksCacheKey = $"performance_index_ticks:{indexDefinition.Key}:{snapshot.Today:yyyyMMdd}";
+            var attempts = new List<object>();
+
+            // Source 1: EastMoney trends2 分时
             try
             {
                 var http = _httpClientFactory.CreateClient("EastMoneyQuote");
@@ -2121,6 +2126,7 @@ namespace 小白养基.Controllers
                 debugIndexError = error;
                 indexTicks = ticks.ToArray();
                 indexAvailable = indexTicks.Length > 0;
+                attempts.Add(new { source = "eastmoney_trends2", url, statusCode, rawRowsCount = rawCount, parsedRowsCount = parsedCount, error = (string?)(string.IsNullOrEmpty(error) ? null : error) });
                 Console.WriteLine($"[PerformanceCurve] index={indexDefinition.Key} secid={indexDefinition.Secid} status={statusCode} rawRows={rawCount} parsedRows={parsedCount} available={indexAvailable} error={error}");
                 if (indexAvailable)
                 {
@@ -2130,11 +2136,15 @@ namespace 小白养基.Controllers
             catch (Exception ex)
             {
                 debugIndexError = ex.Message;
+                attempts.Add(new { source = "eastmoney_trends2", url = debugIndexUrl, statusCode = debugIndexStatusCode, rawRowsCount = 0, parsedRowsCount = 0, error = ex.Message });
                 Console.WriteLine($"[PerformanceCurve] index={indexDefinition.Key} secid={indexDefinition.Secid} FAILED error={ex.Message}");
             }
+
+            // Source 2: performance_index_ticks 缓存
             if (!indexAvailable)
             {
                 var cachedTicks = await TryGetPerformanceIndexTicksCacheAsync(indexTicksCacheKey);
+                attempts.Add(new { source = "cache", cacheHit = cachedTicks.Length > 0, parsedRowsCount = cachedTicks.Length });
                 if (cachedTicks.Length > 0)
                 {
                     indexTicks = cachedTicks;
@@ -2145,17 +2155,21 @@ namespace 小白养基.Controllers
                     indexMessage = "指数使用缓存数据";
                 }
             }
+
+            // Source 3: EastMoney push2 quote 当前涨跌幅
             if (!indexAvailable)
             {
                 try
                 {
                     var http = _httpClientFactory.CreateClient("EastMoneyQuote");
+                    var quoteUrl = $"https://push2.eastmoney.com/api/qt/stock/get?secid={indexDefinition.Secid}";
                     var (rate, quoteStatus, quoteError) = await FetchPerformanceIndexQuoteRateWithDebugAsync(http, indexDefinition);
-                    debugQuoteUrl = $"https://push2.eastmoney.com/api/qt/stock/get?secid={indexDefinition.Secid}";
+                    debugQuoteUrl = quoteUrl;
                     debugQuoteStatusCode = quoteStatus;
                     debugQuoteError = quoteError;
                     debugQuoteRate = rate;
                     fallbackIndexRate = rate;
+                    attempts.Add(new { source = "eastmoney_quote", url = quoteUrl, statusCode = quoteStatus, quoteRate = rate, error = (string?)(string.IsNullOrEmpty(quoteError) ? null : quoteError) });
                     if (fallbackIndexRate.HasValue)
                     {
                         indexFallback = true;
@@ -2166,9 +2180,100 @@ namespace 小白养基.Controllers
                 catch (Exception ex)
                 {
                     debugQuoteError = ex.Message;
+                    attempts.Add(new { source = "eastmoney_quote", url = debugQuoteUrl, statusCode = debugQuoteStatusCode, quoteRate = (double?)null, error = ex.Message });
                     Console.WriteLine($"[PerformanceCurve] index={indexDefinition.Key} quoteFallback FAILED error={ex.Message}");
                 }
             }
+
+            // Source 4: AKShare sidecar 指数分时
+            if (!indexAvailable)
+            {
+                var akShareUrl = $"http://127.0.0.1:8765/index-intraday?index={indexDefinition.Key}";
+                try
+                {
+                    using var akClient = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+                    using var akResp = await akClient.GetAsync(akShareUrl);
+                    int akStatus = (int)akResp.StatusCode;
+                    string akBody = await akResp.Content.ReadAsStringAsync();
+
+                    if (akResp.IsSuccessStatusCode)
+                    {
+                        using var akDoc = JsonDocument.Parse(akBody);
+                        var akRoot = akDoc.RootElement;
+                        if (akRoot.TryGetProperty("points", out var pointsArr) && pointsArr.ValueKind == JsonValueKind.Array)
+                        {
+                            var akTicks = new List<PerformanceIndexTick>();
+                            foreach (var pt in pointsArr.EnumerateArray())
+                            {
+                                var rateStr = pt.TryGetProperty("rate", out var rv) && rv.ValueKind == JsonValueKind.Number ? rv.GetDouble() : 0;
+                                var timeStr = pt.TryGetProperty("time", out var tv) ? tv.GetString() : null;
+                                if (!string.IsNullOrEmpty(timeStr) && DateTime.TryParse(timeStr, out var ptTime) && ptTime.Date == snapshot.Today)
+                                {
+                                    akTicks.Add(new PerformanceIndexTick(ptTime, 100d * (1d + rateStr / 100d)));
+                                }
+                            }
+                            if (akTicks.Count > 0)
+                            {
+                                indexTicks = akTicks.OrderBy(t => t.Time).ToArray();
+                                indexAvailable = true;
+                                indexFallback = true;
+                                indexStale = false;
+                                indexMessage = "指数使用 AKShare 备用源";
+                                await SetPerformanceIndexTicksCacheAsync(indexTicksCacheKey, indexTicks);
+                            }
+                            attempts.Add(new { source = "akshare_index_intraday", url = akShareUrl, statusCode = akStatus, rawRowsCount = pointsArr.GetArrayLength(), parsedRowsCount = akTicks.Count, error = (string?)(akTicks.Count > 0 ? null : "0 ticks after date filter") });
+                        }
+                        else
+                        {
+                            attempts.Add(new { source = "akshare_index_intraday", url = akShareUrl, statusCode = akStatus, rawRowsCount = 0, parsedRowsCount = 0, error = "points not array" });
+                        }
+                    }
+                    else
+                    {
+                        attempts.Add(new { source = "akshare_index_intraday", url = akShareUrl, statusCode = akStatus, rawRowsCount = 0, parsedRowsCount = 0, error = $"HTTP {akStatus}" });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    attempts.Add(new { source = "akshare_index_intraday", url = akShareUrl, statusCode = 0, rawRowsCount = 0, parsedRowsCount = 0, error = ex.Message });
+                    Console.WriteLine($"[PerformanceCurve] index={indexDefinition.Key} akshare_intraday FAILED error={ex.Message}");
+                }
+            }
+
+            // Source 5: AKShare sidecar 指数当前涨跌幅
+            if (!indexAvailable && !fallbackIndexRate.HasValue)
+            {
+                var akQuoteUrl = $"http://127.0.0.1:8765/index-intraday?index={indexDefinition.Key}";
+                try
+                {
+                    using var akClient = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+                    using var akResp = await akClient.GetAsync(akQuoteUrl);
+                    int akStatus = (int)akResp.StatusCode;
+                    string akBody = await akResp.Content.ReadAsStringAsync();
+                    if (akResp.IsSuccessStatusCode)
+                    {
+                        using var akDoc = JsonDocument.Parse(akBody);
+                        var akRoot = akDoc.RootElement;
+                        if (akRoot.TryGetProperty("points", out var pts) && pts.ValueKind == JsonValueKind.Array && pts.GetArrayLength() > 0)
+                        {
+                            var lastPt = pts[pts.GetArrayLength() - 1];
+                            if (lastPt.TryGetProperty("rate", out var rv) && rv.ValueKind == JsonValueKind.Number)
+                            {
+                                fallbackIndexRate = Math.Round(rv.GetDouble(), 2);
+                                indexFallback = true;
+                                indexMessage = "指数仅使用 AKShare 当前涨跌幅";
+                            }
+                        }
+                    }
+                    attempts.Add(new { source = "akshare_quote", url = akQuoteUrl, statusCode = akStatus, quoteRate = fallbackIndexRate, error = (string?)(fallbackIndexRate.HasValue ? null : "rate not found") });
+                }
+                catch (Exception ex)
+                {
+                    attempts.Add(new { source = "akshare_quote", url = akQuoteUrl, statusCode = 0, quoteRate = (double?)null, error = ex.Message });
+                    Console.WriteLine($"[PerformanceCurve] index={indexDefinition.Key} akshare_quote FAILED error={ex.Message}");
+                }
+            }
+
             if (!indexAvailable && !fallbackIndexRate.HasValue)
             {
                 indexMessage = "指数盘中数据暂不可用";
@@ -2285,6 +2390,7 @@ namespace 小白养基.Controllers
                     selectedIndex = normalizedIndex,
                     resolvedIndexCode = indexDefinition.Key,
                     resolvedSecId = indexDefinition.Secid,
+                    attempts,
                     indexExternalUrl = debugIndexUrl,
                     indexExternalStatusCode = debugIndexStatusCode,
                     indexRawRowsCount = debugRawRowsCount,
