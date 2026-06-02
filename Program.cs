@@ -158,7 +158,9 @@ app.UseStaticFiles(new StaticFileOptions
         var path = ctx.File.PhysicalPath ?? string.Empty;
         if (path.EndsWith("index.html", StringComparison.OrdinalIgnoreCase))
         {
-            ctx.Context.Response.Headers[HeaderNames.CacheControl] = "no-cache";
+            ctx.Context.Response.Headers[HeaderNames.CacheControl] = "no-cache, no-store, must-revalidate";
+            ctx.Context.Response.Headers["Pragma"] = "no-cache";
+            ctx.Context.Response.Headers["Expires"] = "0";
             return;
         }
 
@@ -203,7 +205,7 @@ app.MapGet("/api/debug/version", (IWebHostEnvironment env) =>
     return Results.Ok(new
     {
         app = "xiaobaiyangji",
-        buildVersion = "2026-06-02-debug-v1",
+        buildVersion = "2026-06-02-debug-cache-v1",
         buildTime = System.IO.File.GetLastWriteTime(typeof(Program).Assembly.Location).ToString("yyyy-MM-dd HH:mm:ss"),
         gitCommit,
         serverTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),

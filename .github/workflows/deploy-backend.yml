@@ -217,7 +217,11 @@ jobs:
             exit 1
           fi
 
-          echo "======= 6. 外网 API 简测 ======="
+          echo "======= 6. 版本验证 ======="
+          curl -sS --max-time 5 "http://127.0.0.1:${PORT}/api/debug/version" || true
+          echo ""
+
+          echo "======= 7. 外网 API 简测 ======="
           curl -sS --max-time 5 -I "https://guzhi.21212121.xyz/api/fund/sectors" || true
 
           echo "======= 部署完成 ======="
