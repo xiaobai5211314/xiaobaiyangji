@@ -2068,6 +2068,7 @@ namespace 小白养基.Controllers
 
             var indexTicks = Array.Empty<PerformanceIndexTick>();
             var indexAvailable = false;
+            double? fallbackIndexRate = null;
             try
             {
                 var http = _httpClientFactory.CreateClient("EastMoneyQuote");
@@ -2078,10 +2079,27 @@ namespace 小白养基.Controllers
             {
                 Console.WriteLine($"[performance-curve] intraday index failed: {indexDefinition.Key} {ex.Message}");
             }
+            if (!indexAvailable)
+            {
+                try
+                {
+                    var http = _httpClientFactory.CreateClient("EastMoneyQuote");
+                    fallbackIndexRate = await FetchPerformanceIndexQuoteRateAsync(http, indexDefinition);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[performance-curve] intraday index quote fallback failed: {indexDefinition.Key} {ex.Message}");
+                }
+            }
 
             var indexRatesByTime = indexAvailable
                 ? BuildAlignedIntradayIndexRates(timeline, indexTicks)
                 : new Dictionary<DateTime, double?>();
+            if (!indexAvailable && fallbackIndexRate.HasValue && timeline.Count > 0)
+            {
+                // trends2 没有返回分时点时，只把 quote 当前涨跌幅补到最后一个点，避免伪造 0% 横线。
+                indexRatesByTime[finalTime] = fallbackIndexRate.Value;
+            }
 
             var cursors = new int[series.Count];
             Array.Fill(cursors, -1);
@@ -2304,6 +2322,37 @@ namespace 小白养基.Controllers
             return result
                 .OrderBy(p => p.Time)
                 .ToList();
+        }
+
+        private static async Task<double?> FetchPerformanceIndexQuoteRateAsync(
+            HttpClient http,
+            PerformanceIndexDefinition index)
+        {
+            var url = $"https://push2.eastmoney.com/api/qt/stock/get?secid={Uri.EscapeDataString(index.Secid)}&fltt=2&fields=f43,f60,f170";
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+            var response = await http.GetStringAsync(url, cts.Token);
+            using var doc = JsonDocument.Parse(response);
+            if (!doc.RootElement.TryGetProperty("data", out var data) ||
+                data.ValueKind == JsonValueKind.Null)
+            {
+                return null;
+            }
+
+            if (TryGetDouble(data, "f170", out var rate))
+            {
+                return Math.Round(rate, 2);
+            }
+
+            if (TryGetDouble(data, "f43", out var latest) &&
+                TryGetDouble(data, "f60", out var previousClose) &&
+                latest > 0 &&
+                previousClose > 0)
+            {
+                return Math.Round((latest - previousClose) / previousClose * 100d, 2);
+            }
+
+            return null;
         }
 
         private static Dictionary<DateTime, double?> BuildAlignedIntradayIndexRates(

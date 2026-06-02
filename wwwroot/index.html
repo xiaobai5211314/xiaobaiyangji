@@ -4432,6 +4432,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <button class="btn" @click="fetchCapitalFlow(true)">🔄</button>
                     </div>
                     <div v-if="isCapitalLoading" class="news-empty">📡 正在同步主力资金...</div>
+                    <div v-else-if="capitalFlowRows.length === 0" class="news-empty">{{ capitalFlowError || '主力资金流暂不可用' }}</div>
                     <div v-else class="capital-two-col">
                         <div class="capital-box">
                             <div class="capital-box-title"><span>🔴 行业板块流入</span><span style="color:var(--text-muted);font-size:11px;">TOP {{ capitalFlowInRows.length }}</span></div>
@@ -5280,6 +5281,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const capitalFlowSource = ref('');
                 const capitalFlowUpdatedAt = ref('');
                 const isCapitalLoading = ref(false);
+                const capitalFlowError = ref('');
                 const showSectorRadar = ref(false);
                 const isSectorLoading = ref(false);
                 const showSectorDetails = ref(false);
@@ -6544,6 +6546,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     capitalFlowOutRows.value = normalizeCapitalRows(data.outflow || rows).filter(x => (x.mainNet || 0) < 0).sort((a, b) => (a.mainNet || 0) - (b.mainNet || 0));
                     capitalFlowSource.value = data.source || '东方财富板块资金流向';
                     capitalFlowUpdatedAt.value = data.updatedAt || '';
+                    capitalFlowError.value = '';
                     capitalCacheTime = Date.now();
                 };
                 const fetchCapitalFlow = async (force = false) => {
@@ -6561,7 +6564,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         applyCapitalPayload(data);
                         writeJsonCache('capital_flow_cache_v1', data);
                     } catch (e) {
-                        if (capitalFlowRows.value.length === 0) showToast('主力资金流获取失败', 'error');
+                        capitalFlowError.value = force && e?.message
+                            ? `主力资金流暂不可用：${String(e.message).slice(0, 80)}`
+                            : '主力资金流暂不可用';
                     } finally {
                         isCapitalLoading.value = false;
                     }
@@ -6616,7 +6621,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         performanceChartInstance.value = echarts.init(performanceChartRef.value, 'dark');
                     }
 
-                    const hasIndexLine = points.some(p => p.indexRate !== null && p.indexRate !== undefined && Number.isFinite(Number(p.indexRate)));
+                    const indexName = performanceCurve.value?.indexName || selectedPerformanceIndexName.value;
+                    const hasIndexLine = performanceCurve.value?.indexAvailable === true &&
+                        points.some(p => p.indexRate !== null && p.indexRate !== undefined && Number.isFinite(Number(p.indexRate)));
                     const series = [
                         {
                             name: '我的收益率',
@@ -6624,7 +6631,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             smooth: true,
                             symbol: 'circle',
                             symbolSize: 5,
-                            data: points.map(p => Number(p.myRate || 0)),
+                            data: points.map(p => Number.isFinite(Number(p.myRate)) ? Number(p.myRate) : null),
                             lineStyle: { width: 3, color: '#ff4d8f' },
                             itemStyle: { color: '#ff4d8f' },
                             areaStyle: { color: 'rgba(255,77,143,.10)' }
@@ -6633,7 +6640,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                     if (hasIndexLine) {
                         series.push({
-                            name: performanceCurve.value?.indexName || selectedPerformanceIndexName.value,
+                            name: indexName,
                             type: 'line',
                             smooth: true,
                             symbol: 'circle',
@@ -6645,6 +6652,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         });
                     }
 
+                    performanceChartInstance.value.clear();
                     performanceChartInstance.value.setOption({
                         backgroundColor: 'transparent',
                         animationDuration: 450,
@@ -6656,12 +6664,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             formatter(params) {
                                 const row = points[params[0]?.dataIndex || 0] || {};
                                 const title = row.time || row.date || '';
+                                const myRate = Number(row.myRate);
+                                const indexRate = row.indexRate === null || row.indexRate === undefined ? null : Number(row.indexRate);
+                                const hasIndexValue = performanceCurve.value?.indexAvailable === true && Number.isFinite(indexRate);
+                                const excess = hasIndexValue && Number.isFinite(myRate) ? myRate - indexRate : null;
                                 let html = `<div style="font-weight:900;margin-bottom:6px;">${title}</div>`;
-                                params.forEach(p => {
-                                    html += `<div>${p.marker} ${p.seriesName}: <strong>${formatPerformancePercent(p.value)}</strong></div>`;
-                                });
-                                const excess = row.indexRate === null || row.indexRate === undefined ? null : Number(row.myRate || 0) - Number(row.indexRate || 0);
-                                if (excess !== null && Number.isFinite(excess)) html += `<div style="color:#94a3b8;">超额收益 ${formatPerformancePercent(excess)}</div>`;
+                                html += `<div><span style="color:#ff4d8f;">●</span> 我的收益率：<strong>${formatPerformancePercent(myRate)}</strong></div>`;
+                                html += `<div><span style="color:#38bdf8;">●</span> ${indexName}：<strong>${hasIndexValue ? formatPerformancePercent(indexRate) : '--'}</strong></div>`;
+                                html += `<div style="color:#94a3b8;">超额收益：${excess === null ? '--' : formatPerformancePercent(excess)}</div>`;
                                 if (canShowPerformanceAmount.value) {
                                     const myProfit = Number(row.myProfit ?? row.dailyProfit ?? 0);
                                     html += `<div style="margin-top:6px;color:#94a3b8;">收益金额 ${formatPerformanceMoney(myProfit)}</div>`;
@@ -6672,6 +6682,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         legend: {
                             top: 0,
                             right: 0,
+                            data: hasIndexLine ? ['我的收益率', indexName] : ['我的收益率'],
                             textStyle: { color: '#cbd5e1', fontSize: 11 }
                         },
                         grid: { left: 8, right: 10, top: 34, bottom: 8, containLabel: true },
@@ -7245,7 +7256,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     performanceCurve, performancePeriod, performanceIndex, performanceLoading, performancePeriods, performanceIndices, selectedPerformanceIndexName, performanceIsToday, showPerformanceAmount, canShowPerformanceAmount, togglePerformanceAmount, performanceMessage, performanceVerdict, performanceExcessClass, fetchPerformanceCurve, renderPerformanceChart, switchPerformancePeriod, formatPerformancePercent, formatPerformanceMoney,
                     handleLogin, handleRegister, handleLogout, saveUserProfile, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, confirmOcrImport, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
-                    sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, isCapitalLoading, fetchCapitalFlow,
+                    sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, capitalFlowError, isCapitalLoading, fetchCapitalFlow,
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, isDetailsLoading, expandedSectors, toggleSector,
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices, formatIndexPoint, formatIndexRate,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
