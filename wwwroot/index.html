@@ -4429,8 +4429,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 <div class="glass-panel capital-flow-panel">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;">
                         <div>
-                            <div class="page-title" style="font-size:18px;">💧 行业板块主力资金</div>
-                            <div class="page-subtitle">{{ capitalFlowSource || '东方财富行业板块资金流向' }} · 已过滤概念/事件标签 · {{ capitalFlowUpdatedAt || '待更新' }}</div>
+                            <div class="page-title" style="font-size:18px;">{{ capitalFlowSource === '持仓主题贡献估算' ? '📊 持仓主题贡献估算' : '💧 行业板块主力资金' }}</div>
+                            <div class="page-subtitle">{{ capitalFlowSource || '东方财富行业板块资金流向' }} · {{ capitalFlowUpdatedAt || '待更新' }}</div>
                         </div>
                         <button class="btn" @click="fetchCapitalFlow(true)">🔄</button>
                     </div>

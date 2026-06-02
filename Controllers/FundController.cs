@@ -3914,38 +3914,36 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             limit = Math.Clamp(limit, 10, 80);
             string freshKey = $"CapitalFlowV3_{limit}";
             string staleKey = $"CapitalFlowV3_{limit}_Stale";
+            var attempts = new List<object>();
 
-            if (!force && _cache.TryGetValue(freshKey, out object fresh))
+            // Non-force: try fresh cache first
+            if (!force && _cache.TryGetValue(freshKey, out CapitalFlowPayloadDto? cachedFresh) && cachedFresh?.Rows?.Count > 0)
             {
-                if (fresh is CapitalFlowPayloadDto cachedPayload)
-                {
-                    if (debug) cachedPayload.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), cacheHit = true, cacheSource = "fresh", returnedRowsCount = cachedPayload.Rows?.Count ?? 0 };
-                    Console.WriteLine($"[CapitalFlow] externalStatus=skipped rows={cachedPayload.Rows?.Count ?? 0} cacheHit=true cacheSource=fresh");
-                }
-                return Ok(fresh);
+                if (debug) cachedFresh.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), cacheHit = true, cacheSource = "fresh", returnedRowsCount = cachedFresh.Rows.Count };
+                Console.WriteLine($"[CapitalFlow] cacheHit=true source=fresh rows={cachedFresh.Rows.Count}");
+                return Ok(cachedFresh);
             }
 
-            if (!force &&
-                _cache.TryGetValue(staleKey, out CapitalFlowPayloadDto? stale) &&
-                stale != null)
+            // Non-force: try stale cache, trigger background refresh
+            if (!force && _cache.TryGetValue(staleKey, out CapitalFlowPayloadDto? cachedStale) && cachedStale?.Rows?.Count > 0)
             {
                 _ = Task.Run(() => RefreshCapitalFlowCacheQuietlyAsync(limit));
-                var stalePayload = CloneCapitalFlowPayload(stale, true, true, "主力资金流使用缓存数据", "cache");
-                if (debug) stalePayload.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), cacheHit = true, cacheSource = "stale", returnedRowsCount = stalePayload.Rows?.Count ?? 0 };
-                Console.WriteLine($"[CapitalFlow] externalStatus=skipped rows={stalePayload.Rows?.Count ?? 0} cacheHit=true cacheSource=stale");
-                return Ok(stalePayload);
+                var p = CloneCapitalFlowPayload(cachedStale, true, true, "主力资金流使用缓存数据", "cache");
+                if (debug) p.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), cacheHit = true, cacheSource = "stale", returnedRowsCount = p.Rows.Count };
+                Console.WriteLine($"[CapitalFlow] cacheHit=true source=stale rows={p.Rows.Count}");
+                return Ok(p);
             }
 
+            // Acquire lock
             if (!await _capitalFlowRefreshLock.WaitAsync(0))
             {
-                var cachedWhileBusy = await TryGetCapitalFlowFallbackAsync(limit);
-                if (cachedWhileBusy != null)
+                var lockCached = await TryGetCapitalFlowFallbackAsync(limit);
+                if (lockCached?.Rows?.Count > 0)
                 {
-                    var busyPayload = CloneCapitalFlowPayload(cachedWhileBusy, true, true, "主力资金流使用缓存数据", "cache");
-                    if (debug) busyPayload.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), cacheHit = true, cacheSource = "lock-fallback", returnedRowsCount = busyPayload.Rows?.Count ?? 0 };
-                    return Ok(busyPayload);
+                    var p = CloneCapitalFlowPayload(lockCached, true, true, "主力资金流使用缓存数据", "cache");
+                    if (debug) p.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), cacheHit = true, cacheSource = "lock-fallback", returnedRowsCount = p.Rows.Count };
+                    return Ok(p);
                 }
-
                 var unavail = CreateUnavailableCapitalFlowPayload();
                 if (debug) unavail.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), cacheHit = false, cacheSource = "none", returnedRowsCount = 0, error = "lock contention, no cache" };
                 return Ok(unavail);
@@ -3953,40 +3951,45 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
             try
             {
-                if (!force && _cache.TryGetValue(freshKey, out fresh))
+                // Re-check cache after acquiring lock
+                if (!force && _cache.TryGetValue(freshKey, out cachedFresh) && cachedFresh?.Rows?.Count > 0)
                 {
-                    if (fresh is CapitalFlowPayloadDto recheck)
-                    {
-                        if (debug) recheck.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), cacheHit = true, cacheSource = "fresh-recheck", returnedRowsCount = recheck.Rows?.Count ?? 0 };
-                    }
-                    return Ok(fresh);
+                    if (debug) cachedFresh.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), cacheHit = true, cacheSource = "fresh-recheck", returnedRowsCount = cachedFresh.Rows.Count };
+                    return Ok(cachedFresh);
                 }
-                if (!force &&
-                    _cache.TryGetValue(staleKey, out stale) &&
-                    stale != null)
+                if (!force && _cache.TryGetValue(staleKey, out cachedStale) && cachedStale?.Rows?.Count > 0)
                 {
-                    var recheckStale = CloneCapitalFlowPayload(stale, true, true, "主力资金流使用缓存数据", "cache");
-                    if (debug) recheckStale.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), cacheHit = true, cacheSource = "stale-recheck", returnedRowsCount = recheckStale.Rows?.Count ?? 0 };
-                    return Ok(recheckStale);
+                    var p = CloneCapitalFlowPayload(cachedStale, true, true, "主力资金流使用缓存数据", "cache");
+                    if (debug) p.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), cacheHit = true, cacheSource = "stale-recheck", returnedRowsCount = p.Rows.Count };
+                    return Ok(p);
                 }
 
-                var payload = await BuildCapitalFlowPayloadAsync(limit, debug);
-                await SetCapitalFlowCacheAsync(limit, payload);
-                return Ok(payload);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[CapitalFlow] externalStatus=error rows=0 cacheHit=false error={ex.Message}");
+                // Try multiple external sources
+                var payload = await BuildCapitalFlowPayloadAsync(limit, attempts);
+
+                if (payload != null && payload.Rows.Count > 0)
+                {
+                    await SetCapitalFlowCacheAsync(limit, payload);
+                    if (debug) payload.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), attempts, cacheHit = false, cacheSource = "none", returnedRowsCount = payload.Rows.Count };
+                    Console.WriteLine($"[CapitalFlow] source={payload.Source} rows={payload.Rows.Count} cached=true");
+                    return Ok(payload);
+                }
+
+                // All external sources failed -- always try cache fallback (even with force=true)
+                Console.WriteLine($"[CapitalFlow] all external sources failed, attempts={attempts.Count}");
                 var cached = await TryGetCapitalFlowFallbackAsync(limit);
-                if (cached != null)
+                if (cached?.Rows?.Count > 0)
                 {
-                    var exPayload = CloneCapitalFlowPayload(cached, true, true, "主力资金流使用缓存数据", "cache");
-                    if (debug) exPayload.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), externalError = ex.Message, cacheHit = true, cacheSource = "exception-fallback", returnedRowsCount = exPayload.Rows?.Count ?? 0 };
-                    return Ok(exPayload);
+                    var p = CloneCapitalFlowPayload(cached, true, true, "主力资金流使用缓存数据", "cache");
+                    if (debug) p.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), attempts, cacheHit = true, cacheSource = "memory+redis", returnedRowsCount = p.Rows.Count };
+                    Console.WriteLine($"[CapitalFlow] fallback to cache rows={p.Rows.Count}");
+                    return Ok(p);
                 }
 
+                // No cache available
                 var unavail = CreateUnavailableCapitalFlowPayload();
-                if (debug) unavail.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), externalError = ex.Message, cacheHit = false, cacheSource = "none", returnedRowsCount = 0 };
+                if (debug) unavail.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), attempts, cacheHit = false, cacheSource = "none", returnedRowsCount = 0 };
+                Console.WriteLine($"[CapitalFlow] no cache available, returning empty");
                 return Ok(unavail);
             }
             finally
@@ -4002,7 +4005,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             try
             {
                 var payload = await BuildCapitalFlowPayloadAsync(limit);
-                await SetCapitalFlowCacheAsync(limit, payload);
+                if (payload != null) await SetCapitalFlowCacheAsync(limit, payload);
             }
             catch (Exception ex)
             {
@@ -4139,20 +4142,34 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             };
         }
 
-        private async Task<CapitalFlowPayloadDto> BuildCapitalFlowPayloadAsync(int limit, bool debug = false)
+        private async Task<CapitalFlowPayloadDto?> BuildCapitalFlowPayloadAsync(int limit, List<object>? attempts = null)
         {
-            string lastExternalUrl = "";
-            int externalStatusCode = 0;
-            string externalError = "";
+            // Source 1: 东方财富行业板块资金流
+            var result = await TryFetchEastMoneyFlowAsync(limit, "m:90+t:2,m:90+t:3", "eastmoney_sector_flow", "东方财富行业板块资金流向", attempts);
+            if (result != null) return result;
+
+            // Source 2: 东方财富概念板块资金流（备用）
+            result = await TryFetchEastMoneyFlowAsync(limit, "m:90+t:3", "eastmoney_concept_flow", "东方财富概念板块资金流向", attempts);
+            if (result != null) return result;
+
+            return null;
+        }
+
+        private async Task<CapitalFlowPayloadDto?> TryFetchEastMoneyFlowAsync(
+            int limit, string fsFilter, string sourceName, string sourceLabel, List<object>? attempts)
+        {
+            string externalUrl = "";
+            int statusCode = 0;
+            string error = "";
             string rawPreview = "";
             int rawInflowCount = 0, rawOutflowCount = 0;
 
-            async Task<List<CapitalFlowRowDto>> FetchRowsAsync(int po)
+            async Task<List<CapitalFlowRowDto>> FetchDirectionAsync(int po)
             {
                 long ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 int requestSize = Math.Clamp(limit * 5, 120, 300);
-                string url = $"https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz={requestSize}&po={po}&np=1&fltt=2&invt=2&fid=f62&fs=m:90+t:2,m:90+t:3&fields=f12,f14,f3,f62,f184,f66,f72&_={ts}";
-                lastExternalUrl = url;
+                string url = $"https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz={requestSize}&po={po}&np=1&fltt=2&invt=2&fid=f62&fs={fsFilter}&fields=f12,f14,f3,f62,f184,f66,f72&_={ts}";
+                externalUrl = url;
                 using var handler = new HttpClientHandler { ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true };
                 using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(8) };
                 client.DefaultRequestVersion = new Version(1, 1);
@@ -4161,145 +4178,84 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
                 using var request = new HttpRequestMessage(HttpMethod.Get, url);
                 using var response = await client.SendAsync(request);
-                externalStatusCode = (int)response.StatusCode;
+                statusCode = (int)response.StatusCode;
                 response.EnsureSuccessStatusCode();
                 string body = await response.Content.ReadAsStringAsync();
 
                 if (string.IsNullOrEmpty(rawPreview) && body.Length > 0)
-                {
                     rawPreview = body.Length > 300 ? body[..300] : body;
-                }
-
-                Console.WriteLine($"[CapitalFlow] po={po} status={externalStatusCode} bodyLen={body.Length} preview={rawPreview[..Math.Min(rawPreview.Length, 120)]}");
 
                 using var doc = JsonDocument.Parse(body);
-                if (!doc.RootElement.TryGetProperty("data", out var data) ||
-                    data.ValueKind == JsonValueKind.Null)
+                if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null)
                 {
-                    externalError = $"data is null or missing (bodyLen={body.Length})";
-                    Console.WriteLine($"[CapitalFlow] externalStatus={externalStatusCode} rawLen={body.Length} error={externalError}");
+                    error = "data is null";
+                    return new List<CapitalFlowRowDto>();
+                }
+                if (!data.TryGetProperty("diff", out var list) || list.ValueKind != JsonValueKind.Array)
+                {
+                    error = "data.diff missing/not array";
                     return new List<CapitalFlowRowDto>();
                 }
 
-                if (!data.TryGetProperty("diff", out var list) ||
-                    list.ValueKind != JsonValueKind.Array)
-                {
-                    var diffKind = data.TryGetProperty("diff", out var diffEl) ? diffEl.ValueKind.ToString() : "missing";
-                    externalError = $"data.diff is {diffKind}, not array";
-                    Console.WriteLine($"[CapitalFlow] externalStatus={externalStatusCode} rawLen={body.Length} error={externalError}");
-                    return new List<CapitalFlowRowDto>();
-                }
-
-                int arrayLen = list.GetArrayLength();
-                var result = new List<CapitalFlowRowDto>();
+                var rows = new List<CapitalFlowRowDto>();
                 foreach (var item in list.EnumerateArray())
                 {
                     string code = item.TryGetProperty("f12", out var f12) ? f12.GetString() ?? "" : "";
                     string name = item.TryGetProperty("f14", out var f14) ? f14.GetString() ?? "" : "";
+                    if (string.IsNullOrWhiteSpace(name)) continue;
                     double rate = item.TryGetProperty("f3", out var f3) && f3.ValueKind == JsonValueKind.Number ? f3.GetDouble() : 0;
                     double mainNet = item.TryGetProperty("f62", out var f62) && f62.ValueKind == JsonValueKind.Number ? f62.GetDouble() : 0;
                     double mainRatio = item.TryGetProperty("f184", out var f184) && f184.ValueKind == JsonValueKind.Number ? f184.GetDouble() : 0;
                     double superNet = item.TryGetProperty("f66", out var f66) && f66.ValueKind == JsonValueKind.Number ? f66.GetDouble() : 0;
                     double bigNet = item.TryGetProperty("f72", out var f72) && f72.ValueKind == JsonValueKind.Number ? f72.GetDouble() : 0;
-
-                    if (string.IsNullOrWhiteSpace(name)) continue;
-
-                    result.Add(new CapitalFlowRowDto
-                    {
-                        Code = code,
-                        Name = name,
-                        Rate = Math.Round(rate, 2),
-                        MainNet = mainNet,
-                        MainNetText = FormatMoneyWanYi(mainNet),
-                        MainRatio = Math.Round(mainRatio, 2),
-                        SuperNet = superNet,
-                        BigNet = bigNet
-                    });
+                    rows.Add(new CapitalFlowRowDto { Code = code, Name = name, Rate = Math.Round(rate, 2), MainNet = mainNet, MainNetText = FormatMoneyWanYi(mainNet), MainRatio = Math.Round(mainRatio, 2), SuperNet = superNet, BigNet = bigNet });
                 }
 
-                if (po == 1) rawInflowCount = arrayLen;
-                else rawOutflowCount = arrayLen;
-                Console.WriteLine($"[CapitalFlow] po={po} diffArrayLen={arrayLen} parsedRows={result.Count}");
-                return result;
+                if (po == 1) rawInflowCount = list.GetArrayLength();
+                else rawOutflowCount = list.GetArrayLength();
+                return rows;
             }
 
-            List<CapitalFlowRowDto> inflow;
+            List<CapitalFlowRowDto> inflow, outflow;
             try
             {
-                inflow = (await FetchRowsAsync(1))
-                    .Where(IsIndustryCapitalFlowRow)
-                    .OrderByDescending(x => x.MainNet)
-                    .Take(limit)
-                    .ToList();
+                inflow = (await FetchDirectionAsync(1)).Where(IsIndustryCapitalFlowRow).OrderByDescending(x => x.MainNet).Take(limit).ToList();
+                outflow = (await FetchDirectionAsync(0)).Where(IsIndustryCapitalFlowRow).OrderBy(x => x.MainNet).Take(limit).ToList();
             }
             catch (Exception ex)
             {
-                externalError = $"inflow fetch failed: {ex.Message}";
-                Console.WriteLine($"[CapitalFlow] externalStatus={externalStatusCode} rows=0 cacheHit=false error={externalError}");
-                throw;
+                error = ex.Message;
+                Console.WriteLine($"[CapitalFlow] source={sourceName} status={statusCode} error={error}");
+                attempts?.Add(new { source = sourceName, url = externalUrl, statusCode, rawLength = rawPreview.Length, parsedRowsCount = 0, error });
+                return null;
             }
 
-            List<CapitalFlowRowDto> outflow;
-            try
+            var rows2 = inflow.Concat(outflow).GroupBy(x => x.Code).Select(g => g.OrderByDescending(x => Math.Abs(x.MainNet)).First()).OrderByDescending(x => x.MainNet).ToList();
+
+            if (rows2.Count == 0)
             {
-                outflow = (await FetchRowsAsync(0))
-                    .Where(IsIndustryCapitalFlowRow)
-                    .OrderBy(x => x.MainNet)
-                    .Take(limit)
-                    .ToList();
-            }
-            catch (Exception ex)
-            {
-                externalError = $"outflow fetch failed: {ex.Message}";
-                Console.WriteLine($"[CapitalFlow] externalStatus={externalStatusCode} rows=0 cacheHit=false error={externalError}");
-                throw;
+                error = string.IsNullOrEmpty(error) ? $"0 rows after filter (rawIn={rawInflowCount}, rawOut={rawOutflowCount})" : error;
+                Console.WriteLine($"[CapitalFlow] source={sourceName} status={statusCode} rows=0 error={error}");
+                attempts?.Add(new { source = sourceName, url = externalUrl, statusCode, rawLength = rawPreview.Length, parsedRowsCount = 0, error });
+                return null;
             }
 
-            var rows = inflow.Concat(outflow)
-                .GroupBy(x => x.Code)
-                .Select(g => g.OrderByDescending(x => Math.Abs(x.MainNet)).First())
-                .OrderByDescending(x => x.MainNet)
-                .ToList();
+            Console.WriteLine($"[CapitalFlow] source={sourceName} status={statusCode} rows={rows2.Count} OK");
+            attempts?.Add(new { source = sourceName, url = externalUrl, statusCode, rawLength = rawPreview.Length, parsedRowsCount = rows2.Count, error = (string?)null });
 
-            Console.WriteLine($"[CapitalFlow] externalStatus={externalStatusCode} rows={rows.Count} rawInflow={rawInflowCount} rawOutflow={rawOutflowCount} cacheHit=false error={(externalError ?? "none")}");
-
-            if (rows.Count == 0)
+            return new CapitalFlowPayloadDto
             {
-                externalError = string.IsNullOrEmpty(externalError) ? "主力资金流实时数据为空（外部返回0条行业数据）" : externalError;
-                throw new InvalidOperationException(externalError);
-            }
-
-            var payload = new CapitalFlowPayloadDto
-            {
-                Source = "东方财富行业板块资金流向",
+                Source = sourceLabel,
                 UpdatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
                 IsFallback = false,
                 IsStale = false,
                 Message = string.Empty,
-                Rows = rows,
+                Rows = rows2,
                 Inflow = inflow,
                 Outflow = outflow
             };
-
-            if (debug)
-            {
-                payload.Debug = new
-                {
-                    requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
-                    externalUrl = lastExternalUrl,
-                    externalStatusCode,
-                    externalError,
-                    cacheHit = false,
-                    cacheAgeSeconds = (int?)null,
-                    rawPreview = rawPreview.Length > 200 ? rawPreview[..200] : rawPreview,
-                    rawInflowCount,
-                    rawOutflowCount,
-                    returnedRowsCount = rows.Count
-                };
-            }
-
-            return payload;
         }
+
         [HttpGet("sector-details")]
         public async Task<IActionResult> GetSectorDetails([FromQuery] string secCode)
         {
