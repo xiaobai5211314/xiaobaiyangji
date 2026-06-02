@@ -1677,7 +1677,7 @@ namespace 小白养基.Controllers
             var result = new List<PerformanceFundIntradaySeries>();
             foreach (var config in myFunds)
             {
-                var amount = Math.Max(0d, config.HoldAmount);
+                var amount = Math.Max(0d, GetDailyBaseAmount(config, todayDash));
                 if (amount <= 0)
                 {
                     continue;

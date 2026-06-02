@@ -569,10 +569,21 @@ namespace 小白养基.Controllers
 
         private static object EnrichHolding(StockHolding x, StockQuoteDto? quote)
         {
-            var price = quote?.Price ?? x.LastPrice ?? 0;
+            var price = quote?.Price ?? x.LastPrice ?? 0m;
             var value = Math.Round(x.Shares * price, 2);
             var profit = value - x.CostAmount;
             var profitRate = x.CostAmount > 0 ? Math.Round(profit / x.CostAmount * 100, 2) : 0;
+            var changeRate = quote?.ChangeRate ?? x.LastRate ?? 0m;
+
+            string quoteStatus;
+            if (quote != null && quote.QuoteTime.Date == DateTime.Now.Date)
+                quoteStatus = "realtime";
+            else if (quote != null)
+                quoteStatus = "previous_trade_day";
+            else if (x.LastPrice.HasValue)
+                quoteStatus = "stale_cache";
+            else
+                quoteStatus = "unavailable";
 
             return new
             {
@@ -583,28 +594,38 @@ namespace 小白养基.Controllers
                 x.Shares,
                 x.CostPrice,
                 x.CostAmount,
-                price,
-                changeAmount = quote?.ChangeAmount ?? 0,
-                changeRate = quote?.ChangeRate ?? x.LastRate ?? 0,
-                marketValue = value,
-                totalProfit = profit,
-                totalProfitRate = profitRate,
-                quoteTime = quote?.QuoteTime.ToString("yyyy-MM-dd HH:mm:ss")
+                price = quoteStatus == "unavailable" ? (double?)null : (double)price,
+                changeAmount = quoteStatus == "unavailable" ? (double?)null : (double)(quote?.ChangeAmount ?? 0m),
+                changeRate = quoteStatus == "unavailable" ? (double?)null : (double)changeRate,
+                marketValue = quoteStatus == "unavailable" ? (double?)null : (double)value,
+                totalProfit = quoteStatus == "unavailable" ? (double?)null : (double)profit,
+                totalProfitRate = quoteStatus == "unavailable" ? (double?)null : (double)profitRate,
+                quoteTime = quote?.QuoteTime.ToString("yyyy-MM-dd HH:mm:ss"),
+                quoteStatus
             };
         }
 
         private static object EnrichWatch(StockWatchItem x, StockQuoteDto? quote)
         {
+            string quoteStatus;
+            if (quote != null && quote.QuoteTime.Date == DateTime.Now.Date)
+                quoteStatus = "realtime";
+            else if (quote != null)
+                quoteStatus = "previous_trade_day";
+            else
+                quoteStatus = "unavailable";
+
             return new
             {
                 x.Id,
                 code = x.StockCode,
                 market = quote?.Market ?? x.Market,
                 name = quote?.Name ?? x.StockName,
-                price = quote?.Price ?? 0,
-                changeAmount = quote?.ChangeAmount ?? 0,
-                changeRate = quote?.ChangeRate ?? 0,
-                quoteTime = quote?.QuoteTime.ToString("yyyy-MM-dd HH:mm:ss")
+                price = quoteStatus == "unavailable" ? (double?)null : (double?)(quote?.Price),
+                changeAmount = quoteStatus == "unavailable" ? (double?)null : (double?)(quote?.ChangeAmount),
+                changeRate = quoteStatus == "unavailable" ? (double?)null : (double?)(quote?.ChangeRate),
+                quoteTime = quote?.QuoteTime.ToString("yyyy-MM-dd HH:mm:ss"),
+                quoteStatus
             };
         }
 

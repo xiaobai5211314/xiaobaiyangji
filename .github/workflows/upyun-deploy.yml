@@ -30,8 +30,18 @@ jobs:
           upx put wwwroot/index.html /index.html
           
       - name: 刷新又拍云CDN缓存
+        continue-on-error: true
         run: |
+          set +e
+          echo "开始刷新又拍云 CDN 缓存..."
           curl -X POST "https://purge.upyun.com/purge/" \
             -H "Content-Type: application/json" \
             -u "${{ secrets.UPYUN_OPERATOR }}:${{ secrets.UPYUN_PASSWORD }}" \
             -d '{"urls":"https://guzhicdn.21212121.xyz/index.html"}'
+          code=$?
+          if [ "$code" -ne 0 ]; then
+            echo "::warning::又拍云 CDN 刷新失败，curl exit code=$code；前端文件已上传，部署不因此失败。请检查又拍云 purge 接口证书或手动刷新 CDN。"
+          else
+            echo "又拍云 CDN 刷新成功"
+          fi
+          exit 0

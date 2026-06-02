@@ -4130,12 +4130,19 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <div v-for="s in stockHoldings" :key="'h-'+s.code" class="stock-card">
                             <div class="stock-row-head">
                                 <div><strong>{{ s.name }}</strong><div class="stock-code-chip">{{ s.market }} {{ s.code }}</div></div>
-                                <div :style="{color:Number(s.changeRate)>=0?'#ff4d4f':'#10b981',fontWeight:'900',textAlign:'right'}">{{ Number(s.price||0).toFixed(2) }}<br>{{ Number(s.changeRate)>=0?'+':'' }}{{ Number(s.changeRate||0).toFixed(2) }}%</div>
+                                <div :style="{color:Number(s.changeRate)>=0?'#ff4d4f':'#10b981',fontWeight:'900',textAlign:'right'}">
+                                    <span v-if="s.quoteStatus==='unavailable'">--</span>
+                                    <span v-else>{{ Number(s.price||0).toFixed(2) }}</span><br>
+                                    <span v-if="s.quoteStatus==='unavailable'">--</span>
+                                    <span v-else>{{ Number(s.changeRate)>=0?'+':'' }}{{ Number(s.changeRate||0).toFixed(2) }}%</span>
+                                    <span v-if="s.quoteStatus==='previous_trade_day'" style="font-size:10px;font-weight:400;opacity:.6;"> 上交易日</span>
+                                    <span v-else-if="s.quoteStatus==='stale_cache'" style="font-size:10px;font-weight:400;opacity:.6;"> 缓存</span>
+                                </div>
                             </div>
                             <div class="stock-metrics">
                                 <div class="stock-metric"><div class="label">持股</div><div class="value">{{ Number(s.shares||0).toFixed(0) }}</div></div>
-                                <div class="stock-metric"><div class="label">市值</div><div class="value">{{ Number(s.marketValue||0).toFixed(2) }}</div></div>
-                                <div class="stock-metric"><div class="label">持有收益</div><div class="value" :style="{color:Number(s.totalProfit)>=0?'#ff4d4f':'#10b981'}">{{ Number(s.totalProfit)>=0?'+':'' }}{{ Number(s.totalProfit||0).toFixed(2) }}</div></div>
+                                <div class="stock-metric"><div class="label">市值</div><div class="value">{{ s.marketValue!=null?Number(s.marketValue).toFixed(2):'--' }}</div></div>
+                                <div class="stock-metric"><div class="label">持有收益</div><div class="value" :style="{color:Number(s.totalProfit)>=0?'#ff4d4f':'#10b981'}">{{ s.totalProfit!=null?(Number(s.totalProfit)>=0?'+':'')+Number(s.totalProfit).toFixed(2):'--' }}</div></div>
                             </div>
                             <div class="stock-actions"><button class="btn btn-primary" @click="openStockDetail(s)">走势</button><button class="btn" @click="addStockWatch(s)">加自选</button><button class="btn btn-danger" @click="deleteStockHolding(s)">删除</button></div>
                         </div>
@@ -4144,7 +4151,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <div v-for="s in stockWatchList" :key="'w-'+s.code" class="stock-card">
                             <div class="stock-row-head">
                                 <div><strong>{{ s.name }}</strong><div class="stock-code-chip">{{ s.market }} {{ s.code }}</div></div>
-                                <div :style="{color:Number(s.changeRate)>=0?'#ff4d4f':'#10b981',fontWeight:'900',textAlign:'right'}">{{ Number(s.price||0).toFixed(2) }}<br>{{ Number(s.changeRate)>=0?'+':'' }}{{ Number(s.changeRate||0).toFixed(2) }}%</div>
+                                <div :style="{color:Number(s.changeRate)>=0?'#ff4d4f':'#10b981',fontWeight:'900',textAlign:'right'}">
+                                    <span v-if="s.quoteStatus==='unavailable'">--</span>
+                                    <span v-else>{{ Number(s.price||0).toFixed(2) }}</span><br>
+                                    <span v-if="s.quoteStatus==='unavailable'">--</span>
+                                    <span v-else>{{ Number(s.changeRate)>=0?'+':'' }}{{ Number(s.changeRate||0).toFixed(2) }}%</span>
+                                    <span v-if="s.quoteStatus==='previous_trade_day'" style="font-size:10px;font-weight:400;opacity:.6;"> 上交易日</span>
+                                    <span v-else-if="s.quoteStatus==='stale_cache'" style="font-size:10px;font-weight:400;opacity:.6;"> 缓存</span>
+                                </div>
                             </div>
                             <div class="stock-actions"><button class="btn btn-primary" @click="openStockDetail(s)">走势</button><button class="btn" @click="openStockHoldingEditor(s)">转持有</button><button class="btn btn-danger" @click="deleteStockWatch(s)">移除</button></div>
                         </div>
@@ -4153,7 +4167,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     <div class="glass-panel feature-card stock-detail-card">
                         <div class="stock-row-head">
                             <div><div class="feature-title">{{ selectedStock.name || '股票走势' }}</div><div class="feature-subtitle">{{ selectedStock.code ? selectedStock.market + ' ' + selectedStock.code : '选择持仓、自选或搜索结果查看走势' }}</div></div>
-                            <div v-if="selectedStock.code" :style="{color:Number(selectedStock.changeRate)>=0?'#ff4d4f':'#10b981',fontWeight:'900',textAlign:'right'}">{{ Number(selectedStock.price||0).toFixed(2) }}<br>{{ Number(selectedStock.changeRate)>=0?'+':'' }}{{ Number(selectedStock.changeRate||0).toFixed(2) }}%</div>
+                            <div v-if="selectedStock.code" :style="{color:Number(selectedStock.changeRate)>=0?'#ff4d4f':'#10b981',fontWeight:'900',textAlign:'right'}">
+                                <span v-if="selectedStock.quoteStatus==='unavailable'">--</span>
+                                <span v-else>{{ Number(selectedStock.price||0).toFixed(2) }}</span><br>
+                                <span v-if="selectedStock.quoteStatus==='unavailable'">--</span>
+                                <span v-else>{{ Number(selectedStock.changeRate)>=0?'+':'' }}{{ Number(selectedStock.changeRate||0).toFixed(2) }}%</span>
+                                <span v-if="selectedStock.quoteStatus==='previous_trade_day'" style="font-size:10px;font-weight:400;opacity:.6;"> 上交易日</span>
+                                <span v-else-if="selectedStock.quoteStatus==='stale_cache'" style="font-size:10px;font-weight:400;opacity:.6;"> 缓存</span>
+                            </div>
                         </div>
                         <div class="stock-kline-tabs">
                             <button v-for="p in stockKlinePeriods" :key="p.value" :class="['stock-kline-tab', stockKlinePeriod===p.value?'active':'']" @click="switchStockKline(p.value)">{{ p.label }}</button>
@@ -5229,7 +5250,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const stockSearchResults = ref([]);
                 const stockOcrLoading = ref(false);
                 const stockOcrPreview = reactive({ show: false, batchId: 0, items: [] });
-                const selectedStock = reactive({ code: '', market: '', name: '', price: 0, changeRate: 0 });
+                const selectedStock = reactive({ code: '', market: '', name: '', price: null, changeRate: null, quoteStatus: 'unavailable' });
                 const stockKlinePeriod = ref('minute');
                 const stockKlinePeriods = [
                     { value: 'minute', label: '分K' },
@@ -5535,7 +5556,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 };
 
                 const openStockDetail = async (s) => {
-                    Object.assign(selectedStock, { code: s.code, market: s.market || '', name: s.name || '', price: Number(s.price || 0), changeRate: Number(s.changeRate || 0) });
+                    Object.assign(selectedStock, { code: s.code, market: s.market || '', name: s.name || '', price: s.price != null ? Number(s.price) : null, changeRate: s.changeRate != null ? Number(s.changeRate) : null, quoteStatus: s.quoteStatus || 'unavailable' });
                     await fetchStockKlines();
                 };
 
