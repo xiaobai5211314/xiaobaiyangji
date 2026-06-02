@@ -4144,12 +4144,16 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
         private async Task<CapitalFlowPayloadDto?> BuildCapitalFlowPayloadAsync(int limit, List<object>? attempts = null)
         {
-            // Source 1: 东方财富行业板块资金流
+            // Source 1: push2.eastmoney.com 行业板块资金流
             var result = await TryFetchEastMoneyFlowAsync(limit, "m:90+t:2,m:90+t:3", "eastmoney_sector_flow", "东方财富行业板块资金流向", attempts);
             if (result != null) return result;
 
-            // Source 2: 东方财富概念板块资金流（备用）
+            // Source 2: push2.eastmoney.com 概念板块资金流（备用）
             result = await TryFetchEastMoneyFlowAsync(limit, "m:90+t:3", "eastmoney_concept_flow", "东方财富概念板块资金流向", attempts);
+            if (result != null) return result;
+
+            // Source 3: datacenter-web.eastmoney.com（不同服务器）
+            result = await TryFetchDatacenterSectorFlowAsync(limit, attempts);
             if (result != null) return result;
 
             return null;
@@ -4254,6 +4258,102 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 Inflow = inflow,
                 Outflow = outflow
             };
+        }
+
+        private async Task<CapitalFlowPayloadDto?> TryFetchDatacenterSectorFlowAsync(int limit, List<object>? attempts)
+        {
+            string externalUrl = "";
+            int statusCode = 0;
+            string error = "";
+            string rawPreview = "";
+
+            try
+            {
+                externalUrl = "https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_SECTOR_MONEYFLOW&columns=ALL&pageSize=80&pageNumber=1&sortColumns=NET_INFLOW_TOTAL&sortTypes=-1";
+                using var handler = new HttpClientHandler { ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true };
+                using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(8) };
+                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
+                client.DefaultRequestHeaders.Add("Referer", "https://data.eastmoney.com/");
+
+                using var req = new HttpRequestMessage(HttpMethod.Get, externalUrl);
+                using var resp = await client.SendAsync(req);
+                statusCode = (int)resp.StatusCode;
+                resp.EnsureSuccessStatusCode();
+                string body = await resp.Content.ReadAsStringAsync();
+                rawPreview = body.Length > 200 ? body[..200] : body;
+
+                using var doc = JsonDocument.Parse(body);
+                var root = doc.RootElement;
+
+                if (!root.TryGetProperty("result", out var result) || result.ValueKind == JsonValueKind.Null ||
+                    !result.TryGetProperty("data", out var dataArr) || dataArr.ValueKind != JsonValueKind.Array)
+                {
+                    var resultKind = root.TryGetProperty("result", out var r) ? r.ValueKind.ToString() : "missing";
+                    error = $"result.data not array (result={resultKind})";
+                    Console.WriteLine($"[CapitalFlow] source=datacenter status={statusCode} error={error} preview={rawPreview[..Math.Min(100, rawPreview.Length)]}");
+                    attempts?.Add(new { source = "eastmoney_datacenter", url = externalUrl, statusCode, rawLength = body.Length, parsedRowsCount = 0, error });
+                    return null;
+                }
+
+                var rows = new List<CapitalFlowRowDto>();
+                foreach (var item in dataArr.EnumerateArray())
+                {
+                    string name = item.TryGetProperty("BOARD_NAME", out var bn) ? bn.GetString() ?? "" :
+                                  item.TryGetProperty("SECTOR_NAME", out var sn) ? sn.GetString() ?? "" : "";
+                    string code = item.TryGetProperty("BOARD_CODE", out var bc) ? bc.GetString() ?? "" :
+                                  item.TryGetProperty("SECTOR_CODE", out var sc) ? sc.GetString() ?? "" : "";
+                    if (string.IsNullOrWhiteSpace(name)) continue;
+
+                    double rate = TryGetDouble(item, "CHANGE_RATE", out var cr) ? cr :
+                                  TryGetDouble(item, "CHANGE_PCT", out var cp) ? cp : 0;
+                    double mainNet = TryGetDouble(item, "NET_INFLOW_TOTAL", out var nit) ? nit :
+                                     TryGetDouble(item, "MAIN_NET_INFLOW", out var mni) ? mni :
+                                     TryGetDouble(item, "NET_INFLOW", out var ni) ? ni : 0;
+                    double mainRatio = TryGetDouble(item, "NET_INFLOW_RATIO", out var nir) ? nir :
+                                       TryGetDouble(item, "MAIN_NET_RATIO", out var mnr) ? mnr : 0;
+                    double superNet = TryGetDouble(item, "SUPER_NET_INFLOW", out var sni) ? sni :
+                                      TryGetDouble(item, "LARGE_NET_INFLOW", out var lni) ? lni : 0;
+                    double bigNet = TryGetDouble(item, "BIG_NET_INFLOW", out var bni) ? bni : 0;
+
+                    rows.Add(new CapitalFlowRowDto
+                    {
+                        Code = code, Name = name, Rate = Math.Round(rate, 2),
+                        MainNet = mainNet, MainNetText = FormatMoneyWanYi(mainNet),
+                        MainRatio = Math.Round(mainRatio, 2), SuperNet = superNet, BigNet = bigNet
+                    });
+                }
+
+                if (rows.Count == 0)
+                {
+                    error = $"0 rows parsed (rawArrayLen={dataArr.GetArrayLength()})";
+                    Console.WriteLine($"[CapitalFlow] source=datacenter status={statusCode} error={error}");
+                    attempts?.Add(new { source = "eastmoney_datacenter", url = externalUrl, statusCode, rawLength = body.Length, parsedRowsCount = 0, error });
+                    return null;
+                }
+
+                Console.WriteLine($"[CapitalFlow] source=datacenter status={statusCode} rows={rows.Count} OK");
+                attempts?.Add(new { source = "eastmoney_datacenter", url = externalUrl, statusCode, rawLength = body.Length, parsedRowsCount = rows.Count, error = (string?)null });
+
+                rows = rows.OrderByDescending(x => x.MainNet).ToList();
+                var inflow = rows.Where(x => x.MainNet > 0).Take(limit).ToList();
+                var outflow = rows.Where(x => x.MainNet < 0).OrderBy(x => x.MainNet).Take(limit).ToList();
+                var merged = inflow.Concat(outflow).GroupBy(x => x.Code).Select(g => g.OrderByDescending(x => Math.Abs(x.MainNet)).First()).OrderByDescending(x => x.MainNet).ToList();
+
+                return new CapitalFlowPayloadDto
+                {
+                    Source = "东方财富数据中心行业资金流",
+                    UpdatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
+                    IsFallback = false, IsStale = false, Message = string.Empty,
+                    Rows = merged, Inflow = inflow, Outflow = outflow
+                };
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                Console.WriteLine($"[CapitalFlow] source=datacenter status={statusCode} error={error}");
+                attempts?.Add(new { source = "eastmoney_datacenter", url = externalUrl, statusCode, rawLength = 0, parsedRowsCount = 0, error });
+                return null;
+            }
         }
 
         [HttpGet("sector-details")]
