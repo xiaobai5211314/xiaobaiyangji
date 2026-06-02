@@ -4169,6 +4169,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <div :style="{ fontSize: '18px', fontWeight: '900', color: isNight ? '#10b981' : '#f59e0b', margin: '5px 0' }">
                             {{ isNight ? '🌙 夜间休市' : '☀️ 盘中盯盘' }}
                         </div>
+                        <div :style="{fontSize:'11px',fontWeight:'900',color:fundEstimateSummary.color,whiteSpace:'nowrap'}">{{ fundEstimateSummary.text }}</div>
                     </div>
                     <div class="divider"></div>
                     <div style="text-align: center;">
@@ -5193,6 +5194,16 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     if (excess === 0) return `跑平 ${data.indexName || selectedPerformanceIndexName.value}`;
                     return `${excess > 0 ? '跑赢' : '跑输'} ${data.indexName || selectedPerformanceIndexName.value} ${formatPerformancePercent(excess)}`;
                 });
+                const normalizePerformanceMessage = (data) => {
+                    const raw = String(data?.message || '');
+                    if (!raw) return '';
+                    const parts = [];
+                    if (raw.includes('旧估值') || raw.includes('快照')) parts.push('含旧估值，曲线为估算值');
+                    if (raw.includes('缺失估值') || raw.includes('暂缺')) parts.push('部分估值暂缺');
+                    if (raw.includes('指数盘中数据暂不可用')) parts.push('指数盘中数据暂不可用');
+                    if (raw.includes('指数数据暂不可用')) parts.push('指数数据暂不可用');
+                    return parts.length > 0 ? Array.from(new Set(parts)).join(' · ') : raw;
+                };
                 let timer = null;
                 let isFetchingData = false;
                 let lastDataFetchAt = 0;
@@ -5536,27 +5547,33 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const fundEstimateBadgeLabel = (fund) => {
                     if (fund?.isSettled) return '✅ 净值确认';
                     const source = fund?.estimateSource || 'missing';
-                    if (source === 'fund_record_today') return '📌 今日快照';
                     if (fund?.isStale) return '🕰️ 旧估值';
                     if (source === 'fund_record_old') return '🕰️ 旧估值';
+                    if (!fund?.quoteOk && source === 'missing') return '⚠️ 估值暂缺';
+                    if (fund?.isFallback) return '🧩 快照/备用源';
+                    if (fund?.quoteOk && !fund?.isFallback && !fund?.isStale) return '⏱️ 盘中估值';
                     if (source === 'missing') return '⚠️ 估值暂缺';
-                    if (fund?.isFallback) return '🧩 备用源';
-                    return '⏱️ 盘中侦测';
+                    return '⏱️ 盘中估值';
                 };
-                const fundRefreshToast = (items) => {
+                const getFundEstimateSummary = (items = fundsList.value) => {
                     const rows = Array.isArray(items) ? items : [];
-                    if (rows.length === 0) return { msg: '基金暂无持仓', type: 'info' };
+                    if (rows.length === 0) return { text: '暂无持仓', color: 'var(--text-muted)', staleCount: 0, missingCount: 0 };
                     const missing = rows.filter(f => (f.estimateSource || '') === 'missing');
                     const stale = rows.filter(f => f.isStale || f.estimateSource === 'fund_record_old');
-                    const fallback = rows.filter(f => f.isFallback && !f.isStale && f.estimateSource !== 'fund_record_old');
-                    const realtime = rows.filter(f => f.isSettled || (f.quoteOk && !f.isFallback && !f.isStale));
-                    if (realtime.length === rows.length) return { msg: '✅ 基金盘中估值已刷新', type: 'success' };
-                    if (missing.length === rows.length || stale.length === rows.length) return { msg: '❌ 基金估值失败，当前显示旧数据或估值暂缺', type: 'error' };
-                    if (stale.length > 0) return { msg: `⚠️ 部分基金使用快照/旧估值：${stale.map(f => f.code).slice(0, 5).join(',')}`, type: 'info' };
-                    if (fallback.length > 0) return { msg: '✅ 基金估值已刷新，部分来自备用源', type: 'success' };
-                    if (missing.length > 0) return { msg: `⚠️ 部分基金估值暂缺：${missing.map(f => f.code).slice(0, 5).join(',')}`, type: 'info' };
-                    return { msg: '✅ 数据已刷新', type: 'success' };
+                    const settled = rows.filter(f => f.isSettled);
+                    if (missing.length > 0) return { text: `部分估值暂缺 · ${missing.length}只`, color: '#fbbf24', staleCount: stale.length, missingCount: missing.length };
+                    if (stale.length > 0) {
+                        return {
+                            text: isNight.value ? `夜间休市，部分基金待净值确认 · ${stale.length}只` : `部分基金估值延迟 · ${stale.length}只`,
+                            color: '#fbbf24',
+                            staleCount: stale.length,
+                            missingCount: 0
+                        };
+                    }
+                    if (settled.length === rows.length) return { text: '净值确认', color: '#10b981', staleCount: 0, missingCount: 0 };
+                    return { text: '盘中估算', color: '#38bdf8', staleCount: 0, missingCount: 0 };
                 };
+                const fundEstimateSummary = computed(() => getFundEstimateSummary());
 
                 const loadStockDashboard = async (force = false) => {
                     if (!currentUser.value) return;
@@ -6685,7 +6702,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         if (!res.ok) throw new Error(await res.text());
                         const data = await res.json();
                         performanceCurve.value = data || null;
-                        performanceMessage.value = data?.message || '';
+                        performanceMessage.value = normalizePerformanceMessage(data);
                         await nextTick();
                         await renderPerformanceChart();
                     } catch (e) {
@@ -6753,9 +6770,6 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             const fundRows = await fetchData({ force, silent: true });
                             if (fundRows === null) {
                                 showToast(fundsList.value.length > 0 ? '🌐 数据刷新失败，已保留上次数据' : '🌐 数据刷新失败', 'error');
-                            } else {
-                                const toast = fundRefreshToast(fundRows);
-                                showToast(toast.msg, toast.type);
                             }
                         }
                     } finally {
@@ -7236,7 +7250,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices, formatIndexPoint, formatIndexRate,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
                     analysisMonth, selectedAnalysisDate, analysisViewMode, analysisDetailMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, analysisProfitTop, analysisLossTop, analysisMonthTotal, fetchAnalysis, refreshAnalysisPage, goAnalysisToday, todayDashStr,
-                    assetMode, setAssetMode, stockHoldings, stockWatchList, stockQuoteStatus, stockSearchKeyword, stockSearchResults, stockOcrLoading, stockOcrPreview, selectedStock, stockKlinePeriod, stockKlinePeriods, stockChartRef, stockChartStatus, triggerStockOcr, handleStockOcrUpload, confirmStockOcr, loadStockDashboard, searchStocks, addStockWatch, openStockHoldingEditor, deleteStockHolding, deleteStockWatch, openStockDetail, switchStockKline, recalculateStockOcrItem, formatOcrNumber, signedOcrNumber, profitColor, formatStockPrice, formatStockRate, formatStockMoney, stockNumberColor, quoteSourceLabel, formatNullablePercent, fundEstimateBadgeLabel, dailyBattleReport, confidenceRows, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, calibrationRows,
+                    assetMode, setAssetMode, stockHoldings, stockWatchList, stockQuoteStatus, stockSearchKeyword, stockSearchResults, stockOcrLoading, stockOcrPreview, selectedStock, stockKlinePeriod, stockKlinePeriods, stockChartRef, stockChartStatus, triggerStockOcr, handleStockOcrUpload, confirmStockOcr, loadStockDashboard, searchStocks, addStockWatch, openStockHoldingEditor, deleteStockHolding, deleteStockWatch, openStockDetail, switchStockKline, recalculateStockOcrItem, formatOcrNumber, signedOcrNumber, profitColor, formatStockPrice, formatStockRate, formatStockMoney, stockNumberColor, quoteSourceLabel, formatNullablePercent, fundEstimateBadgeLabel, fundEstimateSummary, dailyBattleReport, confidenceRows, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, calibrationRows,
                     globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, saveDailyArchive, ocrModal, ocrPreviewTotal, isConfirmingOcrImport,
                     reduceModal, openReduceModal, handleReducePosition, addModal, openAddModal, handleAddPosition
                 };
