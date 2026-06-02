@@ -1835,11 +1835,11 @@ namespace 小白养基.Controllers
             public string Code { get; init; } = string.Empty;
             public string Market { get; init; } = string.Empty;
             public string Secid { get; init; } = string.Empty;
-            public double Latest { get; init; }
-            public double Point { get; init; }
-            public double Close { get; init; }
-            public double TodayRate { get; init; }
-            public double YearRate { get; init; }
+            public double? Latest { get; init; }
+            public double? Point { get; init; }
+            public double? Close { get; init; }
+            public double? TodayRate { get; init; }
+            public double? YearRate { get; init; }
             public List<GlobalIndexKlineDto> Klines { get; init; } = new();
         }
 
@@ -2136,7 +2136,8 @@ namespace 小白养基.Controllers
             catch (Exception ex)
             {
                 debugIndexError = ex.Message;
-                attempts.Add(new { source = "eastmoney_trends2", url = debugIndexUrl, statusCode = debugIndexStatusCode, rawRowsCount = 0, parsedRowsCount = 0, error = ex.Message });
+                var trends2Url = $"https://push2his.eastmoney.com/api/qt/stock/trends2/get?secid={Uri.EscapeDataString(indexDefinition.Secid)}";
+                attempts.Add(new { source = "eastmoney_trends2", url = trends2Url, statusCode = debugIndexStatusCode, rawRowsCount = 0, parsedRowsCount = 0, error = ex.Message });
                 Console.WriteLine($"[PerformanceCurve] index={indexDefinition.Key} secid={indexDefinition.Secid} FAILED error={ex.Message}");
             }
 
@@ -2997,11 +2998,11 @@ namespace 小白养基.Controllers
                 Code = idx.Code,
                 Market = idx.Market,
                 Secid = idx.Secids.FirstOrDefault() ?? string.Empty,
-                Latest = 0,
-                Point = 0,
-                Close = 0,
-                TodayRate = 0,
-                YearRate = 0,
+                Latest = null,
+                Point = null,
+                Close = null,
+                TodayRate = null,
+                YearRate = null,
                 Klines = new List<GlobalIndexKlineDto>()
             };
         }
@@ -5144,17 +5145,25 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             var todaySnapshot = await BuildTodayPortfolioSnapshotAsync(username);
             if (todaySnapshot.Funds.Count > 0)
             {
-                bool matchesRequestedFund(ArchiveRowDto row)
-                {
-                    return string.IsNullOrWhiteSpace(fundCode) ||
-                           string.Equals(row.FundCode, fundCode, StringComparison.OrdinalIgnoreCase);
-                }
+                // 市场未开盘时不覆盖今天的日历数据
+                var now = ChinaNow();
+                bool isWeekend = now.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+                bool marketNotYetOpen = !isWeekend && now.TimeOfDay < new TimeSpan(9, 30, 0);
 
-                records.RemoveAll(r => r.RecordDate.Date == todaySnapshot.Today && matchesRequestedFund(r));
-                var overlayRows = BuildArchiveDtosFromSnapshot(todaySnapshot)
-                    .Where(matchesRequestedFund)
-                    .ToList();
-                records.AddRange(overlayRows);
+                if (!marketNotYetOpen)
+                {
+                    bool matchesRequestedFund(ArchiveRowDto row)
+                    {
+                        return string.IsNullOrWhiteSpace(fundCode) ||
+                               string.Equals(row.FundCode, fundCode, StringComparison.OrdinalIgnoreCase);
+                    }
+
+                    records.RemoveAll(r => r.RecordDate.Date == todaySnapshot.Today && matchesRequestedFund(r));
+                    var overlayRows = BuildArchiveDtosFromSnapshot(todaySnapshot)
+                        .Where(matchesRequestedFund)
+                        .ToList();
+                    records.AddRange(overlayRows);
+                }
             }
 
             records = records
