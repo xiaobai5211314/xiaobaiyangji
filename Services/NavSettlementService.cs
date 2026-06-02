@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using 小白养基.Models;
@@ -157,6 +159,126 @@ namespace 小白养基.Services
                 NavDiff = navDiff,
                 Source = source
             };
+        }
+
+        private async Task<OfficialNavSnapshot?> FetchOfficialNavSnapshotAsync(string fundCode, string settleDate, CancellationToken stoppingToken)
+        {
+            try
+            {
+                long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={fundCode}&pageIndex=1&pageSize=2&_={timestamp}";
+                string response = await _httpClient.GetStringAsync(url, stoppingToken);
+                using var doc = JsonDocument.Parse(response);
+                if (doc.RootElement.TryGetProperty("Data", out var data) &&
+                    data.TryGetProperty("LSJZList", out var dataArray))
+                {
+                    var snapshot = TryBuildOfficialNavSnapshot(dataArray, settleDate);
+                    if (snapshot != null)
+                    {
+                        snapshot.Source = $"eastmoney_lsjz_actual/{snapshot.Source}";
+                        return snapshot;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "eastmoney_lsjz_actual 失败：{Code}", fundCode);
+            }
+
+            var tiantian = await FetchTiantianNavSnapshotAsync(fundCode, settleDate, stoppingToken);
+            if (tiantian != null) return tiantian;
+
+            var sina = await FetchSinaNavSnapshotAsync(fundCode, settleDate, stoppingToken);
+            if (sina != null) return sina;
+
+            return null;
+        }
+
+        private async Task<OfficialNavSnapshot?> FetchTiantianNavSnapshotAsync(string fundCode, string settleDate, CancellationToken stoppingToken)
+        {
+            try
+            {
+                var url = $"https://fund.eastmoney.com/pingzhongdata/{fundCode}.js?v={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+                var text = await _httpClient.GetStringAsync(url, stoppingToken);
+                var match = Regex.Match(text, @"var\s+Data_netWorthTrend\s*=\s*(\[.*?\]);", RegexOptions.Singleline);
+                if (!match.Success) return null;
+
+                using var doc = JsonDocument.Parse(match.Groups[1].Value);
+                if (doc.RootElement.ValueKind != JsonValueKind.Array || doc.RootElement.GetArrayLength() == 0) return null;
+                var rows = doc.RootElement.EnumerateArray().ToList();
+                var latest = rows[^1];
+                var date = latest.TryGetProperty("x", out var x) && x.TryGetInt64(out var ms)
+                    ? DateTimeOffset.FromUnixTimeMilliseconds(ms).LocalDateTime.ToString("yyyy-MM-dd")
+                    : string.Empty;
+                if (date != settleDate) return null;
+
+                double? todayNav = TryGetDouble(latest, "y", out var navToday) ? navToday : null;
+                double? yesterdayNav = null;
+                double? navDiff = null;
+                double? navRate = null;
+                if (rows.Count > 1 && TryGetDouble(rows[^2], "y", out var navYesterday) && navYesterday > 0 && todayNav.HasValue)
+                {
+                    yesterdayNav = navYesterday;
+                    navDiff = todayNav.Value - navYesterday;
+                    navRate = Math.Round(navDiff.Value / navYesterday * 100.0, 4);
+                }
+
+                double? apiRate = TryGetDouble(latest, "equityReturn", out var parsedRate) ? parsedRate : null;
+                var finalRate = apiRate.HasValue && Math.Abs(apiRate.Value) > 0.000001 ? apiRate : navRate;
+                if (!finalRate.HasValue) return null;
+
+                return new OfficialNavSnapshot
+                {
+                    Date = date,
+                    Rate = Math.Round(finalRate.Value, 4),
+                    TodayNav = todayNav,
+                    YesterdayNav = yesterdayNav,
+                    NavDiff = navDiff,
+                    Source = "tiantian_nav_actual"
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "tiantian_nav_actual 失败：{Code}", fundCode);
+                return null;
+            }
+        }
+
+        private async Task<OfficialNavSnapshot?> FetchSinaNavSnapshotAsync(string fundCode, string settleDate, CancellationToken stoppingToken)
+        {
+            try
+            {
+                using var scope = _serviceProvider.CreateScope();
+                var factory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
+                var client = factory.CreateClient("SinaQuote");
+                var text = await client.GetStringAsync($"https://hq.sinajs.cn/list=f_{fundCode}", stoppingToken);
+                var match = Regex.Match(text ?? string.Empty, "\"(.*)\"");
+                if (!match.Success) return null;
+                var parts = match.Groups[1].Value.Split(',');
+                if (parts.Length < 5 || parts[4] != settleDate) return null;
+                if (!double.TryParse(parts[1], NumberStyles.Any, CultureInfo.InvariantCulture, out var todayNav) ||
+                    !double.TryParse(parts[3], NumberStyles.Any, CultureInfo.InvariantCulture, out var yesterdayNav) ||
+                    yesterdayNav <= 0)
+                {
+                    return null;
+                }
+
+                var navDiff = todayNav - yesterdayNav;
+                return new OfficialNavSnapshot
+                {
+                    Date = parts[4],
+                    Rate = Math.Round(navDiff / yesterdayNav * 100.0, 4),
+                    TodayNav = todayNav,
+                    YesterdayNav = yesterdayNav,
+                    NavDiff = navDiff,
+                    Source = "sina_nav_actual"
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "sina_nav_actual 失败：{Code}", fundCode);
+                return null;
+            }
         }
 
         private static bool ApplyOneDaySettlement(
@@ -381,19 +503,7 @@ namespace 小白养基.Services
 
                 try
                 {
-                    long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                    string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize=2&_={timestamp}";
-                    string response = await _httpClient.GetStringAsync(url, stoppingToken);
-
-                    using var doc = JsonDocument.Parse(response);
-                    if (!doc.RootElement.TryGetProperty("Data", out var data) ||
-                        !data.TryGetProperty("LSJZList", out var dataArray) ||
-                        dataArray.GetArrayLength() == 0)
-                    {
-                        continue;
-                    }
-
-                    var navSnapshot = TryBuildOfficialNavSnapshot(dataArray, settleDate);
+                    var navSnapshot = await FetchOfficialNavSnapshotAsync(code, settleDate, stoppingToken);
                     if (navSnapshot == null)
                     {
                         continue;
@@ -407,6 +517,8 @@ namespace 小白养基.Services
                     {
                         targetRecord.ActualRate = actualRate;
                         targetRecord.DiffRate = Math.Round(actualRate - targetRecord.EstimatedRate, 2);
+                        targetRecord.IsActualNav = true;
+                        targetRecord.ActualSource = navSnapshot.Source;
                     }
 
                     // 使用预加载的持仓数据

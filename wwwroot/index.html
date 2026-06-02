@@ -4128,13 +4128,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <div v-if="stockHoldings.length===0" class="feature-subtitle" style="padding:14px 0;">暂无股票持仓，可 OCR 导入或手动搜索后录入。</div>
                         <div v-for="s in stockHoldings" :key="'h-'+s.code" class="stock-card">
                             <div class="stock-row-head">
-                                <div><strong>{{ s.name }}</strong><div class="stock-code-chip">{{ s.market }} {{ s.code }}</div></div>
-                                <div :style="{color:Number(s.changeRate)>=0?'#ff4d4f':'#10b981',fontWeight:'900',textAlign:'right'}">{{ Number(s.price||0).toFixed(2) }}<br>{{ Number(s.changeRate)>=0?'+':'' }}{{ Number(s.changeRate||0).toFixed(2) }}%</div>
+                                <div><strong>{{ s.name }}</strong><div class="stock-code-chip">{{ s.market }} {{ s.code }} · {{ quoteSourceLabel(s) }}</div></div>
+                                <div :style="{color:stockNumberColor(s.changeRate),fontWeight:'900',textAlign:'right'}">{{ formatStockPrice(s.price) }}<br>{{ formatStockRate(s.changeRate) }}</div>
                             </div>
                             <div class="stock-metrics">
                                 <div class="stock-metric"><div class="label">持股</div><div class="value">{{ Number(s.shares||0).toFixed(0) }}</div></div>
-                                <div class="stock-metric"><div class="label">市值</div><div class="value">{{ Number(s.marketValue||0).toFixed(2) }}</div></div>
-                                <div class="stock-metric"><div class="label">持有收益</div><div class="value" :style="{color:Number(s.totalProfit)>=0?'#ff4d4f':'#10b981'}">{{ Number(s.totalProfit)>=0?'+':'' }}{{ Number(s.totalProfit||0).toFixed(2) }}</div></div>
+                                <div class="stock-metric"><div class="label">市值</div><div class="value">{{ formatStockMoney(s.marketValue) }}</div></div>
+                                <div class="stock-metric"><div class="label">持有收益</div><div class="value" :style="{color:stockNumberColor(s.totalProfit)}">{{ formatStockMoney(s.totalProfit, true) }}</div></div>
                             </div>
                             <div class="stock-actions"><button class="btn btn-primary" @click="openStockDetail(s)">走势</button><button class="btn" @click="addStockWatch(s)">加自选</button><button class="btn btn-danger" @click="deleteStockHolding(s)">删除</button></div>
                         </div>
@@ -4142,8 +4142,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <div class="feature-title" style="font-size:17px;margin-top:14px;">自选股票</div>
                         <div v-for="s in stockWatchList" :key="'w-'+s.code" class="stock-card">
                             <div class="stock-row-head">
-                                <div><strong>{{ s.name }}</strong><div class="stock-code-chip">{{ s.market }} {{ s.code }}</div></div>
-                                <div :style="{color:Number(s.changeRate)>=0?'#ff4d4f':'#10b981',fontWeight:'900',textAlign:'right'}">{{ Number(s.price||0).toFixed(2) }}<br>{{ Number(s.changeRate)>=0?'+':'' }}{{ Number(s.changeRate||0).toFixed(2) }}%</div>
+                                <div><strong>{{ s.name }}</strong><div class="stock-code-chip">{{ s.market }} {{ s.code }} · {{ quoteSourceLabel(s) }}</div></div>
+                                <div :style="{color:stockNumberColor(s.changeRate),fontWeight:'900',textAlign:'right'}">{{ formatStockPrice(s.price) }}<br>{{ formatStockRate(s.changeRate) }}</div>
                             </div>
                             <div class="stock-actions"><button class="btn btn-primary" @click="openStockDetail(s)">走势</button><button class="btn" @click="openStockHoldingEditor(s)">转持有</button><button class="btn btn-danger" @click="deleteStockWatch(s)">移除</button></div>
                         </div>
@@ -4152,7 +4152,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     <div class="glass-panel feature-card stock-detail-card">
                         <div class="stock-row-head">
                             <div><div class="feature-title">{{ selectedStock.name || '股票走势' }}</div><div class="feature-subtitle">{{ selectedStock.code ? selectedStock.market + ' ' + selectedStock.code : '选择持仓、自选或搜索结果查看走势' }}</div></div>
-                            <div v-if="selectedStock.code" :style="{color:Number(selectedStock.changeRate)>=0?'#ff4d4f':'#10b981',fontWeight:'900',textAlign:'right'}">{{ Number(selectedStock.price||0).toFixed(2) }}<br>{{ Number(selectedStock.changeRate)>=0?'+':'' }}{{ Number(selectedStock.changeRate||0).toFixed(2) }}%</div>
+                            <div v-if="selectedStock.code" :style="{color:stockNumberColor(selectedStock.changeRate),fontWeight:'900',textAlign:'right'}">{{ formatStockPrice(selectedStock.price) }}<br>{{ formatStockRate(selectedStock.changeRate) }}</div>
                         </div>
                         <div class="stock-kline-tabs">
                             <button v-for="p in stockKlinePeriods" :key="p.value" :class="['stock-kline-tab', stockKlinePeriod===p.value?'active':'']" @click="switchStockKline(p.value)">{{ p.label }}</button>
@@ -4320,11 +4320,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 6px; margin-top: 5px;">
                             <span style="display: flex; align-items: center; gap: 5px;">
                                 <span :class="['fund-badge', fund.isSettled ? 'badge-actual' : 'badge-estimate']">
-                                    {{ fund.isSettled ? '✅ 净值确认' : '⏱️ 盘中侦测' }}
+                                    {{ fundEstimateBadgeLabel(fund) }}
                                 </span>
 
-                                <span v-if="fund.isHoliday" style="color:var(--text-muted); font-weight: bold; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-size: 11px;">☕ 休市</span>
+                                <span v-if="fund.currentRate === null || fund.currentRate === undefined" style="color:var(--text-muted); font-weight: bold;">--</span>
                                 <span v-else :style="{color: fund.currentRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold'}">{{ fund.currentRate > 0 ? '+' : ''}}{{ fund.currentRate }}%</span>
+                                <span v-if="fund.isHoliday" style="color:var(--text-muted); font-weight: bold; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-size: 11px;">☕ 休市</span>
 
                                 <span v-if="fund.calibrationOffset && Math.abs(fund.calibrationOffset) > 0 && !fund.isHoliday" style="font-size: 10px; color: #8b5cf6; border: 1px solid #8b5cf6; padding: 1px 4px; border-radius: 4px;">
                                     🤖修正: {{ fund.calibrationOffset > 0 ? '+' : '' }}{{ fund.calibrationOffset }}%
@@ -4356,11 +4357,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             </div>
                             <div class="metric-item" style="background: rgba(79, 172, 254, 0.1); padding: 2px; border-radius: 4px;">
                                 <span class="metric-label" style="color: #4facfe;">🌟 今日收益</span>
-                                <span class="metric-value" :style="{color: privacyMode <= 1 ? (fund.todayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 1 ? (fund.todayProfit >= 0 ? '+' : '') + fund.todayProfit : '****' }}</span>
+                                <span class="metric-value" :style="{color: privacyMode <= 1 ? stockNumberColor(fund.todayProfit) : '#cbd5e1'}">{{ privacyMode <= 1 ? formatStockMoney(fund.todayProfit, true) : '****' }}</span>
                             </div>
                             <div class="metric-item">
                                 <span class="metric-label">🚀 今日收益率</span>
-                                <span class="metric-value" :style="{color: privacyMode <= 2 ? (fund.currentRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 2 ? ((fund.currentRate > 0 ? '+' : '') + fund.currentRate + '%') : '****' }}</span>
+                                <span class="metric-value" :style="{color: privacyMode <= 2 && fund.currentRate !== null && fund.currentRate !== undefined ? (fund.currentRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 2 ? formatNullablePercent(fund.currentRate) : '****' }}</span>
                             </div>
                             <div class="metric-item">
                                 <span class="metric-label">💰 累计盈亏</span>
@@ -5224,11 +5225,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const assetMode = ref(localStorage.getItem('asset_mode') || 'fund');
                 const stockHoldings = ref([]);
                 const stockWatchList = ref([]);
+                const stockQuoteStatus = ref(null);
                 const stockSearchKeyword = ref('');
                 const stockSearchResults = ref([]);
                 const stockOcrLoading = ref(false);
                 const stockOcrPreview = reactive({ show: false, batchId: 0, items: [] });
-                const selectedStock = reactive({ code: '', market: '', name: '', price: 0, changeRate: 0 });
+                const selectedStock = reactive({ code: '', market: '', name: '', price: null, changeRate: null, quoteSource: 'missing' });
                 const stockKlinePeriod = ref('minute');
                 const stockKlinePeriods = [
                     { value: 'minute', label: '分K' },
@@ -5461,6 +5463,80 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     else triggerUpload();
                 };
 
+                const parseNullableNumber = (value) => {
+                    if (value === null || value === undefined || value === '') return null;
+                    const n = Number(value);
+                    return Number.isFinite(n) ? n : null;
+                };
+                const formatStockPrice = (value) => {
+                    const n = parseNullableNumber(value);
+                    return n === null ? '--' : n.toFixed(2);
+                };
+                const formatStockMoney = (value, signed = false) => {
+                    const n = parseNullableNumber(value);
+                    if (n === null) return '--';
+                    return `${signed && n > 0 ? '+' : ''}${n.toFixed(2)}`;
+                };
+                const formatStockRate = (value) => {
+                    const n = parseNullableNumber(value);
+                    if (n === null) return '--';
+                    return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
+                };
+                const stockNumberColor = (value) => {
+                    const n = parseNullableNumber(value);
+                    if (n === null) return '#cbd5e1';
+                    return n >= 0 ? '#ff4d4f' : '#10b981';
+                };
+                const quoteSourceLabel = (item) => {
+                    const source = item?.quoteSource || 'missing';
+                    if (source === 'eastmoney' || source === 'tencent' || source === 'sina') return item?.isFallback ? '备用源' : '实时';
+                    if (source === 'snapshot_today') return '快照';
+                    if (source === 'snapshot_old' || source === 'holding_last') return '旧数据';
+                    return '缺失';
+                };
+                const stockRefreshToast = (data) => {
+                    const requested = Number(data?.quoteRequestedCount || 0);
+                    const realtime = Number(data?.quoteRealtimeCount || 0);
+                    const fallback = Number(data?.quoteFallbackCount || 0);
+                    const staleCodes = data?.quoteStaleCodes || [];
+                    const failedCodes = data?.quoteFailedCodes || [];
+                    if (requested > 0 && realtime === requested && fallback === 0) return { msg: '✅ 股票实时行情已刷新', type: 'success' };
+                    if (requested > 0 && realtime === 0 && failedCodes.length >= requested) return { msg: '❌ 股票实时行情失败，当前显示旧数据', type: 'error' };
+                    if (staleCodes.length > 0) return { msg: `⚠️ 部分股票使用快照/旧数据：${staleCodes.slice(0, 5).join(',')}`, type: 'info' };
+                    if (fallback > 0) return { msg: '✅ 股票数据已刷新，部分来自备用源', type: 'success' };
+                    if (failedCodes.length > 0) return { msg: `⚠️ 部分股票行情缺失：${failedCodes.slice(0, 5).join(',')}`, type: 'info' };
+                    return { msg: '✅ 股票数据已刷新', type: 'success' };
+                };
+                const formatNullablePercent = (value) => {
+                    const n = parseNullableNumber(value);
+                    if (n === null) return '--';
+                    return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
+                };
+                const fundEstimateBadgeLabel = (fund) => {
+                    if (fund?.isSettled) return '✅ 净值确认';
+                    const source = fund?.estimateSource || 'missing';
+                    if (source === 'fund_record_today') return '📌 今日快照';
+                    if (fund?.isStale) return '🕰️ 旧估值';
+                    if (source === 'fund_record_old') return '🕰️ 旧估值';
+                    if (source === 'missing') return '⚠️ 估值暂缺';
+                    if (fund?.isFallback) return '🧩 备用源';
+                    return '⏱️ 盘中侦测';
+                };
+                const fundRefreshToast = (items) => {
+                    const rows = Array.isArray(items) ? items : [];
+                    if (rows.length === 0) return { msg: '基金暂无持仓', type: 'info' };
+                    const missing = rows.filter(f => (f.estimateSource || '') === 'missing');
+                    const stale = rows.filter(f => f.isStale || f.estimateSource === 'fund_record_old');
+                    const fallback = rows.filter(f => f.isFallback && !f.isStale && f.estimateSource !== 'fund_record_old');
+                    const realtime = rows.filter(f => f.isSettled || (f.quoteOk && !f.isFallback && !f.isStale));
+                    if (realtime.length === rows.length) return { msg: '✅ 基金盘中估值已刷新', type: 'success' };
+                    if (missing.length === rows.length || stale.length === rows.length) return { msg: '❌ 基金估值失败，当前显示旧数据或估值暂缺', type: 'error' };
+                    if (stale.length > 0) return { msg: `⚠️ 部分基金使用快照/旧估值：${stale.map(f => f.code).slice(0, 5).join(',')}`, type: 'info' };
+                    if (fallback.length > 0) return { msg: '✅ 基金估值已刷新，部分来自备用源', type: 'success' };
+                    if (missing.length > 0) return { msg: `⚠️ 部分基金估值暂缺：${missing.map(f => f.code).slice(0, 5).join(',')}`, type: 'info' };
+                    return { msg: '✅ 数据已刷新', type: 'success' };
+                };
+
                 const loadStockDashboard = async (force = false) => {
                     if (!currentUser.value) return;
                     try {
@@ -5469,11 +5545,15 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         if (!res.ok || !data.success) throw new Error(data.message || '股票数据读取失败');
                         stockHoldings.value = data.holdings || [];
                         stockWatchList.value = data.watchList || [];
+                        stockQuoteStatus.value = data;
                         if (!selectedStock.code) {
                             const first = stockHoldings.value[0] || stockWatchList.value[0];
                             if (first) openStockDetail(first);
                         }
-                        if (force) showToast('股票数据已刷新', 'success');
+                        if (force) {
+                            const toast = stockRefreshToast(data);
+                            showToast(toast.msg, toast.type);
+                        }
                     } catch (e) {
                         if (force) showToast(e.message || '股票数据读取失败', 'error');
                     }
@@ -5534,7 +5614,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 };
 
                 const openStockDetail = async (s) => {
-                    Object.assign(selectedStock, { code: s.code, market: s.market || '', name: s.name || '', price: Number(s.price || 0), changeRate: Number(s.changeRate || 0) });
+                    Object.assign(selectedStock, { code: s.code, market: s.market || '', name: s.name || '', price: parseNullableNumber(s.price), changeRate: parseNullableNumber(s.changeRate), quoteSource: s.quoteSource || 'missing' });
                     await fetchStockKlines();
                 };
 
@@ -6638,13 +6718,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     pullRefresh.loading = true;
                     try {
                         if (assetMode.value === 'stock') {
-                            await loadStockDashboard(false);
+                            await loadStockDashboard(true);
                             if (selectedStock.code) await fetchStockKlines();
-                            showToast('✅ 股票数据已刷新', 'success');
                         } else {
                             if (force) await syncRealNavIfNeeded();
-                            await fetchData({ force, silent: true });
-                            showToast('✅ 数据已刷新', 'success');
+                            const fundRows = await fetchData({ force, silent: true });
+                            const toast = fundRefreshToast(fundRows);
+                            showToast(toast.msg, toast.type);
                         }
                     } finally {
                         pullRefresh.loading = false;
@@ -6801,15 +6881,43 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const settledCalibrationPayload = [];
 
                         apiData.forEach(fund => {
-                            if (fund.isSettled) { fund.currentRate = fund.actualRate; fund.isHoliday = false; if (fund.data.length > 0 && String(fund.data[fund.data.length - 1][0]).includes("15:00:00")) { fund.data[fund.data.length - 1][1] = fund.actualRate; } else { fund.data.push([`${todaySlash} 15:00:00`, fund.actualRate]); } } else if (isWeekend || currentMinutes < 565) { fund.currentRate = 0; fund.isHoliday = true; } else if (fund.data && fund.data.length > 0) { let lastDataTime = String(fund.data[fund.data.length - 1][0]); let hasTodayDate = lastDataTime.includes(todaySlash) || lastDataTime.includes(todayDash); let isPast935 = (d.getHours() > 9) || (d.getHours() === 9 && d.getMinutes() >= 35); if (hasTodayDate && !(isPast935 && fund.data.length <= 2)) { fund.currentRate = fund.data[fund.data.length - 1][1]; fund.isHoliday = false; } else { fund.currentRate = 0; fund.isHoliday = true; } } else { fund.currentRate = 0; fund.isHoliday = true; }
+                            fund.data = Array.isArray(fund.data) ? fund.data : [];
+                            if (fund.isSettled) {
+                                fund.currentRate = fund.actualRate;
+                                fund.isHoliday = false;
+                                if (fund.data.length > 0 && String(fund.data[fund.data.length - 1][0]).includes("15:00:00")) {
+                                    fund.data[fund.data.length - 1][1] = fund.actualRate;
+                                } else {
+                                    fund.data.push([`${todaySlash} 15:00:00`, fund.actualRate]);
+                                }
+                            } else if (fund.data.length > 0) {
+                                let lastDataTime = String(fund.data[fund.data.length - 1][0]);
+                                let lastRate = parseNullableNumber(fund.data[fund.data.length - 1][1]);
+                                let hasTodayDate = lastDataTime.includes(todaySlash) || lastDataTime.includes(todayDash);
+                                let isPast935 = (d.getHours() > 9) || (d.getHours() === 9 && d.getMinutes() >= 35);
+                                if (hasTodayDate && !(isPast935 && fund.data.length <= 2)) {
+                                    fund.currentRate = lastRate;
+                                    fund.isHoliday = false;
+                                } else {
+                                    fund.currentRate = lastRate;
+                                    fund.isHoliday = true;
+                                    fund.isStale = true;
+                                    fund.estimateSource = fund.estimateSource || 'fund_record_old';
+                                }
+                            } else {
+                                fund.currentRate = null;
+                                fund.isHoliday = isWeekend || currentMinutes < 565;
+                                fund.estimateSource = fund.estimateSource || 'missing';
+                            }
 
-                            const rawCurrentRate = Number(fund.currentRate || 0);
+                            const rawCurrentRate = parseNullableNumber(fund.currentRate);
+                            const hasCurrentRate = rawCurrentRate !== null;
                             if (fund.isSettled) {
                                 settledCalibrationPayload.push({
                                     fundCode: fund.code,
                                     fundName: fund.name,
                                     tradeDate: todayDash,
-                                    estimatedRate: rawCurrentRate,
+                                    estimatedRate: rawCurrentRate ?? 0,
                                     actualRate: Number(fund.actualRate ?? fund.lastSettledRate ?? fund.currentRate ?? 0),
                                     estimatedAssets: Number(fund.amount || 0),
                                     actualAssets: Number(fund.todayAmount || fund.amount || 0)
@@ -6821,11 +6929,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             fund.calibrationSamples = calibrationProfile.samples;
                             fund.calibrationLastError = Number(calibrationProfile.lastError.toFixed(2));
                             fund.calibrationConfidence = calibrationProfile.confidence;
-                            if (!fund.isSettled && !fund.isHoliday && calibrationProfile.samples >= 1) {
+                            if (!fund.isSettled && !fund.isHoliday && hasCurrentRate && calibrationProfile.samples >= 1) {
                                 fund.currentRate = Number((rawCurrentRate + calibrationProfile.offset).toFixed(2));
                                 fund.calibrationNote = `原估 ${rawCurrentRate >= 0 ? '+' : ''}${rawCurrentRate.toFixed(2)}% · ${calibrationProfile.samples}天样本${calibrationProfile.confidence}可信`;
                                 intradayCalibrationPayload.push({ fundCode: fund.code, fundName: fund.name, tradeDate: todayDash, estimatedRate: rawCurrentRate, estimatedAssets: Number(fund.amount || 0), source: 'today-api' });
-                            } else if (!fund.isSettled && !fund.isHoliday) {
+                            } else if (!fund.isSettled && !fund.isHoliday && hasCurrentRate) {
                                 fund.calibrationNote = '正在积累盘中估值样本';
                                 intradayCalibrationPayload.push({ fundCode: fund.code, fundName: fund.name, tradeDate: todayDash, estimatedRate: rawCurrentRate, estimatedAssets: Number(fund.amount || 0), source: 'today-api' });
                             } else if (fund.isSettled && calibrationProfile.samples > 0) {
@@ -6838,27 +6946,34 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             let todayAddAmount = isUnconfirmed ? (Number(fund.lastAddAmount) || 0) : 0;
                             let isAlreadySettled = (fund.lastSettledDate === todayDash);
                             let currentAmount = Number(fund.amount) || 0;
-                            let todayProfitVal = 0;
+                            let todayProfitVal = null;
                             let currentRealTimeAmount = currentAmount;
 
                             if (isAlreadySettled) {
                                 todayProfitVal = Number(fund.lastSettledProfit) || 0;
                                 fund.todayProfit = todayProfitVal.toFixed(2);
                                 currentRealTimeAmount = currentAmount;
-                                fund.currentRate = Number(fund.lastSettledRate) || fund.currentRate || 0;
+                                const settledRate = parseNullableNumber(fund.lastSettledRate);
+                                if (settledRate !== null) fund.currentRate = settledRate;
                             } else if (fund.isSettled && fund.actualExactProfit != null) {
                                 todayProfitVal = Number(fund.actualExactProfit) || 0;
                                 fund.todayProfit = todayProfitVal.toFixed(2);
                                 currentRealTimeAmount = currentAmount + todayProfitVal;
                             } else {
                                 let baseAmount = currentAmount - todayAddAmount;
-                                todayProfitVal = baseAmount * ((Number(fund.currentRate) || 0) / 100);
-                                fund.todayProfit = todayProfitVal.toFixed(2);
-                                currentRealTimeAmount = currentAmount + todayProfitVal;
+                                const rateForProfit = parseNullableNumber(fund.currentRate);
+                                if (rateForProfit !== null) {
+                                    todayProfitVal = baseAmount * (rateForProfit / 100);
+                                    fund.todayProfit = todayProfitVal.toFixed(2);
+                                    currentRealTimeAmount = currentAmount + todayProfitVal;
+                                } else {
+                                    fund.todayProfit = null;
+                                    currentRealTimeAmount = currentAmount;
+                                }
                             }
 
                             fund.todayAmount = currentRealTimeAmount.toFixed(2);
-                            if (!isNaN(todayProfitVal)) { tToday += todayProfitVal; }
+                            if (todayProfitVal !== null && !isNaN(todayProfitVal)) { tToday += todayProfitVal; }
 
                             fund.realizedProfit = Number(fund.realizedProfit) || 0;
                             const floatProfit = (fund.cost && fund.cost > 0) ? (currentRealTimeAmount - fund.cost) : 0;
@@ -6867,9 +6982,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             fund.breakEvenRate = (fund.cost && fund.cost > currentRealTimeAmount) ? (((fund.cost / currentRealTimeAmount) - 1) * 100).toFixed(2) : "0.00";
                             fund.existingReturnRate = (fund.cost && fund.cost > 0) ? ((allProfit / fund.cost) * 100).toFixed(2) : "0.00";
 
-                            const rateBaseForToday = isAlreadySettled
-                                ? (currentAmount - todayProfitVal - todayAddAmount)
-                                : (currentAmount - todayAddAmount);
+                            const rateBaseForToday = todayProfitVal !== null
+                                ? (isAlreadySettled ? (currentAmount - todayProfitVal - todayAddAmount) : (currentAmount - todayAddAmount))
+                                : 0;
                             tPrincipal += currentAmount; tPrincipalForRate += rateBaseForToday; tCost += (fund.cost || currentAmount);
                         });
 
@@ -6930,9 +7045,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         if ('requestIdleCallback' in window) requestIdleCallback(runChart, { timeout: 800 });
                         else requestAnimationFrame(runChart);
                         fetchPerformanceCurve();
+                        return apiData;
                     } catch (e) {
                         isLoading.value = false;
                         if (!silent) showToast("🌐 数据刷新失败", "error");
+                        return null;
                     } finally {
                         isFetchingData = false;
                     }
@@ -7064,7 +7181,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices, formatIndexPoint, formatIndexRate,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
                     analysisMonth, selectedAnalysisDate, analysisViewMode, analysisDetailMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, analysisProfitTop, analysisLossTop, analysisMonthTotal, fetchAnalysis, refreshAnalysisPage, goAnalysisToday, todayDashStr,
-                    assetMode, setAssetMode, stockHoldings, stockWatchList, stockSearchKeyword, stockSearchResults, stockOcrLoading, stockOcrPreview, selectedStock, stockKlinePeriod, stockKlinePeriods, stockChartRef, stockChartStatus, triggerStockOcr, handleStockOcrUpload, confirmStockOcr, loadStockDashboard, searchStocks, addStockWatch, openStockHoldingEditor, deleteStockHolding, deleteStockWatch, openStockDetail, switchStockKline, recalculateStockOcrItem, formatOcrNumber, signedOcrNumber, profitColor, dailyBattleReport, confidenceRows, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, calibrationRows,
+                    assetMode, setAssetMode, stockHoldings, stockWatchList, stockQuoteStatus, stockSearchKeyword, stockSearchResults, stockOcrLoading, stockOcrPreview, selectedStock, stockKlinePeriod, stockKlinePeriods, stockChartRef, stockChartStatus, triggerStockOcr, handleStockOcrUpload, confirmStockOcr, loadStockDashboard, searchStocks, addStockWatch, openStockHoldingEditor, deleteStockHolding, deleteStockWatch, openStockDetail, switchStockKline, recalculateStockOcrItem, formatOcrNumber, signedOcrNumber, profitColor, formatStockPrice, formatStockRate, formatStockMoney, stockNumberColor, quoteSourceLabel, formatNullablePercent, fundEstimateBadgeLabel, dailyBattleReport, confidenceRows, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, calibrationRows,
                     globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, saveDailyArchive, ocrModal, ocrPreviewTotal, isConfirmingOcrImport,
                     reduceModal, openReduceModal, handleReducePosition, addModal, openAddModal, handleAddPosition
                 };

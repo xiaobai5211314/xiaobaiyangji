@@ -136,6 +136,15 @@ namespace 小白养基.Controllers
             public string Source { get; set; } = string.Empty;
         }
 
+        private sealed record FundEstimateStatus(
+            double? Rate,
+            string EstimateSource,
+            bool QuoteOk,
+            bool IsFallback,
+            bool IsStale,
+            DateTime? EstimateTime,
+            string EstimateMessage);
+
         private static bool TryGetDouble(JsonElement element, string propertyName, out double value)
         {
             value = 0;
@@ -212,17 +221,121 @@ namespace 小白养基.Controllers
 
         private async Task<OfficialNavSnapshot?> FetchOfficialNavSnapshotAsync(HttpClient client, string fundCode, string settleDate)
         {
-            long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={fundCode}&pageIndex=1&pageSize=2&_={timestamp}";
-            string res = await client.GetStringAsync(url);
-            using var doc = JsonDocument.Parse(res);
-            if (!doc.RootElement.TryGetProperty("Data", out var data) ||
-                !data.TryGetProperty("LSJZList", out var dataArray))
+            try
             {
-                return null;
+                long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={fundCode}&pageIndex=1&pageSize=2&_={timestamp}";
+                string res = await client.GetStringAsync(url);
+                using var doc = JsonDocument.Parse(res);
+                if (doc.RootElement.TryGetProperty("Data", out var data) &&
+                    data.TryGetProperty("LSJZList", out var dataArray))
+                {
+                    var snapshot = TryBuildOfficialNavSnapshot(dataArray, settleDate);
+                    if (snapshot != null)
+                    {
+                        snapshot.Source = $"eastmoney_lsjz_actual/{snapshot.Source}";
+                        return snapshot;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[真实净值] eastmoney failed {fundCode}: {ex.Message}");
             }
 
-            return TryBuildOfficialNavSnapshot(dataArray, settleDate);
+            var tiantian = await FetchTiantianNavSnapshotAsync(client, fundCode, settleDate);
+            if (tiantian != null) return tiantian;
+
+            var sina = await FetchSinaNavSnapshotAsync(fundCode, settleDate);
+            if (sina != null) return sina;
+
+            return null;
+        }
+
+        private static async Task<OfficialNavSnapshot?> FetchTiantianNavSnapshotAsync(HttpClient client, string fundCode, string settleDate)
+        {
+            try
+            {
+                var url = $"https://fund.eastmoney.com/pingzhongdata/{fundCode}.js?v={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+                var text = await client.GetStringAsync(url);
+                var match = Regex.Match(text, @"var\s+Data_netWorthTrend\s*=\s*(\[.*?\]);", RegexOptions.Singleline);
+                if (!match.Success) return null;
+
+                using var doc = JsonDocument.Parse(match.Groups[1].Value);
+                if (doc.RootElement.ValueKind != JsonValueKind.Array || doc.RootElement.GetArrayLength() == 0) return null;
+
+                var rows = doc.RootElement.EnumerateArray().ToList();
+                var latest = rows[^1];
+                var date = latest.TryGetProperty("x", out var x) && x.TryGetInt64(out var ms)
+                    ? DateTimeOffset.FromUnixTimeMilliseconds(ms).LocalDateTime.ToString("yyyy-MM-dd")
+                    : string.Empty;
+                if (date != settleDate) return null;
+
+                double? todayNav = TryGetDouble(latest, "y", out var navToday) ? navToday : null;
+                double? yesterdayNav = null;
+                double? navDiff = null;
+                double? navRate = null;
+                if (rows.Count > 1 && TryGetDouble(rows[^2], "y", out var navYesterday) && navYesterday > 0 && todayNav.HasValue)
+                {
+                    yesterdayNav = navYesterday;
+                    navDiff = todayNav.Value - navYesterday;
+                    navRate = Math.Round(navDiff.Value / navYesterday * 100.0, 4);
+                }
+
+                double? apiRate = TryGetDouble(latest, "equityReturn", out var parsedRate) ? parsedRate : null;
+                var finalRate = apiRate.HasValue && Math.Abs(apiRate.Value) > 0.000001 ? apiRate : navRate;
+                if (!finalRate.HasValue) return null;
+
+                return new OfficialNavSnapshot
+                {
+                    Date = date,
+                    Rate = Math.Round(finalRate.Value, 4),
+                    TodayNav = todayNav,
+                    YesterdayNav = yesterdayNav,
+                    NavDiff = navDiff,
+                    Source = "tiantian_nav_actual"
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[真实净值] tiantian failed {fundCode}: {ex.Message}");
+                return null;
+            }
+        }
+
+        private async Task<OfficialNavSnapshot?> FetchSinaNavSnapshotAsync(string fundCode, string settleDate)
+        {
+            try
+            {
+                var client = _httpClientFactory.CreateClient("SinaQuote");
+                var text = await client.GetStringAsync($"https://hq.sinajs.cn/list=f_{fundCode}");
+                var match = Regex.Match(text ?? string.Empty, "\"(.*)\"");
+                if (!match.Success) return null;
+                var parts = match.Groups[1].Value.Split(',');
+                if (parts.Length < 5 || parts[4] != settleDate) return null;
+                if (!double.TryParse(parts[1], NumberStyles.Any, CultureInfo.InvariantCulture, out var todayNav) ||
+                    !double.TryParse(parts[3], NumberStyles.Any, CultureInfo.InvariantCulture, out var yesterdayNav) ||
+                    yesterdayNav <= 0)
+                {
+                    return null;
+                }
+
+                var navDiff = todayNav - yesterdayNav;
+                return new OfficialNavSnapshot
+                {
+                    Date = parts[4],
+                    Rate = Math.Round(navDiff / yesterdayNav * 100.0, 4),
+                    TodayNav = todayNav,
+                    YesterdayNav = yesterdayNav,
+                    NavDiff = navDiff,
+                    Source = "sina_nav_actual"
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[真实净值] sina failed {fundCode}: {ex.Message}");
+                return null;
+            }
         }
         private async Task<double> CalibrateSharesByOfficialNavAsync(
     HttpClient client,
@@ -241,6 +354,60 @@ namespace 小白养基.Controllers
 
             return 0;
         }
+
+        private static FundEstimateStatus BuildFundEstimateStatus(
+            IReadOnlyList<FundData> todayRecords,
+            FundData? lastRecord,
+            DateTime localTime)
+        {
+            var latestToday = todayRecords
+                .OrderByDescending(r => r.FetchTime)
+                .FirstOrDefault();
+
+            if (latestToday != null)
+            {
+                var ageMinutes = (localTime - latestToday.FetchTime).TotalMinutes;
+                var source = string.IsNullOrWhiteSpace(latestToday.EstimateSource)
+                    ? "fundgz_1234567"
+                    : latestToday.EstimateSource;
+                var isStale = latestToday.IsStale || ageMinutes > 15;
+                var isFallback = latestToday.IsFallback || isStale || source != "fundgz_1234567";
+                var message = !string.IsNullOrWhiteSpace(latestToday.EstimateMessage)
+                    ? latestToday.EstimateMessage
+                    : isStale ? "今日估值超过15分钟，按快照显示" : string.Empty;
+
+                return new FundEstimateStatus(
+                    Rate: latestToday.EstimatedRate,
+                    EstimateSource: isStale ? "fund_record_today" : source,
+                    QuoteOk: latestToday.QuoteOk,
+                    IsFallback: isFallback,
+                    IsStale: isStale,
+                    EstimateTime: latestToday.FetchTime,
+                    EstimateMessage: message);
+            }
+
+            if (lastRecord != null)
+            {
+                return new FundEstimateStatus(
+                    Rate: lastRecord.EstimatedRate,
+                    EstimateSource: "fund_record_old",
+                    QuoteOk: false,
+                    IsFallback: true,
+                    IsStale: true,
+                    EstimateTime: lastRecord.FetchTime,
+                    EstimateMessage: "今日估值缺失，使用最近一条历史估值");
+            }
+
+            return new FundEstimateStatus(
+                Rate: null,
+                EstimateSource: "missing",
+                QuoteOk: false,
+                IsFallback: false,
+                IsStale: false,
+                EstimateTime: null,
+                EstimateMessage: "估值暂缺");
+        }
+
         private static bool ApplyOneDaySettlement(
      MyFundConfig fund,
      double actualRate,
@@ -1559,6 +1726,23 @@ namespace 小白养基.Controllers
                 .GroupBy(r => r.FundCode)
                 .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).Take(3).ToList());
 
+            var estimateStatusByCode = myFunds.ToDictionary(
+                f => f.FundCode,
+                f =>
+                {
+                    var fundRecords = todayRecords.Where(r => r.FundCode == f.FundCode).ToList();
+                    lastRecordDict.TryGetValue(f.FundCode, out var lastRecord);
+                    return BuildFundEstimateStatus(fundRecords, lastRecord, localTime);
+                });
+            var staleFundCodes = estimateStatusByCode
+                .Where(x => x.Value.IsStale)
+                .Select(x => x.Key)
+                .ToList();
+            var missingFundCodes = estimateStatusByCode
+                .Where(x => x.Value.EstimateSource == "missing")
+                .Select(x => x.Key)
+                .ToList();
+
             var series = BuildTodayPerformanceSeries(myFunds, todayRecords, lastRecordDict, pastActualDict, today, todayDash);
             var totalPrincipal = series.Sum(s => s.Amount);
             var timeline = series
@@ -1661,9 +1845,20 @@ namespace 小白养基.Controllers
                 indexTotalRate = Math.Round(indexTotalRate, 2),
                 excessRate = hasIndexRate ? Math.Round(myTotalRate - indexTotalRate, 2) : 0d,
                 myTotalProfit = Math.Round(myTotalProfit, 2),
-                message = hasIndexRate ? "" : "指数盘中数据暂不可用",
+                message = BuildTodayPerformanceMessage(hasIndexRate, staleFundCodes, missingFundCodes),
+                staleFundCodes,
+                missingFundCodes,
                 points = compactPoints
             });
+        }
+
+        private static string BuildTodayPerformanceMessage(bool hasIndexRate, IReadOnlyList<string> staleFundCodes, IReadOnlyList<string> missingFundCodes)
+        {
+            var parts = new List<string>();
+            if (!hasIndexRate) parts.Add("指数盘中数据暂不可用");
+            if (staleFundCodes.Count > 0) parts.Add($"包含旧估值：{string.Join(",", staleFundCodes.Take(5))}");
+            if (missingFundCodes.Count > 0) parts.Add($"已跳过缺失估值：{string.Join(",", missingFundCodes.Take(5))}");
+            return string.Join("；", parts);
         }
 
         private static List<PerformanceFundIntradaySeries> BuildTodayPerformanceSeries(
@@ -2232,6 +2427,7 @@ namespace 小白养基.Controllers
                 {
                     var fundRecords = todayRecords.Where(r => r.FundCode == config.FundCode).ToList();
                     lastRecordDict.TryGetValue(config.FundCode, out var lastRecord);
+                    var estimateStatus = BuildFundEstimateStatus(fundRecords, lastRecord, localTime);
 
                     var past3DaysRecords = pastActualDict.TryGetValue(config.FundCode, out var pastList)
                         ? pastList
@@ -2257,27 +2453,35 @@ namespace 小白养基.Controllers
                         Math.Round(r.EstimatedRate + avgDiff, 2)
                     }));
 
-                    if (dataPoints.Count == 0)
-                    {
-                        dataPoints.Add(new object[] { todayStr + " 09:30:00", 0 });
-                    }
-
                     // 是否已完成今日真实净值清算。只读本地字段，不在 today 请求里访问外部接口。
                     bool isSettled = config.LastSettledDate == todayDash;
                     double? actualRate = isSettled ? config.LastSettledRate : null;
                     double? actualExactProfit = isSettled ? config.LastSettledProfit : null;
 
-                    double todayRateForSimulation = isSettled ? config.LastSettledRate : (dataPoints.Count > 0 ? Convert.ToDouble(dataPoints.Last()[1]) : 0);
+                    double? todayRateForSimulation = isSettled
+                        ? config.LastSettledRate
+                        : estimateStatus.Rate.HasValue ? Math.Round(estimateStatus.Rate.Value + avgDiff, 2) : null;
                     double todayBaseAmount = GetDailyBaseAmount(config, todayDash);
-                    double todayProfitPreview = isSettled ? config.LastSettledProfit : Math.Round(todayBaseAmount * todayRateForSimulation / 100.0, 2);
-                    double currentAssetsPreview = isSettled ? config.HoldAmount : Math.Round(config.HoldAmount + todayProfitPreview, 2);
+                    double? todayProfitPreview = isSettled
+                        ? config.LastSettledProfit
+                        : todayRateForSimulation.HasValue ? Math.Round(todayBaseAmount * todayRateForSimulation.Value / 100.0, 2) : null;
+                    double currentAssetsPreview = isSettled
+                        ? config.HoldAmount
+                        : todayProfitPreview.HasValue ? Math.Round(config.HoldAmount + todayProfitPreview.Value, 2) : config.HoldAmount;
                     double costBasis = config.CostAmount > 0 ? config.CostAmount : config.HoldAmount;
                     double totalProfitPreview = Math.Round(currentAssetsPreview - costBasis + config.RealizedProfit, 2);
                     double existingReturnRateValue = costBasis > 0 ? Math.Round(totalProfitPreview / costBasis * 100.0, 2) : 0;
                     double breakEvenRateValue = currentAssetsPreview > 0 && totalProfitPreview < 0 ? Math.Round(-totalProfitPreview / currentAssetsPreview * 100.0, 2) : 0;
                     double diffAbs = lastRecord != null ? Math.Abs(lastRecord.DiffRate) : 0;
-                    int reliabilityScore = isSettled ? 100 : Math.Clamp(80 - (int)Math.Round(Math.Abs(avgDiff) * 40) - (diffAbs > 0.15 ? 10 : 0), 35, 92);
-                    string reliabilityLevel = isSettled ? "真实净值确认" : reliabilityScore >= 80 ? "估值较稳" : reliabilityScore >= 60 ? "估值需观察" : "估值偏弱";
+                    int reliabilityScore = isSettled
+                        ? 100
+                        : estimateStatus.Rate.HasValue ? Math.Clamp(80 - (int)Math.Round(Math.Abs(avgDiff) * 40) - (diffAbs > 0.15 ? 10 : 0) - (estimateStatus.IsStale ? 25 : 0), 20, 92) : 0;
+                    string reliabilityLevel = isSettled
+                        ? "真实净值确认"
+                        : !estimateStatus.Rate.HasValue ? "估值暂缺"
+                        : estimateStatus.IsStale ? "旧估值"
+                        : estimateStatus.IsFallback ? "备用源/快照"
+                        : reliabilityScore >= 80 ? "估值较稳" : reliabilityScore >= 60 ? "估值需观察" : "估值偏弱";
 
                     // FundController.cs 中 GetTodayData 方法内部
                     return new
@@ -2309,7 +2513,14 @@ namespace 小白养基.Controllers
                         data = dataPoints,
                         isSettled = isSettled,
                         actualRate = actualRate,
-                        actualExactProfit = actualExactProfit
+                        actualExactProfit = actualExactProfit,
+                        estimateSource = isSettled ? "eastmoney_lsjz_actual" : estimateStatus.EstimateSource,
+                        quoteOk = isSettled || estimateStatus.QuoteOk,
+                        isFallback = !isSettled && estimateStatus.IsFallback,
+                        isStale = !isSettled && estimateStatus.IsStale,
+                        isActualNav = isSettled,
+                        estimateTime = estimateStatus.EstimateTime?.ToString("yyyy-MM-dd HH:mm:ss"),
+                        estimateMessage = isSettled ? "净值确认" : estimateStatus.EstimateMessage
                     };
 
                 });
@@ -2384,6 +2595,8 @@ namespace 小白养基.Controllers
                     {
                         targetRecord.ActualRate = snapshot.Rate;
                         targetRecord.DiffRate = Math.Round(snapshot.Rate - targetRecord.EstimatedRate, 2);
+                        targetRecord.IsActualNav = true;
+                        targetRecord.ActualSource = snapshot.Source;
                     }
 
                     foreach (var fund in group)
@@ -2452,12 +2665,7 @@ namespace 小白养基.Controllers
             {
                 // 🚀 修复 1：5秒超时，从容应对高并发
                 var client = _httpClientFactory.CreateClient("EastMoney");
-                string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={fundCode}&pageIndex=1&pageSize=2";
-                string res = await client.GetStringAsync(url);
-                using var doc = JsonDocument.Parse(res);
-                var dataArray = doc.RootElement.GetProperty("Data").GetProperty("LSJZList");
-
-                var snapshot = TryBuildOfficialNavSnapshot(dataArray, todayStr);
+                var snapshot = await FetchOfficialNavSnapshotAsync(client, fundCode, todayStr);
                 if (snapshot != null)
                 {
                     double? exactProfit = null;
@@ -2471,15 +2679,8 @@ namespace 小白养基.Controllers
                     return result;
                 }
 
-                if (dataArray.GetArrayLength() > 0)
-                {
-                    var latest = dataArray[0];
-                    if ((latest.GetProperty("FSRQ").GetString() ?? "") != todayStr)
-                    {
-                        _cache.Set(missKey, true, TimeSpan.FromMinutes(2));
-                        return (null, null);
-                    }
-                }
+                _cache.Set(missKey, true, TimeSpan.FromMinutes(2));
+                return (null, null);
             }
             catch (Exception ex)
             {

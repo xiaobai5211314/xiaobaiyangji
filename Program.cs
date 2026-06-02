@@ -100,6 +100,24 @@ builder.Services.AddHttpClient("EastMoneyQuote", client =>
     ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
 });
 
+builder.Services.AddHttpClient("TencentQuote", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(6);
+    client.DefaultRequestVersion = new Version(1, 1);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36");
+    client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "*/*");
+    client.DefaultRequestHeaders.TryAddWithoutValidation("Referer", "https://gu.qq.com/");
+});
+
+builder.Services.AddHttpClient("SinaQuote", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(6);
+    client.DefaultRequestVersion = new Version(1, 1);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36");
+    client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "*/*");
+    client.DefaultRequestHeaders.TryAddWithoutValidation("Referer", "https://finance.sina.com.cn/");
+});
+
 builder.Services.AddHttpClient("WeChatMiniProgram", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(8);

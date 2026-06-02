@@ -56,8 +56,28 @@ namespace 小白养基.Controllers
                 .Distinct()
                 .ToList();
 
-            var quoteMap = (await _quotes.GetQuotesAsync(codes, cancellationToken))
+            var quoteList = await _quotes.GetQuotesAsync(codes, cancellationToken);
+            var quoteMap = quoteList
                 .ToDictionary(x => x.Code, x => x);
+
+            var quoteRequestedCount = codes.Count;
+            var quoteSuccessCount = quoteList.Count(x => x.QuoteOk);
+            var quoteRealtimeCount = quoteList.Count(x => x.QuoteOk && IsRealtimeQuoteSource(x.QuoteSource));
+            var quoteFallbackCodes = quoteList
+                .Where(x => x.IsFallback)
+                .Select(x => x.Code)
+                .Distinct()
+                .ToList();
+            var quoteStaleCodes = quoteList
+                .Where(x => x.IsStale || x.QuoteSource is "snapshot_old" or "holding_last")
+                .Select(x => x.Code)
+                .Distinct()
+                .ToList();
+            var quoteFailedCodes = quoteList
+                .Where(x => !x.QuoteOk && x.QuoteSource == "missing")
+                .Select(x => x.Code)
+                .Distinct()
+                .ToList();
 
             return Ok(new
             {
@@ -65,6 +85,14 @@ namespace 小白养基.Controllers
                 username,
                 holdings = holdings.Select(x => EnrichHolding(x, quoteMap.GetValueOrDefault(x.StockCode))).ToList(),
                 watchList = watch.Select(x => EnrichWatch(x, quoteMap.GetValueOrDefault(x.StockCode))).ToList(),
+                quoteRequestedCount,
+                quoteSuccessCount,
+                quoteRealtimeCount,
+                quoteFallbackCount = quoteFallbackCodes.Count,
+                quoteFailedCodes,
+                quoteFallbackCodes,
+                quoteStaleCodes,
+                hasFreshQuotes = quoteRequestedCount > 0 && quoteRealtimeCount == quoteRequestedCount,
                 updatedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
             });
         }
@@ -556,11 +584,11 @@ namespace 小白养基.Controllers
 
         private static void ApplyQuote(StockHolding row, StockQuoteDto? quote)
         {
-            if (quote == null) return;
+            if (quote?.QuoteOk != true || quote.Price is not { } price) return;
 
-            row.LastPrice = quote.Price;
+            row.LastPrice = price;
             row.LastRate = quote.ChangeRate;
-            row.LastMarketValue = Math.Round(row.Shares * quote.Price, 2);
+            row.LastMarketValue = Math.Round(row.Shares * price, 2);
             row.LastProfit = row.LastMarketValue - row.CostAmount;
             row.LastProfitRate = row.CostAmount > 0
                 ? Math.Round(row.LastProfit.GetValueOrDefault() / row.CostAmount * 100, 2)
@@ -569,44 +597,63 @@ namespace 小白养基.Controllers
 
         private static object EnrichHolding(StockHolding x, StockQuoteDto? quote)
         {
-            var price = quote?.Price ?? x.LastPrice ?? 0;
-            var value = Math.Round(x.Shares * price, 2);
-            var profit = value - x.CostAmount;
-            var profitRate = x.CostAmount > 0 ? Math.Round(profit / x.CostAmount * 100, 2) : 0;
+            var useHoldingLast = (quote == null || quote.QuoteSource == "missing") && x.LastPrice.HasValue;
+            var price = useHoldingLast ? x.LastPrice : quote?.Price;
+            decimal? value = price.HasValue ? Math.Round(x.Shares * price.Value, 2) : null;
+            decimal? profit = value.HasValue ? value.Value - x.CostAmount : null;
+            decimal? profitRate = profit.HasValue && x.CostAmount > 0 ? Math.Round(profit.Value / x.CostAmount * 100, 2) : null;
+            var quoteSource = useHoldingLast ? "holding_last" : quote?.QuoteSource ?? "missing";
+            var quoteOk = quote?.QuoteOk == true && !useHoldingLast;
+            var isFallback = useHoldingLast || quote?.IsFallback == true;
+            var isStale = useHoldingLast || quote?.IsStale == true;
 
             return new
             {
                 x.Id,
                 code = x.StockCode,
                 market = quote?.Market ?? x.Market,
-                name = quote?.Name ?? x.StockName,
+                name = !string.IsNullOrWhiteSpace(quote?.Name) && quote!.Name != quote.Code ? quote.Name : x.StockName,
                 x.Shares,
                 x.CostPrice,
                 x.CostAmount,
                 price,
-                changeAmount = quote?.ChangeAmount ?? 0,
-                changeRate = quote?.ChangeRate ?? x.LastRate ?? 0,
+                changeAmount = useHoldingLast ? null : quote?.ChangeAmount,
+                changeRate = useHoldingLast ? x.LastRate : quote?.ChangeRate,
                 marketValue = value,
                 totalProfit = profit,
                 totalProfitRate = profitRate,
-                quoteTime = quote?.QuoteTime.ToString("yyyy-MM-dd HH:mm:ss")
+                quoteOk,
+                quoteSource,
+                isFallback,
+                isStale,
+                quoteTime = useHoldingLast ? null : quote?.QuoteTime?.ToString("yyyy-MM-dd HH:mm:ss"),
+                errorMessage = useHoldingLast ? "实时行情缺失，使用持仓上次价格" : quote?.ErrorMessage
             };
         }
 
         private static object EnrichWatch(StockWatchItem x, StockQuoteDto? quote)
         {
+            var hasDisplayQuote = quote != null && quote.QuoteSource != "missing" && quote.Price.HasValue;
             return new
             {
                 x.Id,
                 code = x.StockCode,
                 market = quote?.Market ?? x.Market,
                 name = quote?.Name ?? x.StockName,
-                price = quote?.Price ?? 0,
-                changeAmount = quote?.ChangeAmount ?? 0,
-                changeRate = quote?.ChangeRate ?? 0,
-                quoteTime = quote?.QuoteTime.ToString("yyyy-MM-dd HH:mm:ss")
+                price = hasDisplayQuote ? quote!.Price : null,
+                changeAmount = hasDisplayQuote ? quote!.ChangeAmount : null,
+                changeRate = hasDisplayQuote ? quote!.ChangeRate : null,
+                quoteOk = quote?.QuoteOk == true,
+                quoteSource = quote?.QuoteSource ?? "missing",
+                isFallback = quote?.IsFallback == true,
+                isStale = quote?.IsStale == true,
+                quoteTime = quote?.QuoteTime?.ToString("yyyy-MM-dd HH:mm:ss"),
+                errorMessage = quote?.ErrorMessage
             };
         }
+
+        private static bool IsRealtimeQuoteSource(string? source)
+            => source is "eastmoney" or "tencent" or "sina";
 
         private static StockOcrTextBlock? ToStockOcrTextBlock(JToken? token)
         {

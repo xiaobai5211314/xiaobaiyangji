@@ -36,6 +36,22 @@ namespace 小白养基.Models
                 .HasIndex(r => r.FetchTime)
                 .HasDatabaseName("IX_FundRecord_Time");
 
+            modelBuilder.Entity<FundData>()
+                .Property(r => r.EstimateSource)
+                .HasMaxLength(40);
+
+            modelBuilder.Entity<FundData>()
+                .Property(r => r.ActualSource)
+                .HasMaxLength(40);
+
+            modelBuilder.Entity<FundData>()
+                .Property(r => r.EstimateMessage)
+                .HasMaxLength(300);
+
+            modelBuilder.Entity<FundData>()
+                .Property(r => r.RawTime)
+                .HasMaxLength(40);
+
             modelBuilder.Entity<MyFundConfig>()
                 .HasIndex(f => f.Username)
                 .HasDatabaseName("IX_MyFundConfig_Username");
