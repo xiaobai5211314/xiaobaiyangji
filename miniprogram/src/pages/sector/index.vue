@@ -82,7 +82,7 @@
       <view class="glass-card board-card">
         <view class="board-head">
           <text class="section-title compact-title">流出榜</text>
-          <text class="muted-text">{{ flowPayload.source || '' }}</text>
+          <text class="muted-text">{{ flowSourceSubtitle }}</text>
         </view>
         <view v-if="outflowList.length === 0" class="empty-mini">暂无流出数据</view>
         <view v-for="(item, index) in outflowList.slice(0, 8)" :key="flowKey(item, index, 'out')" class="board-row">
@@ -179,6 +179,11 @@ const inflowList = computed(() => {
 const outflowList = computed(() => {
   const source = flowPayload.value.outflow?.length ? flowPayload.value.outflow : flowRows.value;
   return filterIndustryCapitalFlowRows(source).sort((a, b) => Number(a.mainNet || 0) - Number(b.mainNet || 0));
+});
+const flowSourceSubtitle = computed(() => {
+  const src = flowPayload.value.source || '';
+  if (src.includes('板块主力资金')) return 'AKShare / 东方财富数据中心备用源';
+  return src;
 });
 const sectorCount = computed(() => allSectors.value.length || topList.value.length + bottomList.value.length);
 const updatedAtText = computed(() => sectorPayload.value.updatedAt || '板块与资金流同步观察');

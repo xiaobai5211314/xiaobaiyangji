@@ -4148,11 +4148,19 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             var result = await TryFetchEastMoneyFlowAsync(limit, "m:90+t:2", "eastmoney_sector_flow", "东方财富行业板块资金流向", attempts);
             if (result != null) return result;
 
-            // Source 2: datacenter-web.eastmoney.com（不同服务器）
-            result = await TryFetchDatacenterSectorFlowAsync(limit, attempts);
+            // Source 2: push2.eastmoney.com 概念板块 (m:90+t:3)
+            result = await TryFetchEastMoneyFlowAsync(limit, "m:90+t:3", "eastmoney_concept_flow", "东方财富概念板块资金流向", attempts);
             if (result != null) return result;
 
-            // Source 3: 本地基金涨幅估算（不依赖外部API）
+            // Source 3: AKShare sidecar — 行业资金流
+            result = await TryFetchAkShareFlowAsync(limit, "行业资金流", "akshare_sector_fund_flow", "行业板块主力资金", attempts);
+            if (result != null) return result;
+
+            // Source 4: AKShare sidecar — 概念资金流
+            result = await TryFetchAkShareFlowAsync(limit, "概念资金流", "akshare_concept_fund_flow", "概念板块主力资金", attempts);
+            if (result != null) return result;
+
+            // Source 5: 本地基金涨幅估算（不依赖外部API）
             result = await BuildLocalSectorEstimateAsync(limit, attempts);
             return result;
         }
@@ -4350,6 +4358,88 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 error = ex.Message;
                 Console.WriteLine($"[CapitalFlow] source=datacenter status={statusCode} error={error}");
                 attempts?.Add(new { source = "eastmoney_datacenter", url = externalUrl, statusCode, rawLength = 0, parsedRowsCount = 0, error });
+                return null;
+            }
+        }
+
+        private async Task<CapitalFlowPayloadDto?> TryFetchAkShareFlowAsync(
+            int limit, string sectorType, string sourceName, string sourceLabel, List<object>? attempts)
+        {
+            string url = $"http://127.0.0.1:8765/sector-fund-flow?indicator=今日&sector_type={Uri.EscapeDataString(sectorType)}";
+            int statusCode = 0;
+
+            try
+            {
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+                using var resp = await client.GetAsync(url);
+                statusCode = (int)resp.StatusCode;
+                string body = await resp.Content.ReadAsStringAsync();
+
+                if (!resp.IsSuccessStatusCode)
+                {
+                    string err = $"HTTP {(int)resp.StatusCode}";
+                    try { var ej = JsonDocument.Parse(body); if (ej.RootElement.TryGetProperty("error", out var em)) err = em.GetString() ?? err; } catch { }
+                    Console.WriteLine($"[CapitalFlow] source={sourceName} status={statusCode} error={err}");
+                    attempts?.Add(new { source = sourceName, url, statusCode, rawLength = body.Length, parsedRowsCount = 0, error = err });
+                    return null;
+                }
+
+                using var doc = JsonDocument.Parse(body);
+                var root = doc.RootElement;
+                if (!root.TryGetProperty("rows", out var arr) || arr.ValueKind != JsonValueKind.Array)
+                {
+                    Console.WriteLine($"[CapitalFlow] source={sourceName} status={statusCode} error=rows not array");
+                    attempts?.Add(new { source = sourceName, url, statusCode, rawLength = body.Length, parsedRowsCount = 0, error = "rows not array" });
+                    return null;
+                }
+
+                var allRows = new List<CapitalFlowRowDto>();
+                foreach (var item in arr.EnumerateArray())
+                {
+                    string name = item.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+                    if (string.IsNullOrWhiteSpace(name)) continue;
+                    double rate = item.TryGetProperty("rate", out var r) && r.ValueKind == JsonValueKind.Number ? r.GetDouble() : 0;
+                    double mainNet = item.TryGetProperty("mainNet", out var mn) && mn.ValueKind == JsonValueKind.Number ? mn.GetDouble() : 0;
+                    double mainRatio = item.TryGetProperty("mainRatio", out var mr) && mr.ValueKind == JsonValueKind.Number ? mr.GetDouble() : 0;
+                    double superNet = item.TryGetProperty("superNet", out var sn) && sn.ValueKind == JsonValueKind.Number ? sn.GetDouble() : 0;
+                    double bigNet = item.TryGetProperty("bigNet", out var bn) && bn.ValueKind == JsonValueKind.Number ? bn.GetDouble() : 0;
+                    string topStock = item.TryGetProperty("topStock", out var ts) ? ts.GetString() ?? "" : "";
+                    string code = $"AKS_{name}";
+                    allRows.Add(new CapitalFlowRowDto
+                    {
+                        Code = code, Name = name, Rate = Math.Round(rate, 2),
+                        MainNet = mainNet, MainNetText = FormatMoneyWanYi(mainNet),
+                        MainRatio = Math.Round(mainRatio, 2), SuperNet = superNet, BigNet = bigNet
+                    });
+                }
+
+                if (allRows.Count == 0)
+                {
+                    Console.WriteLine($"[CapitalFlow] source={sourceName} status={statusCode} rows=0");
+                    attempts?.Add(new { source = sourceName, url, statusCode, rawLength = body.Length, parsedRowsCount = 0, error = "0 rows parsed" });
+                    return null;
+                }
+
+                var inflow = allRows.Where(x => x.MainNet > 0).OrderByDescending(x => x.MainNet).Take(limit).ToList();
+                var outflow = allRows.Where(x => x.MainNet < 0).OrderBy(x => x.MainNet).Take(limit).ToList();
+                var merged = inflow.Concat(outflow).GroupBy(x => x.Code).Select(g => g.OrderByDescending(x => Math.Abs(x.MainNet)).First()).OrderByDescending(x => x.MainNet).ToList();
+
+                Console.WriteLine($"[CapitalFlow] source={sourceName} status={statusCode} rows={merged.Count} OK");
+                attempts?.Add(new { source = sourceName, url, statusCode, rawLength = body.Length, parsedRowsCount = merged.Count, error = (string?)null });
+
+                return new CapitalFlowPayloadDto
+                {
+                    Source = sourceLabel,
+                    UpdatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
+                    IsFallback = true, IsStale = false,
+                    Message = "使用 AKShare 板块资金流备用源",
+                    Rows = merged, Inflow = inflow, Outflow = outflow
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[CapitalFlow] source={sourceName} status={statusCode} error={ex.Message}");
+                attempts?.Add(new { source = sourceName, url, statusCode, rawLength = 0, parsedRowsCount = 0, error = ex.Message });
                 return null;
             }
         }

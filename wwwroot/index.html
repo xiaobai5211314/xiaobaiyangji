@@ -4429,8 +4429,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 <div class="glass-panel capital-flow-panel">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;">
                         <div>
-                            <div class="page-title" style="font-size:18px;">{{ capitalFlowSource === '持仓主题贡献估算' ? '📊 持仓主题贡献估算' : '💧 行业板块主力资金' }}</div>
-                            <div class="page-subtitle">{{ capitalFlowSource || '东方财富行业板块资金流向' }} · {{ capitalFlowUpdatedAt || '待更新' }}</div>
+                            <div class="page-title" style="font-size:18px;">{{ capitalFlowSource === '持仓主题贡献估算' ? '📊 持仓主题贡献估算' : capitalFlowSource === '概念板块主力资金' ? '💧 概念板块主力资金' : '💧 行业板块主力资金' }}</div>
+                            <div class="page-subtitle">{{ capitalFlowSource && capitalFlowSource.includes('AKShare') ? 'AKShare / 东方财富数据中心备用源' : capitalFlowSource || '东方财富行业板块资金流向' }} · {{ capitalFlowUpdatedAt || '待更新' }}</div>
                         </div>
                         <button class="btn" @click="fetchCapitalFlow(true)">🔄</button>
                     </div>
@@ -4440,7 +4440,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <div v-if="capitalFlowRows.length === 0" class="news-empty">{{ capitalFlowError || '主力资金流暂不可用' }}</div>
                         <div v-else class="capital-two-col">
                             <div class="capital-box">
-                                <div class="capital-box-title"><span>🔴 行业板块流入</span><span style="color:var(--text-muted);font-size:11px;">TOP {{ capitalFlowInRows.length }}</span></div>
+                                <div class="capital-box-title"><span>{{ capitalFlowSource === '概念板块主力资金' ? '🔴 概念板块流入' : '🔴 行业板块流入' }}</span><span style="color:var(--text-muted);font-size:11px;">TOP {{ capitalFlowInRows.length }}</span></div>
                                 <div class="capital-row capital-head"><span>板块</span><span class="capital-value">净流入</span><span class="capital-value">净占比</span></div>
                                 <div v-for="item in capitalFlowInRows.slice(0, 12)" :key="'in-'+item.code" class="capital-row">
                                     <div style="min-width:0;"><div class="capital-name">{{ item.name }}</div><div class="capital-sub">涨跌 {{ item.rate > 0 ? '+' : '' }}{{ item.rate }}%</div></div>
@@ -4449,7 +4449,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 </div>
                             </div>
                             <div class="capital-box">
-                                <div class="capital-box-title"><span>🟢 行业板块流出</span><span style="color:var(--text-muted);font-size:11px;">TOP {{ capitalFlowOutRows.length }}</span></div>
+                                <div class="capital-box-title"><span>{{ capitalFlowSource === '概念板块主力资金' ? '🟢 概念板块流出' : '🟢 行业板块流出' }}</span><span style="color:var(--text-muted);font-size:11px;">TOP {{ capitalFlowOutRows.length }}</span></div>
                                 <div class="capital-row capital-head"><span>板块</span><span class="capital-value">净流出</span><span class="capital-value">净占比</span></div>
                                 <div v-for="item in capitalFlowOutRows.slice(0, 12)" :key="'out-'+item.code" class="capital-row">
                                     <div style="min-width:0;"><div class="capital-name">{{ item.name }}</div><div class="capital-sub">涨跌 {{ item.rate > 0 ? '+' : '' }}{{ item.rate }}%</div></div>
@@ -6559,9 +6559,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     capitalFlowSource.value = data.source || '东方财富板块资金流向';
                     capitalFlowUpdatedAt.value = data.updatedAt || '';
                     const message = String(data.message || '');
-                    capitalFlowError.value = data.isFallback
-                        ? '使用缓存数据'
-                        : (message || '');
+                    capitalFlowError.value = message || (data.isFallback ? '使用缓存数据' : '');
                     capitalCacheTime = Date.now();
                 };
                 const fetchCapitalFlow = async (force = false) => {
