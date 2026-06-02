@@ -145,6 +145,86 @@ namespace 小白养基.Controllers
             DateTime? EstimateTime,
             string EstimateMessage);
 
+        private sealed class TodayPortfolioSnapshot
+        {
+            public string Username { get; init; } = string.Empty;
+            public DateTime LocalTime { get; init; }
+            public DateTime Today { get; init; }
+            public string TodaySlash { get; init; } = string.Empty;
+            public string TodayDash { get; init; } = string.Empty;
+            public List<MyFundConfig> MyFunds { get; init; } = new();
+            public List<FundData> TodayRecords { get; init; } = new();
+            public Dictionary<string, FundData> LastRecordDict { get; init; } = new();
+            public Dictionary<string, List<FundData>> PastActualDict { get; init; } = new();
+            public List<TodayPortfolioFundSnapshot> Funds { get; init; } = new();
+            public double TotalAmount { get; init; }
+            public double TotalBaseAmount { get; init; }
+            public double? TotalTodayProfit { get; init; }
+            public double? TotalTodayRate { get; init; }
+            public double TotalAssets { get; init; }
+            public double TotalCost { get; init; }
+            public double TotalProfit { get; init; }
+            public double TotalRate { get; init; }
+            public bool AllSettled { get; init; }
+            public bool HasStale { get; init; }
+            public bool HasMissing { get; init; }
+            public bool FundRecordsReadFailed { get; init; }
+            public List<string> StaleFundCodes { get; init; } = new();
+            public List<string> MissingFundCodes { get; init; } = new();
+        }
+
+        private sealed class TodayPortfolioFundSnapshot
+        {
+            public string Code { get; init; } = string.Empty;
+            public string Name { get; init; } = string.Empty;
+            public double Amount { get; init; }
+            public double Shares { get; init; }
+            public double? Cost { get; init; }
+            public double RealizedProfit { get; init; }
+            public string? LastTradeDate { get; init; }
+            public double LastAddAmount { get; init; }
+            public string? LastSettledDate { get; init; }
+            public double LastSettledProfit { get; init; }
+            public double LastSettledRate { get; init; }
+            public double ExistingReturnRate { get; init; }
+            public double BreakEvenRate { get; init; }
+            public int ReliabilityScore { get; init; }
+            public string ReliabilityLevel { get; init; } = string.Empty;
+            public double DiffRate { get; init; }
+            public double CalibrationOffset { get; init; }
+            public List<object[]> DataPoints { get; init; } = new();
+            public bool IsSettled { get; init; }
+            public double? ActualRate { get; init; }
+            public double? ActualExactProfit { get; init; }
+            public double? CurrentRate { get; init; }
+            public double? TodayProfit { get; init; }
+            public double TodayAmount { get; init; }
+            public double TodayBaseAmount { get; init; }
+            public string EstimateSource { get; init; } = "missing";
+            public bool QuoteOk { get; init; }
+            public bool IsFallback { get; init; }
+            public bool IsStale { get; init; }
+            public bool IsActualNav { get; init; }
+            public DateTime? EstimateTime { get; init; }
+            public string EstimateMessage { get; init; } = string.Empty;
+            public object[] BreakEvenSimulator { get; init; } = Array.Empty<object>();
+        }
+
+        private sealed class ArchiveRowDto
+        {
+            public string FundCode { get; init; } = string.Empty;
+            public string FundName { get; init; } = string.Empty;
+            public DateTime RecordDate { get; init; }
+            public double Assets { get; init; }
+            public double DailyProfit { get; init; }
+            public double DailyRate { get; init; }
+            public double TotalProfit { get; init; }
+            public double TotalRate { get; init; }
+            public bool IsConfirmed { get; init; } = true;
+            public string ArchiveStatus { get; init; } = "confirmed";
+            public string ArchiveMessage { get; init; } = string.Empty;
+        }
+
         private static bool TryGetDouble(JsonElement element, string propertyName, out double value)
         {
             value = 0;
@@ -532,89 +612,335 @@ namespace 小白养基.Controllers
             return GetEffectiveBaseAmount(fund, settleDate);
         }
 
-        private static double GetRecordRateForToday(FundData? record)
+        private async Task<TodayPortfolioSnapshot> BuildTodayPortfolioSnapshotAsync(
+            string username,
+            List<MyFundConfig>? suppliedFunds = null,
+            DateTime? suppliedLocalTime = null)
         {
-            if (record == null) return 0;
-            return Math.Abs(record.ActualRate) > 0.000001 ? record.ActualRate : record.EstimatedRate;
-        }
+            var localTime = suppliedLocalTime ?? ChinaNow();
+            var today = localTime.Date;
+            var todaySlash = localTime.ToString("yyyy'/'MM'/'dd");
+            var todayDash = localTime.ToString("yyyy-MM-dd");
 
-        private static List<DailyArchive> BuildArchiveRowsFromCurrentHoldings(string username, DateTime date, List<MyFundConfig> funds, List<FundData> todayRecords)
-        {
-            string dateDash = date.ToString("yyyy-MM-dd");
-            var latestRecordDict = todayRecords
+            var myFunds = suppliedFunds ?? await _context.MyFunds
+                .AsNoTracking()
+                .Where(f => f.Username == username)
+                .ToListAsync();
+
+            var fundCodes = myFunds
+                .Select(f => f.FundCode)
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Distinct()
+                .ToList();
+
+            var recentRecords = new List<FundData>();
+            var fundRecordsReadFailed = false;
+            if (fundCodes.Count > 0)
+            {
+                var recentStart = today.AddDays(-10);
+                try
+                {
+                    recentRecords = await _context.FundRecords
+                        .AsNoTracking()
+                        .Where(r => fundCodes.Contains(r.FundCode) && r.FetchTime >= recentStart)
+                        .OrderBy(r => r.FetchTime)
+                        .ToListAsync();
+                }
+                catch (Exception ex)
+                {
+                    fundRecordsReadFailed = true;
+                    Console.WriteLine($"[TodayPortfolioSnapshot] FundRecords query failed. username={username}, error={ex}");
+                }
+            }
+
+            var todayRecords = recentRecords
+                .Where(r => r.FetchTime >= today)
+                .ToList();
+
+            var lastRecordDict = recentRecords
+                .Where(r => r.FetchTime < today)
                 .GroupBy(r => r.FundCode)
                 .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).First());
 
-            var rows = new List<DailyArchive>();
-            double totalCost = 0;
-            double totalRealized = 0;
-            double totalDailyProfit = 0;
-            double totalDailyBase = 0;
-            double totalCurrentAssets = 0;
+            var pastActualDict = recentRecords
+                .Where(r => r.ActualRate != 0)
+                .GroupBy(r => r.FundCode)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).Take(3).ToList());
 
-            foreach (var fund in funds)
+            var fundSnapshots = new List<TodayPortfolioFundSnapshot>();
+
+            foreach (var config in myFunds)
             {
-                latestRecordDict.TryGetValue(fund.FundCode, out var record);
+                var fundRecords = todayRecords.Where(r => r.FundCode == config.FundCode).ToList();
+                lastRecordDict.TryGetValue(config.FundCode, out var lastRecord);
 
-                double cost = fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount;
-                double baseAmount = GetDailyBaseAmount(fund, dateDash);
-                double dailyRate = fund.LastSettledDate == dateDash ? fund.LastSettledRate : GetRecordRateForToday(record);
-                double dailyProfit = fund.LastSettledDate == dateDash
-                    ? fund.LastSettledProfit
-                    : Math.Round(baseAmount * (dailyRate / 100.0), 2);
+                var estimateStatus = fundRecordsReadFailed
+                    ? new FundEstimateStatus(
+                        Rate: null,
+                        EstimateSource: "missing",
+                        QuoteOk: false,
+                        IsFallback: false,
+                        IsStale: false,
+                        EstimateTime: null,
+                        EstimateMessage: "估值记录读取失败，但持仓已保留")
+                    : BuildFundEstimateStatus(fundRecords, lastRecord, localTime);
 
-                double currentAssets = fund.LastSettledDate == dateDash
-                    ? fund.HoldAmount
-                    : Math.Round(fund.HoldAmount + dailyProfit, 2);
+                var past3DaysRecords = pastActualDict.TryGetValue(config.FundCode, out var pastList)
+                    ? pastList
+                    : new List<FundData>();
 
-                double totalProfit = currentAssets - cost + fund.RealizedProfit;
-                double totalRate = cost > 0 ? totalProfit / cost * 100.0 : 0;
-
-                rows.Add(new DailyArchive
+                var avgDiff = 0d;
+                if (past3DaysRecords.Count > 0)
                 {
-                    Username = username,
-                    FundCode = fund.FundCode,
-                    FundName = fund.FundName,
-                    RecordDate = date,
-                    Assets = Math.Round(currentAssets, 2),
-                    DailyProfit = Math.Round(dailyProfit, 2),
-                    DailyRate = Math.Round(dailyRate, 2),
-                    TotalProfit = Math.Round(totalProfit, 2),
-                    TotalRate = Math.Round(totalRate, 2)
-                });
+                    avgDiff = past3DaysRecords.Average(r => r.ActualRate - r.EstimatedRate);
+                    avgDiff = Math.Clamp(avgDiff, -0.5, 0.5);
+                }
 
-                totalCost += cost;
-                totalRealized += fund.RealizedProfit;
-                totalDailyProfit += dailyProfit;
-                totalDailyBase += baseAmount;
-                totalCurrentAssets += currentAssets;
+                var dataPoints = new List<object[]>();
+                if (lastRecord != null)
+                {
+                    dataPoints.Add(new object[] { todaySlash + " 09:30:00", Math.Round(lastRecord.EstimatedRate + avgDiff, 2) });
+                }
+
+                dataPoints.AddRange(fundRecords.Select(r => new object[]
+                {
+                    r.FetchTime.ToString("yyyy'/'MM'/'dd HH:mm:ss"),
+                    Math.Round(r.EstimatedRate + avgDiff, 2)
+                }));
+
+                var isSettled = config.LastSettledDate == todayDash;
+                double? actualRate = isSettled ? config.LastSettledRate : null;
+                double? actualExactProfit = isSettled ? config.LastSettledProfit : null;
+                var todayBaseAmount = GetDailyBaseAmount(config, todayDash);
+                double? currentRate = isSettled
+                    ? config.LastSettledRate
+                    : estimateStatus.Rate.HasValue ? Math.Round(estimateStatus.Rate.Value + avgDiff, 2) : null;
+                double? todayProfit = isSettled
+                    ? config.LastSettledProfit
+                    : currentRate.HasValue ? Math.Round(todayBaseAmount * currentRate.Value / 100.0, 2) : null;
+                var todayAmount = isSettled
+                    ? config.HoldAmount
+                    : todayProfit.HasValue ? Math.Round(config.HoldAmount + todayProfit.Value, 2) : config.HoldAmount;
+
+                var costBasis = config.CostAmount > 0 ? config.CostAmount : config.HoldAmount;
+                var totalProfit = Math.Round(todayAmount - costBasis + config.RealizedProfit, 2);
+                var existingReturnRate = costBasis > 0 ? Math.Round(totalProfit / costBasis * 100.0, 2) : 0;
+                var breakEvenRate = todayAmount > 0 && totalProfit < 0 ? Math.Round(-totalProfit / todayAmount * 100.0, 2) : 0;
+                var diffAbs = lastRecord != null ? Math.Abs(lastRecord.DiffRate) : 0;
+                var reliabilityScore = isSettled
+                    ? 100
+                    : currentRate.HasValue ? Math.Clamp(80 - (int)Math.Round(Math.Abs(avgDiff) * 40) - (diffAbs > 0.15 ? 10 : 0) - (estimateStatus.IsStale ? 25 : 0), 20, 92) : 0;
+                var reliabilityLevel = isSettled
+                    ? "真实净值确认"
+                    : !currentRate.HasValue ? "估值暂缺"
+                    : estimateStatus.IsStale ? "旧估值"
+                    : estimateStatus.IsFallback ? "备用源/快照"
+                    : reliabilityScore >= 80 ? "估值较稳" : reliabilityScore >= 60 ? "估值需观察" : "估值偏弱";
+
+                fundSnapshots.Add(new TodayPortfolioFundSnapshot
+                {
+                    Code = config.FundCode,
+                    Name = config.FundName,
+                    Amount = config.HoldAmount,
+                    Shares = config.HoldShares,
+                    Cost = config.CostAmount > 0 ? config.CostAmount : (double?)null,
+                    RealizedProfit = config.RealizedProfit,
+                    LastTradeDate = config.LastTradeDate,
+                    LastAddAmount = config.LastAddAmount,
+                    LastSettledDate = config.LastSettledDate,
+                    LastSettledProfit = config.LastSettledProfit,
+                    LastSettledRate = config.LastSettledRate,
+                    ExistingReturnRate = existingReturnRate,
+                    BreakEvenRate = breakEvenRate,
+                    ReliabilityScore = reliabilityScore,
+                    ReliabilityLevel = reliabilityLevel,
+                    DiffRate = lastRecord != null ? lastRecord.DiffRate : 0,
+                    CalibrationOffset = Math.Round(avgDiff, 4),
+                    DataPoints = dataPoints,
+                    IsSettled = isSettled,
+                    ActualRate = actualRate,
+                    ActualExactProfit = actualExactProfit,
+                    CurrentRate = currentRate,
+                    TodayProfit = todayProfit,
+                    TodayAmount = todayAmount,
+                    TodayBaseAmount = todayBaseAmount,
+                    EstimateSource = isSettled ? "eastmoney_lsjz_actual" : estimateStatus.EstimateSource,
+                    QuoteOk = isSettled || estimateStatus.QuoteOk,
+                    IsFallback = !isSettled && estimateStatus.IsFallback,
+                    IsStale = !isSettled && estimateStatus.IsStale,
+                    IsActualNav = isSettled,
+                    EstimateTime = estimateStatus.EstimateTime,
+                    EstimateMessage = isSettled ? "净值确认" : estimateStatus.EstimateMessage,
+                    BreakEvenSimulator = new object[]
+                    {
+                        new { scenario = "+1%", projectedAssets = Math.Round(todayAmount * 1.01, 2), projectedProfit = Math.Round(todayAmount * 1.01 - costBasis + config.RealizedProfit, 2) },
+                        new { scenario = "+3%", projectedAssets = Math.Round(todayAmount * 1.03, 2), projectedProfit = Math.Round(todayAmount * 1.03 - costBasis + config.RealizedProfit, 2) },
+                        new { scenario = "+5%", projectedAssets = Math.Round(todayAmount * 1.05, 2), projectedProfit = Math.Round(todayAmount * 1.05 - costBasis + config.RealizedProfit, 2) },
+                        new { scenario = "-3%", projectedAssets = Math.Round(todayAmount * 0.97, 2), projectedProfit = Math.Round(todayAmount * 0.97 - costBasis + config.RealizedProfit, 2) }
+                    }
+                });
             }
 
-            double totalDailyRate = totalDailyBase > 0 ? totalDailyProfit / totalDailyBase * 100.0 : 0;
-            double totalCampProfit = totalCurrentAssets - totalCost + totalRealized;
-            double totalCampRate = totalCost > 0 ? totalCampProfit / totalCost * 100.0 : 0;
+            var validFunds = fundSnapshots
+                .Where(f => f.TodayProfit.HasValue && f.TodayBaseAmount > 0)
+                .ToList();
+            var totalBaseAmount = Math.Round(validFunds.Sum(f => f.TodayBaseAmount), 4);
+            double? totalTodayProfit = validFunds.Count > 0
+                ? Math.Round(validFunds.Sum(f => f.TodayProfit.GetValueOrDefault()), 2)
+                : null;
+            double? totalTodayRate = totalTodayProfit.HasValue && totalBaseAmount > 0
+                ? Math.Round(totalTodayProfit.Value / totalBaseAmount * 100.0, 2)
+                : null;
+            var totalAssets = Math.Round(fundSnapshots.Sum(f => f.TodayAmount), 2);
+            var totalCost = Math.Round(fundSnapshots.Sum(f => f.Cost ?? f.Amount), 2);
+            var totalRealized = fundSnapshots.Sum(f => f.RealizedProfit);
+            var totalProfitAll = Math.Round(totalAssets - totalCost + totalRealized, 2);
+            var totalRateAll = totalCost > 0 ? Math.Round(totalProfitAll / totalCost * 100.0, 2) : 0;
+            var staleFundCodes = fundSnapshots
+                .Where(f => !f.IsSettled && f.IsStale)
+                .Select(f => f.Code)
+                .Distinct()
+                .ToList();
+            var missingFundCodes = fundSnapshots
+                .Where(f => !f.IsSettled && (f.EstimateSource == "missing" || !f.CurrentRate.HasValue || !f.TodayProfit.HasValue))
+                .Select(f => f.Code)
+                .Distinct()
+                .ToList();
 
-            rows.Add(new DailyArchive
+            return new TodayPortfolioSnapshot
             {
                 Username = username,
-                FundCode = "TOTAL",
-                FundName = "总持仓",
-                RecordDate = date,
-                Assets = Math.Round(totalCurrentAssets, 2),
-                DailyProfit = Math.Round(totalDailyProfit, 2),
-                DailyRate = Math.Round(totalDailyRate, 2),
-                TotalProfit = Math.Round(totalCampProfit, 2),
-                TotalRate = Math.Round(totalCampRate, 2)
-            });
+                LocalTime = localTime,
+                Today = today,
+                TodaySlash = todaySlash,
+                TodayDash = todayDash,
+                MyFunds = myFunds,
+                TodayRecords = todayRecords,
+                LastRecordDict = lastRecordDict,
+                PastActualDict = pastActualDict,
+                Funds = fundSnapshots,
+                TotalAmount = Math.Round(fundSnapshots.Sum(f => f.Amount), 2),
+                TotalBaseAmount = totalBaseAmount,
+                TotalTodayProfit = totalTodayProfit,
+                TotalTodayRate = totalTodayRate,
+                TotalAssets = totalAssets,
+                TotalCost = totalCost,
+                TotalProfit = totalProfitAll,
+                TotalRate = totalRateAll,
+                AllSettled = fundSnapshots.Count > 0 && fundSnapshots.All(f => f.IsSettled),
+                HasStale = staleFundCodes.Count > 0,
+                HasMissing = missingFundCodes.Count > 0,
+                FundRecordsReadFailed = fundRecordsReadFailed,
+                StaleFundCodes = staleFundCodes,
+                MissingFundCodes = missingFundCodes
+            };
+        }
+
+        private static string BuildArchiveStatusMessage(TodayPortfolioSnapshot snapshot)
+        {
+            if (snapshot.AllSettled) return "已确认";
+            if (snapshot.HasMissing) return "部分估值暂缺，待净值确认";
+            if (snapshot.HasStale) return "含旧估值，待净值确认";
+            return "预估，待确认";
+        }
+
+        private static List<DailyArchive> BuildArchiveRowsFromSnapshot(TodayPortfolioSnapshot snapshot)
+        {
+            var rows = new List<DailyArchive>();
+            foreach (var fund in snapshot.Funds.Where(f => f.TodayProfit.HasValue && f.CurrentRate.HasValue))
+            {
+                rows.Add(new DailyArchive
+                {
+                    Username = snapshot.Username,
+                    FundCode = fund.Code,
+                    FundName = fund.Name,
+                    RecordDate = snapshot.Today,
+                    Assets = Math.Round(fund.TodayAmount, 2),
+                    DailyProfit = Math.Round(fund.TodayProfit.GetValueOrDefault(), 2),
+                    DailyRate = Math.Round(fund.CurrentRate.GetValueOrDefault(), 2),
+                    TotalProfit = Math.Round(fund.TodayAmount - (fund.Cost ?? fund.Amount) + fund.RealizedProfit, 2),
+                    TotalRate = Math.Round(fund.ExistingReturnRate, 2)
+                });
+            }
+
+            if (snapshot.TotalTodayProfit.HasValue && snapshot.TotalTodayRate.HasValue)
+            {
+                rows.Add(new DailyArchive
+                {
+                    Username = snapshot.Username,
+                    FundCode = "TOTAL",
+                    FundName = "总持仓",
+                    RecordDate = snapshot.Today,
+                    Assets = Math.Round(snapshot.TotalAssets, 2),
+                    DailyProfit = Math.Round(snapshot.TotalTodayProfit.Value, 2),
+                    DailyRate = Math.Round(snapshot.TotalTodayRate.Value, 2),
+                    TotalProfit = Math.Round(snapshot.TotalProfit, 2),
+                    TotalRate = Math.Round(snapshot.TotalRate, 2)
+                });
+            }
 
             return rows;
         }
 
-        private async Task UpsertTodayArchivesFromCurrentHoldingsAsync(string username, DateTime today, List<MyFundConfig> funds, List<FundData> todayRecords)
+        private static List<ArchiveRowDto> BuildArchiveDtosFromSnapshot(TodayPortfolioSnapshot snapshot)
+        {
+            var status = snapshot.AllSettled ? "confirmed" : (snapshot.HasMissing ? "estimated_missing" : (snapshot.HasStale ? "estimated_stale" : "estimated"));
+            var message = BuildArchiveStatusMessage(snapshot);
+            var rows = new List<ArchiveRowDto>();
+
+            foreach (var fund in snapshot.Funds.Where(f => f.TodayProfit.HasValue && f.CurrentRate.HasValue))
+            {
+                rows.Add(new ArchiveRowDto
+                {
+                    FundCode = fund.Code,
+                    FundName = fund.Name,
+                    RecordDate = snapshot.Today,
+                    Assets = Math.Round(fund.TodayAmount, 2),
+                    DailyProfit = Math.Round(fund.TodayProfit.GetValueOrDefault(), 2),
+                    DailyRate = Math.Round(fund.CurrentRate.GetValueOrDefault(), 2),
+                    TotalProfit = Math.Round(fund.TodayAmount - (fund.Cost ?? fund.Amount) + fund.RealizedProfit, 2),
+                    TotalRate = Math.Round(fund.ExistingReturnRate, 2),
+                    IsConfirmed = snapshot.AllSettled,
+                    ArchiveStatus = status,
+                    ArchiveMessage = message
+                });
+            }
+
+            if (snapshot.TotalTodayProfit.HasValue && snapshot.TotalTodayRate.HasValue)
+            {
+                rows.Add(new ArchiveRowDto
+                {
+                    FundCode = "TOTAL",
+                    FundName = "总持仓",
+                    RecordDate = snapshot.Today,
+                    Assets = Math.Round(snapshot.TotalAssets, 2),
+                    DailyProfit = Math.Round(snapshot.TotalTodayProfit.Value, 2),
+                    DailyRate = Math.Round(snapshot.TotalTodayRate.Value, 2),
+                    TotalProfit = Math.Round(snapshot.TotalProfit, 2),
+                    TotalRate = Math.Round(snapshot.TotalRate, 2),
+                    IsConfirmed = snapshot.AllSettled,
+                    ArchiveStatus = status,
+                    ArchiveMessage = message
+                });
+            }
+
+            return rows;
+        }
+
+        private async Task<bool> UpsertTodayArchivesFromSnapshotAsync(TodayPortfolioSnapshot snapshot)
+        {
+            if (!snapshot.AllSettled) return false;
+            var rows = BuildArchiveRowsFromSnapshot(snapshot);
+            if (rows.Count == 0) return false;
+            await UpsertDailyArchivesAsync(snapshot.Username, snapshot.Today, rows);
+            return true;
+        }
+
+        private async Task UpsertTodayArchivesFromCurrentHoldingsAsync(string username, DateTime today, List<MyFundConfig> funds)
         {
             if (funds.Count == 0) return;
-            var rows = BuildArchiveRowsFromCurrentHoldings(username, today, funds, todayRecords);
-            await UpsertDailyArchivesAsync(username, today, rows);
+            var snapshot = await BuildTodayPortfolioSnapshotAsync(username, funds, today.Date.AddHours(15));
+            await UpsertTodayArchivesFromSnapshotAsync(snapshot);
         }
 
         private async Task<List<FundInfoCache>> GetAllFundsAsync()
@@ -1411,11 +1737,7 @@ namespace 小白养基.Controllers
                 if (count > 0)
                 {
                     var settleDate = ChinaNow().Date;
-                    var fundCodes = funds.Select(f => f.FundCode).Distinct().ToList();
-                    var todayRecords = await _context.FundRecords
-                        .Where(r => r.FetchTime >= settleDate && fundCodes.Contains(r.FundCode))
-                        .ToListAsync();
-                    await UpsertTodayArchivesFromCurrentHoldingsAsync(username, settleDate, funds, todayRecords);
+                    await UpsertTodayArchivesFromCurrentHoldingsAsync(username, settleDate, funds);
                 }
 
                 await _context.SaveChangesAsync();
@@ -1461,14 +1783,9 @@ namespace 小白养基.Controllers
                 if (successCount > 0)
                 {
                     var settleDate = ChinaNow().Date;
-                    var codesForToday = allFunds.Select(f => f.FundCode).Distinct().ToList();
-                    var todayRecords = await _context.FundRecords
-                        .Where(r => r.FetchTime >= settleDate && codesForToday.Contains(r.FundCode))
-                        .ToListAsync();
-
                     foreach (var group in allFunds.GroupBy(f => f.Username))
                     {
-                        await UpsertTodayArchivesFromCurrentHoldingsAsync(group.Key, settleDate, group.ToList(), todayRecords);
+                        await UpsertTodayArchivesFromCurrentHoldingsAsync(group.Key, settleDate, group.ToList());
                         ClearTodayCache(group.Key);
                     }
                 }
@@ -1597,6 +1914,16 @@ namespace 小白养基.Controllers
                 .Where(a => a.Username == username && a.RecordDate >= startDate && a.RecordDate < endExclusive)
                 .ToListAsync();
 
+            var todaySnapshot = await BuildTodayPortfolioSnapshotAsync(username);
+            if (todaySnapshot.Funds.Count > 0)
+            {
+                archiveRows.RemoveAll(a => a.RecordDate.Date == todaySnapshot.Today);
+                if (todaySnapshot.AllSettled)
+                {
+                    archiveRows.AddRange(BuildArchiveRowsFromSnapshot(todaySnapshot));
+                }
+            }
+
             var myArchives = BuildPerformanceArchivePoints(archiveRows);
             if (myArchives.Count == 0)
             {
@@ -1677,17 +2004,8 @@ namespace 小白养基.Controllers
             string normalizedIndex,
             PerformanceIndexDefinition indexDefinition)
         {
-            var localTime = ChinaNow();
-            var today = localTime.Date;
-            var todayDash = localTime.ToString("yyyy-MM-dd");
-
-            var myFunds = await _context.MyFunds
-                .AsNoTracking()
-                .Where(f => f.Username == username)
-                .ToListAsync();
-
-            var fundCodes = myFunds.Select(f => f.FundCode).ToList();
-            if (fundCodes.Count == 0)
+            var snapshot = await BuildTodayPortfolioSnapshotAsync(username);
+            if (snapshot.Funds.Count == 0)
             {
                 return Ok(new
                 {
@@ -1705,45 +2023,15 @@ namespace 小白养基.Controllers
                 });
             }
 
-            var recentStart = today.AddDays(-10);
-            var recentRecords = await _context.FundRecords
-                .AsNoTracking()
-                .Where(r => fundCodes.Contains(r.FundCode) && r.FetchTime >= recentStart)
-                .OrderBy(r => r.FetchTime)
-                .ToListAsync();
-
-            var todayRecords = recentRecords
-                .Where(r => r.FetchTime >= today)
-                .ToList();
-
-            var lastRecordDict = recentRecords
-                .Where(r => r.FetchTime < today)
-                .GroupBy(r => r.FundCode)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).First());
-
-            var pastActualDict = recentRecords
-                .Where(r => r.ActualRate != 0)
-                .GroupBy(r => r.FundCode)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).Take(3).ToList());
-
-            var estimateStatusByCode = myFunds.ToDictionary(
-                f => f.FundCode,
-                f =>
-                {
-                    var fundRecords = todayRecords.Where(r => r.FundCode == f.FundCode).ToList();
-                    lastRecordDict.TryGetValue(f.FundCode, out var lastRecord);
-                    return BuildFundEstimateStatus(fundRecords, lastRecord, localTime);
-                });
-            var staleFundCodes = estimateStatusByCode
-                .Where(x => x.Value.IsStale)
-                .Select(x => x.Key)
-                .ToList();
-            var missingFundCodes = estimateStatusByCode
-                .Where(x => x.Value.EstimateSource == "missing")
-                .Select(x => x.Key)
-                .ToList();
-
-            var series = BuildTodayPerformanceSeries(myFunds, todayRecords, lastRecordDict, pastActualDict, today, todayDash);
+            var baseAmountByCode = snapshot.Funds.ToDictionary(f => f.Code, f => f.TodayBaseAmount);
+            var series = BuildTodayPerformanceSeries(
+                snapshot.MyFunds,
+                snapshot.TodayRecords,
+                snapshot.LastRecordDict,
+                snapshot.PastActualDict,
+                baseAmountByCode,
+                snapshot.Today,
+                snapshot.TodayDash);
             var totalPrincipal = series.Sum(s => s.Amount);
             var timeline = series
                 .SelectMany(s => s.Points.Select(p => p.Time))
@@ -1751,7 +2039,16 @@ namespace 小白养基.Controllers
                 .OrderBy(t => t)
                 .ToList();
 
-            if (series.Count == 0 || totalPrincipal <= 0 || timeline.Count == 0)
+            var finalTime = snapshot.AllSettled
+                ? snapshot.Today.AddHours(15)
+                : (timeline.Count > 0 ? timeline[^1] : snapshot.LocalTime);
+            if (snapshot.TotalTodayRate.HasValue && !timeline.Contains(finalTime))
+            {
+                timeline.Add(finalTime);
+                timeline = timeline.Distinct().OrderBy(t => t).ToList();
+            }
+
+            if ((series.Count == 0 || totalPrincipal <= 0 || timeline.Count == 0) && !snapshot.TotalTodayRate.HasValue)
             {
                 return Ok(new
                 {
@@ -1774,7 +2071,7 @@ namespace 小白养基.Controllers
             try
             {
                 var http = _httpClientFactory.CreateClient("EastMoneyQuote");
-                indexTicks = (await FetchPerformanceIndexTicksAsync(http, indexDefinition, today)).ToArray();
+                indexTicks = (await FetchPerformanceIndexTicksAsync(http, indexDefinition, snapshot.Today)).ToArray();
                 indexAvailable = indexTicks.Length > 0;
             }
             catch (Exception ex)
@@ -1827,9 +2124,33 @@ namespace 小白养基.Controllers
                 .GroupBy(p => p.Time)
                 .Select(g => g.Last())
                 .ToList();
+
+            if (snapshot.TotalTodayRate.HasValue && snapshot.TotalTodayProfit.HasValue)
+            {
+                indexRatesByTime.TryGetValue(finalTime, out var finalIndexRate);
+                finalIndexRate ??= compactPoints
+                    .Where(p => p.IndexRate.HasValue)
+                    .Select(p => p.IndexRate)
+                    .LastOrDefault();
+                var finalTimeText = finalTime.ToString("yyyy-MM-dd HH:mm");
+                compactPoints.RemoveAll(p => p.Time == finalTimeText);
+                compactPoints.Add(new PerformanceCurvePoint(
+                    finalTimeText,
+                    finalTime.ToString("yyyy-MM-dd"),
+                    Math.Round(snapshot.TotalTodayRate.Value, 2),
+                    Math.Round(snapshot.TotalTodayProfit.Value, 2),
+                    finalIndexRate.HasValue ? Math.Round(finalIndexRate.Value, 2) : null,
+                    Math.Round(snapshot.TotalAssets, 2),
+                    Math.Round(snapshot.TotalTodayProfit.Value, 2),
+                    Math.Round(snapshot.TotalTodayRate.Value, 2)));
+                compactPoints = compactPoints
+                    .OrderBy(p => p.Time)
+                    .ToList();
+            }
+
             var hasIndexRate = compactPoints.Any(p => p.IndexRate.HasValue);
-            var myTotalRate = compactPoints.Count > 0 ? compactPoints[^1].MyRate : 0d;
-            var myTotalProfit = compactPoints.Count > 0 ? compactPoints[^1].MyProfit : 0d;
+            var myTotalRate = snapshot.TotalTodayRate ?? (compactPoints.Count > 0 ? compactPoints[^1].MyRate : 0d);
+            var myTotalProfit = snapshot.TotalTodayProfit ?? (compactPoints.Count > 0 ? compactPoints[^1].MyProfit : 0d);
             var indexTotalRate = hasIndexRate
                 ? compactPoints.Where(p => p.IndexRate.HasValue).Select(p => p.IndexRate!.Value).Last()
                 : 0d;
@@ -1845,9 +2166,13 @@ namespace 小白养基.Controllers
                 indexTotalRate = Math.Round(indexTotalRate, 2),
                 excessRate = hasIndexRate ? Math.Round(myTotalRate - indexTotalRate, 2) : 0d,
                 myTotalProfit = Math.Round(myTotalProfit, 2),
-                message = BuildTodayPerformanceMessage(hasIndexRate, staleFundCodes, missingFundCodes),
-                staleFundCodes,
-                missingFundCodes,
+                totalBaseAmount = Math.Round(snapshot.TotalBaseAmount, 2),
+                allSettled = snapshot.AllSettled,
+                hasStale = snapshot.HasStale,
+                hasMissing = snapshot.HasMissing,
+                message = BuildTodayPerformanceMessage(hasIndexRate, snapshot.StaleFundCodes, snapshot.MissingFundCodes),
+                staleFundCodes = snapshot.StaleFundCodes,
+                missingFundCodes = snapshot.MissingFundCodes,
                 points = compactPoints
             });
         }
@@ -1866,13 +2191,16 @@ namespace 小白养基.Controllers
             List<FundData> todayRecords,
             Dictionary<string, FundData> lastRecordDict,
             Dictionary<string, List<FundData>> pastActualDict,
+            IReadOnlyDictionary<string, double> baseAmountByCode,
             DateTime today,
             string todayDash)
         {
             var result = new List<PerformanceFundIntradaySeries>();
             foreach (var config in myFunds)
             {
-                var amount = Math.Max(0d, config.HoldAmount);
+                var amount = baseAmountByCode.TryGetValue(config.FundCode, out var baseAmount)
+                    ? Math.Max(0d, baseAmount)
+                    : Math.Max(0d, GetDailyBaseAmount(config, todayDash));
                 if (amount <= 0)
                 {
                     continue;
@@ -2381,178 +2709,65 @@ namespace 小白养基.Controllers
                     return Ok(cachedResult);
                 }
 
-                // ✅ 优化后（只读查询，不跟踪变更）
-                var myFunds = await _context.MyFunds
-                    .AsNoTracking()  // 添加这行
-                    .Where(f => f.Username == username)
-                    .ToListAsync();
-                var myFundCodes = myFunds.Select(f => f.FundCode).ToList();
+                // ⚡ 首屏性能优化：today 接口只读本机数据库，不发起外部净值 HTTP 请求。
+                // 今日组合口径统一由 BuildTodayPortfolioSnapshotAsync 输出，避免首页、曲线、档案各算各的。
+                var snapshot = await BuildTodayPortfolioSnapshotAsync(username);
+                if (snapshot.Funds.Count == 0) return Ok(new List<object>());
 
-                if (!myFundCodes.Any()) return Ok(new List<object>());
-
-                var localTime = ChinaNow();
-                var today = localTime.Date;
-                string todayStr = localTime.ToString("yyyy'/'MM'/'dd");
-                string todayDash = localTime.ToString("yyyy-MM-dd");
-
-                // 只取最近 10 天的必要数据，避免首屏把历史全表拖回内存。
-                // FundRecords 只是估值记录；即使估值表 schema 或查询异常，也必须保留 MyFunds 持仓返回。
-                var recentStart = today.AddDays(-10);
-                var recentRecords = new List<FundData>();
-                var fundRecordsReadFailed = false;
-                try
-                {
-                    recentRecords = await _context.FundRecords
-                        .AsNoTracking()
-                        .Where(r => myFundCodes.Contains(r.FundCode) && r.FetchTime >= recentStart)
-                        .OrderBy(r => r.FetchTime)
-                        .ToListAsync();
-                }
-                catch (Exception ex)
-                {
-                    fundRecordsReadFailed = true;
-                    Console.WriteLine($"[FundToday] FundRecords query failed, fallback to MyFunds only. username={username}, error={ex}");
-                }
-
-                var todayRecords = recentRecords
-                    .Where(r => r.FetchTime >= today)
+                var finalResult = snapshot.Funds
+                    .OrderByDescending(x => x.Amount)
+                    .Select(f => new
+                    {
+                        code = f.Code,
+                        name = f.Name,
+                        amount = f.Amount,
+                        shares = f.Shares,
+                        cost = f.Cost,
+                        realizedProfit = f.RealizedProfit,
+                        lastTradeDate = f.LastTradeDate,
+                        lastAddAmount = f.LastAddAmount,
+                        lastSettledDate = f.LastSettledDate,
+                        lastSettledProfit = f.LastSettledProfit,
+                        lastSettledRate = f.LastSettledRate,
+                        existingReturnRate = f.ExistingReturnRate,
+                        breakEvenRate = f.BreakEvenRate,
+                        reliabilityScore = f.ReliabilityScore,
+                        reliabilityLevel = f.ReliabilityLevel,
+                        breakEvenSimulator = f.BreakEvenSimulator,
+                        diffRate = f.DiffRate,
+                        calibrationOffset = f.CalibrationOffset,
+                        data = f.DataPoints,
+                        isSettled = f.IsSettled,
+                        actualRate = f.ActualRate,
+                        actualExactProfit = f.ActualExactProfit,
+                        currentRate = f.CurrentRate,
+                        todayProfit = f.TodayProfit,
+                        todayAmount = f.TodayAmount,
+                        todayBaseAmount = f.TodayBaseAmount,
+                        estimateSource = f.EstimateSource,
+                        quoteOk = f.QuoteOk,
+                        isFallback = f.IsFallback,
+                        isStale = f.IsStale,
+                        isActualNav = f.IsActualNav,
+                        estimateTime = f.EstimateTime?.ToString("yyyy-MM-dd HH:mm:ss"),
+                        estimateMessage = f.EstimateMessage,
+                        portfolioTodayRate = snapshot.TotalTodayRate,
+                        portfolioTodayProfit = snapshot.TotalTodayProfit,
+                        portfolioTotalBaseAmount = snapshot.TotalBaseAmount,
+                        portfolioAllSettled = snapshot.AllSettled,
+                        portfolioHasStale = snapshot.HasStale,
+                        portfolioHasMissing = snapshot.HasMissing,
+                        staleFundCodes = snapshot.StaleFundCodes,
+                        missingFundCodes = snapshot.MissingFundCodes
+                    })
                     .ToList();
 
-                var lastRecordDict = recentRecords
-                    .Where(r => r.FetchTime < today)
-                    .GroupBy(r => r.FundCode)
-                    .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).First());
-
-                var pastActualDict = recentRecords
-                    .Where(r => r.ActualRate != 0)
-                    .GroupBy(r => r.FundCode)
-                    .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).Take(3).ToList());
-
-
-                // ⚡ 首屏性能优化：today 接口不再发起任何外部净值 HTTP 请求。
-                // 真实净值由 NavSettlementService 后台结算后写入 MyFunds.LastSettled* 字段。
-                // 这样 App/Web 打开和下拉刷新只访问本机数据库，避免东方财富接口抖动拖慢用户请求。
-
-
-                var result = myFunds.Select(config =>
+                if (snapshot.AllSettled)
                 {
-                    var fundRecords = todayRecords.Where(r => r.FundCode == config.FundCode).ToList();
-                    lastRecordDict.TryGetValue(config.FundCode, out var lastRecord);
-                    var estimateStatus = fundRecordsReadFailed
-                        ? new FundEstimateStatus(
-                            Rate: null,
-                            EstimateSource: "missing",
-                            QuoteOk: false,
-                            IsFallback: false,
-                            IsStale: false,
-                            EstimateTime: null,
-                            EstimateMessage: "估值记录读取失败，但持仓已保留")
-                        : BuildFundEstimateStatus(fundRecords, lastRecord, localTime);
-
-                    var past3DaysRecords = pastActualDict.TryGetValue(config.FundCode, out var pastList)
-                        ? pastList
-                        : new List<FundData>();
-
-                    double avgDiff = 0;
-                    if (past3DaysRecords.Count > 0)
+                    if (await UpsertTodayArchivesFromSnapshotAsync(snapshot))
                     {
-                        avgDiff = past3DaysRecords.Average(r => r.ActualRate - r.EstimatedRate);
-                        if (avgDiff > 0.5) avgDiff = 0.5;
-                        if (avgDiff < -0.5) avgDiff = -0.5;
+                        await _context.SaveChangesAsync();
                     }
-
-                    var dataPoints = new List<object[]>();
-
-                    if (lastRecord != null)
-                    {
-                        dataPoints.Add(new object[] { todayStr + " 09:30:00", Math.Round(lastRecord.EstimatedRate + avgDiff, 2) });
-                    }
-
-                    dataPoints.AddRange(fundRecords.Select(r => new object[] {
-                        r.FetchTime.ToString("yyyy'/'MM'/'dd HH:mm:ss"),
-                        Math.Round(r.EstimatedRate + avgDiff, 2)
-                    }));
-
-                    // 是否已完成今日真实净值清算。只读本地字段，不在 today 请求里访问外部接口。
-                    bool isSettled = config.LastSettledDate == todayDash;
-                    double? actualRate = isSettled ? config.LastSettledRate : null;
-                    double? actualExactProfit = isSettled ? config.LastSettledProfit : null;
-
-                    double? todayRateForSimulation = isSettled
-                        ? config.LastSettledRate
-                        : estimateStatus.Rate.HasValue ? Math.Round(estimateStatus.Rate.Value + avgDiff, 2) : null;
-                    double todayBaseAmount = GetDailyBaseAmount(config, todayDash);
-                    double? todayProfitPreview = isSettled
-                        ? config.LastSettledProfit
-                        : todayRateForSimulation.HasValue ? Math.Round(todayBaseAmount * todayRateForSimulation.Value / 100.0, 2) : null;
-                    double currentAssetsPreview = isSettled
-                        ? config.HoldAmount
-                        : todayProfitPreview.HasValue ? Math.Round(config.HoldAmount + todayProfitPreview.Value, 2) : config.HoldAmount;
-                    double costBasis = config.CostAmount > 0 ? config.CostAmount : config.HoldAmount;
-                    double totalProfitPreview = Math.Round(currentAssetsPreview - costBasis + config.RealizedProfit, 2);
-                    double existingReturnRateValue = costBasis > 0 ? Math.Round(totalProfitPreview / costBasis * 100.0, 2) : 0;
-                    double breakEvenRateValue = currentAssetsPreview > 0 && totalProfitPreview < 0 ? Math.Round(-totalProfitPreview / currentAssetsPreview * 100.0, 2) : 0;
-                    double diffAbs = lastRecord != null ? Math.Abs(lastRecord.DiffRate) : 0;
-                    int reliabilityScore = isSettled
-                        ? 100
-                        : estimateStatus.Rate.HasValue ? Math.Clamp(80 - (int)Math.Round(Math.Abs(avgDiff) * 40) - (diffAbs > 0.15 ? 10 : 0) - (estimateStatus.IsStale ? 25 : 0), 20, 92) : 0;
-                    string reliabilityLevel = isSettled
-                        ? "真实净值确认"
-                        : !estimateStatus.Rate.HasValue ? "估值暂缺"
-                        : estimateStatus.IsStale ? "旧估值"
-                        : estimateStatus.IsFallback ? "备用源/快照"
-                        : reliabilityScore >= 80 ? "估值较稳" : reliabilityScore >= 60 ? "估值需观察" : "估值偏弱";
-
-                    // FundController.cs 中 GetTodayData 方法内部
-                    return new
-                    {
-                        code = config.FundCode,
-                        name = config.FundName,
-                        amount = config.HoldAmount,
-                        shares = config.HoldShares,
-                        cost = config.CostAmount > 0 ? config.CostAmount : (double?)null,
-                        realizedProfit = config.RealizedProfit,
-                        lastTradeDate = config.LastTradeDate,
-                        lastAddAmount = config.LastAddAmount,
-                        lastSettledDate = config.LastSettledDate,
-                        lastSettledProfit = config.LastSettledProfit,
-                        lastSettledRate = config.LastSettledRate,
-                        existingReturnRate = existingReturnRateValue,
-                        breakEvenRate = breakEvenRateValue,
-                        reliabilityScore = reliabilityScore,
-                        reliabilityLevel = reliabilityLevel,
-                        breakEvenSimulator = new[]
-                        {
-                            new { scenario = "+1%", projectedAssets = Math.Round(currentAssetsPreview * 1.01, 2), projectedProfit = Math.Round(currentAssetsPreview * 1.01 - costBasis + config.RealizedProfit, 2) },
-                            new { scenario = "+3%", projectedAssets = Math.Round(currentAssetsPreview * 1.03, 2), projectedProfit = Math.Round(currentAssetsPreview * 1.03 - costBasis + config.RealizedProfit, 2) },
-                            new { scenario = "+5%", projectedAssets = Math.Round(currentAssetsPreview * 1.05, 2), projectedProfit = Math.Round(currentAssetsPreview * 1.05 - costBasis + config.RealizedProfit, 2) },
-                            new { scenario = "-3%", projectedAssets = Math.Round(currentAssetsPreview * 0.97, 2), projectedProfit = Math.Round(currentAssetsPreview * 0.97 - costBasis + config.RealizedProfit, 2) }
-                        },
-                        diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
-                        calibrationOffset = Math.Round(avgDiff, 4),
-                        data = dataPoints,
-                        isSettled = isSettled,
-                        actualRate = actualRate,
-                        actualExactProfit = actualExactProfit,
-                        estimateSource = isSettled ? "eastmoney_lsjz_actual" : estimateStatus.EstimateSource,
-                        quoteOk = isSettled || estimateStatus.QuoteOk,
-                        isFallback = !isSettled && estimateStatus.IsFallback,
-                        isStale = !isSettled && estimateStatus.IsStale,
-                        isActualNav = isSettled,
-                        estimateTime = estimateStatus.EstimateTime?.ToString("yyyy-MM-dd HH:mm:ss"),
-                        estimateMessage = isSettled ? "净值确认" : estimateStatus.EstimateMessage
-                    };
-
-                });
-
-                var finalResult = result.OrderByDescending(x => x.amount).ToList();
-
-                // 真实净值一出现，后端立即修正“今日总持仓 + 单只基金”档案。
-                // 这样不再依赖前端 save-archive，也能覆盖旧版本写坏的 TOTAL 记录。
-                if (!fundRecordsReadFailed && myFunds.Any(f => f.LastSettledDate == todayDash))
-                {
-                    await UpsertTodayArchivesFromCurrentHoldingsAsync(username, today, myFunds, todayRecords);
-                    await _context.SaveChangesAsync();
                 }
 
                 // ✅ 优化后（60秒缓存，减少数据库压力）
@@ -2648,11 +2863,7 @@ namespace 小白养基.Controllers
                     diagnostics.Add($"{group.Key}: {snapshot.Rate:F4}% [{snapshot.Source}]");
                 }
 
-                var todayRecords = await _context.FundRecords
-                    .Where(r => r.FetchTime >= today && r.FetchTime < tomorrow)
-                    .ToListAsync();
-
-                await UpsertTodayArchivesFromCurrentHoldingsAsync(username, today, funds, todayRecords);
+                await UpsertTodayArchivesFromCurrentHoldingsAsync(username, today, funds);
                 await _context.SaveChangesAsync();
 
                 ClearTodayCache(username);
@@ -3951,6 +4162,34 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             try
             {
                 var date = DateTime.Parse(req.DateStr).Date;
+                if (date == ChinaNow().Date)
+                {
+                    var snapshot = await BuildTodayPortfolioSnapshotAsync(req.Username);
+                    if (!snapshot.AllSettled)
+                    {
+                        return Ok(new
+                        {
+                            success = false,
+                            skipped = true,
+                            message = BuildArchiveStatusMessage(snapshot),
+                            allSettled = snapshot.AllSettled,
+                            hasStale = snapshot.HasStale,
+                            hasMissing = snapshot.HasMissing,
+                            staleFundCodes = snapshot.StaleFundCodes,
+                            missingFundCodes = snapshot.MissingFundCodes
+                        });
+                    }
+
+                    if (await UpsertTodayArchivesFromSnapshotAsync(snapshot))
+                    {
+                        await _context.SaveChangesAsync();
+                        ClearTodayCache(req.Username);
+                        return Ok($"✅ 已按今日统一快照写入/修正 {snapshot.Funds.Count + 1} 条收益档案");
+                    }
+
+                    return BadRequest("今日统一快照为空");
+                }
+
                 var incoming = new List<DailyArchive>();
 
                 if (req.Total != null)
@@ -4001,150 +4240,28 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
                 var userGroups = allFunds.GroupBy(f => f.Username);
                 int savedCount = 0;
+                int skippedCount = 0;
                 foreach (var group in userGroups)
                 {
                     string username = group.Key;
                     var userFunds = group.ToList();
-
-                    // 🚀 终极碾压法则：夜间机器人的数据永远是最准的！绝对覆盖！
-                    var existingRecords = await _context.DailyArchives
-                        .Where(a => a.Username == username && a.RecordDate == today)
-                        .ToListAsync();
-                    if (existingRecords.Any())
+                    var snapshot = await BuildTodayPortfolioSnapshotAsync(username, userFunds, localTime);
+                    if (!snapshot.AllSettled)
                     {
-                        //bool hasRealData = existingRecords.Any(r => r.FundCode == "TOTAL" && r.DailyRate != 0);
-                        //if (hasRealData) continue; // 有真实数据才跳过
-                        // 🚀 撤销保护锁，允许一天内无限次测试覆写
-                        _context.DailyArchives.RemoveRange(existingRecords);
-                        // 估值数据删掉重写
+                        skippedCount++;
+                        Console.WriteLine($"[auto-archive-nightly] skip estimated archive. username={username}, stale={string.Join(",", snapshot.StaleFundCodes)}, missing={string.Join(",", snapshot.MissingFundCodes)}");
+                        continue;
                     }
 
-                    double totalAssets = 0;
-                    double totalCost = 0;
-                    double totalDailyProfit = 0; // 直接累加今日总收益，杜绝误差
-                    double totalDailyBase = 0;   // 今日收益率分母：剥离/补回在途交易后的有效基数
-                    double totalCurrentAssets = 0;
-                    double totalRealized = 0;
-
-                    // 获取今天的字符串，用于判断今日加仓
-                    string todayStrSlash = today.ToString("yyyy/MM/dd");
-                    string todayStrDash = today.ToString("yyyy-MM-dd");
-
-                    foreach (var fund in userFunds)
+                    if (await UpsertTodayArchivesFromSnapshotAsync(snapshot))
                     {
-                        totalAssets += fund.HoldAmount;
-                        totalCost += (fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount);
-                        totalRealized += fund.RealizedProfit; // 🚀 累加单只基金的落袋利润
-
-                        var todayRecord = await _context.FundRecords
-                            .Where(r => r.FundCode == fund.FundCode && r.FetchTime >= today)
-                            .OrderByDescending(r => r.FetchTime)
-                            .FirstOrDefaultAsync();
-
-                        // 算钱逻辑 (基础粗略版)
-                        double dailyRate = todayRecord != null && Math.Abs(todayRecord.ActualRate) > 0.000001
-                            ? todayRecord.ActualRate
-                            : (todayRecord?.EstimatedRate ?? 0);
-
-                        // ==========================================
-                        // 🚀 核心补丁：后端必须像前端一样，精准剥离今日新军！
-                        // 绝对禁止未确认的资金参与今日收益结算，掐断虚假印钞！
-                        double baseAmount = GetDailyBaseAmount(fund, todayStrDash);
-                        totalDailyBase += baseAmount;
-                        double dailyProfit = fund.LastSettledDate == todayStrDash
-                            ? fund.LastSettledProfit
-                            : baseAmount * (dailyRate / 100.0);
-                        // ==========================================
-
-
-
-                        // 🚀 终极纠缠态补丁：用金额反推真实份额，再呼叫猎隼侦察兵！
-                        double effectiveShares = GetEffectiveShares(fund, todayStrDash);
-
-
-                        // 🚀 核心对齐补丁 1：高精度物理对齐！(调用猎隼侦察兵)
-                        var realData = await GetTodayRealRateAsync(fund.FundCode, today.ToString("yyyy-MM-dd"), effectiveShares);
-
-                        if (fund.LastSettledDate == todayStrDash)
-                        {
-                            dailyRate = fund.LastSettledRate;
-                            dailyProfit = fund.LastSettledProfit;
-                        }
-                        else
-                        {
-                            // 1. 突击指令：只要拿到了官方真实收益率，立刻覆盖！绝对不能被物理利润的计算结果绑架
-                            if (realData.rate.HasValue)
-                            {
-                                dailyRate = realData.rate.Value;
-                                dailyProfit = baseAmount * (dailyRate / 100.0);
-                            }
-
-                            // 2. 狙击指令：如果东方财富数据完整，算出了高精度的绝对物理利润，再执行覆盖
-                            if (realData.exactProfit.HasValue)
-                            {
-                                dailyProfit = realData.exactProfit.Value;
-                            }
-                        }
-
-                        // 🚀 算历史总收益 (包含单只基金的落袋利润)
-                        double cost = fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount;
-                        double currentAssets = fund.LastSettledDate == todayStrDash
-                            ? fund.HoldAmount
-                            : fund.HoldAmount + dailyProfit;
-                        double totalProfit = currentAssets - cost + fund.RealizedProfit;
-                        double totalRate = cost > 0 ? (totalProfit / cost * 100.0) : 0;
-                        totalCurrentAssets += currentAssets;
-
-                        // 自动归档只写 DailyArchives，不再修改 MyFunds.HoldAmount，避免和夜间清算重复滚存。
-
-                        // 保存单只基金收益
-                        _context.DailyArchives.Add(new DailyArchive
-                        {
-                            Username = username,
-                            FundCode = fund.FundCode,
-                            FundName = fund.FundName,
-                            RecordDate = today,
-                            Assets = Math.Round(currentAssets, 2), // 单只基金市值不含落袋，与前端一致
-                            DailyProfit = Math.Round(dailyProfit, 2),
-                            DailyRate = Math.Round(dailyRate, 2),
-                            TotalProfit = Math.Round(totalProfit, 2),
-                            TotalRate = Math.Round(totalRate, 2)
-                        });
-                        // 累加总阵地今日收益
-                        totalDailyProfit += dailyProfit;
+                        savedCount++;
+                        ClearTodayCache(username);
                     }
-
-                    // 今日总收益率分母必须是当日有效持仓基数，不能用已结算后的市值重复稀释。
-                    double totalDailyRate = totalDailyBase > 0 ? (totalDailyProfit / totalDailyBase) * 100.0 : 0;
-
-                    double currentTotalAssetsAfter = totalCurrentAssets;
-
-                    // 🚀 核心修复：把已落袋收益加回盈亏分子
-                    double totalCampProfit = currentTotalAssetsAfter - totalCost + totalRealized;
-                    double totalCampRate = totalCost > 0 ? (totalCampProfit / totalCost * 100.0) : 0;
-
-                    // 总持仓市值只记录仍在持仓里的资产；落袋利润只进入累计盈亏分子。
-                    double alignedTotalAssets = currentTotalAssetsAfter;
-
-                    // 保存总持仓收益
-                    _context.DailyArchives.Add(new DailyArchive
-                    {
-                        Username = username,
-                        FundCode = "TOTAL",
-                        FundName = "总持仓",
-                        RecordDate = today,
-                        Assets = alignedTotalAssets, // 对齐前端大屏的展示逻辑
-                        DailyProfit = Math.Round(totalDailyProfit, 2),
-                        DailyRate = Math.Round(totalDailyRate, 2),
-                        TotalProfit = Math.Round(totalCampProfit, 2), // 已包含落袋利润
-                        TotalRate = Math.Round(totalCampRate, 2)
-                    });
-
-                    savedCount++;
                 }
 
                 await _context.SaveChangesAsync();
-                return Ok($"[{localTime:yyyy-MM-dd HH:mm:ss}] 🌙 夜间自动收益封存完毕！成功为 {savedCount} 位用户名生成了历史档案。");
+                return Ok($"[{localTime:yyyy-MM-dd HH:mm:ss}] 🌙 夜间自动收益封存完毕！成功为 {savedCount} 位用户名生成正式档案，跳过 {skippedCount} 位未确认估算。");
             }
             catch (Exception ex)
             {
@@ -4168,22 +4285,51 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 query = query.Where(a => a.FundCode == fundCode);
             }
 
-            var records = await query
+            var dbRows = await query
                 .OrderByDescending(a => a.RecordDate)
                 .ThenByDescending(a => a.Id)
                 .Take(limit)
-                .Select(a => new
-                {
-                    fundCode = a.FundCode,
-                    fundName = a.FundName,
-                    recordDate = a.RecordDate,
-                    assets = a.Assets,
-                    dailyProfit = a.DailyProfit,
-                    dailyRate = a.DailyRate,
-                    totalProfit = a.TotalProfit,
-                    totalRate = a.TotalRate
-                })
                 .ToListAsync();
+
+            var records = dbRows
+                .Select(a => new ArchiveRowDto
+                {
+                    FundCode = a.FundCode,
+                    FundName = a.FundName,
+                    RecordDate = a.RecordDate,
+                    Assets = Math.Round(a.Assets, 2),
+                    DailyProfit = Math.Round(a.DailyProfit, 2),
+                    DailyRate = Math.Round(a.DailyRate, 2),
+                    TotalProfit = Math.Round(a.TotalProfit, 2),
+                    TotalRate = Math.Round(a.TotalRate, 2),
+                    IsConfirmed = true,
+                    ArchiveStatus = "confirmed",
+                    ArchiveMessage = "已确认"
+                })
+                .ToList();
+
+            var todaySnapshot = await BuildTodayPortfolioSnapshotAsync(username);
+            if (todaySnapshot.Funds.Count > 0)
+            {
+                bool matchesRequestedFund(ArchiveRowDto row)
+                {
+                    return string.IsNullOrWhiteSpace(fundCode) ||
+                           string.Equals(row.FundCode, fundCode, StringComparison.OrdinalIgnoreCase);
+                }
+
+                records.RemoveAll(r => r.RecordDate.Date == todaySnapshot.Today && matchesRequestedFund(r));
+                var overlayRows = BuildArchiveDtosFromSnapshot(todaySnapshot)
+                    .Where(matchesRequestedFund)
+                    .ToList();
+                records.AddRange(overlayRows);
+            }
+
+            records = records
+                .OrderByDescending(r => r.RecordDate)
+                .ThenByDescending(r => string.Equals(r.FundCode, "TOTAL", StringComparison.OrdinalIgnoreCase))
+                .ThenBy(r => r.FundCode)
+                .Take(limit)
+                .ToList();
 
             return Ok(records);
         }

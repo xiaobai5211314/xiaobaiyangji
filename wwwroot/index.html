@@ -4178,12 +4178,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     <div class="divider"></div>
                     <div style="text-align: center;">
                         <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">🌟 今日总收益</div>
-                        <div class="number-display" :style="{ color: privacyMode <= 1 ? (totalTodayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 1 ? (totalTodayProfit >= 0 ? '+' : '') + totalTodayProfit.toFixed(2) : '****' }}</div>
+                        <div class="number-display" :style="{ color: privacyMode <= 1 ? stockNumberColor(totalTodayProfit) : '#cbd5e1' }">{{ privacyMode <= 1 ? formatPerformanceMoney(totalTodayProfit) : '****' }}</div>
                     </div>
                     <div class="divider"></div>
                     <div style="text-align: center;">
                         <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">🚀 今日收益率</div>
-                        <div class="number-display" :style="{ color: privacyMode <= 2 ? (totalTodayRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 2 ? (totalTodayRate > 0 ? '+' : '') + totalTodayRate.toFixed(2) + '%' : '****' }}</div>
+                        <div class="number-display" :style="{ color: privacyMode <= 2 ? stockNumberColor(totalTodayRate) : '#cbd5e1' }">{{ privacyMode <= 2 ? formatPerformancePercent(totalTodayRate) : '****' }}</div>
                     </div>
                     <div class="divider"></div>
                     <div style="text-align: center;">
@@ -4243,7 +4243,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     <div class="glass-panel feature-card">
                         <div class="feature-title">🧾 今日收盘战报</div>
                         <div class="feature-subtitle">{{ dailyBattleReport.summary }}</div>
-                        <div class="feature-big-number" :style="{color: totalTodayProfit>=0?'#ff4d4f':'#10b981'}">{{ privacyMode <= 1 ? dailyBattleReport.todayProfitText : '****' }}</div>
+                        <div class="feature-big-number" :style="{color: stockNumberColor(totalTodayProfit)}">{{ privacyMode <= 1 ? dailyBattleReport.todayProfitText : '****' }}</div>
                         <div class="report-line"><span>最大贡献</span><strong style="color:#ff4d4f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px;">{{ dailyBattleReport.bestName }}</strong></div>
                         <div class="report-line"><span>最大拖累</span><strong style="color:#10b981;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px;">{{ dailyBattleReport.worstName }}</strong></div>
                         <div class="report-line"><span>操作提示</span><strong style="color:#fbbf24;text-align:right;">{{ dailyBattleReport.actionHint }}</strong></div>
@@ -4481,7 +4481,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             <div v-show="activePage === 'analysis'" class="app-page">
                 <div class="page-topbar glass-panel"><div><div class="page-title">📊 盈亏分析</div><div class="page-subtitle">每日战报、月历、盈利/亏损排行</div></div><div class="analysis-toolbar"><input type="month" v-model="analysisMonth" @change="fetchAnalysis(true)"><select v-model="analysisViewMode"><option value="profit">金额</option><option value="rate">收益率</option></select><button class="btn" @click="refreshAnalysisPage(true)">🔄</button></div></div>
                 <div class="feature-grid">
-                    <div class="glass-panel feature-card"><div class="feature-title">🧾 每日收盘战报</div><div class="feature-subtitle">{{ selectedAnalysisDate }} · {{ dailyBattleReport.summary }}</div><div class="report-line"><span>今日收益</span><strong :style="{color:totalTodayProfit>=0?'#ff4d4f':'#10b981'}">{{ dailyBattleReport.todayProfitText }}</strong></div><div class="report-line"><span>贡献核心</span><strong style="color:#ff4d4f;">{{ dailyBattleReport.bestName }}</strong></div><div class="report-line"><span>风险拖累</span><strong style="color:#10b981;">{{ dailyBattleReport.worstName }}</strong></div></div>
+                    <div class="glass-panel feature-card"><div class="feature-title">🧾 每日收盘战报</div><div class="feature-subtitle">{{ selectedAnalysisDate }} · {{ dailyBattleReport.summary }}</div><div class="report-line"><span>今日收益</span><strong :style="{color:stockNumberColor(totalTodayProfit)}">{{ dailyBattleReport.todayProfitText }}</strong></div><div class="report-line"><span>贡献核心</span><strong style="color:#ff4d4f;">{{ dailyBattleReport.bestName }}</strong></div><div class="report-line"><span>风险拖累</span><strong style="color:#10b981;">{{ dailyBattleReport.worstName }}</strong></div></div>
                     <div class="glass-panel feature-card"><div class="feature-title">🧭 回本总览</div><div class="feature-subtitle">全部未回本持仓，按回本所需涨幅排序。</div><div class="compact-scroll-list" style="margin-top:8px;max-height:170px;"><div v-if="recoveryWatchList.length===0" class="feature-subtitle" style="padding:10px 0;">当前没有需要回本的持仓。</div><div v-for="fund in recoveryWatchList" :key="'rw-'+fund.code" class="report-line"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;">{{ fund.name }}</span><strong style="color:#fbbf24;">{{ Number(fund.breakEvenRate || 0).toFixed(2) }}%</strong></div></div></div>
                 </div>
                 <div class="analysis-grid">
@@ -4490,7 +4490,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             <div v-for="w in ['一','二','三','四','五','六','日']" :key="w" class="calendar-week">{{ w }}</div><div v-for="day in analysisCalendarDays" :key="day.key" :class="['calendar-day', day.empty?'empty':'', day.profit>0?'positive':(day.profit<0?'negative':''), selectedAnalysisDate===day.date?'active':'']" @click="!day.empty && (selectedAnalysisDate = day.date)">
                                 <template v-if="!day.empty">
                                     <div class="calendar-date">{{ day.day }}</div>
-                                    <div class="calendar-profit" :style="{color:day.profit>=0?'#ff4d4f':'#10b981'}">{{ day.hasRecord ? ((day.profit>0?'+':'') + (analysisViewMode==='rate' ? day.rate.toFixed(2)+'%' : day.profit.toFixed(2))) : '—' }}</div>
+                                    <div class="calendar-profit" :style="{color:day.profit>=0?'#ff4d4f':'#10b981'}">{{ day.hasRecord ? (analysisViewMode==='rate' ? formatPerformancePercent(day.rate) : formatPerformanceMoney(day.profit)) : '—' }}</div>
+                                    <div v-if="day.hasRecord && !day.isConfirmed" style="margin-top:4px;font-size:10px;font-weight:900;color:#fbbf24;">估算</div>
                                 </template>
                             </div>
                         </div>
@@ -5137,8 +5138,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const totalPrincipal = ref(0);
                 const totalProfit = ref(0);
                 const totalRate = ref(0);
-                const totalTodayProfit = ref(0);
-                const totalTodayRate = ref(0);
+                const totalTodayProfit = ref(null);
+                const totalTodayRate = ref(null);
                 const loginForm = reactive({ username: '', password: '' });
                 const profileForm = reactive({ displayName: '', saving: false });
                 const fundForm = reactive({ code: '', amount: '' });
@@ -5318,7 +5319,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const analysisTotalRecords = computed(() => analysisRecords.value.filter(r => r.fundCode === 'TOTAL'));
                 const selectedDayFundRecords = computed(() => analysisRecords.value.filter(r => r.fundCode !== 'TOTAL' && String(r.recordDate || '').slice(0, 10) === selectedAnalysisDate.value).sort((a, b) => Math.abs(Number(b.dailyProfit || 0)) - Math.abs(Number(a.dailyProfit || 0))));
                 const selectedDayTotalProfitRecords = computed(() => fundsList.value.map(f => ({ fundCode: f.code, fundName: f.name, assets: Number(f.todayAmount || f.amount || 0), totalProfit: Number(f.estimatedProfit || 0), totalRate: Number(f.existingReturnRate || 0) })).sort((a, b) => Math.abs(Number(b.totalProfit || 0)) - Math.abs(Number(a.totalProfit || 0))));
-                const analysisMonthTotal = computed(() => analysisTotalRecords.value.filter(r => String(r.recordDate || '').slice(0, 7) === analysisMonth.value).reduce((sum, r) => sum + Number(r.dailyProfit || 0), 0));
+                const analysisMonthTotal = computed(() => analysisTotalRecords.value.filter(r => String(r.recordDate || '').slice(0, 7) === analysisMonth.value).reduce((sum, r) => {
+                    const n = Number(r.dailyProfit);
+                    return Number.isFinite(n) ? sum + n : sum;
+                }, 0));
                 const analysisCalendarDays = computed(() => {
                     const [y, m] = analysisMonth.value.split('-').map(Number);
                     if (!y || !m) return [];
@@ -5335,7 +5339,21 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     for (let day = 1; day <= days; day++) {
                         const date = `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                         const rec = totalMap.get(date);
-                        arr.push({ key: date, empty: false, day, date, hasRecord: !!rec, profit: Number(rec?.dailyProfit || 0), rate: Number(rec?.dailyRate || 0) });
+                        const profit = rec ? Number(rec.dailyProfit) : null;
+                        const rate = rec ? Number(rec.dailyRate) : null;
+                        const hasRecord = !!rec && Number.isFinite(profit) && Number.isFinite(rate);
+                        arr.push({
+                            key: date,
+                            empty: false,
+                            day,
+                            date,
+                            hasRecord,
+                            profit: hasRecord ? profit : 0,
+                            rate: hasRecord ? rate : 0,
+                            isConfirmed: rec?.isConfirmed !== false,
+                            archiveStatus: rec?.archiveStatus || 'confirmed',
+                            archiveMessage: rec?.archiveMessage || ''
+                        });
                     }
                     return arr;
                 });
@@ -5395,18 +5413,21 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 });
 
                 const dailyBattleReport = computed(() => {
-                    const rows = [...fundsList.value].map(f => ({ ...f, p: Number(f.todayProfit || 0), amountNum: Number(f.todayAmount || f.amount || 0) }));
+                    const rows = [...fundsList.value].map(f => {
+                        const p = parseNullableNumber(f.todayProfit);
+                        return { ...f, p: p === null ? 0 : p, hasTodayProfit: p !== null, amountNum: Number(f.todayAmount || f.amount || 0) };
+                    });
                     const best = rows.slice().sort((a, b) => b.p - a.p)[0];
                     const worst = rows.slice().sort((a, b) => a.p - b.p)[0];
                     const exposure = portfolioExposure.value[0];
-                    const profit = Number(totalTodayProfit.value || 0);
+                    const profit = parseNullableNumber(totalTodayProfit.value);
                     let actionHint = '保持观察';
-                    if (profit < 0 && worst && Math.abs(worst.p) > Math.abs(profit) * 0.5) actionHint = `重点复盘 ${worst.name}`;
+                    if (profit !== null && profit < 0 && worst && Math.abs(worst.p) > Math.abs(profit) * 0.5) actionHint = `重点复盘 ${worst.name}`;
                     else if (exposure && exposure.ratio >= 45) actionHint = `${exposure.name} 集中度偏高`;
-                    else if (profit > 0) actionHint = '盈利日先看净值确认';
+                    else if (profit !== null && profit > 0) actionHint = '盈利日先看净值确认';
                     return {
                         summary: fundsList.value.length ? `${fundsList.value.length} 只持仓，主暴露 ${exposure?.name || '待识别'} ${exposure ? exposure.ratio.toFixed(1) : '0.0'}%。` : '暂无持仓数据。',
-                        todayProfitText: `${profit >= 0 ? '+' : ''}${profit.toFixed(2)}`,
+                        todayProfitText: profit === null ? '--' : `${profit >= 0 ? '+' : ''}${profit.toFixed(2)}`,
                         bestName: best ? `${best.name} ${best.p >= 0 ? '+' : ''}${best.p.toFixed(2)}` : '暂无',
                         worstName: worst ? `${worst.name} ${worst.p >= 0 ? '+' : ''}${worst.p.toFixed(2)}` : '暂无',
                         actionHint
@@ -6080,6 +6101,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     if (!silent && !confirm("💾 确定要将大屏当前的数据作为【今日最终收益】永久封存吗？")) return;
                     let d = new Date();
                     let localDateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+                    if (fundsList.value.length > 0 && fundsList.value.some(f => !f.isSettled)) {
+                        if (!silent) showToast("含旧估值，待净值确认，不写入正式档案", "info");
+                        return;
+                    }
                     const safeNumber = (val) => Number((parseFloat(val) || 0).toFixed(2));
                     const totalAssetsNow = fundsList.value.reduce((sum, f) => sum + safeNumber(f.todayAmount || f.amount), 0);
                     const payload = {
@@ -6089,7 +6114,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     };
                     try {
                         const response = await fetch(`${API_BASE}/api/fund/save-archive`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                        if (response.ok) { if (!silent) showToast("✅ 今日收益已安全锁入密码箱！", "success"); } else { if (!silent) showToast("❌ 封存受阻", "error"); }
+                        const result = await response.clone().json().catch(() => null);
+                        if (response.ok && result?.skipped) {
+                            if (!silent) showToast(result.message || "含旧估值，待净值确认", "info");
+                        } else if (response.ok) { if (!silent) showToast("✅ 今日收益已安全锁入密码箱！", "success"); } else { if (!silent) showToast("❌ 封存受阻", "error"); }
                     } catch (e) { if (!silent) showToast("🌐 指挥中心失联", "error"); }
                 };
 
@@ -6877,7 +6905,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const apiData = await response.json();
                         if (!Array.isArray(apiData)) throw new Error('today接口返回结构异常');
                         lastDataFetchAt = Date.now();
-                        let tPrincipal = 0; let tPrincipalForRate = 0; let tCost = 0; let tToday = 0; let d = new Date();
+                        let tPrincipal = 0; let tPrincipalForRate = 0; let tCost = 0; let tToday = 0; let validTodayCount = 0; let d = new Date();
                         let todaySlash = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
                         let todayDash = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
                         let currentMinutes = d.getHours() * 60 + d.getMinutes(); let isWeekend = (d.getDay() === 0 || d.getDay() === 6);
@@ -6887,14 +6915,22 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                         apiData.forEach(fund => {
                             fund.data = Array.isArray(fund.data) ? fund.data : [];
+                            const serverCurrentRate = parseNullableNumber(fund.currentRate);
+                            const serverTodayProfit = parseNullableNumber(fund.todayProfit);
+                            const serverTodayAmount = parseNullableNumber(fund.todayAmount);
+                            const serverTodayBaseAmount = parseNullableNumber(fund.todayBaseAmount);
+                            const hasServerSnapshot = serverCurrentRate !== null || serverTodayProfit !== null || serverTodayBaseAmount !== null;
                             if (fund.isSettled) {
-                                fund.currentRate = fund.actualRate;
+                                fund.currentRate = serverCurrentRate ?? fund.actualRate;
                                 fund.isHoliday = false;
                                 if (fund.data.length > 0 && String(fund.data[fund.data.length - 1][0]).includes("15:00:00")) {
-                                    fund.data[fund.data.length - 1][1] = fund.actualRate;
+                                    fund.data[fund.data.length - 1][1] = fund.currentRate;
                                 } else {
-                                    fund.data.push([`${todaySlash} 15:00:00`, fund.actualRate]);
+                                    fund.data.push([`${todaySlash} 15:00:00`, fund.currentRate]);
                                 }
+                            } else if (hasServerSnapshot) {
+                                fund.currentRate = serverCurrentRate;
+                                fund.isHoliday = serverCurrentRate === null || fund.isStale || fund.estimateSource === 'missing';
                             } else if (fund.data.length > 0) {
                                 let lastDataTime = String(fund.data[fund.data.length - 1][0]);
                                 let lastRate = parseNullableNumber(fund.data[fund.data.length - 1][1]);
@@ -6934,11 +6970,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             fund.calibrationSamples = calibrationProfile.samples;
                             fund.calibrationLastError = Number(calibrationProfile.lastError.toFixed(2));
                             fund.calibrationConfidence = calibrationProfile.confidence;
-                            if (!fund.isSettled && !fund.isHoliday && hasCurrentRate && calibrationProfile.samples >= 1) {
+                            if (!hasServerSnapshot && !fund.isSettled && !fund.isHoliday && hasCurrentRate && calibrationProfile.samples >= 1) {
                                 fund.currentRate = Number((rawCurrentRate + calibrationProfile.offset).toFixed(2));
                                 fund.calibrationNote = `原估 ${rawCurrentRate >= 0 ? '+' : ''}${rawCurrentRate.toFixed(2)}% · ${calibrationProfile.samples}天样本${calibrationProfile.confidence}可信`;
                                 intradayCalibrationPayload.push({ fundCode: fund.code, fundName: fund.name, tradeDate: todayDash, estimatedRate: rawCurrentRate, estimatedAssets: Number(fund.amount || 0), source: 'today-api' });
-                            } else if (!fund.isSettled && !fund.isHoliday && hasCurrentRate) {
+                            } else if (!hasServerSnapshot && !fund.isSettled && !fund.isHoliday && hasCurrentRate) {
                                 fund.calibrationNote = '正在积累盘中估值样本';
                                 intradayCalibrationPayload.push({ fundCode: fund.code, fundName: fund.name, tradeDate: todayDash, estimatedRate: rawCurrentRate, estimatedAssets: Number(fund.amount || 0), source: 'today-api' });
                             } else if (fund.isSettled && calibrationProfile.samples > 0) {
@@ -6954,7 +6990,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             let todayProfitVal = null;
                             let currentRealTimeAmount = currentAmount;
 
-                            if (isAlreadySettled) {
+                            if (hasServerSnapshot) {
+                                todayProfitVal = serverTodayProfit;
+                                fund.todayProfit = todayProfitVal === null ? null : todayProfitVal.toFixed(2);
+                                currentRealTimeAmount = serverTodayAmount ?? (todayProfitVal !== null ? currentAmount + todayProfitVal : currentAmount);
+                                fund.todayBaseAmount = serverTodayBaseAmount;
+                                if (serverCurrentRate !== null) fund.currentRate = serverCurrentRate;
+                            } else if (isAlreadySettled) {
                                 todayProfitVal = Number(fund.lastSettledProfit) || 0;
                                 fund.todayProfit = todayProfitVal.toFixed(2);
                                 currentRealTimeAmount = currentAmount;
@@ -6978,7 +7020,6 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             }
 
                             fund.todayAmount = currentRealTimeAmount.toFixed(2);
-                            if (todayProfitVal !== null && !isNaN(todayProfitVal)) { tToday += todayProfitVal; }
 
                             fund.realizedProfit = Number(fund.realizedProfit) || 0;
                             const floatProfit = (fund.cost && fund.cost > 0) ? (currentRealTimeAmount - fund.cost) : 0;
@@ -6988,15 +7029,21 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             fund.existingReturnRate = (fund.cost && fund.cost > 0) ? ((allProfit / fund.cost) * 100).toFixed(2) : "0.00";
 
                             const rateBaseForToday = todayProfitVal !== null
-                                ? (isAlreadySettled ? (currentAmount - todayProfitVal - todayAddAmount) : (currentAmount - todayAddAmount))
+                                ? (hasServerSnapshot
+                                    ? (serverTodayBaseAmount || 0)
+                                    : (isAlreadySettled ? (currentAmount - todayProfitVal - todayAddAmount) : (currentAmount - todayAddAmount)))
                                 : 0;
+                            if (todayProfitVal !== null && Number.isFinite(todayProfitVal) && rateBaseForToday > 0) {
+                                tToday += todayProfitVal;
+                                validTodayCount++;
+                            }
                             tPrincipal += currentAmount; tPrincipalForRate += rateBaseForToday; tCost += (fund.cost || currentAmount);
                         });
 
                         fundsList.value = apiData;
                         const tRealized = fundsList.value.reduce((sum, f) => sum + (f.realizedProfit || 0), 0);
-                        totalPrincipal.value = tPrincipal; totalTodayProfit.value = tToday;
-                        totalTodayRate.value = tPrincipalForRate > 0 ? (tToday / tPrincipalForRate * 100) : 0;
+                        totalPrincipal.value = tPrincipal; totalTodayProfit.value = validTodayCount > 0 ? tToday : null;
+                        totalTodayRate.value = tPrincipalForRate > 0 ? (tToday / tPrincipalForRate * 100) : null;
                         const currentTotalAssets = fundsList.value.reduce((sum, f) => sum + (parseFloat(f.todayAmount || f.amount) || 0), 0);
                         totalProfit.value = currentTotalAssets - tCost + tRealized;
                         totalRate.value = tCost > 0 ? ((currentTotalAssets - tCost + tRealized) / tCost * 100) : 0;
@@ -7006,8 +7053,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         saveUiState('dashboard_summary', {
                             date: todayDash,
                             totalPrincipal: Number(totalPrincipal.value || 0),
-                            totalTodayProfit: Number(totalTodayProfit.value || 0),
-                            totalTodayRate: Number(totalTodayRate.value || 0),
+                            totalTodayProfit: totalTodayProfit.value === null ? null : Number(totalTodayProfit.value || 0),
+                            totalTodayRate: totalTodayRate.value === null ? null : Number(totalTodayRate.value || 0),
                             totalProfit: Number(totalProfit.value || 0),
                             totalRate: Number(totalRate.value || 0)
                         });
