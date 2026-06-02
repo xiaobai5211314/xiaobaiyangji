@@ -4152,7 +4152,9 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             result = await TryFetchDatacenterSectorFlowAsync(limit, attempts);
             if (result != null) return result;
 
-            return null;
+            // Source 3: 本地基金涨幅估算（不依赖外部API）
+            result = await BuildLocalSectorEstimateAsync(limit, attempts);
+            return result;
         }
 
         private async Task<CapitalFlowPayloadDto?> TryFetchEastMoneyFlowAsync(
@@ -4349,6 +4351,79 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 Console.WriteLine($"[CapitalFlow] source=datacenter status={statusCode} error={error}");
                 attempts?.Add(new { source = "eastmoney_datacenter", url = externalUrl, statusCode, rawLength = 0, parsedRowsCount = 0, error });
                 return null;
+            }
+        }
+
+        private async Task<CapitalFlowPayloadDto> BuildLocalSectorEstimateAsync(int limit, List<object>? attempts)
+        {
+            try
+            {
+                var today = ChinaNow().Date;
+                var latestRecords = await _context.FundRecords
+                    .AsNoTracking()
+                    .Where(f => f.FetchTime >= today)
+                    .GroupBy(f => f.FundCode)
+                    .Select(g => g.OrderByDescending(f => f.FetchTime).First())
+                    .ToListAsync();
+
+                if (latestRecords.Count == 0)
+                {
+                    attempts?.Add(new { source = "local_exposure_estimate", url = (string?)null, statusCode = 0, rawLength = 0, parsedRowsCount = 0, error = "no fund data today" });
+                    return CreateUnavailableCapitalFlowPayload();
+                }
+
+                var sectorStats = new Dictionary<string, (string name, List<double> rates)>();
+                foreach (var record in latestRecords)
+                {
+                    foreach (var def in SectorDefinitions)
+                    {
+                        if (ScoreFundForSector(record.FundName, def) <= 0) continue;
+                        if (!sectorStats.ContainsKey(def.Key))
+                            sectorStats[def.Key] = (def.Name, new List<double>());
+                        sectorStats[def.Key].rates.Add(record.EstimatedRate);
+                        break;
+                    }
+                }
+
+                var sectorRows = sectorStats
+                    .Where(kv => kv.Value.rates.Count > 0)
+                    .Select(kv => new CapitalFlowRowDto
+                    {
+                        Code = kv.Key,
+                        Name = kv.Value.name,
+                        Rate = Math.Round(kv.Value.rates.Average(), 2),
+                        MainNet = 0, MainNetText = "--", MainRatio = 0, SuperNet = 0, BigNet = 0
+                    })
+                    .OrderByDescending(x => x.Rate)
+                    .Take(limit)
+                    .ToList();
+
+                if (sectorRows.Count == 0)
+                {
+                    attempts?.Add(new { source = "local_exposure_estimate", url = (string?)null, statusCode = 0, rawLength = 0, parsedRowsCount = 0, error = "no sectors matched" });
+                    return CreateUnavailableCapitalFlowPayload();
+                }
+
+                var inflow = sectorRows.Where(x => x.Rate > 0).ToList();
+                var outflow = sectorRows.Where(x => x.Rate < 0).OrderBy(x => x.Rate).ToList();
+
+                Console.WriteLine($"[CapitalFlow] source=local_exposure_estimate rows={sectorRows.Count} funds={latestRecords.Count}");
+                attempts?.Add(new { source = "local_exposure_estimate", url = (string?)null, statusCode = 200, rawLength = latestRecords.Count, parsedRowsCount = sectorRows.Count, error = (string?)null });
+
+                return new CapitalFlowPayloadDto
+                {
+                    Source = "持仓主题贡献估算",
+                    UpdatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
+                    IsFallback = true, IsStale = false,
+                    Message = "外部资金流数据暂不可用，当前展示持仓基金板块涨跌估算",
+                    Rows = sectorRows, Inflow = inflow, Outflow = outflow
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[CapitalFlow] source=local_exposure_estimate error={ex.Message}");
+                attempts?.Add(new { source = "local_exposure_estimate", url = (string?)null, statusCode = 0, rawLength = 0, parsedRowsCount = 0, error = ex.Message });
+                return CreateUnavailableCapitalFlowPayload();
             }
         }
 
