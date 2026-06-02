@@ -2181,7 +2181,8 @@ namespace 小白养基.Controllers
                 catch (Exception ex)
                 {
                     debugQuoteError = ex.Message;
-                    attempts.Add(new { source = "eastmoney_quote", url = debugQuoteUrl, statusCode = debugQuoteStatusCode, quoteRate = (double?)null, error = ex.Message });
+                    var quoteUrlCatch = $"https://push2.eastmoney.com/api/qt/stock/get?secid={indexDefinition.Secid}";
+                    attempts.Add(new { source = "eastmoney_quote", url = quoteUrlCatch, statusCode = debugQuoteStatusCode, quoteRate = (double?)null, error = ex.Message });
                     Console.WriteLine($"[PerformanceCurve] index={indexDefinition.Key} quoteFallback FAILED error={ex.Message}");
                 }
             }
