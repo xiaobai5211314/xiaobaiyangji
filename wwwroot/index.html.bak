@@ -4135,6 +4135,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <button class="btn" @click="fetchCapitalFlow(true)">🔄</button>
                     </div>
                     <div v-if="isCapitalLoading" class="news-empty">📡 正在同步主力资金...</div>
+                    <div v-else-if="capitalFlowRows.length === 0" class="news-empty">{{ capitalFlowError || '主力资金流暂不可用' }}</div>
                     <div v-else class="capital-two-col">
                         <div class="capital-box">
                             <div class="capital-box-title"><span>🔴 行业板块流入</span><span style="color:#94a3b8;font-size:11px;">TOP {{ capitalFlowInRows.length }}</span></div>
@@ -4913,6 +4914,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const capitalFlowOutRows = ref([]);
                 const capitalFlowSource = ref('');
                 const capitalFlowUpdatedAt = ref('');
+                const capitalFlowError = ref('');
                 const isCapitalLoading = ref(false);
                 const showSectorRadar = ref(false);
                 const isSectorLoading = ref(false);
@@ -6067,6 +6069,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     capitalFlowOutRows.value = normalizeCapitalRows(data.outflow || rows).filter(x => (x.mainNet || 0) < 0).sort((a, b) => (a.mainNet || 0) - (b.mainNet || 0));
                     capitalFlowSource.value = data.source || '东方财富板块资金流向';
                     capitalFlowUpdatedAt.value = data.updatedAt || '';
+                    capitalFlowError.value = '';
                     capitalCacheTime = Date.now();
                 };
                 const fetchCapitalFlow = async (force = false) => {
@@ -6084,7 +6087,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         applyCapitalPayload(data);
                         writeJsonCache('capital_flow_cache_v1', data);
                     } catch (e) {
-                        if (capitalFlowRows.value.length === 0) showToast('主力资金流获取失败', 'error');
+                        capitalFlowError.value = force && e?.message
+                            ? `主力资金流暂不可用：${String(e.message).slice(0, 80)}`
+                            : '主力资金流暂不可用';
                     } finally {
                         isCapitalLoading.value = false;
                     }
@@ -6566,7 +6571,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
                     handleLogin, handleRegister, handleLogout, saveUserProfile, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, confirmOcrImport, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
-                    sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, isCapitalLoading, fetchCapitalFlow,
+                    sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, capitalFlowError, isCapitalLoading, fetchCapitalFlow,
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, isDetailsLoading, expandedSectors, toggleSector,
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices, formatIndexPoint, formatIndexRate,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,

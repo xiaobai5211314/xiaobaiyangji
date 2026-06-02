@@ -100,6 +100,7 @@
                 const capitalFlowOutRows = ref([]);
                 const capitalFlowSource = ref('');
                 const capitalFlowUpdatedAt = ref('');
+                const capitalFlowError = ref('');
                 const isCapitalLoading = ref(false);
                 const showSectorRadar = ref(false);
                 const isSectorLoading = ref(false);
@@ -939,6 +940,7 @@
                     capitalFlowOutRows.value = normalizeCapitalRows(data.outflow || rows).filter(x => (x.mainNet || 0) < 0).sort((a, b) => (a.mainNet || 0) - (b.mainNet || 0));
                     capitalFlowSource.value = data.source || '东方财富板块资金流向';
                     capitalFlowUpdatedAt.value = data.updatedAt || '';
+                    capitalFlowError.value = '';
                     capitalCacheTime = Date.now();
                 };
                 const fetchCapitalFlow = async (force = false) => {
@@ -956,7 +958,9 @@
                         applyCapitalPayload(data);
                         writeJsonCache('capital_flow_cache_v1', data);
                     } catch (e) {
-                        if (capitalFlowRows.value.length === 0) showToast('主力资金流获取失败', 'error');
+                        capitalFlowError.value = force && e?.message
+                            ? `主力资金流暂不可用：${String(e.message).slice(0, 80)}`
+                            : '主力资金流暂不可用';
                     } finally {
                         isCapitalLoading.value = false;
                     }
@@ -1369,7 +1373,7 @@
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
                     handleLogin, handleRegister, handleLogout, handleAddFund, handleDeleteFund, triggerUpload, handleFileUpload, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
-                    sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, isCapitalLoading, fetchCapitalFlow,
+                    sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, capitalFlowError, isCapitalLoading, fetchCapitalFlow,
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, isDetailsLoading, expandedSectors, toggleSector,
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
@@ -1380,4 +1384,3 @@
                 };
             }
         }).mount('#app');
-    
