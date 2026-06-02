@@ -180,7 +180,7 @@
           v-if="shouldRenderFundTrend(fund, fundIndex)"
           :canvas-id="fundTrendCanvasId(fund)"
           :points="todayTrendPoints(fund)"
-          :tone="fund.currentRateValue >= 0 ? 'profit' : 'loss'"
+          :tone="fund.currentRateValue !== null && fund.currentRateValue < 0 ? 'loss' : 'profit'"
           empty-text="暂无估值走势数据"
         />
         <button v-else class="expand-trend-button" @tap="expandFundTrend(fund)">

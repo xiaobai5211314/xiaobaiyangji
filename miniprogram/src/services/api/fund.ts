@@ -12,8 +12,8 @@ export interface FundTodayItem {
   breakEvenRate?: number;
   reliabilityScore?: number;
   reliabilityLevel?: string;
-  currentRate?: number;
-  rawCurrentRate?: number;
+  currentRate?: number | null;
+  rawCurrentRate?: number | null;
   diffRate?: number;
   isSettled?: boolean;
   isHoliday?: boolean;
@@ -30,7 +30,7 @@ export interface FundTodayItem {
   calibrationLastError?: number;
   calibrationConfidence?: string;
   calibrationNote?: string;
-  todayProfit?: number;
+  todayProfit?: number | null;
   totalProfit?: number;
   estimatedProfit?: number;
   todayAmount?: number;
@@ -115,8 +115,7 @@ export interface FundArchiveRow {
 export function getTodayFunds(username: string, force = false) {
   const query = `username=${encodeURIComponent(username)}${force ? '&force=true' : ''}`;
   return get<FundTodayItem[]>(`/api/fund/today?${query}`, {
-    loadingText: '读取持仓',
-    fallbackData: []
+    loadingText: '读取持仓'
   });
 }
 

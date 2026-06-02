@@ -2396,12 +2396,23 @@ namespace 小白养基.Controllers
                 string todayDash = localTime.ToString("yyyy-MM-dd");
 
                 // 只取最近 10 天的必要数据，避免首屏把历史全表拖回内存。
+                // FundRecords 只是估值记录；即使估值表 schema 或查询异常，也必须保留 MyFunds 持仓返回。
                 var recentStart = today.AddDays(-10);
-                var recentRecords = await _context.FundRecords
-                    .AsNoTracking()
-                    .Where(r => myFundCodes.Contains(r.FundCode) && r.FetchTime >= recentStart)
-                    .OrderBy(r => r.FetchTime)
-                    .ToListAsync();
+                var recentRecords = new List<FundData>();
+                var fundRecordsReadFailed = false;
+                try
+                {
+                    recentRecords = await _context.FundRecords
+                        .AsNoTracking()
+                        .Where(r => myFundCodes.Contains(r.FundCode) && r.FetchTime >= recentStart)
+                        .OrderBy(r => r.FetchTime)
+                        .ToListAsync();
+                }
+                catch (Exception ex)
+                {
+                    fundRecordsReadFailed = true;
+                    Console.WriteLine($"[FundToday] FundRecords query failed, fallback to MyFunds only. username={username}, error={ex}");
+                }
 
                 var todayRecords = recentRecords
                     .Where(r => r.FetchTime >= today)
@@ -2427,7 +2438,16 @@ namespace 小白养基.Controllers
                 {
                     var fundRecords = todayRecords.Where(r => r.FundCode == config.FundCode).ToList();
                     lastRecordDict.TryGetValue(config.FundCode, out var lastRecord);
-                    var estimateStatus = BuildFundEstimateStatus(fundRecords, lastRecord, localTime);
+                    var estimateStatus = fundRecordsReadFailed
+                        ? new FundEstimateStatus(
+                            Rate: null,
+                            EstimateSource: "missing",
+                            QuoteOk: false,
+                            IsFallback: false,
+                            IsStale: false,
+                            EstimateTime: null,
+                            EstimateMessage: "估值记录读取失败，但持仓已保留")
+                        : BuildFundEstimateStatus(fundRecords, lastRecord, localTime);
 
                     var past3DaysRecords = pastActualDict.TryGetValue(config.FundCode, out var pastList)
                         ? pastList
@@ -2529,7 +2549,7 @@ namespace 小白养基.Controllers
 
                 // 真实净值一出现，后端立即修正“今日总持仓 + 单只基金”档案。
                 // 这样不再依赖前端 save-archive，也能覆盖旧版本写坏的 TOTAL 记录。
-                if (myFunds.Any(f => f.LastSettledDate == todayDash))
+                if (!fundRecordsReadFailed && myFunds.Any(f => f.LastSettledDate == todayDash))
                 {
                     await UpsertTodayArchivesFromCurrentHoldingsAsync(username, today, myFunds, todayRecords);
                     await _context.SaveChangesAsync();

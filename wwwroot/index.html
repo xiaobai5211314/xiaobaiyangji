@@ -6723,8 +6723,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         } else {
                             if (force) await syncRealNavIfNeeded();
                             const fundRows = await fetchData({ force, silent: true });
-                            const toast = fundRefreshToast(fundRows);
-                            showToast(toast.msg, toast.type);
+                            if (fundRows === null) {
+                                showToast(fundsList.value.length > 0 ? '🌐 数据刷新失败，已保留上次数据' : '🌐 数据刷新失败', 'error');
+                            } else {
+                                const toast = fundRefreshToast(fundRows);
+                                showToast(toast.msg, toast.type);
+                            }
                         }
                     } finally {
                         pullRefresh.loading = false;
@@ -6871,6 +6875,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const response = await fetch(`${API_BASE}/api/fund/today?username=${encodeURIComponent(currentUser.value)}${forceParam}`, { cache: force ? 'no-store' : 'default' });
                         if (!response.ok) throw new Error('today接口异常');
                         const apiData = await response.json();
+                        if (!Array.isArray(apiData)) throw new Error('today接口返回结构异常');
                         lastDataFetchAt = Date.now();
                         let tPrincipal = 0; let tPrincipalForRate = 0; let tCost = 0; let tToday = 0; let d = new Date();
                         let todaySlash = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
@@ -7048,7 +7053,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         return apiData;
                     } catch (e) {
                         isLoading.value = false;
-                        if (!silent) showToast("🌐 数据刷新失败", "error");
+                        if (!silent) {
+                            const keepText = fundsList.value.length > 0 ? "，已保留上次数据" : "";
+                            showToast(`🌐 数据刷新失败${keepText}`, "error");
+                        }
                         return null;
                     } finally {
                         isFetchingData = false;

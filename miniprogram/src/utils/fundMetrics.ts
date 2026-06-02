@@ -11,8 +11,8 @@ export interface ConfidenceView {
 
 export interface FundView extends FundTodayItem {
   viewKey: string;
-  currentRateValue: number;
-  todayProfitValue: number;
+  currentRateValue: number | null;
+  todayProfitValue: number | null;
   todayAmountValue: number;
   estimatedProfitValue: number;
   existingReturnRateValue: number;
@@ -85,6 +85,10 @@ function round(value: number, digits = 2) {
   return Math.round(value * factor) / factor;
 }
 
+function roundNullable(value: number | null, digits = 2) {
+  return value === null ? null : round(value, digits);
+}
+
 function todayParts(now: Date) {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -98,10 +102,10 @@ function todayParts(now: Date) {
 function pickLastRate(fund: FundTodayItem, slashDate: string, dashDate: string, now: Date) {
   const data = Array.isArray(fund.data) ? fund.data : [];
   const last = data[data.length - 1];
-  if (!last) return { rate: 0, isHoliday: true };
+  if (!last) return { rate: null as number | null, isHoliday: true };
 
   const lastTime = String(last[0] || '');
-  const lastRate = numberOrZero(last[1]);
+  const lastRate = finiteNumber(last[1]);
   const hasTodayDate = lastTime.includes(slashDate) || lastTime.includes(dashDate);
   const isPast935 = now.getHours() > 9 || (now.getHours() === 9 && now.getMinutes() >= 35);
 
@@ -109,7 +113,7 @@ function pickLastRate(fund: FundTodayItem, slashDate: string, dashDate: string, 
     return { rate: lastRate, isHoliday: false };
   }
 
-  return { rate: 0, isHoliday: true };
+  return { rate: lastRate, isHoliday: true };
 }
 
 function deriveRateState(fund: FundTodayItem, now: Date, slashDate: string, dashDate: string) {
@@ -118,14 +122,14 @@ function deriveRateState(fund: FundTodayItem, now: Date, slashDate: string, dash
 
   if (fund.isSettled) {
     return {
-      rate: numberOrZero(fund.actualRate ?? fund.lastSettledRate ?? fund.currentRate),
+      rate: finiteNumber(fund.actualRate ?? fund.lastSettledRate ?? fund.currentRate),
       isHoliday: false,
       isSettled: true
     };
   }
 
   if (isWeekend || currentMinutes < 565) {
-    return { rate: 0, isHoliday: true, isSettled: false };
+    return { rate: null as number | null, isHoliday: true, isSettled: false };
   }
 
   const lastRate = pickLastRate(fund, slashDate, dashDate, now);
@@ -189,7 +193,7 @@ function buildExposure(funds: FundView[], totalAssets: number) {
     const name = classifyFundSector(fund);
     const row = map.get(name) || { name, amount: 0, dailyProfit: 0, count: 0, funds: [], ratio: 0 };
     row.amount += fund.todayAmountValue;
-    row.dailyProfit += fund.todayProfitValue;
+    row.dailyProfit += fund.todayProfitValue ?? 0;
     row.count += 1;
     row.funds.push(fund.name || fund.code || '未命名基金');
     map.set(name, row);
@@ -201,7 +205,7 @@ function buildExposure(funds: FundView[], totalAssets: number) {
 }
 
 function buildDailyReport(funds: FundView[], totalTodayProfit: number, exposure: ExposureView[]): DailyBattleReportView {
-  const rows = [...funds].map((fund) => ({ ...fund, p: fund.todayProfitValue, amountNum: fund.todayAmountValue }));
+  const rows = [...funds].map((fund) => ({ ...fund, p: fund.todayProfitValue ?? 0, amountNum: fund.todayAmountValue }));
   const best = rows.slice().sort((a, b) => b.p - a.p)[0];
   const worst = rows.slice().sort((a, b) => a.p - b.p)[0];
   const topExposure = exposure[0];
@@ -240,18 +244,18 @@ export function buildPortfolioMetrics(rawFunds: FundTodayItem[], now = new Date(
     const todayAddAmount = isUnconfirmed ? numberOrZero(fund.lastAddAmount) : 0;
     const isAlreadySettled = fund.lastSettledDate === dash;
     const currentAmount = numberOrZero(fund.amount);
-    let todayProfitValue = 0;
+    let todayProfitValue: number | null = null;
     let todayAmountValue = currentAmount;
-    let currentRateValue = rateState.rate;
+    let currentRateValue: number | null = rateState.rate;
 
     if (isAlreadySettled) {
       todayProfitValue = numberOrZero(fund.lastSettledProfit);
       todayAmountValue = currentAmount;
-      currentRateValue = numberOrZero(fund.lastSettledRate) || currentRateValue;
+      currentRateValue = finiteNumber(fund.lastSettledRate) ?? currentRateValue;
     } else if (rateState.isSettled && fund.actualExactProfit !== null && fund.actualExactProfit !== undefined) {
       todayProfitValue = numberOrZero(fund.actualExactProfit);
       todayAmountValue = currentAmount + todayProfitValue;
-    } else {
+    } else if (currentRateValue !== null) {
       const baseAmount = currentAmount - todayAddAmount;
       todayProfitValue = baseAmount * (currentRateValue / 100);
       todayAmountValue = currentAmount + todayProfitValue;
@@ -266,22 +270,24 @@ export function buildPortfolioMetrics(rawFunds: FundTodayItem[], now = new Date(
       validCost && validCost > todayAmountValue && todayAmountValue > 0 ? ((validCost / todayAmountValue - 1) * 100) : 0;
     const existingReturnRateValue = validCost ? (estimatedProfitValue / validCost) * 100 : 0;
     const rateBaseForToday = isAlreadySettled
-      ? currentAmount - todayProfitValue - todayAddAmount
-      : currentAmount - todayAddAmount;
+      ? currentAmount - (todayProfitValue ?? 0) - todayAddAmount
+      : todayProfitValue !== null
+        ? currentAmount - todayAddAmount
+        : 0;
 
     totalPrincipal += currentAmount;
     totalPrincipalForRate += rateBaseForToday;
     totalCost += validCost || currentAmount;
-    totalTodayProfit += Number.isNaN(todayProfitValue) ? 0 : todayProfitValue;
+    totalTodayProfit += todayProfitValue === null || Number.isNaN(todayProfitValue) ? 0 : todayProfitValue;
 
     const view: FundView = {
       ...fund,
       viewKey: `${fund.code || fund.name || 'fund'}-${index}`,
-      currentRate: round(currentRateValue),
-      currentRateValue: round(currentRateValue),
-      rawCurrentRate: finiteNumber(fund.rawCurrentRate) ?? round(currentRateValue),
-      todayProfit: round(todayProfitValue),
-      todayProfitValue: round(todayProfitValue),
+      currentRate: roundNullable(currentRateValue),
+      currentRateValue: roundNullable(currentRateValue),
+      rawCurrentRate: finiteNumber(fund.rawCurrentRate) ?? roundNullable(currentRateValue),
+      todayProfit: roundNullable(todayProfitValue),
+      todayProfitValue: roundNullable(todayProfitValue),
       todayAmount: round(todayAmountValue),
       todayAmountValue: round(todayAmountValue),
       estimatedProfit: round(estimatedProfitValue),
