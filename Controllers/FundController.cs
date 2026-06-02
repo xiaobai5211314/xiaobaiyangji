@@ -55,6 +55,7 @@ namespace 小白养基.Controllers
             public List<CapitalFlowRowDto> Rows { get; set; } = new();
             public List<CapitalFlowRowDto> Inflow { get; set; } = new();
             public List<CapitalFlowRowDto> Outflow { get; set; } = new();
+            public object? Debug { get; set; }
         }
 
         public class FundInfoCache
@@ -1905,7 +1906,8 @@ namespace 小白养基.Controllers
         public async Task<IActionResult> GetPerformanceCurve(
             [FromQuery] string username,
             [FromQuery] string period = "today",
-            [FromQuery(Name = "index")] string indexKey = "hs300")
+            [FromQuery(Name = "index")] string indexKey = "hs300",
+            [FromQuery] bool debug = false)
         {
             if (string.IsNullOrWhiteSpace(username))
             {
@@ -1927,7 +1929,7 @@ namespace 小白养基.Controllers
 
             if (normalizedPeriod == "today")
             {
-                return await GetTodayPerformanceCurveAsync(username, normalizedIndex, indexDefinition);
+                return await GetTodayPerformanceCurveAsync(username, normalizedIndex, indexDefinition, debug);
             }
 
             var today = ChinaNow().Date;
@@ -2027,8 +2029,16 @@ namespace 小白养基.Controllers
         private async Task<IActionResult> GetTodayPerformanceCurveAsync(
             string username,
             string normalizedIndex,
-            PerformanceIndexDefinition indexDefinition)
+            PerformanceIndexDefinition indexDefinition,
+            bool debug = false)
         {
+            // Debug tracking variables
+            string debugIndexUrl = "", debugIndexError = "", debugQuoteUrl = "", debugQuoteError = "";
+            int debugIndexStatusCode = 0, debugRawRowsCount = 0, debugParsedRowsCount = 0;
+            bool debugCacheHit = false;
+            double? debugQuoteRate = null;
+            int debugQuoteStatusCode = 0;
+
             var snapshot = await BuildTodayPortfolioSnapshotAsync(username);
             if (snapshot.Funds.Count == 0)
             {
@@ -2044,7 +2054,8 @@ namespace 小白养基.Controllers
                     excessRate = 0d,
                     myTotalProfit = 0d,
                     message = "暂无今日盘中收益数据",
-                    points = Array.Empty<PerformanceCurvePoint>()
+                    points = Array.Empty<PerformanceCurvePoint>(),
+                    debug = debug ? new { selectedIndex = normalizedIndex, resolvedIndexCode = indexDefinition.Key, resolvedSecId = indexDefinition.Secid, snapshotEmpty = true } : null
                 });
             }
 
@@ -2087,7 +2098,8 @@ namespace 小白养基.Controllers
                     excessRate = 0d,
                     myTotalProfit = 0d,
                     message = "暂无今日盘中收益数据",
-                    points = Array.Empty<PerformanceCurvePoint>()
+                    points = Array.Empty<PerformanceCurvePoint>(),
+                    debug = debug ? new { selectedIndex = normalizedIndex, resolvedIndexCode = indexDefinition.Key, resolvedSecId = indexDefinition.Secid, noSeriesData = true } : null
                 });
             }
 
@@ -2101,8 +2113,15 @@ namespace 小白养基.Controllers
             try
             {
                 var http = _httpClientFactory.CreateClient("EastMoneyQuote");
-                indexTicks = (await FetchPerformanceIndexTicksAsync(http, indexDefinition, snapshot.Today)).ToArray();
+                var (ticks, url, statusCode, rawCount, parsedCount, error) = await FetchPerformanceIndexTicksWithDebugAsync(http, indexDefinition, snapshot.Today);
+                debugIndexUrl = url;
+                debugIndexStatusCode = statusCode;
+                debugRawRowsCount = rawCount;
+                debugParsedRowsCount = parsedCount;
+                debugIndexError = error;
+                indexTicks = ticks.ToArray();
                 indexAvailable = indexTicks.Length > 0;
+                Console.WriteLine($"[PerformanceCurve] index={indexDefinition.Key} secid={indexDefinition.Secid} status={statusCode} rawRows={rawCount} parsedRows={parsedCount} available={indexAvailable} error={error}");
                 if (indexAvailable)
                 {
                     await SetPerformanceIndexTicksCacheAsync(indexTicksCacheKey, indexTicks);
@@ -2110,7 +2129,8 @@ namespace 小白养基.Controllers
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[performance-curve] intraday index failed: {indexDefinition.Key} {ex.Message}");
+                debugIndexError = ex.Message;
+                Console.WriteLine($"[PerformanceCurve] index={indexDefinition.Key} secid={indexDefinition.Secid} FAILED error={ex.Message}");
             }
             if (!indexAvailable)
             {
@@ -2121,6 +2141,7 @@ namespace 小白养基.Controllers
                     indexAvailable = true;
                     indexFallback = true;
                     indexStale = true;
+                    debugCacheHit = true;
                     indexMessage = "指数使用缓存数据";
                 }
             }
@@ -2129,16 +2150,23 @@ namespace 小白养基.Controllers
                 try
                 {
                     var http = _httpClientFactory.CreateClient("EastMoneyQuote");
-                    fallbackIndexRate = await FetchPerformanceIndexQuoteRateAsync(http, indexDefinition);
+                    var (rate, quoteStatus, quoteError) = await FetchPerformanceIndexQuoteRateWithDebugAsync(http, indexDefinition);
+                    debugQuoteUrl = $"https://push2.eastmoney.com/api/qt/stock/get?secid={indexDefinition.Secid}";
+                    debugQuoteStatusCode = quoteStatus;
+                    debugQuoteError = quoteError;
+                    debugQuoteRate = rate;
+                    fallbackIndexRate = rate;
                     if (fallbackIndexRate.HasValue)
                     {
                         indexFallback = true;
                         indexMessage = "指数仅使用当前涨跌幅";
                     }
+                    Console.WriteLine($"[PerformanceCurve] index={indexDefinition.Key} quoteFallback status={quoteStatus} rate={rate} error={quoteError}");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[performance-curve] intraday index quote fallback failed: {indexDefinition.Key} {ex.Message}");
+                    debugQuoteError = ex.Message;
+                    Console.WriteLine($"[PerformanceCurve] index={indexDefinition.Key} quoteFallback FAILED error={ex.Message}");
                 }
             }
             if (!indexAvailable && !fallbackIndexRate.HasValue)
@@ -2227,6 +2255,9 @@ namespace 小白养基.Controllers
                 ? compactPoints.Where(p => p.IndexRate.HasValue).Select(p => p.IndexRate!.Value).Last()
                 : 0d;
 
+            int pointsWithMyRate = compactPoints.Count(p => p.IndexRate.HasValue || true);
+            int pointsWithIndexRate = compactPoints.Count(p => p.IndexRate.HasValue);
+
             return Ok(new
             {
                 period = "today",
@@ -2248,7 +2279,27 @@ namespace 小白养基.Controllers
                 message = BuildTodayPerformanceMessage(hasIndexRate, indexMessage, snapshot.StaleFundCodes, snapshot.MissingFundCodes),
                 staleFundCodes = snapshot.StaleFundCodes,
                 missingFundCodes = snapshot.MissingFundCodes,
-                points = compactPoints
+                points = compactPoints,
+                debug = debug ? new
+                {
+                    selectedIndex = normalizedIndex,
+                    resolvedIndexCode = indexDefinition.Key,
+                    resolvedSecId = indexDefinition.Secid,
+                    indexExternalUrl = debugIndexUrl,
+                    indexExternalStatusCode = debugIndexStatusCode,
+                    indexRawRowsCount = debugRawRowsCount,
+                    indexParsedRowsCount = debugParsedRowsCount,
+                    indexError = debugIndexError,
+                    indexCacheHit = debugCacheHit,
+                    quoteExternalUrl = debugQuoteUrl,
+                    quoteExternalStatusCode = debugQuoteStatusCode,
+                    quoteRate = debugQuoteRate,
+                    quoteError = debugQuoteError,
+                    pointsCount = compactPoints.Count,
+                    pointsWithMyRate = compactPoints.Count,
+                    pointsWithIndexRate = pointsWithIndexRate,
+                    indexRatesByTimeKeys = indexRatesByTime.Count
+                } : null
             });
         }
 
@@ -2337,7 +2388,7 @@ namespace 小白养基.Controllers
             return result;
         }
 
-        private static async Task<List<PerformanceIndexTick>> FetchPerformanceIndexTicksAsync(
+        private static async Task<(List<PerformanceIndexTick> ticks, string url, int statusCode, int rawCount, int parsedCount, string error)> FetchPerformanceIndexTicksWithDebugAsync(
             HttpClient http,
             PerformanceIndexDefinition index,
             DateTime today)
@@ -2346,23 +2397,31 @@ namespace 小白养基.Controllers
             var fields2 = "f51,f52,f53,f54,f55,f56,f57,f58";
             var url = $"https://push2his.eastmoney.com/api/qt/stock/trends2/get?secid={Uri.EscapeDataString(index.Secid)}&fields1={fields1}&fields2={fields2}&iscr=0&iscca=0";
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            var response = await http.GetStringAsync(url, cts.Token);
-            using var doc = JsonDocument.Parse(response);
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            using var response = await http.SendAsync(request, cts.Token);
+            int statusCode = (int)response.StatusCode;
+            response.EnsureSuccessStatusCode();
+            string body = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(body);
+
             if (!doc.RootElement.TryGetProperty("data", out var data) ||
                 data.ValueKind == JsonValueKind.Null ||
                 !data.TryGetProperty("trends", out var trends) ||
                 trends.ValueKind != JsonValueKind.Array)
             {
-                return new List<PerformanceIndexTick>();
+                return (new List<PerformanceIndexTick>(), url, statusCode, 0, 0, "data.trends missing or not array");
             }
 
+            int rawCount = trends.GetArrayLength();
             var result = new List<PerformanceIndexTick>();
+            int skippedDate = 0, skippedParse = 0;
             foreach (var trend in trends.EnumerateArray())
             {
                 var raw = trend.GetString();
                 if (string.IsNullOrWhiteSpace(raw))
                 {
+                    skippedParse++;
                     continue;
                 }
 
@@ -2372,6 +2431,7 @@ namespace 小白养基.Controllers
                     !TryParseInvariantDouble(parts[2], out var price) ||
                     price <= 0)
                 {
+                    skippedParse++;
                     continue;
                 }
 
@@ -2379,31 +2439,51 @@ namespace 小白养基.Controllers
                 {
                     result.Add(new PerformanceIndexTick(time, price));
                 }
+                else
+                {
+                    skippedDate++;
+                }
             }
 
-            return result
-                .OrderBy(p => p.Time)
-                .ToList();
+            result = result.OrderBy(p => p.Time).ToList();
+            string error = result.Count == 0 && rawCount > 0
+                ? $"all {rawCount} rows filtered out (skippedDate={skippedDate}, skippedParse={skippedParse}, today={today:yyyy-MM-dd})"
+                : "";
+
+            return (result, url, statusCode, rawCount, result.Count, error);
         }
 
-        private static async Task<double?> FetchPerformanceIndexQuoteRateAsync(
+        private static async Task<(List<PerformanceIndexTick> ticks, string url, int statusCode, int rawCount, int parsedCount, string error)> FetchPerformanceIndexTicksAsync(
+            HttpClient http,
+            PerformanceIndexDefinition index,
+            DateTime today)
+        {
+            return await FetchPerformanceIndexTicksWithDebugAsync(http, index, today);
+        }
+
+        private static async Task<(double? rate, int statusCode, string error)> FetchPerformanceIndexQuoteRateWithDebugAsync(
             HttpClient http,
             PerformanceIndexDefinition index)
         {
             var url = $"https://push2.eastmoney.com/api/qt/stock/get?secid={Uri.EscapeDataString(index.Secid)}&fltt=2&fields=f43,f60,f170";
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
-            var response = await http.GetStringAsync(url, cts.Token);
-            using var doc = JsonDocument.Parse(response);
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            using var response = await http.SendAsync(request, cts.Token);
+            int statusCode = (int)response.StatusCode;
+            response.EnsureSuccessStatusCode();
+            string body = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(body);
+
             if (!doc.RootElement.TryGetProperty("data", out var data) ||
                 data.ValueKind == JsonValueKind.Null)
             {
-                return null;
+                return (null, statusCode, "data is null");
             }
 
             if (TryGetDouble(data, "f170", out var rate))
             {
-                return Math.Round(rate, 2);
+                return (Math.Round(rate, 2), statusCode, "");
             }
 
             if (TryGetDouble(data, "f43", out var latest) &&
@@ -2411,10 +2491,10 @@ namespace 小白养基.Controllers
                 latest > 0 &&
                 previousClose > 0)
             {
-                return Math.Round((latest - previousClose) / previousClose * 100d, 2);
+                return (Math.Round((latest - previousClose) / previousClose * 100d, 2), statusCode, "");
             }
 
-            return null;
+            return (null, statusCode, "f170 missing and f43/f60 insufficient");
         }
 
         private async Task SetPerformanceIndexTicksCacheAsync(string cacheKey, PerformanceIndexTick[] ticks)
@@ -3829,7 +3909,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
         }
 
         [HttpGet("capital-flow")]
-        public async Task<IActionResult> GetCapitalFlow([FromQuery] bool force = false, [FromQuery] int limit = 30)
+        public async Task<IActionResult> GetCapitalFlow([FromQuery] bool force = false, [FromQuery] int limit = 30, [FromQuery] bool debug = false)
         {
             limit = Math.Clamp(limit, 10, 80);
             string freshKey = $"CapitalFlowV3_{limit}";
@@ -3837,6 +3917,11 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
             if (!force && _cache.TryGetValue(freshKey, out object fresh))
             {
+                if (fresh is CapitalFlowPayloadDto cachedPayload)
+                {
+                    if (debug) cachedPayload.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), cacheHit = true, cacheSource = "fresh", returnedRowsCount = cachedPayload.Rows?.Count ?? 0 };
+                    Console.WriteLine($"[CapitalFlow] externalStatus=skipped rows={cachedPayload.Rows?.Count ?? 0} cacheHit=true cacheSource=fresh");
+                }
                 return Ok(fresh);
             }
 
@@ -3845,7 +3930,10 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 stale != null)
             {
                 _ = Task.Run(() => RefreshCapitalFlowCacheQuietlyAsync(limit));
-                return Ok(CloneCapitalFlowPayload(stale, true, true, "主力资金流使用缓存数据", "cache"));
+                var stalePayload = CloneCapitalFlowPayload(stale, true, true, "主力资金流使用缓存数据", "cache");
+                if (debug) stalePayload.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), cacheHit = true, cacheSource = "stale", returnedRowsCount = stalePayload.Rows?.Count ?? 0 };
+                Console.WriteLine($"[CapitalFlow] externalStatus=skipped rows={stalePayload.Rows?.Count ?? 0} cacheHit=true cacheSource=stale");
+                return Ok(stalePayload);
             }
 
             if (!await _capitalFlowRefreshLock.WaitAsync(0))
@@ -3853,36 +3941,53 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 var cachedWhileBusy = await TryGetCapitalFlowFallbackAsync(limit);
                 if (cachedWhileBusy != null)
                 {
-                    return Ok(CloneCapitalFlowPayload(cachedWhileBusy, true, true, "主力资金流使用缓存数据", "cache"));
+                    var busyPayload = CloneCapitalFlowPayload(cachedWhileBusy, true, true, "主力资金流使用缓存数据", "cache");
+                    if (debug) busyPayload.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), cacheHit = true, cacheSource = "lock-fallback", returnedRowsCount = busyPayload.Rows?.Count ?? 0 };
+                    return Ok(busyPayload);
                 }
 
-                return Ok(CreateUnavailableCapitalFlowPayload());
+                var unavail = CreateUnavailableCapitalFlowPayload();
+                if (debug) unavail.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), cacheHit = false, cacheSource = "none", returnedRowsCount = 0, error = "lock contention, no cache" };
+                return Ok(unavail);
             }
 
             try
             {
-                if (!force && _cache.TryGetValue(freshKey, out fresh)) return Ok(fresh);
+                if (!force && _cache.TryGetValue(freshKey, out fresh))
+                {
+                    if (fresh is CapitalFlowPayloadDto recheck)
+                    {
+                        if (debug) recheck.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), cacheHit = true, cacheSource = "fresh-recheck", returnedRowsCount = recheck.Rows?.Count ?? 0 };
+                    }
+                    return Ok(fresh);
+                }
                 if (!force &&
                     _cache.TryGetValue(staleKey, out stale) &&
                     stale != null)
                 {
-                    return Ok(CloneCapitalFlowPayload(stale, true, true, "主力资金流使用缓存数据", "cache"));
+                    var recheckStale = CloneCapitalFlowPayload(stale, true, true, "主力资金流使用缓存数据", "cache");
+                    if (debug) recheckStale.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), cacheHit = true, cacheSource = "stale-recheck", returnedRowsCount = recheckStale.Rows?.Count ?? 0 };
+                    return Ok(recheckStale);
                 }
 
-                var payload = await BuildCapitalFlowPayloadAsync(limit);
+                var payload = await BuildCapitalFlowPayloadAsync(limit, debug);
                 await SetCapitalFlowCacheAsync(limit, payload);
                 return Ok(payload);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[capital-flow] external failed: {ex.Message}");
+                Console.WriteLine($"[CapitalFlow] externalStatus=error rows=0 cacheHit=false error={ex.Message}");
                 var cached = await TryGetCapitalFlowFallbackAsync(limit);
                 if (cached != null)
                 {
-                    return Ok(CloneCapitalFlowPayload(cached, true, true, "主力资金流使用缓存数据", "cache"));
+                    var exPayload = CloneCapitalFlowPayload(cached, true, true, "主力资金流使用缓存数据", "cache");
+                    if (debug) exPayload.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), externalError = ex.Message, cacheHit = true, cacheSource = "exception-fallback", returnedRowsCount = exPayload.Rows?.Count ?? 0 };
+                    return Ok(exPayload);
                 }
 
-                return Ok(CreateUnavailableCapitalFlowPayload());
+                var unavail = CreateUnavailableCapitalFlowPayload();
+                if (debug) unavail.Debug = new { requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"), externalError = ex.Message, cacheHit = false, cacheSource = "none", returnedRowsCount = 0 };
+                return Ok(unavail);
             }
             finally
             {
@@ -4034,22 +4139,41 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             };
         }
 
-        private async Task<CapitalFlowPayloadDto> BuildCapitalFlowPayloadAsync(int limit)
+        private async Task<CapitalFlowPayloadDto> BuildCapitalFlowPayloadAsync(int limit, bool debug = false)
         {
+            string lastExternalUrl = "";
+            int externalStatusCode = 0;
+            string externalError = "";
+            int rawInflowCount = 0, rawOutflowCount = 0;
+
             async Task<List<CapitalFlowRowDto>> FetchRowsAsync(int po)
             {
                 long ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 int requestSize = Math.Clamp(limit * 5, 120, 300);
                 string url = $"https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz={requestSize}&po={po}&np=1&fltt=2&invt=2&fid=f62&fs=m:90+t:2,m:90+t:3&fields=f12,f14,f3,f62,f184,f66,f72&_={ts}";
+                lastExternalUrl = url;
                 using var handler = new HttpClientHandler { ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true };
-                using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(6) };
+                using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(8) };
                 client.DefaultRequestVersion = new Version(1, 1);
                 client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
                 client.DefaultRequestHeaders.Add("Referer", "https://data.eastmoney.com/bkzj/");
 
-                string body = await client.GetStringAsync(url);
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                using var response = await client.SendAsync(request);
+                externalStatusCode = (int)response.StatusCode;
+                response.EnsureSuccessStatusCode();
+                string body = await response.Content.ReadAsStringAsync();
+
                 using var doc = JsonDocument.Parse(body);
-                var list = doc.RootElement.GetProperty("data").GetProperty("diff");
+                if (!doc.RootElement.TryGetProperty("data", out var data) ||
+                    data.ValueKind == JsonValueKind.Null ||
+                    !data.TryGetProperty("diff", out var list) ||
+                    list.ValueKind != JsonValueKind.Array)
+                {
+                    externalError = "data.diff missing or not array";
+                    Console.WriteLine($"[CapitalFlow] externalStatus={externalStatusCode} rows=0 cacheHit=false error={externalError}");
+                    return new List<CapitalFlowRowDto>();
+                }
 
                 var result = new List<CapitalFlowRowDto>();
                 foreach (var item in list.EnumerateArray())
@@ -4077,20 +4201,42 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                     });
                 }
 
+                if (po == 1) rawInflowCount = result.Count;
+                else rawOutflowCount = result.Count;
                 return result;
             }
 
-            var inflow = (await FetchRowsAsync(1))
-                .Where(IsIndustryCapitalFlowRow)
-                .OrderByDescending(x => x.MainNet)
-                .Take(limit)
-                .ToList();
+            List<CapitalFlowRowDto> inflow;
+            try
+            {
+                inflow = (await FetchRowsAsync(1))
+                    .Where(IsIndustryCapitalFlowRow)
+                    .OrderByDescending(x => x.MainNet)
+                    .Take(limit)
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                externalError = $"inflow fetch failed: {ex.Message}";
+                Console.WriteLine($"[CapitalFlow] externalStatus={externalStatusCode} rows=0 cacheHit=false error={externalError}");
+                throw;
+            }
 
-            var outflow = (await FetchRowsAsync(0))
-                .Where(IsIndustryCapitalFlowRow)
-                .OrderBy(x => x.MainNet)
-                .Take(limit)
-                .ToList();
+            List<CapitalFlowRowDto> outflow;
+            try
+            {
+                outflow = (await FetchRowsAsync(0))
+                    .Where(IsIndustryCapitalFlowRow)
+                    .OrderBy(x => x.MainNet)
+                    .Take(limit)
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                externalError = $"outflow fetch failed: {ex.Message}";
+                Console.WriteLine($"[CapitalFlow] externalStatus={externalStatusCode} rows=0 cacheHit=false error={externalError}");
+                throw;
+            }
 
             var rows = inflow.Concat(outflow)
                 .GroupBy(x => x.Code)
@@ -4098,12 +4244,15 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 .OrderByDescending(x => x.MainNet)
                 .ToList();
 
+            Console.WriteLine($"[CapitalFlow] externalStatus={externalStatusCode} rows={rows.Count} rawInflow={rawInflowCount} rawOutflow={rawOutflowCount} cacheHit=false error={(externalError ?? "none")}");
+
             if (rows.Count == 0)
             {
-                throw new InvalidOperationException("主力资金流实时数据为空");
+                externalError = string.IsNullOrEmpty(externalError) ? "主力资金流实时数据为空（外部返回0条行业数据）" : externalError;
+                throw new InvalidOperationException(externalError);
             }
 
-            return new CapitalFlowPayloadDto
+            var payload = new CapitalFlowPayloadDto
             {
                 Source = "东方财富行业板块资金流向",
                 UpdatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
@@ -4114,6 +4263,24 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 Inflow = inflow,
                 Outflow = outflow
             };
+
+            if (debug)
+            {
+                payload.Debug = new
+                {
+                    requestedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
+                    externalUrl = lastExternalUrl,
+                    externalStatusCode,
+                    externalError,
+                    cacheHit = false,
+                    cacheAgeSeconds = (int?)null,
+                    rawInflowCount,
+                    rawOutflowCount,
+                    returnedRowsCount = rows.Count
+                };
+            }
+
+            return payload;
         }
         [HttpGet("sector-details")]
         public async Task<IActionResult> GetSectorDetails([FromQuery] string secCode)

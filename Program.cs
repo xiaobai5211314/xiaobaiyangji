@@ -172,6 +172,44 @@ app.MapGet("/api/health", () => Results.Ok(new
     status = "ok",
     time = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
 }));
+
+app.MapGet("/api/debug/version", (IWebHostEnvironment env) =>
+{
+    string gitCommit = "unknown";
+    try
+    {
+        var gitDir = Path.Combine(env.ContentRootPath, ".git");
+        if (Directory.Exists(gitDir))
+        {
+            var headFile = Path.Combine(gitDir, "HEAD");
+            if (File.Exists(headFile))
+            {
+                var head = File.ReadAllText(headFile).Trim();
+                if (head.StartsWith("ref: "))
+                {
+                    var refPath = Path.Combine(gitDir, head.Substring(5));
+                    if (File.Exists(refPath))
+                        gitCommit = File.ReadAllText(refPath).Trim()[..12];
+                }
+                else if (head.Length >= 12)
+                {
+                    gitCommit = head[..12];
+                }
+            }
+        }
+    }
+    catch { }
+
+    return Results.Ok(new
+    {
+        app = "xiaobaiyangji",
+        buildVersion = "2026-06-02-debug-v1",
+        buildTime = System.IO.File.GetLastWriteTime(typeof(Program).Assembly.Location).ToString("yyyy-MM-dd HH:mm:ss"),
+        gitCommit,
+        serverTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+        environment = env.EnvironmentName
+    });
+});
 app.MapControllers();
 app.MapGet("/", () => Results.Redirect("/index.html"));
 

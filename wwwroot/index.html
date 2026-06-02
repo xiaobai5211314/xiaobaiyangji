@@ -5084,9 +5084,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     return status >= 500 ? `登录服务暂时不可用（HTTP ${status}）` : `${fallback}（HTTP ${status}）`;
                 };
 
-                const APP_BUILD_VERSION = '2026-06-02-capital-flow-inline-error-v2';
+                const APP_BUILD_VERSION = '2026-06-02-debug-v1';
                 window.__XBYJ_APP_BUILD_VERSION = APP_BUILD_VERSION;
-                console.log('[估值助手] build:', APP_BUILD_VERSION);
+                console.log('[估值助手] frontend build:', APP_BUILD_VERSION);
 
                 const THEME_STORAGE_KEY = 'guzhi_web_theme';
                 const normalizeTheme = (theme) => {
