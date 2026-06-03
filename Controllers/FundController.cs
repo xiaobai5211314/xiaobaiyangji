@@ -1955,7 +1955,7 @@ namespace 小白养基.Controllers
                 try
                 {
                     var http = _httpClientFactory.CreateClient("EastMoneyQuote");
-                    var quoteUrl = $"https://push2.eastmoney.com/api/qt/stock/get?secid={Uri.EscapeDataString(indexDefinition.Secid)}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields=f43,f60,f170&fltt=2";
+                    var quoteUrl = $"https://push2.eastmoney.com/api/qt/stock/get?secid={Uri.EscapeDataString(indexDefinition.Secid)}&fields=f43,f60,f170";
                     using var qcts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
                     var quoteResponse = await http.GetStringAsync(quoteUrl, qcts.Token);
                     using var quoteDoc = JsonDocument.Parse(quoteResponse);
@@ -2656,7 +2656,7 @@ namespace 小白养基.Controllers
             var attempts = new List<GlobalIndexAttemptDto>();
             foreach (string secid in idx.Secids)
             {
-                string url = $"https://push2.eastmoney.com/api/qt/stock/get?secid={Uri.EscapeDataString(secid)}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields=f43,f44,f45,f46,f60,f170,f171&fltt=2";
+                string url = $"https://push2.eastmoney.com/api/qt/stock/get?secid={Uri.EscapeDataString(secid)}&fields=f43,f44,f45,f46,f60,f170,f171";
                 try
                 {
                     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
