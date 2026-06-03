@@ -1984,6 +1984,33 @@ namespace 小白养基.Controllers
                 catch (Exception ex) { Console.WriteLine($"[performance-curve] quote fallback failed: {ex.Message}"); }
             }
 
+            // H. ulist.np batch fallback
+            if (!indexAvailable)
+            {
+                try
+                {
+                    var http = _httpClientFactory.CreateClient("EastMoneyQuote");
+                    var batchUrl = $"https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&secids={Uri.EscapeDataString(indexDefinition.Secid)}&fields=f2,f3,f12";
+                    using var bcts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+                    var batchResp = await http.GetStringAsync(batchUrl, bcts.Token);
+                    using var batchDoc = JsonDocument.Parse(batchResp);
+                    if (batchDoc.RootElement.TryGetProperty("data", out var bData) && bData.ValueKind != JsonValueKind.Null &&
+                        bData.TryGetProperty("diff", out var diff) && diff.ValueKind == JsonValueKind.Array && diff.GetArrayLength() > 0)
+                    {
+                        var item = diff[0];
+                        double bRate = item.TryGetProperty("f3", out var bf3) && bf3.ValueKind == JsonValueKind.Number ? bf3.GetDouble() : 0;
+                        if (Math.Abs(bRate) > 0.000001 || item.TryGetProperty("f2", out _))
+                        {
+                            fallbackIndexRate = Math.Round(bRate, 4);
+                            indexAvailable = true;
+                            indexSource = "ulist-batch-fallback";
+                            indexParsedCount = 1;
+                        }
+                    }
+                }
+                catch (Exception ex) { Console.WriteLine($"[performance-curve] ulist.np fallback failed: {ex.Message}"); }
+            }
+
             Console.WriteLine($"[performance-curve] indexSource={indexSource} indexParsedCount={indexParsedCount}");
 
             var indexRatesByTime = indexAvailable
@@ -2099,7 +2126,7 @@ namespace 小白养基.Controllers
                 {
                     "cache" or "cache-stale" => "指数数据使用缓存",
                     "daily-kline-fallback" => "指数盘中数据使用日线兜底",
-                    "quote-fallback" => "指数盘中数据使用实时点位兜底",
+                    "quote-fallback" or "ulist-batch-fallback" => "指数盘中数据使用实时点位兜底",
                     _ => ""
                 } : "指数盘中数据暂不可用",
                 points = compactPoints
@@ -2463,6 +2490,66 @@ namespace 小白养基.Controllers
                                 Attempts = debugList[i].Attempts
                             };
                     }
+                }
+            }
+
+            // F. ulist.np batch fallback for any still-missing indices
+            int missingCount = results.Count(x => !x.Latest.HasValue || x.Latest.Value <= 0);
+            if (missingCount > 0)
+            {
+                try
+                {
+                    var missingSecids = definitions
+                        .Where((d, i) => !results[i].Latest.HasValue || results[i].Latest.Value <= 0)
+                        .Select(d => d.Secids[0])
+                        .ToList();
+                    var batchUrl = $"https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&secids={Uri.EscapeDataString(string.Join(",", missingSecids))}&fields=f2,f3,f12,f14";
+                    using var bcts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+                    var batchResp = await http.GetStringAsync(batchUrl, bcts.Token);
+                    using var batchDoc = JsonDocument.Parse(batchResp);
+                    if (batchDoc.RootElement.TryGetProperty("data", out var bData) && bData.ValueKind != JsonValueKind.Null &&
+                        bData.TryGetProperty("diff", out var diff) && diff.ValueKind == JsonValueKind.Array)
+                    {
+                        var batchMap = new Dictionary<string, (double price, double rate)>();
+                        foreach (var item in diff.EnumerateArray())
+                        {
+                            var code = item.TryGetProperty("f12", out var f12) ? f12.GetString() : null;
+                            double price = item.TryGetProperty("f2", out var f2) && f2.ValueKind == JsonValueKind.Number ? f2.GetDouble() : 0;
+                            double rate = item.TryGetProperty("f3", out var f3) && f3.ValueKind == JsonValueKind.Number ? f3.GetDouble() : 0;
+                            if (!string.IsNullOrEmpty(code) && price > 0) batchMap[code] = (price, rate);
+                        }
+                        for (int i = 0; i < results.Count; i++)
+                        {
+                            if (results[i].Latest.HasValue && results[i].Latest.Value > 0) continue;
+                            if (batchMap.TryGetValue(definitions[i].Code, out var bm))
+                            {
+                                var batchResult = new GlobalIndexDto
+                                {
+                                    Name = definitions[i].Name, Code = definitions[i].Code,
+                                    Market = definitions[i].Market, Secid = definitions[i].Secids[0],
+                                    Latest = Math.Round(bm.price, 2), Point = Math.Round(bm.price, 2), Close = Math.Round(bm.price, 2),
+                                    TodayRate = Math.Round(bm.rate, 2), YearRate = null,
+                                    Klines = new List<GlobalIndexKlineDto>(), Source = "ulist-batch"
+                                };
+                                results[i] = batchResult;
+                                await WritePerIndexCacheAsync(definitions[i].Code, batchResult);
+                                if (debugList != null && i < debugList.Count)
+                                    debugList[i] = new GlobalIndexDebugDto
+                                    {
+                                        Name = definitions[i].Name, Code = definitions[i].Code,
+                                        Secid = definitions[i].Secids[0], Source = "ulist-batch",
+                                        Latest = batchResult.Latest, TodayRate = batchResult.TodayRate,
+                                        YearRate = null, KlinesCount = 0,
+                                        Attempts = debugList[i].Attempts
+                                    };
+                            }
+                        }
+                        Console.WriteLine($"[global-indices] ulist.np batch filled {batchMap.Count}/{missingSecids.Count}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[global-indices] ulist.np batch failed: {ex.Message}");
                 }
             }
 
