@@ -146,19 +146,22 @@ namespace 小白养基.Services
             // 源2: 腾讯 qt.gtimg.cn
             if (quote == null)
             {
+                Console.WriteLine($"[StockQuote] {code} 尝试腾讯备用源...");
                 quote = await TryGetTencentQuoteAsync(code, market, cancellationToken);
-                if (quote != null) _logger.LogDebug("腾讯备用源成功：{Code}", code);
+                Console.WriteLine($"[StockQuote] {code} 腾讯结果: {(quote != null ? $"OK price={quote.Price}" : "null")}");
             }
 
             // 源3: 新浪 hq.sinajs.cn
             if (quote == null)
             {
+                Console.WriteLine($"[StockQuote] {code} 尝试新浪备用源...");
                 quote = await TryGetSinaQuoteAsync(code, market, cancellationToken);
-                if (quote != null) _logger.LogDebug("新浪备用源成功：{Code}", code);
+                Console.WriteLine($"[StockQuote] {code} 新浪结果: {(quote != null ? $"OK price={quote.Price}" : "null")}");
             }
 
             if (quote == null)
             {
+                Console.WriteLine($"[StockQuote] {code} 所有行情源均失败");
                 _logger.LogWarning("所有行情源均失败：{Code}", code);
                 return null;
             }
@@ -490,7 +493,7 @@ namespace 小白养基.Services
                     Amount: 0,
                     QuoteTime: DateTime.Now);
             }
-            catch { return null; }
+            catch (Exception ex) { Console.WriteLine($"[StockQuote] {code} 腾讯异常: {ex.GetType().Name}: {ex.Message}"); return null; }
         }
 
         private async Task<StockQuoteDto?> TryGetSinaQuoteAsync(string code, string market, CancellationToken ct)
@@ -527,7 +530,7 @@ namespace 小白养基.Services
                     Amount: 0,
                     QuoteTime: DateTime.Now);
             }
-            catch { return null; }
+            catch (Exception ex) { Console.WriteLine($"[StockQuote] {code} 新浪异常: {ex.GetType().Name}: {ex.Message}"); return null; }
         }
 
         private static decimal GetDecimal(JsonElement element, string name)
