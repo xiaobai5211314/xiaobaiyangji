@@ -2330,8 +2330,17 @@ namespace 小白养基.Controllers
             var fields2 = "f51,f52,f53,f54,f55,f56,f57,f58";
             var url = $"https://push2his.eastmoney.com/api/qt/stock/trends2/get?secid={Uri.EscapeDataString(index.Secid)}&fields1={fields1}&fields2={fields2}&iscr=0&iscca=0";
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-            var response = await http.GetStringAsync(url, cts.Token);
+            string response;
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                response = await http.GetStringAsync(url, cts.Token);
+            }
+            catch
+            {
+                // Fallback: use curl (workaround for HttpClient TLS/network issues on some servers)
+                response = await CurlFetchAsync(url);
+            }
             Console.WriteLine($"[performance-curve] trends2 response len={response.Length} secid={index.Secid}");
             using var doc = JsonDocument.Parse(response);
             if (!doc.RootElement.TryGetProperty("data", out var data) ||
@@ -2381,6 +2390,28 @@ namespace 小白养基.Controllers
             return new PerformanceIndexTickResult(
                 result.OrderBy(p => p.Time).ToList(),
                 preClose);
+        }
+
+        private static async Task<string> CurlFetchAsync(string url)
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo("curl")
+            {
+                Arguments = $"-4 -sS --connect-timeout 10 --max-time 20 --http1.1 -H \"Referer: https://quote.eastmoney.com/\" \"{url}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            using var process = System.Diagnostics.Process.Start(psi);
+            if (process == null) throw new InvalidOperationException("Failed to start curl");
+            var output = await process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            if (process.ExitCode != 0)
+            {
+                var err = await process.StandardError.ReadToEndAsync();
+                throw new HttpRequestException($"curl failed (exit={process.ExitCode}): {err}");
+            }
+            return output;
         }
 
         private static Dictionary<DateTime, double?> BuildAlignedIntradayIndexRates(
@@ -2464,8 +2495,16 @@ namespace 小白养基.Controllers
             var limit = Math.Clamp((endDate - startDate).Days + 40, 80, 430);
             var url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={Uri.EscapeDataString(index.Secid)}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt={limit}";
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-            var response = await http.GetStringAsync(url, cts.Token);
+            string response;
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                response = await http.GetStringAsync(url, cts.Token);
+            }
+            catch
+            {
+                response = await CurlFetchAsync(url);
+            }
             using var doc = JsonDocument.Parse(response);
 
             if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null ||
@@ -2809,8 +2848,16 @@ namespace 小白养基.Controllers
                 string url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={Uri.EscapeDataString(secid)}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250";
                 try
                 {
-                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                    string response = await http.GetStringAsync(url, cts.Token);
+                    string response;
+                    try
+                    {
+                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                        response = await http.GetStringAsync(url, cts.Token);
+                    }
+                    catch
+                    {
+                        response = await CurlFetchAsync(url);
+                    }
                     using var doc = JsonDocument.Parse(response);
 
                     if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null)
