@@ -1562,7 +1562,7 @@ namespace 小白养基.Controllers
                     indexParsedCount = fetched.Count;
                     indexCloses = fetched.ToArray();
                     indexAvailable = indexCloses.Length > 0;
-                    indexSource = "fresh";
+                    indexSource = indexAvailable ? "fresh" : "none";
                     if (indexAvailable)
                     {
                         _cache.Set(idxFreshKey, fetched, GetExternalDataFreshTtl());
@@ -1574,13 +1574,15 @@ namespace 小白养基.Controllers
             {
                 indexError = ex.Message;
                 Console.WriteLine($"[performance-curve] index failed: {indexDefinition.Key} {ex.Message}");
-                if (_cache.TryGetValue<List<PerformanceIndexClose>>(idxStaleKey, out var cachedStale) && cachedStale!.Count > 0)
-                {
-                    indexCloses = cachedStale.ToArray();
-                    indexAvailable = true;
-                    indexSource = "cache";
-                    indexParsedCount = indexCloses.Length;
-                }
+            }
+
+            // 外部接口失败或返回空时，尝试 stale 缓存兜底
+            if (!indexAvailable && _cache.TryGetValue<List<PerformanceIndexClose>>(idxStaleKey, out var cachedStale) && cachedStale!.Count > 0)
+            {
+                indexCloses = cachedStale.ToArray();
+                indexAvailable = true;
+                indexSource = "cache";
+                indexParsedCount = indexCloses.Length;
             }
 
             var indexRatesByDate = indexAvailable
@@ -1736,7 +1738,7 @@ namespace 小白养基.Controllers
                     indexParsedCount = fetched.Count;
                     indexTicks = fetched.ToArray();
                     indexAvailable = indexTicks.Length > 0;
-                    indexSource = "fresh";
+                    indexSource = indexAvailable ? "fresh" : "none";
                     if (indexAvailable)
                     {
                         _cache.Set(idxFreshKey, fetched, GetExternalDataFreshTtl());
@@ -1748,13 +1750,15 @@ namespace 小白养基.Controllers
             {
                 indexError = ex.Message;
                 Console.WriteLine($"[performance-curve] intraday index failed: {indexDefinition.Key} {ex.Message}");
-                if (_cache.TryGetValue<List<PerformanceIndexTick>>(idxStaleKey, out var cachedStaleTicks) && cachedStaleTicks!.Count > 0)
-                {
-                    indexTicks = cachedStaleTicks.ToArray();
-                    indexAvailable = true;
-                    indexSource = "cache";
-                    indexParsedCount = indexTicks.Length;
-                }
+            }
+
+            // 外部接口失败或返回空时，尝试 stale 缓存兜底
+            if (!indexAvailable && _cache.TryGetValue<List<PerformanceIndexTick>>(idxStaleKey, out var cachedStaleTicks) && cachedStaleTicks!.Count > 0)
+            {
+                indexTicks = cachedStaleTicks.ToArray();
+                indexAvailable = true;
+                indexSource = "cache";
+                indexParsedCount = indexTicks.Length;
             }
 
             var indexRatesByTime = indexAvailable
