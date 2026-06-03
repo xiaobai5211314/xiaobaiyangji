@@ -1991,8 +1991,10 @@ namespace 小白养基.Controllers
                 {
                     var http = _httpClientFactory.CreateClient("EastMoneyQuote");
                     var batchUrl = $"https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&secids={Uri.EscapeDataString(indexDefinition.Secid)}&fields=f2,f3,f12";
+                    Console.WriteLine($"[performance-curve] ulist.np trying: {batchUrl}");
                     using var bcts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
                     var batchResp = await http.GetStringAsync(batchUrl, bcts.Token);
+                    Console.WriteLine($"[performance-curve] ulist.np response len={batchResp.Length}");
                     using var batchDoc = JsonDocument.Parse(batchResp);
                     if (batchDoc.RootElement.TryGetProperty("data", out var bData) && bData.ValueKind != JsonValueKind.Null &&
                         bData.TryGetProperty("diff", out var diff) && diff.ValueKind == JsonValueKind.Array && diff.GetArrayLength() > 0)
@@ -2007,8 +2009,17 @@ namespace 小白养基.Controllers
                             indexParsedCount = 1;
                         }
                     }
+                    else
+                    {
+                        indexError = $"ulist.np: data={batchResp[..Math.Min(200, batchResp.Length)]}";
+                        Console.WriteLine($"[performance-curve] ulist.np no data: {batchResp[..Math.Min(200, batchResp.Length)]}");
+                    }
                 }
-                catch (Exception ex) { Console.WriteLine($"[performance-curve] ulist.np fallback failed: {ex.Message}"); }
+                catch (Exception ex)
+                {
+                    indexError = $"ulist.np: {ex.Message}";
+                    Console.WriteLine($"[performance-curve] ulist.np fallback failed: {ex.Message}");
+                }
             }
 
             Console.WriteLine($"[performance-curve] indexSource={indexSource} indexParsedCount={indexParsedCount}");
