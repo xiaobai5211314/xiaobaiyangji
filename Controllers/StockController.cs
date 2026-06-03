@@ -70,11 +70,30 @@ namespace 小白养基.Controllers
         }
 
         [HttpGet("quote")]
-        public async Task<IActionResult> Quote([FromQuery] string code, CancellationToken cancellationToken)
+        public async Task<IActionResult> Quote([FromQuery] string code, [FromQuery] bool debug = false, CancellationToken cancellationToken = default)
         {
-            var quote = await _quotes.GetQuoteAsync(code, cancellationToken);
-            if (quote == null) return NotFound(new { success = false, message = "未找到股票行情" });
+            var attempts = new List<object>();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
 
+            // 源1: 东方财富
+            StockQuoteDto? quote = null;
+            try
+            {
+                quote = await _quotes.GetQuoteAsync(code, cancellationToken);
+                attempts.Add(new { source = "eastmoney+tencent+sina", elapsedMs = sw.ElapsedMilliseconds, ok = quote != null, price = quote?.Price, changeRate = quote?.ChangeRate });
+            }
+            catch (Exception ex)
+            {
+                attempts.Add(new { source = "eastmoney", elapsedMs = sw.ElapsedMilliseconds, error = ex.Message });
+            }
+
+            if (quote == null)
+            {
+                if (debug) return Ok(new { success = false, message = "未找到股票行情", debug = new { code, attempts } });
+                return NotFound(new { success = false, message = "未找到股票行情" });
+            }
+
+            if (debug) return Ok(new { success = true, quote, debug = new { code, attempts } });
             return Ok(new { success = true, quote });
         }
 
