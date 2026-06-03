@@ -1821,19 +1821,49 @@ namespace 小白养基.Controllers
             var indexRawCount = 0;
             var indexParsedCount = 0;
             var indexError = (string?)null;
-            var idxFreshKey = $"PerfIdxTick:{indexDefinition.Key}:{today:yyyyMMdd}";
-            var idxStaleKey = idxFreshKey + ":stale";
+            double? fallbackIndexRate = null;
+            var idxDateStr = today.ToString("yyyyMMdd");
+            var idxFreshMemKey = $"PerfIdxTick:{indexDefinition.Key}:{idxDateStr}";
+            var idxStaleMemKey = idxFreshMemKey + ":stale";
+            var idxRedisFreshKey = $"PerformanceIndexTicks:{indexDefinition.Key}:{idxDateStr}:F";
+            var idxRedisStaleKey = $"PerformanceIndexTicks:{indexDefinition.Key}:{idxDateStr}:S";
 
-            try
+            // A. IMemoryCache fresh
+            if (_cache.TryGetValue<List<PerformanceIndexTick>>(idxFreshMemKey, out var cachedFreshTicks) && cachedFreshTicks!.Count > 0)
             {
-                if (_cache.TryGetValue<List<PerformanceIndexTick>>(idxFreshKey, out var cachedFreshTicks) && cachedFreshTicks!.Count > 0)
+                indexTicks = cachedFreshTicks.ToArray();
+                indexAvailable = true;
+                indexSource = "cache";
+                indexParsedCount = indexTicks.Length;
+            }
+
+            // B. Redis fresh
+            if (!indexAvailable)
+            {
+                try
                 {
-                    indexTicks = cachedFreshTicks.ToArray();
-                    indexAvailable = true;
-                    indexSource = "cache";
-                    indexParsedCount = indexTicks.Length;
+                    var db = _redis.GetDatabase();
+                    var redisFresh = await db.StringGetAsync(idxRedisFreshKey);
+                    if (redisFresh.HasValue)
+                    {
+                        var deserialized = JsonSerializer.Deserialize<List<PerformanceIndexTick>>(redisFresh.ToString());
+                        if (deserialized is { Count: > 0 })
+                        {
+                            indexTicks = deserialized.ToArray();
+                            indexAvailable = true;
+                            indexSource = "cache";
+                            indexParsedCount = indexTicks.Length;
+                            _cache.Set(idxFreshMemKey, deserialized, GetExternalDataFreshTtl());
+                        }
+                    }
                 }
-                else
+                catch (Exception ex) { Console.WriteLine($"[performance-curve] redis fresh read failed: {ex.Message}"); }
+            }
+
+            // C. trends2 API
+            if (!indexAvailable)
+            {
+                try
                 {
                     var http = _httpClientFactory.CreateClient("EastMoneyQuote");
                     var fetched = await FetchPerformanceIndexTicksAsync(http, indexDefinition, today);
@@ -1844,28 +1874,122 @@ namespace 小白养基.Controllers
                     indexSource = indexAvailable ? "fresh" : "none";
                     if (indexAvailable)
                     {
-                        _cache.Set(idxFreshKey, fetched, GetExternalDataFreshTtl());
-                        _cache.Set(idxStaleKey, fetched, TimeSpan.FromHours(24));
+                        _cache.Set(idxFreshMemKey, fetched, GetExternalDataFreshTtl());
+                        _cache.Set(idxStaleMemKey, fetched, TimeSpan.FromHours(24));
+                        try
+                        {
+                            var db = _redis.GetDatabase();
+                            var json = JsonSerializer.Serialize(fetched);
+                            await db.StringSetAsync(idxRedisFreshKey, json, GetExternalDataFreshTtl());
+                            await db.StringSetAsync(idxRedisStaleKey, json, TimeSpan.FromDays(7));
+                        }
+                        catch (Exception rex) { Console.WriteLine($"[performance-curve] redis write failed: {rex.Message}"); }
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                indexError = ex.Message;
-                Console.WriteLine($"[performance-curve] intraday index failed: {indexDefinition.Key} {ex.Message}");
+                catch (Exception ex)
+                {
+                    indexError = ex.Message;
+                    Console.WriteLine($"[performance-curve] intraday index failed: {indexDefinition.Key} {ex.Message}");
+                }
             }
 
-            // 外部接口失败或返回空时，尝试 stale 缓存兜底
-            if (!indexAvailable && _cache.TryGetValue<List<PerformanceIndexTick>>(idxStaleKey, out var cachedStaleTicks) && cachedStaleTicks!.Count > 0)
+            // D. IMemoryCache stale
+            if (!indexAvailable && _cache.TryGetValue<List<PerformanceIndexTick>>(idxStaleMemKey, out var cachedStaleTicks) && cachedStaleTicks!.Count > 0)
             {
                 indexTicks = cachedStaleTicks.ToArray();
                 indexAvailable = true;
-                indexSource = "cache";
+                indexSource = "cache-stale";
                 indexParsedCount = indexTicks.Length;
             }
 
+            // E. Redis stale
+            if (!indexAvailable)
+            {
+                try
+                {
+                    var db = _redis.GetDatabase();
+                    var redisStale = await db.StringGetAsync(idxRedisStaleKey);
+                    if (redisStale.HasValue)
+                    {
+                        var deserialized = JsonSerializer.Deserialize<List<PerformanceIndexTick>>(redisStale.ToString());
+                        if (deserialized is { Count: > 0 })
+                        {
+                            indexTicks = deserialized.ToArray();
+                            indexAvailable = true;
+                            indexSource = "cache-stale";
+                            indexParsedCount = indexTicks.Length;
+                        }
+                    }
+                }
+                catch (Exception ex) { Console.WriteLine($"[performance-curve] redis stale read failed: {ex.Message}"); }
+            }
+
+            // F. Daily kline fallback
+            if (!indexAvailable)
+            {
+                try
+                {
+                    var http = _httpClientFactory.CreateClient("EastMoneyQuote");
+                    var klineCloses = await FetchPerformanceIndexClosesAsync(http, indexDefinition, today.AddDays(-10), today);
+                    if (klineCloses.Count >= 2)
+                    {
+                        var sorted = klineCloses.OrderBy(c => c.Date).ToList();
+                        var prevClose = sorted[^2].Close;
+                        var todayClose = sorted[^1].Close;
+                        if (prevClose > 0)
+                        {
+                            fallbackIndexRate = Math.Round((todayClose - prevClose) / prevClose * 100d, 4);
+                            indexAvailable = true;
+                            indexSource = "daily-kline-fallback";
+                            indexRawCount = klineCloses.Count;
+                            indexParsedCount = 1;
+                        }
+                    }
+                }
+                catch (Exception ex) { Console.WriteLine($"[performance-curve] daily kline fallback failed: {ex.Message}"); }
+            }
+
+            // G. Quote fallback
+            if (!indexAvailable)
+            {
+                try
+                {
+                    var http = _httpClientFactory.CreateClient("EastMoneyQuote");
+                    var quoteUrl = $"https://push2.eastmoney.com/api/qt/stock/get?secid={Uri.EscapeDataString(indexDefinition.Secid)}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields=f43,f60,f170&fltt=2";
+                    using var qcts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    var quoteResponse = await http.GetStringAsync(quoteUrl, qcts.Token);
+                    using var quoteDoc = JsonDocument.Parse(quoteResponse);
+                    if (quoteDoc.RootElement.TryGetProperty("data", out var qData) && qData.ValueKind != JsonValueKind.Null)
+                    {
+                        double? qRate = null;
+                        if (qData.TryGetProperty("f170", out var qf170) && qf170.ValueKind == JsonValueKind.Number)
+                            qRate = Math.Round(qf170.GetDouble(), 4);
+                        if (!qRate.HasValue || Math.Abs(qRate.Value) < 0.000001)
+                        {
+                            if (qData.TryGetProperty("f43", out var qf43) && qf43.ValueKind == JsonValueKind.Number &&
+                                qData.TryGetProperty("f60", out var qf60) && qf60.ValueKind == JsonValueKind.Number && qf60.GetDouble() > 0)
+                            {
+                                qRate = Math.Round((qf43.GetDouble() - qf60.GetDouble()) / qf60.GetDouble() * 100d, 4);
+                            }
+                        }
+                        if (qRate.HasValue)
+                        {
+                            fallbackIndexRate = qRate;
+                            indexAvailable = true;
+                            indexSource = "quote-fallback";
+                            indexParsedCount = 1;
+                        }
+                    }
+                }
+                catch (Exception ex) { Console.WriteLine($"[performance-curve] quote fallback failed: {ex.Message}"); }
+            }
+
+            Console.WriteLine($"[performance-curve] indexSource={indexSource} indexParsedCount={indexParsedCount}");
+
             var indexRatesByTime = indexAvailable
-                ? BuildAlignedIntradayIndexRates(timeline, indexTicks)
+                ? (fallbackIndexRate.HasValue
+                    ? timeline.Distinct().ToDictionary(t => t, t => fallbackIndexRate)
+                    : BuildAlignedIntradayIndexRates(timeline, indexTicks))
                 : new Dictionary<DateTime, double?>();
 
             var cursors = new int[series.Count];
@@ -1971,7 +2095,13 @@ namespace 小白养基.Controllers
                 indexTotalRate = Math.Round(indexTotalRate, 2),
                 excessRate = hasIndexRate ? Math.Round(myTotalRate - indexTotalRate, 2) : 0d,
                 myTotalProfit = Math.Round(myTotalProfit, 2),
-                message = hasIndexRate ? (indexSource == "cache" ? "指数数据使用缓存" : "") : "指数盘中数据暂不可用",
+                message = hasIndexRate ? indexSource switch
+                {
+                    "cache" or "cache-stale" => "指数数据使用缓存",
+                    "daily-kline-fallback" => "指数盘中数据使用日线兜底",
+                    "quote-fallback" => "指数盘中数据使用实时点位兜底",
+                    _ => ""
+                } : "指数盘中数据暂不可用",
                 points = compactPoints
             });
         }
@@ -2290,10 +2420,13 @@ namespace 小白养基.Controllers
                 if (idxDebug != null) debugList!.Add(idxDebug);
             }
 
-            // Per-index stale merge: fill missing data from per-index stale cache
+            // Per-index stale merge: fill missing data from per-index stale cache or legacy combined cache
+            List<GlobalIndexDto>? legacyCacheData = null;
             for (int i = 0; i < results.Count; i++)
             {
                 if (results[i].Latest.HasValue && results[i].Latest.Value > 0) continue;
+
+                // D. per-index stale cache
                 var stale = await ReadPerIndexStaleCacheAsync(definitions[i].Code);
                 if (stale != null && stale.Latest.HasValue && stale.Latest.Value > 0)
                 {
@@ -2308,6 +2441,28 @@ namespace 小白养基.Controllers
                             YearRate = stale.YearRate, KlinesCount = stale.Klines.Count,
                             Attempts = debugList[i].Attempts
                         };
+                    continue;
+                }
+
+                // E. legacy combined cache
+                legacyCacheData ??= await TryReadLegacyGlobalIndicesCacheListAsync();
+                if (legacyCacheData != null)
+                {
+                    var legacyItem = legacyCacheData.FirstOrDefault(x => x.Code == definitions[i].Code);
+                    if (legacyItem != null && legacyItem.Latest.HasValue && legacyItem.Latest.Value > 0)
+                    {
+                        legacyItem.Source = "legacy-cache";
+                        results[i] = legacyItem;
+                        if (debugList != null && i < debugList.Count)
+                            debugList[i] = new GlobalIndexDebugDto
+                            {
+                                Name = definitions[i].Name, Code = definitions[i].Code,
+                                Secid = legacyItem.Secid, Source = "legacy-cache",
+                                Latest = legacyItem.Latest, TodayRate = legacyItem.TodayRate,
+                                YearRate = legacyItem.YearRate, KlinesCount = legacyItem.Klines.Count,
+                                Attempts = debugList[i].Attempts
+                            };
+                    }
                 }
             }
 
@@ -2501,7 +2656,7 @@ namespace 小白养基.Controllers
             var attempts = new List<GlobalIndexAttemptDto>();
             foreach (string secid in idx.Secids)
             {
-                string url = $"https://push2.eastmoney.com/api/qt/stock/get?secid={Uri.EscapeDataString(secid)}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields=f43,f170&fltt=2";
+                string url = $"https://push2.eastmoney.com/api/qt/stock/get?secid={Uri.EscapeDataString(secid)}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields=f43,f44,f45,f46,f60,f170,f171&fltt=2";
                 try
                 {
                     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -2516,10 +2671,29 @@ namespace 小白养基.Controllers
 
                     double? latest = null;
                     double? todayRate = null;
-                    if (data.TryGetProperty("f43", out var f43) && f43.ValueKind == JsonValueKind.Number)
+                    if (data.TryGetProperty("f43", out var f43) && f43.ValueKind == JsonValueKind.Number && f43.GetDouble() > 0)
                         latest = Math.Round(f43.GetDouble(), 2);
                     if (data.TryGetProperty("f170", out var f170) && f170.ValueKind == JsonValueKind.Number)
                         todayRate = Math.Round(f170.GetDouble(), 2);
+
+                    // f43 fallback: try f46 (open), f44 (high), f45 (low)
+                    if (!latest.HasValue || latest.Value <= 0)
+                    {
+                        foreach (var fbField in new[] { "f46", "f44", "f45" })
+                        {
+                            if (data.TryGetProperty(fbField, out var fb) && fb.ValueKind == JsonValueKind.Number && fb.GetDouble() > 0)
+                            {
+                                latest = Math.Round(fb.GetDouble(), 2);
+                                break;
+                            }
+                        }
+                    }
+
+                    // Calculate from previous close + change rate if still missing
+                    if ((!latest.HasValue || latest.Value <= 0) && todayRate.HasValue && data.TryGetProperty("f60", out var f60) && f60.ValueKind == JsonValueKind.Number && f60.GetDouble() > 0)
+                    {
+                        latest = Math.Round(f60.GetDouble() * (1 + todayRate.Value / 100d), 2);
+                    }
 
                     if (latest.HasValue && latest.Value > 0)
                     {
@@ -2532,7 +2706,7 @@ namespace 小白养基.Controllers
                             Klines = new List<GlobalIndexKlineDto>()
                         }, attempts);
                     }
-                    attempts.Add(new GlobalIndexAttemptDto { Source = "quote", Url = url, Status = 200, Error = $"latest={latest}" });
+                    attempts.Add(new GlobalIndexAttemptDto { Source = "quote", Url = url, Status = 200, Error = $"latest={latest} todayRate={todayRate}" });
                 }
                 catch (OperationCanceledException)
                 {
@@ -2569,6 +2743,18 @@ namespace 小白养基.Controllers
                 Console.WriteLine($"[global-indices] redis read failed: {ex.Message}");
                 return null;
             }
+        }
+
+        private async Task<List<GlobalIndexDto>?> TryReadLegacyGlobalIndicesCacheListAsync()
+        {
+            try
+            {
+                var db = _redis.GetDatabase();
+                var cached = await db.StringGetAsync(GlobalIndicesCacheKey);
+                if (!cached.HasValue) return null;
+                return JsonSerializer.Deserialize<List<GlobalIndexDto>>(cached.ToString(), GlobalIndicesJsonOptions);
+            }
+            catch { return null; }
         }
 
         private async Task TryWriteLegacyGlobalIndicesCacheAsync(List<GlobalIndexDto> result)

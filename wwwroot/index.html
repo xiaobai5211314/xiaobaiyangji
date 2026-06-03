@@ -6057,9 +6057,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         if (Array.isArray(data)) {
                             globalIndices.value = data;
                             const srcInfo = data.filter(x => x.source && x.source !== 'fresh').map(x => `${x.name}:${x.source}`);
-                            if (srcInfo.length > 0) console.log('[global-indices] source=' + srcInfo.join(', '));
+                            const validCount = data.filter(x => x.latest && x.latest > 0).length;
+                            console.log(`[global-indices] source=${srcInfo.length > 0 ? srcInfo.join(', ') : 'fresh'} validCount=${validCount}/7`);
                         } else if (data && Array.isArray(data.indices)) {
                             globalIndices.value = data.indices;
+                            const validCount = data.indices.filter(x => x.latest && x.latest > 0).length;
+                            console.log(`[global-indices] source=debug validCount=${validCount}/${data.totalCount || 7}`);
                             if (data.debug) console.log('[global-indices]', JSON.stringify(data.debug));
                         } else {
                             globalIndices.value = [];
@@ -6611,6 +6614,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const data = await res.json();
                         performanceCurve.value = data || null;
                         performanceMessage.value = data?.message || '';
+                        if (data?.indexSource) console.log(`[performance-curve] indexSource=${data.indexSource} indexParsedCount=${data.indexParsedCount || 0}`);
                         await nextTick();
                         await renderPerformanceChart();
                     } catch (e) {
