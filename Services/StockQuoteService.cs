@@ -475,13 +475,23 @@ namespace 小白养基.Services
             };
         }
 
+        private static async Task<string> GetStringGbAsync(HttpClient client, string url, CancellationToken ct)
+        {
+            using var resp = await client.GetAsync(url, ct);
+            resp.EnsureSuccessStatusCode();
+            var bytes = await resp.Content.ReadAsByteArrayAsync(ct);
+            // 尝试 UTF-8，失败回退 GBK
+            try { return System.Text.Encoding.UTF8.GetString(bytes); }
+            catch { return System.Text.Encoding.GetEncoding("GBK").GetString(bytes); }
+        }
+
         private async Task<StockQuoteDto?> TryGetTencentQuoteAsync(string code, string market, CancellationToken ct)
         {
             try
             {
                 using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
                 var symbol = TencentSymbol(code, market);
-                var text = await client.GetStringAsync($"https://qt.gtimg.cn/q={symbol}", ct);
+                var text = await GetStringGbAsync(client, $"https://qt.gtimg.cn/q={symbol}", ct);
                 // 格式: v_sh600519="1~贵州茅台~600519~1307.22~1309.60~1306.00~36362~...~...~...~-2.38~-0.18~1326.36~1301.00~..."
                 var start = text.IndexOf('"');
                 var end = text.LastIndexOf('"');
@@ -517,7 +527,7 @@ namespace 小白养基.Services
                 using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
                 client.DefaultRequestHeaders.Add("Referer", "https://finance.sina.com.cn");
                 var symbol = TencentSymbol(code, market); // sh/sz/hk 前缀格式相同
-                var text = await client.GetStringAsync($"https://hq.sinajs.cn/list={symbol}", ct);
+                var text = await GetStringGbAsync(client, $"https://hq.sinajs.cn/list={symbol}", ct);
                 // 格式: var hq_str_sh600519="贵州茅台,1307.22,1309.60,...,2026-06-03,09:06:48,...";
                 var start = text.IndexOf('"');
                 var end = text.LastIndexOf('"');

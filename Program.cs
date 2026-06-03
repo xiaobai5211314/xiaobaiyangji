@@ -10,6 +10,7 @@ using 小白养基.Services;
 using StackExchange.Redis;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
+System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 var builder = WebApplication.CreateBuilder(args);
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
