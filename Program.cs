@@ -92,17 +92,18 @@ builder.Services.AddHttpClient("EastMoney", client =>
 builder.Services.AddHttpClient("EastMoneyQuote", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(30);
-    client.DefaultRequestVersion = new Version(1, 1);
+    client.DefaultRequestVersion = System.Net.HttpVersion.Version11;
+    client.DefaultVersionPolicy = System.Net.Http.HttpVersionPolicy.RequestVersionExact;
     client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36");
-    client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "*/*");
+    client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "application/json, text/plain, */*");
     client.DefaultRequestHeaders.TryAddWithoutValidation("Referer", "https://quote.eastmoney.com/");
+    client.DefaultRequestHeaders.TryAddWithoutValidation("Connection", "keep-alive");
 }).ConfigurePrimaryHttpMessageHandler(() =>
 {
     return new HttpClientHandler
     {
         UseCookies = false,
         MaxConnectionsPerServer = 20,
-        SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13,
     };
 });
 
