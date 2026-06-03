@@ -104,27 +104,6 @@ builder.Services.AddHttpClient("EastMoneyQuote", client =>
     {
         ConnectTimeout = TimeSpan.FromSeconds(10),
         UseCookies = false,
-        EnableMultipleHttp2Connections = false,
-        ConnectCallback = async (context, cancellationToken) =>
-        {
-            var addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, cancellationToken);
-            // Prefer IPv4 — push2his.eastmoney.com may have broken IPv6
-            var sorted = addresses.OrderBy(a => a.AddressFamily == AddressFamily.InterNetwork ? 0 : 1).ToArray();
-            Socket? socket = null;
-            foreach (var addr in sorted)
-            {
-                socket?.Dispose();
-                socket = new Socket(addr.AddressFamily, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
-                try
-                {
-                    await socket.ConnectAsync(addr, context.DnsEndPoint.Port, cancellationToken);
-                    return new NetworkStream(socket, ownsSocket: true);
-                }
-                catch { /* try next address */ }
-            }
-            socket?.Dispose();
-            throw new SocketException((int)SocketError.HostUnreachable);
-        }
     };
 });
 
