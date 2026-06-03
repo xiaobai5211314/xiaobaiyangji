@@ -734,6 +734,12 @@ namespace 小白养基.Controllers
             var items = new List<OcrImportPreviewItem>();
             const string amountPattern = @"^\d[\d,]*\.\d{2}$";
 
+            // 诊断：输出所有 OCR 识别行
+            for (int di = 0; di < texts.Count; di++)
+            {
+                diagnostics.Add($"[OCR行#{di}] {texts[di]}");
+            }
+
             var navClient = _httpClientFactory.CreateClient("EastMoney");
             string settleDate = ChinaDateDash();
 
@@ -865,9 +871,23 @@ namespace 小白养基.Controllers
 
                 if (best.fund == null || best.score <= 65 || holdAmount <= 0)
                 {
-                    diagnostics.Add($"未确认: {namePart}，匹配分 {best.score:F1}");
+                    int cardStart = FindCardStartIndex(texts, i);
+                    diagnostics.Add($"[OCR卡片] 金额行#{i} cardStart={cardStart} 候选行: [{string.Join(" | ", nameCandidates)}] 拼接: {namePart}");
+                    // 找最接近的3个候选基金
+                    var top3 = FindTopNCandidates(namePart, potentialFragment, robustFundPool, 3);
+                    if (top3.Count > 0)
+                    {
+                        diagnostics.Add($"  最接近: {string.Join("; ", top3.Select(t => $"{t.fund.Name}({t.fund.Code}) 分={t.score:F1}"))}");
+                    }
+                    else
+                    {
+                        diagnostics.Add($"  未找到任何候选基金");
+                    }
+                    diagnostics.Add($"未确认: {namePart}，匹配分 {best.score:F1}，金额 {holdAmount}");
                     continue;
                 }
+
+                diagnostics.Add($"[OCR匹配] {namePart} → {best.fund.Name}({best.fund.Code}) 分={best.score:F1} 金额={holdAmount}");
 
                 string calcMethod = "识别提取";
 
@@ -936,20 +956,41 @@ namespace 小白养基.Controllers
         }
         private static string FindPreviousFundName(List<string> texts, int amountIndex)
         {
-            // 兼容旧调用：取第一个非噪声行
+            // Legacy wrapper
             var candidates = CollectNameCandidateLines(texts, amountIndex);
             return candidates.Count > 0 ? candidates[0] : string.Empty;
+        }
+
+        private static int FindCardStartIndex(List<string> texts, int amountIndex)
+        {
+            // 从金额行往上找卡片起点：
+            // 遇到"财富号"行 → 该行之后
+            // 遇到上一个金额行 → 该行之后
+            // 到达顶部 → 0
+            for (int k = amountIndex - 1; k >= 0; k--)
+            {
+                string line = texts[k].Trim();
+                if (line.Contains("财富号")) return k + 1;
+                if (Regex.IsMatch(line, @"^\d[\d,]*\.\d{2}$")) return k + 1;
+            }
+            return 0;
         }
 
         private static List<string> CollectNameCandidateLines(List<string> texts, int amountIndex)
         {
             var result = new List<string>();
-            for (int k = amountIndex - 1; k >= Math.Max(0, amountIndex - 5); k--)
+            int cardStart = FindCardStartIndex(texts, amountIndex);
+
+            for (int k = amountIndex - 1; k >= cardStart; k--)
             {
                 string prev = texts[k].Trim();
-                if (string.IsNullOrWhiteSpace(prev) || IsNoiseLine(prev) || Regex.IsMatch(prev, @"^[-\d\.,%+]+$")) continue;
+                if (string.IsNullOrWhiteSpace(prev)) continue;
+                if (IsNoiseLine(prev)) continue;
+                if (Regex.IsMatch(prev, @"^[-\d\.,%+]+$")) continue;
+                // 过滤短片段（单个中文字符/2字符非截断），但保留截断行和有意义的名称行
+                if (prev.Length <= 2 && !prev.EndsWith("...") && !prev.EndsWith("…")) continue;
                 result.Add(prev);
-                if (result.Count >= 3) break;  // 最多取3行候选
+                if (result.Count >= 4) break;
             }
             return result;
         }
@@ -1084,7 +1125,9 @@ namespace 小白养基.Controllers
                 {
                     var candidates = fundPool.Where(f =>
                         !string.IsNullOrWhiteSpace(f.NormalizedName) &&
-                        (f.NormalizedName.Contains(pureChinese) || pureChinese.Contains(f.NormalizedName[..Math.Min(3, f.NormalizedName.Length)])));
+                        (f.NormalizedName.Contains(pureChinese) ||
+                         pureChinese.Contains(f.NormalizedName[..Math.Min(3, f.NormalizedName.Length)]) ||
+                         (pureChinese.Length >= 4 && f.NormalizedName.Contains(pureChinese[..Math.Min(4, pureChinese.Length)]))));
                     foreach (var f in candidates)
                     {
                         double levScore = CalculateSimilarity(normalizedOcr, f.NormalizedName) * 100;
@@ -1121,6 +1164,37 @@ namespace 小白养基.Controllers
             var matches = Regex.Matches(text, @"[\u4e00-\u9fa5]{2,}");
             foreach (Match m in matches) tokens.Add(m.Value);
             return tokens;
+        }
+
+        private List<(FundInfoCache fund, double score)> FindTopNCandidates(string namePart, string potentialFragment, List<FundInfoCache> fundPool, int n)
+        {
+            string testName = string.IsNullOrWhiteSpace(potentialFragment) ? namePart : namePart + potentialFragment;
+            string normalizedOcr = NormalizeFundName(testName);
+            string pureChinese = Regex.Replace(testName, @"[^\u4e00-\u9fa5]", "");
+            if (pureChinese.Length < 2) return new();
+
+            var ocrTokens = ExtractChineseTokens(testName);
+            var scored = new List<(FundInfoCache fund, double score)>();
+
+            foreach (var f in fundPool)
+            {
+                if (string.IsNullOrWhiteSpace(f.NormalizedName)) continue;
+                if (!f.NormalizedName.Contains(pureChinese) &&
+                    !pureChinese.Contains(f.NormalizedName[..Math.Min(3, f.NormalizedName.Length)]) &&
+                    !(pureChinese.Length >= 4 && f.NormalizedName.Contains(pureChinese[..Math.Min(4, pureChinese.Length)])))
+                    continue;
+
+                double levScore = CalculateSimilarity(normalizedOcr, f.NormalizedName) * 100;
+                double tokenBonus = 0;
+                if (ocrTokens.Count >= 2)
+                {
+                    int hits = ocrTokens.Count(t => f.NormalizedName.Contains(t));
+                    tokenBonus = (double)hits / ocrTokens.Count * 15;
+                }
+                scored.Add((f, Math.Min(100, levScore + tokenBonus)));
+            }
+
+            return scored.OrderByDescending(x => x.score).Take(n).ToList();
         }
 
         private async Task<int> ApplyOcrImportRowsAsync(string username, List<OcrImportPreviewItem> items)
@@ -1228,12 +1302,17 @@ namespace 小白养基.Controllers
         private static string NormalizeFundName(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) return "";
-            return name.ToUpper()
+            var s = name.ToUpper()
                        .Replace(" ", "").Replace("（", "(").Replace("）", ")")
                        .Replace("(QDII)", "").Replace("QDII", "")
                        .Replace("ETF联接", "ETF").Replace("证券投资基金", "")
                        .Replace("发起式", "").Replace("主题", "").Replace("指数型", "")
                        .Replace("混合", "").Replace("指数", "").Replace("C类", "C").Replace("A类", "A").Trim();
+            // 处理 OCR 截断词：设→设备，材料设→材料设备，质量精→质量精选
+            s = Regex.Replace(s, @"材料设$", "材料设备");
+            s = Regex.Replace(s, @"质量精$", "质量精选");
+            s = Regex.Replace(s, @"(?<![一-龥])设$", "设备");
+            return s;
         }
 
         private double CalculateSimilarity(string s, string t)
