@@ -1954,8 +1954,8 @@ namespace 小白养基.Controllers
                 }
                 catch (Exception ex)
                 {
-                    indexError = ex.Message;
-                    Console.WriteLine($"[performance-curve] intraday index failed: {indexDefinition.Key} {ex.Message}");
+                    indexError = $"{ex.GetType().Name}: {ex.Message} | inner={ex.InnerException?.Message}";
+                    Console.WriteLine($"[performance-curve] intraday index failed: {indexDefinition.Key} {ex.GetType().Name}: {ex.Message} | inner={ex.InnerException?.Message}");
                 }
             }
 
