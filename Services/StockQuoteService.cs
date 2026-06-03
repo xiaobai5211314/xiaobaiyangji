@@ -150,32 +150,24 @@ namespace 小白养基.Services
             catch (Exception ex)
             {
                 LastQuoteAttempts.Add(new { source = "eastmoney", elapsedMs = sw.ElapsedMilliseconds, error = $"{ex.GetType().Name}: {ex.Message}" });
-                Console.WriteLine($"[StockQuote] {code} 东方财富失败: {ex.GetType().Name}: {ex.Message}");
             }
 
             // 源2: 腾讯 qt.gtimg.cn
             if (quote == null)
             {
-                var tSw = System.Diagnostics.Stopwatch.StartNew();
-                Console.WriteLine($"[StockQuote] {code} 尝试腾讯备用源...");
                 quote = await TryGetTencentQuoteAsync(code, market, cancellationToken);
-                Console.WriteLine($"[StockQuote] {code} 腾讯结果: {(quote != null ? $"OK price={quote.Price}" : "null")} ({tSw.ElapsedMilliseconds}ms)");
-                LastQuoteAttempts.Add(new { source = "tencent", elapsedMs = tSw.ElapsedMilliseconds, ok = quote != null, price = quote?.Price, error = quote == null ? (_lastTencentError ?? "unknown") : (string?)null });
+                if (quote != null) _logger.LogDebug("腾讯备用源成功：{Code}", code);
             }
 
             // 源3: 新浪 hq.sinajs.cn
             if (quote == null)
             {
-                var sSw = System.Diagnostics.Stopwatch.StartNew();
-                Console.WriteLine($"[StockQuote] {code} 尝试新浪备用源...");
                 quote = await TryGetSinaQuoteAsync(code, market, cancellationToken);
-                Console.WriteLine($"[StockQuote] {code} 新浪结果: {(quote != null ? $"OK price={quote.Price}" : "null")} ({sSw.ElapsedMilliseconds}ms)");
-                LastQuoteAttempts.Add(new { source = "sina", elapsedMs = sSw.ElapsedMilliseconds, ok = quote != null, price = quote?.Price, error = quote == null ? (_lastSinaError ?? "unknown") : (string?)null });
+                if (quote != null) _logger.LogDebug("新浪备用源成功：{Code}", code);
             }
 
             if (quote == null)
             {
-                Console.WriteLine($"[StockQuote] {code} 所有行情源均失败");
                 _logger.LogWarning("所有行情源均失败：{Code}", code);
                 return null;
             }
@@ -517,7 +509,7 @@ namespace 小白养基.Services
                     Amount: 0,
                     QuoteTime: DateTime.Now);
             }
-            catch (Exception ex) { _lastTencentError = $"{ex.GetType().Name}: {ex.Message}"; Console.WriteLine($"[StockQuote] {code} 腾讯异常: {ex.GetType().Name}: {ex.Message}"); return null; }
+            catch (Exception ex) { _lastTencentError = $"{ex.GetType().Name}: {ex.Message}"; return null; }
         }
 
         private async Task<StockQuoteDto?> TryGetSinaQuoteAsync(string code, string market, CancellationToken ct)
@@ -554,7 +546,7 @@ namespace 小白养基.Services
                     Amount: 0,
                     QuoteTime: DateTime.Now);
             }
-            catch (Exception ex) { _lastSinaError = $"{ex.GetType().Name}: {ex.Message}"; Console.WriteLine($"[StockQuote] {code} 新浪异常: {ex.GetType().Name}: {ex.Message}"); return null; }
+            catch (Exception ex) { _lastSinaError = $"{ex.GetType().Name}: {ex.Message}"; return null; }
         }
 
         private static decimal GetDecimal(JsonElement element, string name)
