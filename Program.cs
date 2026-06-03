@@ -100,10 +100,10 @@ builder.Services.AddHttpClient("EastMoneyQuote", client =>
     client.DefaultRequestHeaders.TryAddWithoutValidation("Connection", "keep-alive");
 }).ConfigurePrimaryHttpMessageHandler(() =>
 {
-    return new HttpClientHandler
+    return new SocketsHttpHandler
     {
+        PooledConnectionLifetime = TimeSpan.Zero,
         UseCookies = false,
-        MaxConnectionsPerServer = 20,
     };
 });
 
