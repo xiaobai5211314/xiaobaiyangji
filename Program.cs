@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Net.Http.Headers;
 using System.IO.Compression;
+using System.Net;
+using System.Net.Sockets;
 using System.Text.Json;
 using 小白养基.Models;
 using 小白养基.Services;
@@ -96,9 +98,37 @@ builder.Services.AddHttpClient("EastMoneyQuote", client =>
     client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36");
     client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "*/*");
     client.DefaultRequestHeaders.TryAddWithoutValidation("Referer", "https://quote.eastmoney.com/");
-}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+}).ConfigurePrimaryHttpMessageHandler(() =>
 {
-    ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+    return new SocketsHttpHandler
+    {
+        ConnectTimeout = TimeSpan.FromSeconds(10),
+        UseCookies = false,
+        EnableMultipleHttp2Connections = false,
+        ConnectCallback = async (context, cancellationToken) =>
+        {
+            var addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, cancellationToken);
+            var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+            try
+            {
+                foreach (var addr in addresses)
+                {
+                    try
+                    {
+                        await socket.ConnectAsync(addr, context.DnsEndPoint.Port, cancellationToken);
+                        return new NetworkStream(socket, ownsSocket: true);
+                    }
+                    catch
+                    {
+                        socket.Dispose();
+                        socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+                    }
+                }
+                throw new SocketException((int)SocketError.HostUnreachable);
+            }
+            catch { socket.Dispose(); throw; }
+        }
+    };
 });
 
 builder.Services.AddHttpClient("WeChatMiniProgram", client =>

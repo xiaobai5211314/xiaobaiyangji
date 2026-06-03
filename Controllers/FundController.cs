@@ -1886,6 +1886,7 @@ namespace 小白养基.Controllers
             var indexParsedCount = 0;
             var indexError = (string?)null;
             double? fallbackIndexRate = null;
+            double? preCloseFromTrends2 = null;
             var idxDateStr = today.ToString("yyyyMMdd");
             var idxFreshMemKey = $"PerfIdxTick:{indexDefinition.Key}:{idxDateStr}";
             var idxStaleMemKey = idxFreshMemKey + ":stale";
@@ -1930,20 +1931,21 @@ namespace 小白养基.Controllers
                 try
                 {
                     var http = _httpClientFactory.CreateClient("EastMoneyQuote");
-                    var fetched = await FetchPerformanceIndexTicksAsync(http, indexDefinition, today);
-                    indexRawCount = fetched.Count;
-                    indexParsedCount = fetched.Count;
-                    indexTicks = fetched.ToArray();
+                    var trendResult = await FetchPerformanceIndexTicksAsync(http, indexDefinition, today);
+                    indexRawCount = trendResult.Ticks.Count;
+                    indexParsedCount = trendResult.Ticks.Count;
+                    indexTicks = trendResult.Ticks.ToArray();
+                    preCloseFromTrends2 = trendResult.PreClose;
                     indexAvailable = indexTicks.Length > 0;
-                    indexSource = indexAvailable ? "fresh" : "none";
+                    indexSource = indexAvailable ? "trends2" : "none";
                     if (indexAvailable)
                     {
-                        _cache.Set(idxFreshMemKey, fetched, GetExternalDataFreshTtl());
-                        _cache.Set(idxStaleMemKey, fetched, TimeSpan.FromHours(24));
+                        _cache.Set(idxFreshMemKey, trendResult.Ticks, GetExternalDataFreshTtl());
+                        _cache.Set(idxStaleMemKey, trendResult.Ticks, TimeSpan.FromHours(24));
                         try
                         {
                             var db = _redis.GetDatabase();
-                            var json = JsonSerializer.Serialize(fetched);
+                            var json = JsonSerializer.Serialize(trendResult.Ticks);
                             await db.StringSetAsync(idxRedisFreshKey, json, GetExternalDataFreshTtl());
                             await db.StringSetAsync(idxRedisStaleKey, json, TimeSpan.FromDays(7));
                         }
@@ -2111,7 +2113,7 @@ namespace 小白养基.Controllers
             bool hasRealTicks = indexTicks.Length > 0;
             bool isFallbackRate = fallbackIndexRate.HasValue && !hasRealTicks;
             var indexRatesByTime = hasRealTicks
-                ? BuildAlignedIntradayIndexRates(timeline, indexTicks)
+                ? BuildAlignedIntradayIndexRates(timeline, indexTicks, preCloseFromTrends2)
                 : new Dictionary<DateTime, double?>();
 
             var cursors = new int[series.Count];
@@ -2311,7 +2313,11 @@ namespace 小白养基.Controllers
             return result;
         }
 
-        private static async Task<List<PerformanceIndexTick>> FetchPerformanceIndexTicksAsync(
+        private sealed record PerformanceIndexTickResult(
+            List<PerformanceIndexTick> Ticks,
+            double? PreClose);
+
+        private static async Task<PerformanceIndexTickResult> FetchPerformanceIndexTicksAsync(
             HttpClient http,
             PerformanceIndexDefinition index,
             DateTime today)
@@ -2320,7 +2326,7 @@ namespace 小白养基.Controllers
             var fields2 = "f51,f52,f53,f54,f55,f56,f57,f58";
             var url = $"https://push2his.eastmoney.com/api/qt/stock/trends2/get?secid={Uri.EscapeDataString(index.Secid)}&fields1={fields1}&fields2={fields2}&iscr=0&iscca=0";
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             var response = await http.GetStringAsync(url, cts.Token);
             using var doc = JsonDocument.Parse(response);
             if (!doc.RootElement.TryGetProperty("data", out var data) ||
@@ -2328,8 +2334,14 @@ namespace 小白养基.Controllers
                 !data.TryGetProperty("trends", out var trends) ||
                 trends.ValueKind != JsonValueKind.Array)
             {
-                return new List<PerformanceIndexTick>();
+                return new PerformanceIndexTickResult(new List<PerformanceIndexTick>(), null);
             }
+
+            double? preClose = null;
+            if (data.TryGetProperty("preClose", out var preCloseElem) && preCloseElem.ValueKind == JsonValueKind.Number)
+                preClose = preCloseElem.GetDouble();
+            if (!preClose.HasValue && data.TryGetProperty("preSettlement", out var preSetElem) && preSetElem.ValueKind == JsonValueKind.Number)
+                preClose = preSetElem.GetDouble();
 
             var result = new List<PerformanceIndexTick>();
             foreach (var trend in trends.EnumerateArray())
@@ -2355,14 +2367,15 @@ namespace 小白养基.Controllers
                 }
             }
 
-            return result
-                .OrderBy(p => p.Time)
-                .ToList();
+            return new PerformanceIndexTickResult(
+                result.OrderBy(p => p.Time).ToList(),
+                preClose);
         }
 
         private static Dictionary<DateTime, double?> BuildAlignedIntradayIndexRates(
             IEnumerable<DateTime> targetTimes,
-            IReadOnlyList<PerformanceIndexTick> indexTicks)
+            IReadOnlyList<PerformanceIndexTick> indexTicks,
+            double? preClose = null)
         {
             var result = new Dictionary<DateTime, double?>();
             var orderedTargets = targetTimes
@@ -2376,7 +2389,7 @@ namespace 小白养基.Controllers
 
             var cursor = 0;
             double? latestPrice = null;
-            double? basePrice = null;
+            double basePrice = preClose ?? 0;
 
             foreach (var targetTime in orderedTargets)
             {
@@ -2392,8 +2405,8 @@ namespace 小白养基.Controllers
                     continue;
                 }
 
-                basePrice ??= latestPrice.Value;
-                result[targetTime] = basePrice > 0 ? (latestPrice.Value - basePrice.Value) / basePrice.Value * 100d : null;
+                if (basePrice <= 0) basePrice = latestPrice.Value;
+                result[targetTime] = basePrice > 0 ? (latestPrice.Value - basePrice) / basePrice * 100d : null;
             }
 
             return result;
@@ -2440,7 +2453,7 @@ namespace 小白养基.Controllers
             var limit = Math.Clamp((endDate - startDate).Days + 40, 80, 430);
             var url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={Uri.EscapeDataString(index.Secid)}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt={limit}";
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             var response = await http.GetStringAsync(url, cts.Token);
             using var doc = JsonDocument.Parse(response);
 
