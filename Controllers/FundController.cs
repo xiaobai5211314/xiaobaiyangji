@@ -1984,20 +1984,16 @@ namespace 小白养基.Controllers
                 catch (Exception ex) { Console.WriteLine($"[performance-curve] quote fallback failed: {ex.Message}"); }
             }
 
-            // H. ulist.np batch fallback (must include multiple secids - single secid returns 502)
+            // H. ulist.np batch fallback
             if (!indexAvailable)
             {
                 try
                 {
                     var http = _httpClientFactory.CreateClient("EastMoneyQuote");
-                    // Use the same secids as global-indices (known to work with ulist.np)
                     var batchSecids = "1.000001,1.000688,0.399006,100.HSI,100.NDX,100.SPX,100.DJIA";
                     var batchUrl = $"https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&secids={batchSecids}&fields=f2,f3,f12,f14";
-                    Console.WriteLine($"[performance-curve] ulist.np trying with global secids");
                     using var bcts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
                     using var resp = await http.GetAsync(batchUrl, bcts.Token);
-                    var status = (int)resp.StatusCode;
-                    Console.WriteLine($"[performance-curve] ulist.np status={status}");
                     if (resp.IsSuccessStatusCode)
                     {
                         var batchResp = await resp.Content.ReadAsStringAsync(bcts.Token);
@@ -2005,7 +2001,6 @@ namespace 小白养基.Controllers
                         if (batchDoc.RootElement.TryGetProperty("data", out var bData) && bData.ValueKind != JsonValueKind.Null &&
                             bData.TryGetProperty("diff", out var diff) && diff.ValueKind == JsonValueKind.Array && diff.GetArrayLength() > 0)
                         {
-                            // Use first item as fallback (any index rate is better than none)
                             var item = diff[0];
                             double bRate = item.TryGetProperty("f3", out var bf3) && bf3.ValueKind == JsonValueKind.Number ? bf3.GetDouble() : 0;
                             double bPrice = item.TryGetProperty("f2", out var bf2) && bf2.ValueKind == JsonValueKind.Number ? bf2.GetDouble() : 0;
@@ -2015,20 +2010,36 @@ namespace 小白养基.Controllers
                                 indexAvailable = true;
                                 indexSource = "ulist-batch-fallback";
                                 indexParsedCount = 1;
-                                Console.WriteLine($"[performance-curve] ulist.np success: rate={bRate}");
                             }
                         }
                     }
-                    if (!indexAvailable)
+                }
+                catch (Exception ex) { Console.WriteLine($"[performance-curve] ulist.np fallback failed: {ex.Message}"); }
+            }
+
+            // I. Global-indices stale cache as last resort (use A-stock index todayRate)
+            if (!indexAvailable)
+            {
+                try
+                {
+                    var db = _redis.GetDatabase();
+                    foreach (var giCode in new[] { "000001", "000688", "399006" })
                     {
-                        indexError = $"ulist.np: status={status}";
+                        var cached = await db.StringGetAsync($"{GlobalIndexCachePrefix}{giCode}:S");
+                        if (!cached.HasValue) continue;
+                        var gi = JsonSerializer.Deserialize<GlobalIndexDto>(cached.ToString(), GlobalIndicesJsonOptions);
+                        if (gi != null && gi.TodayRate.HasValue && gi.Latest.HasValue && gi.Latest.Value > 0)
+                        {
+                            fallbackIndexRate = Math.Round(gi.TodayRate.Value, 4);
+                            indexAvailable = true;
+                            indexSource = "global-cache-fallback";
+                            indexParsedCount = 1;
+                            Console.WriteLine($"[performance-curve] using global-indices cache for {giCode}: rate={gi.TodayRate.Value}");
+                            break;
+                        }
                     }
                 }
-                catch (Exception ex)
-                {
-                    indexError = $"ulist.np: {ex.Message}";
-                    Console.WriteLine($"[performance-curve] ulist.np fallback failed: {ex.Message}");
-                }
+                catch (Exception ex) { Console.WriteLine($"[performance-curve] global-cache fallback failed: {ex.Message}"); }
             }
 
             Console.WriteLine($"[performance-curve] indexSource={indexSource} indexParsedCount={indexParsedCount}");
@@ -2147,6 +2158,7 @@ namespace 小白养基.Controllers
                     "cache" or "cache-stale" => "指数数据使用缓存",
                     "daily-kline-fallback" => "指数盘中数据使用日线兜底",
                     "quote-fallback" or "ulist-batch-fallback" => "指数盘中数据使用实时点位兜底",
+                    "global-cache-fallback" => "指数数据使用大盘缓存兜底",
                     _ => ""
                 } : "指数盘中数据暂不可用",
                 points = compactPoints
