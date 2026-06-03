@@ -472,9 +472,9 @@ namespace 小白养基.Services
             using var resp = await client.GetAsync(url, ct);
             resp.EnsureSuccessStatusCode();
             var bytes = await resp.Content.ReadAsByteArrayAsync(ct);
-            // 尝试 UTF-8，失败回退 GBK
-            try { return System.Text.Encoding.UTF8.GetString(bytes); }
-            catch { return System.Text.Encoding.GetEncoding("GBK").GetString(bytes); }
+            // 腾讯/新浪返回 GBK/GB18030 编码，优先用 GB18030 解码
+            try { return System.Text.Encoding.GetEncoding("GB18030").GetString(bytes); }
+            catch { return System.Text.Encoding.UTF8.GetString(bytes); }
         }
 
         private async Task<StockQuoteDto?> TryGetTencentQuoteAsync(string code, string market, CancellationToken ct)

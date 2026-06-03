@@ -561,6 +561,20 @@ namespace 小白养基.Controllers
             }
         }
 
+        private static bool IsGarbledStockName(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return true;
+            var bad = name.Count(c => c == '�' || c == '?');
+            return bad >= 2 || bad >= name.Length / 3;
+        }
+
+        private static string PickDisplayStockName(string? quoteName, string? storedName, string code)
+        {
+            if (!IsGarbledStockName(quoteName)) return quoteName!.Trim();
+            if (!IsGarbledStockName(storedName)) return storedName!.Trim();
+            return code;
+        }
+
         private static void ApplyQuote(StockHolding row, StockQuoteDto? quote)
         {
             if (quote == null) return;
@@ -597,7 +611,7 @@ namespace 小白养基.Controllers
                 x.Id,
                 code = x.StockCode,
                 market = quote?.Market ?? x.Market,
-                name = quote?.Name ?? x.StockName,
+                name = PickDisplayStockName(quote?.Name, x.StockName, x.StockCode),
                 x.Shares,
                 x.CostPrice,
                 x.CostAmount,
@@ -627,7 +641,7 @@ namespace 小白养基.Controllers
                 x.Id,
                 code = x.StockCode,
                 market = quote?.Market ?? x.Market,
-                name = quote?.Name ?? x.StockName,
+                name = PickDisplayStockName(quote?.Name, x.StockName, x.StockCode),
                 price = quoteStatus == "unavailable" ? (double?)null : (double?)(quote?.Price),
                 changeAmount = quoteStatus == "unavailable" ? (double?)null : (double?)(quote?.ChangeAmount),
                 changeRate = quoteStatus == "unavailable" ? (double?)null : (double?)(quote?.ChangeRate),
