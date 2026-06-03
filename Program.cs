@@ -4,8 +4,6 @@ using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Net.Http.Headers;
 using System.IO.Compression;
-using System.Net;
-using System.Net.Sockets;
 using System.Text.Json;
 using 小白养基.Models;
 using 小白养基.Services;
@@ -100,10 +98,11 @@ builder.Services.AddHttpClient("EastMoneyQuote", client =>
     client.DefaultRequestHeaders.TryAddWithoutValidation("Referer", "https://quote.eastmoney.com/");
 }).ConfigurePrimaryHttpMessageHandler(() =>
 {
-    return new SocketsHttpHandler
+    return new HttpClientHandler
     {
-        ConnectTimeout = TimeSpan.FromSeconds(10),
+        ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
         UseCookies = false,
+        MaxConnectionsPerServer = 10,
     };
 });
 
