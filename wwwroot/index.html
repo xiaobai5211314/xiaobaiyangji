@@ -6814,7 +6814,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const forceParam = force ? '&force=true' : '';
                         const response = await fetch(`${API_BASE}/api/fund/today?username=${encodeURIComponent(currentUser.value)}${forceParam}`, { cache: force ? 'no-store' : 'default' });
                         if (!response.ok) throw new Error('today接口异常');
-                        const apiData = await response.json();
+                        const rawData = await response.json();
+                        const apiData = Array.isArray(rawData) ? rawData : (rawData.funds || []);
+                        const apiSummary = rawData.summary || null;
                         lastDataFetchAt = Date.now();
                         let tPrincipal = 0; let tPrincipalForRate = 0; let tCost = 0; let tToday = 0; let d = new Date();
                         let todaySlash = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
@@ -6899,11 +6901,19 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                         fundsList.value = apiData;
                         const tRealized = fundsList.value.reduce((sum, f) => sum + (f.realizedProfit || 0), 0);
-                        totalPrincipal.value = tPrincipal; totalTodayProfit.value = tToday;
-                        totalTodayRate.value = tPrincipalForRate > 0 ? (tToday / tPrincipalForRate * 100) : 0;
-                        const currentTotalAssets = fundsList.value.reduce((sum, f) => sum + (parseFloat(f.todayAmount || f.amount) || 0), 0);
-                        totalProfit.value = currentTotalAssets - tCost + tRealized;
-                        totalRate.value = tCost > 0 ? ((currentTotalAssets - tCost + tRealized) / tCost * 100) : 0;
+                        totalPrincipal.value = tPrincipal;
+                        if (apiSummary) {
+                            totalTodayProfit.value = apiSummary.totalTodayProfit;
+                            totalTodayRate.value = apiSummary.totalTodayRate;
+                            totalProfit.value = apiSummary.totalProfit;
+                            totalRate.value = apiSummary.totalRate;
+                        } else {
+                            totalTodayProfit.value = tToday;
+                            totalTodayRate.value = tPrincipalForRate > 0 ? (tToday / tPrincipalForRate * 100) : 0;
+                            const currentTotalAssets = fundsList.value.reduce((sum, f) => sum + (parseFloat(f.todayAmount || f.amount) || 0), 0);
+                            totalProfit.value = currentTotalAssets - tCost + tRealized;
+                            totalRate.value = tCost > 0 ? ((currentTotalAssets - tCost + tRealized) / tCost * 100) : 0;
+                        }
 
                         saveIntradayCalibrationSnapshots(intradayCalibrationPayload);
                         settleCalibrationSamples(settledCalibrationPayload);

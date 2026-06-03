@@ -2309,14 +2309,42 @@ namespace 小白养基.Controllers
                         data = dataPoints,
                         isSettled = isSettled,
                         actualRate = actualRate,
-                        actualExactProfit = actualExactProfit
+                        actualExactProfit = actualExactProfit,
+                        todayBaseAmount = todayBaseAmount,
+                        todayRateForSimulation = todayRateForSimulation
                     };
 
                 });
 
                 var finalResult = result.OrderByDescending(x => x.amount).ToList();
 
-                // 真实净值一出现，后端立即修正“今日总持仓 + 单只基金”档案。
+                // 统一计算今日组合收益摘要（首页和曲线共用同一口径）
+                double summaryProfit = 0, summaryBase = 0, summaryAssets = 0, summaryCost = 0, summaryRealized = 0;
+                foreach (var fund in finalResult)
+                {
+                    double amt = fund.amount;
+                    bool settled = fund.isSettled;
+                    double profitVal = settled
+                        ? fund.lastSettledProfit
+                        : Math.Round(fund.todayBaseAmount * fund.todayRateForSimulation / 100.0, 2);
+                    double baseVal = fund.todayBaseAmount;
+                    summaryProfit += profitVal;
+                    summaryBase += baseVal;
+                    summaryAssets += settled ? amt : (amt + profitVal);
+                    summaryCost += fund.cost ?? 0;
+                    summaryRealized += fund.realizedProfit;
+                }
+                var summary = new
+                {
+                    totalTodayProfit = Math.Round(summaryProfit, 2),
+                    totalTodayBaseAmount = Math.Round(summaryBase, 2),
+                    totalTodayRate = summaryBase > 0 ? Math.Round(summaryProfit / summaryBase * 100, 2) : 0,
+                    totalAssets = Math.Round(summaryAssets, 2),
+                    totalProfit = Math.Round(summaryAssets - summaryCost + summaryRealized, 2),
+                    totalRate = summaryCost > 0 ? Math.Round((summaryAssets - summaryCost + summaryRealized) / summaryCost * 100, 2) : 0
+                };
+
+                // 真实净值一出现，后端立即修正”今日总持仓 + 单只基金”档案。
                 // 这样不再依赖前端 save-archive，也能覆盖旧版本写坏的 TOTAL 记录。
                 if (myFunds.Any(f => f.LastSettledDate == todayDash))
                 {
@@ -2330,7 +2358,7 @@ namespace 小白养基.Controllers
                     .SetSlidingExpiration(TimeSpan.FromSeconds(30));  // 滑动过期
                 _cache.Set(cacheKey, finalResult, cacheOptions);
 
-                return Ok(finalResult);
+                return Ok(new { funds = finalResult, summary });
             }
             catch (Exception ex)
             {

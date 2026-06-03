@@ -114,9 +114,13 @@ export interface FundArchiveRow {
 
 export function getTodayFunds(username: string, force = false) {
   const query = `username=${encodeURIComponent(username)}${force ? '&force=true' : ''}`;
-  return get<FundTodayItem[]>(`/api/fund/today?${query}`, {
+  return get<unknown>(`/api/fund/today?${query}`, {
     loadingText: '读取持仓',
     fallbackData: []
+  }).then((raw) => {
+    if (Array.isArray(raw)) return raw as FundTodayItem[];
+    if (raw && typeof raw === 'object' && 'funds' in raw) return (raw as { funds: FundTodayItem[] }).funds;
+    return [] as FundTodayItem[];
   });
 }
 
