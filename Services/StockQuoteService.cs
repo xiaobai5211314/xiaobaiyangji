@@ -93,6 +93,8 @@ namespace 小白养基.Services
             };
         }
 
+        public List<object> LastQuoteAttempts { get; } = new();
+
         public async Task<StockQuoteDto?> GetQuoteAsync(string code, CancellationToken cancellationToken = default)
         {
             code = NormalizeCode(code);
@@ -107,6 +109,8 @@ namespace 小白养基.Services
 
             var market = InferMarket(code);
             StockQuoteDto? quote = null;
+            LastQuoteAttempts.Clear();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
 
             // 源1: 东方财富 push2
             try
@@ -116,6 +120,7 @@ namespace 小白养基.Services
                 var url = $"https://push2.eastmoney.com/api/qt/stock/get?secid={Uri.EscapeDataString(ToSecId(code))}&fields={Uri.EscapeDataString(fieldsCache)}";
 
                 using var response = await client.GetAsync(url, cancellationToken);
+                var status = (int)response.StatusCode;
                 response.EnsureSuccessStatusCode();
 
                 var json = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -137,26 +142,32 @@ namespace 小白养基.Services
                         Amount: GetDecimal(data, "f48"),
                         QuoteTime: DateTime.Now);
                 }
+                LastQuoteAttempts.Add(new { source = "eastmoney", status, elapsedMs = sw.ElapsedMilliseconds, ok = quote != null });
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "东方财富行情失败，尝试备用源：{Code}", code);
+                LastQuoteAttempts.Add(new { source = "eastmoney", elapsedMs = sw.ElapsedMilliseconds, error = $"{ex.GetType().Name}: {ex.Message}" });
+                Console.WriteLine($"[StockQuote] {code} 东方财富失败: {ex.GetType().Name}: {ex.Message}");
             }
 
             // 源2: 腾讯 qt.gtimg.cn
             if (quote == null)
             {
+                var tSw = System.Diagnostics.Stopwatch.StartNew();
                 Console.WriteLine($"[StockQuote] {code} 尝试腾讯备用源...");
                 quote = await TryGetTencentQuoteAsync(code, market, cancellationToken);
-                Console.WriteLine($"[StockQuote] {code} 腾讯结果: {(quote != null ? $"OK price={quote.Price}" : "null")}");
+                Console.WriteLine($"[StockQuote] {code} 腾讯结果: {(quote != null ? $"OK price={quote.Price}" : "null")} ({tSw.ElapsedMilliseconds}ms)");
+                LastQuoteAttempts.Add(new { source = "tencent", elapsedMs = tSw.ElapsedMilliseconds, ok = quote != null, price = quote?.Price });
             }
 
             // 源3: 新浪 hq.sinajs.cn
             if (quote == null)
             {
+                var sSw = System.Diagnostics.Stopwatch.StartNew();
                 Console.WriteLine($"[StockQuote] {code} 尝试新浪备用源...");
                 quote = await TryGetSinaQuoteAsync(code, market, cancellationToken);
-                Console.WriteLine($"[StockQuote] {code} 新浪结果: {(quote != null ? $"OK price={quote.Price}" : "null")}");
+                Console.WriteLine($"[StockQuote] {code} 新浪结果: {(quote != null ? $"OK price={quote.Price}" : "null")} ({sSw.ElapsedMilliseconds}ms)");
+                LastQuoteAttempts.Add(new { source = "sina", elapsedMs = sSw.ElapsedMilliseconds, ok = quote != null, price = quote?.Price });
             }
 
             if (quote == null)
