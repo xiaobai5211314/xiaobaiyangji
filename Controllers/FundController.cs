@@ -1938,6 +1938,10 @@ namespace 小白养基.Controllers
                     preCloseFromTrends2 = trendResult.PreClose;
                     indexAvailable = indexTicks.Length > 0;
                     indexSource = indexAvailable ? "trends2" : "none";
+                    if (!indexAvailable)
+                    {
+                        indexError = $"trends2 empty: rawCount={trendResult.Ticks.Count} preClose={trendResult.PreClose}";
+                    }
                     if (indexAvailable)
                     {
                         _cache.Set(idxFreshMemKey, trendResult.Ticks, GetExternalDataFreshTtl());
@@ -2328,14 +2332,21 @@ namespace 小白养基.Controllers
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             var response = await http.GetStringAsync(url, cts.Token);
+            Console.WriteLine($"[performance-curve] trends2 response len={response.Length} secid={index.Secid}");
             using var doc = JsonDocument.Parse(response);
             if (!doc.RootElement.TryGetProperty("data", out var data) ||
-                data.ValueKind == JsonValueKind.Null ||
-                !data.TryGetProperty("trends", out var trends) ||
-                trends.ValueKind != JsonValueKind.Array)
+                data.ValueKind == JsonValueKind.Null)
             {
+                Console.WriteLine($"[performance-curve] trends2 data=null");
                 return new PerformanceIndexTickResult(new List<PerformanceIndexTick>(), null);
             }
+            if (!data.TryGetProperty("trends", out var trends) ||
+                trends.ValueKind != JsonValueKind.Array)
+            {
+                Console.WriteLine($"[performance-curve] trends2 trends missing or not array");
+                return new PerformanceIndexTickResult(new List<PerformanceIndexTick>(), null);
+            }
+            Console.WriteLine($"[performance-curve] trends2 trends count={trends.GetArrayLength()}");
 
             double? preClose = null;
             if (data.TryGetProperty("preClose", out var preCloseElem) && preCloseElem.ValueKind == JsonValueKind.Number)
