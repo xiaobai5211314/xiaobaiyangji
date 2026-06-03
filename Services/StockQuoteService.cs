@@ -39,6 +39,7 @@ namespace 小白养基.Services
         Task<StockQuoteDto?> GetQuoteAsync(string code, CancellationToken cancellationToken = default);
         Task<IReadOnlyList<StockQuoteDto>> GetQuotesAsync(IEnumerable<string> codes, CancellationToken cancellationToken = default);
         Task<IReadOnlyList<StockKLineDto>> GetKLinesAsync(string code, string period, CancellationToken cancellationToken = default);
+        Task<(IReadOnlyList<StockKLineDto> rows, bool staleCache, string? error)> GetKLinesWithDebugAsync(string code, string period, CancellationToken cancellationToken = default);
         Task<IReadOnlyList<StockSearchDto>> SearchAsync(string keyword, CancellationToken cancellationToken = default);
         string InferMarket(string code);
         string ToSecId(string code);
@@ -249,11 +250,11 @@ namespace 小白养基.Services
             return quotes.Where(q => q != null).ToList()!;
         }
 
-        public async Task<IReadOnlyList<StockKLineDto>> GetKLinesAsync(string code, string period, CancellationToken cancellationToken = default)
+        public async Task<(IReadOnlyList<StockKLineDto> rows, bool staleCache, string? error)> GetKLinesWithDebugAsync(string code, string period, CancellationToken cancellationToken = default)
         {
             code = NormalizeCode(code);
             period = NormalizePeriod(period);
-            if (!IsStockCode(code)) return Array.Empty<StockKLineDto>();
+            if (!IsStockCode(code)) return (Array.Empty<StockKLineDto>(), false, "invalid code");
 
             var cache = await _context.StockKLineCaches
                 .FirstOrDefaultAsync(x => x.StockCode == code && x.Period == period, cancellationToken);
@@ -261,32 +262,57 @@ namespace 小白养基.Services
             var cacheSeconds = period is "minute" or "hour" ? 20 : 3600;
             if (cache != null && (DateTime.Now - cache.RefreshedAt).TotalSeconds < cacheSeconds)
             {
-                return JsonSerializer.Deserialize<List<StockKLineDto>>(cache.PayloadJson, JsonOptions) ?? new List<StockKLineDto>();
+                var cached = JsonSerializer.Deserialize<List<StockKLineDto>>(cache.PayloadJson, JsonOptions) ?? new();
+                return (cached, false, null);
             }
 
-            var rows = period == "minute"
-                ? await GetTrendLinesAsync(code, cancellationToken)
-                : await GetHistoryKLinesAsync(code, period, cancellationToken);
-
-            var payload = JsonSerializer.Serialize(rows, JsonOptions);
-            if (cache == null)
+            IReadOnlyList<StockKLineDto> rows;
+            try
             {
-                _context.StockKLineCaches.Add(new StockKLineCache
+                rows = period == "minute"
+                    ? await GetTrendLinesAsync(code, cancellationToken)
+                    : await GetHistoryKLinesAsync(code, period, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "走势数据获取失败：{Code} {Period}", code, period);
+                if (cache != null)
                 {
-                    StockCode = code,
-                    Market = InferMarket(code),
-                    Period = period,
-                    PayloadJson = payload,
-                    RefreshedAt = DateTime.Now
-                });
-            }
-            else
-            {
-                cache.PayloadJson = payload;
-                cache.RefreshedAt = DateTime.Now;
+                    var stale = JsonSerializer.Deserialize<List<StockKLineDto>>(cache.PayloadJson, JsonOptions) ?? new();
+                    return (stale, true, ex.Message);
+                }
+                return (Array.Empty<StockKLineDto>(), false, ex.Message);
             }
 
-            await _context.SaveChangesAsync(cancellationToken);
+            try
+            {
+                var payload = JsonSerializer.Serialize(rows, JsonOptions);
+                if (cache == null)
+                {
+                    _context.StockKLineCaches.Add(new StockKLineCache
+                    {
+                        StockCode = code, Market = InferMarket(code),
+                        Period = period, PayloadJson = payload, RefreshedAt = DateTime.Now
+                    });
+                }
+                else
+                {
+                    cache.PayloadJson = payload;
+                    cache.RefreshedAt = DateTime.Now;
+                }
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "走势缓存写入失败：{Code}", code);
+            }
+
+            return (rows, false, null);
+        }
+
+        public async Task<IReadOnlyList<StockKLineDto>> GetKLinesAsync(string code, string period, CancellationToken cancellationToken = default)
+        {
+            var (rows, _, _) = await GetKLinesWithDebugAsync(code, period, cancellationToken);
             return rows;
         }
 

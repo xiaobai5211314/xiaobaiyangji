@@ -5572,7 +5572,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const data = await res.json();
                         lastStockKlineRows.value = data.items || [];
                         renderStockChart(lastStockKlineRows.value);
-                    } catch (e) { showToast('走势读取失败', 'error'); }
+                    } catch (e) { lastStockKlineRows.value = []; renderStockChart([]); }
                 };
 
                 const renderStockChart = (rows) => {

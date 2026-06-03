@@ -96,10 +96,28 @@ namespace 小白养基.Controllers
         public async Task<IActionResult> KLines(
             [FromQuery] string code,
             [FromQuery] string period = "day",
+            [FromQuery] bool debug = false,
             CancellationToken cancellationToken = default)
         {
-            var rows = await _quotes.GetKLinesAsync(code, period, cancellationToken);
-            return Ok(new { success = true, code = NormalizeCode(code), period, items = rows });
+            var normalized = NormalizeCode(code);
+            var (rows, staleCache, error) = await _quotes.GetKLinesWithDebugAsync(normalized, period, cancellationToken);
+            var message = error != null ? (staleCache ? "使用缓存走势数据" : "走势数据暂不可用") : null;
+
+            if (debug)
+            {
+                return Ok(new
+                {
+                    success = true, code = normalized, period,
+                    items = rows, isFallback = staleCache, message,
+                    debug = new { staleCache, error, rowsCount = rows.Count }
+                });
+            }
+
+            return Ok(new
+            {
+                success = true, code = normalized, period,
+                items = rows, isFallback = staleCache, message
+            });
         }
 
         [HttpPost("holding")]
