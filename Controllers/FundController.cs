@@ -1538,15 +1538,49 @@ namespace 小白养基.Controllers
 
             var indexCloses = Array.Empty<PerformanceIndexClose>();
             var indexAvailable = false;
+            var indexSource = "none";
+            var indexRawCount = 0;
+            var indexParsedCount = 0;
+            var indexError = (string?)null;
+            var idxFreshKey = $"PerfIdxClose:{indexDefinition.Key}:{startDate:yyyyMMdd}:{today:yyyyMMdd}";
+            var idxStaleKey = idxFreshKey + ":stale";
+
             try
             {
-                var http = _httpClientFactory.CreateClient("EastMoneyQuote");
-                indexCloses = (await FetchPerformanceIndexClosesAsync(http, indexDefinition, startDate, today)).ToArray();
-                indexAvailable = indexCloses.Length > 0;
+                if (_cache.TryGetValue<List<PerformanceIndexClose>>(idxFreshKey, out var cachedFresh) && cachedFresh!.Count > 0)
+                {
+                    indexCloses = cachedFresh.ToArray();
+                    indexAvailable = true;
+                    indexSource = "cache";
+                    indexParsedCount = indexCloses.Length;
+                }
+                else
+                {
+                    var http = _httpClientFactory.CreateClient("EastMoneyQuote");
+                    var fetched = await FetchPerformanceIndexClosesAsync(http, indexDefinition, startDate, today);
+                    indexRawCount = fetched.Count;
+                    indexParsedCount = fetched.Count;
+                    indexCloses = fetched.ToArray();
+                    indexAvailable = indexCloses.Length > 0;
+                    indexSource = "fresh";
+                    if (indexAvailable)
+                    {
+                        _cache.Set(idxFreshKey, fetched, GetExternalDataFreshTtl());
+                        _cache.Set(idxStaleKey, fetched, TimeSpan.FromHours(24));
+                    }
+                }
             }
             catch (Exception ex)
             {
+                indexError = ex.Message;
                 Console.WriteLine($"[performance-curve] index failed: {indexDefinition.Key} {ex.Message}");
+                if (_cache.TryGetValue<List<PerformanceIndexClose>>(idxStaleKey, out var cachedStale) && cachedStale!.Count > 0)
+                {
+                    indexCloses = cachedStale.ToArray();
+                    indexAvailable = true;
+                    indexSource = "cache";
+                    indexParsedCount = indexCloses.Length;
+                }
             }
 
             var indexRatesByDate = indexAvailable
@@ -1583,11 +1617,15 @@ namespace 小白养基.Controllers
                 indexName = indexDefinition.Name,
                 hasMyData = true,
                 indexAvailable = hasIndexRate,
+                indexSource,
+                indexRawCount,
+                indexParsedCount,
+                indexError,
                 myTotalRate = Math.Round(myTotalRate, 2),
                 indexTotalRate = Math.Round(indexTotalRate, 2),
                 excessRate = hasIndexRate ? Math.Round(myTotalRate - indexTotalRate, 2) : 0d,
                 myTotalProfit = points.Count > 0 ? points[^1].MyProfit : 0d,
-                message = hasIndexRate ? "" : "指数数据暂不可用",
+                message = hasIndexRate ? (indexSource == "cache" ? "指数数据使用缓存" : "") : "指数数据暂不可用",
                 points
             });
         }
@@ -1674,15 +1712,49 @@ namespace 小白养基.Controllers
 
             var indexTicks = Array.Empty<PerformanceIndexTick>();
             var indexAvailable = false;
+            var indexSource = "none";
+            var indexRawCount = 0;
+            var indexParsedCount = 0;
+            var indexError = (string?)null;
+            var idxFreshKey = $"PerfIdxTick:{indexDefinition.Key}:{today:yyyyMMdd}";
+            var idxStaleKey = idxFreshKey + ":stale";
+
             try
             {
-                var http = _httpClientFactory.CreateClient("EastMoneyQuote");
-                indexTicks = (await FetchPerformanceIndexTicksAsync(http, indexDefinition, today)).ToArray();
-                indexAvailable = indexTicks.Length > 0;
+                if (_cache.TryGetValue<List<PerformanceIndexTick>>(idxFreshKey, out var cachedFreshTicks) && cachedFreshTicks!.Count > 0)
+                {
+                    indexTicks = cachedFreshTicks.ToArray();
+                    indexAvailable = true;
+                    indexSource = "cache";
+                    indexParsedCount = indexTicks.Length;
+                }
+                else
+                {
+                    var http = _httpClientFactory.CreateClient("EastMoneyQuote");
+                    var fetched = await FetchPerformanceIndexTicksAsync(http, indexDefinition, today);
+                    indexRawCount = fetched.Count;
+                    indexParsedCount = fetched.Count;
+                    indexTicks = fetched.ToArray();
+                    indexAvailable = indexTicks.Length > 0;
+                    indexSource = "fresh";
+                    if (indexAvailable)
+                    {
+                        _cache.Set(idxFreshKey, fetched, GetExternalDataFreshTtl());
+                        _cache.Set(idxStaleKey, fetched, TimeSpan.FromHours(24));
+                    }
+                }
             }
             catch (Exception ex)
             {
+                indexError = ex.Message;
                 Console.WriteLine($"[performance-curve] intraday index failed: {indexDefinition.Key} {ex.Message}");
+                if (_cache.TryGetValue<List<PerformanceIndexTick>>(idxStaleKey, out var cachedStaleTicks) && cachedStaleTicks!.Count > 0)
+                {
+                    indexTicks = cachedStaleTicks.ToArray();
+                    indexAvailable = true;
+                    indexSource = "cache";
+                    indexParsedCount = indexTicks.Length;
+                }
             }
 
             var indexRatesByTime = indexAvailable
@@ -1784,11 +1856,15 @@ namespace 小白养基.Controllers
                 indexName = indexDefinition.Name,
                 hasMyData = compactPoints.Count > 0,
                 indexAvailable = hasIndexRate,
+                indexSource,
+                indexRawCount,
+                indexParsedCount,
+                indexError,
                 myTotalRate = Math.Round(myTotalRate, 2),
                 indexTotalRate = Math.Round(indexTotalRate, 2),
                 excessRate = hasIndexRate ? Math.Round(myTotalRate - indexTotalRate, 2) : 0d,
                 myTotalProfit = Math.Round(myTotalProfit, 2),
-                message = hasIndexRate ? "" : "指数盘中数据暂不可用",
+                message = hasIndexRate ? (indexSource == "cache" ? "指数数据使用缓存" : "") : "指数盘中数据暂不可用",
                 points = compactPoints
             });
         }
