@@ -2394,24 +2394,25 @@ namespace 小白养基.Controllers
 
         private static async Task<string> CurlFetchAsync(string url)
         {
-            var psi = new System.Diagnostics.ProcessStartInfo("curl")
+            // Retry up to 2 times with short delay
+            for (int attempt = 0; attempt < 3; attempt++)
             {
-                Arguments = $"-4 -sS --connect-timeout 10 --max-time 20 --http1.1 -H \"Referer: https://quote.eastmoney.com/\" \"{url}\"",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
-            using var process = System.Diagnostics.Process.Start(psi);
-            if (process == null) throw new InvalidOperationException("Failed to start curl");
-            var output = await process.StandardOutput.ReadToEndAsync();
-            await process.WaitForExitAsync();
-            if (process.ExitCode != 0)
-            {
-                var err = await process.StandardError.ReadToEndAsync();
-                throw new HttpRequestException($"curl failed (exit={process.ExitCode}): {err}");
+                if (attempt > 0) await Task.Delay(1000);
+                var psi = new System.Diagnostics.ProcessStartInfo("curl")
+                {
+                    Arguments = $"-4 -sS --connect-timeout 10 --max-time 20 --http1.1 -H \"Referer: https://quote.eastmoney.com/\" \"{url}\"",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+                using var process = System.Diagnostics.Process.Start(psi);
+                if (process == null) throw new InvalidOperationException("Failed to start curl");
+                var output = await process.StandardOutput.ReadToEndAsync();
+                await process.WaitForExitAsync();
+                if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output)) return output;
             }
-            return output;
+            throw new HttpRequestException("curl: all 3 attempts failed");
         }
 
         private static Dictionary<DateTime, double?> BuildAlignedIntradayIndexRates(
