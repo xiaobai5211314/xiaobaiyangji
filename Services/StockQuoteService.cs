@@ -95,6 +95,9 @@ namespace 小白养基.Services
 
         public List<object> LastQuoteAttempts { get; } = new();
 
+        private string? _lastTencentError;
+        private string? _lastSinaError;
+
         public async Task<StockQuoteDto?> GetQuoteAsync(string code, CancellationToken cancellationToken = default)
         {
             code = NormalizeCode(code);
@@ -157,7 +160,7 @@ namespace 小白养基.Services
                 Console.WriteLine($"[StockQuote] {code} 尝试腾讯备用源...");
                 quote = await TryGetTencentQuoteAsync(code, market, cancellationToken);
                 Console.WriteLine($"[StockQuote] {code} 腾讯结果: {(quote != null ? $"OK price={quote.Price}" : "null")} ({tSw.ElapsedMilliseconds}ms)");
-                LastQuoteAttempts.Add(new { source = "tencent", elapsedMs = tSw.ElapsedMilliseconds, ok = quote != null, price = quote?.Price });
+                LastQuoteAttempts.Add(new { source = "tencent", elapsedMs = tSw.ElapsedMilliseconds, ok = quote != null, price = quote?.Price, error = quote == null ? (_lastTencentError ?? "unknown") : (string?)null });
             }
 
             // 源3: 新浪 hq.sinajs.cn
@@ -167,7 +170,7 @@ namespace 小白养基.Services
                 Console.WriteLine($"[StockQuote] {code} 尝试新浪备用源...");
                 quote = await TryGetSinaQuoteAsync(code, market, cancellationToken);
                 Console.WriteLine($"[StockQuote] {code} 新浪结果: {(quote != null ? $"OK price={quote.Price}" : "null")} ({sSw.ElapsedMilliseconds}ms)");
-                LastQuoteAttempts.Add(new { source = "sina", elapsedMs = sSw.ElapsedMilliseconds, ok = quote != null, price = quote?.Price });
+                LastQuoteAttempts.Add(new { source = "sina", elapsedMs = sSw.ElapsedMilliseconds, ok = quote != null, price = quote?.Price, error = quote == null ? (_lastSinaError ?? "unknown") : (string?)null });
             }
 
             if (quote == null)
@@ -504,7 +507,7 @@ namespace 小白养基.Services
                     Amount: 0,
                     QuoteTime: DateTime.Now);
             }
-            catch (Exception ex) { Console.WriteLine($"[StockQuote] {code} 腾讯异常: {ex.GetType().Name}: {ex.Message}"); return null; }
+            catch (Exception ex) { _lastTencentError = $"{ex.GetType().Name}: {ex.Message}"; Console.WriteLine($"[StockQuote] {code} 腾讯异常: {ex.GetType().Name}: {ex.Message}"); return null; }
         }
 
         private async Task<StockQuoteDto?> TryGetSinaQuoteAsync(string code, string market, CancellationToken ct)
@@ -541,7 +544,7 @@ namespace 小白养基.Services
                     Amount: 0,
                     QuoteTime: DateTime.Now);
             }
-            catch (Exception ex) { Console.WriteLine($"[StockQuote] {code} 新浪异常: {ex.GetType().Name}: {ex.Message}"); return null; }
+            catch (Exception ex) { _lastSinaError = $"{ex.GetType().Name}: {ex.Message}"; Console.WriteLine($"[StockQuote] {code} 新浪异常: {ex.GetType().Name}: {ex.Message}"); return null; }
         }
 
         private static decimal GetDecimal(JsonElement element, string name)
