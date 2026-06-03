@@ -1481,6 +1481,7 @@ namespace 小白养基.Controllers
             }
         }
         private const string GlobalIndicesCacheKey = "api:fund:global-indices:v1";
+        private const string GlobalIndexCachePrefix = "api:fund:gi:";
 
         private sealed class GlobalIndexDefinition
         {
@@ -1508,6 +1509,29 @@ namespace 小白养基.Controllers
             public double? TodayRate { get; init; }
             public double? YearRate { get; init; }
             public List<GlobalIndexKlineDto> Klines { get; init; } = new();
+            public string? Source { get; set; }
+        }
+
+        private sealed class GlobalIndexDebugDto
+        {
+            public string Name { get; init; } = string.Empty;
+            public string Code { get; init; } = string.Empty;
+            public string Secid { get; init; } = string.Empty;
+            public string Source { get; init; } = "none";
+            public double? Latest { get; init; }
+            public double? TodayRate { get; init; }
+            public double? YearRate { get; init; }
+            public int KlinesCount { get; init; }
+            public List<GlobalIndexAttemptDto> Attempts { get; init; } = new();
+        }
+
+        private sealed class GlobalIndexAttemptDto
+        {
+            public string Source { get; init; } = string.Empty;
+            public string? Url { get; init; }
+            public int Status { get; init; }
+            public string? Error { get; init; }
+            public int ParsedCount { get; init; }
         }
 
         private static readonly JsonSerializerOptions GlobalIndicesJsonOptions = new()
@@ -2231,15 +2255,8 @@ namespace 小白养基.Controllers
         }
 
         [HttpGet("global-indices")]
-        public async Task<IActionResult> GetGlobalIndices([FromQuery] bool force = false)
+        public async Task<IActionResult> GetGlobalIndices([FromQuery] bool force = false, [FromQuery] bool debug = false)
         {
-            string? staleCache = await TryReadGlobalIndicesCacheAsync();
-            if (!force && !string.IsNullOrWhiteSpace(staleCache))
-            {
-                Response.Headers["X-App-Cache"] = "redis";
-                return Content(staleCache, "application/json");
-            }
-
             var definitions = new[]
             {
                 new GlobalIndexDefinition { Name = "上证指数", Code = "000001", Market = "A股指数", Secids = new[] { "1.000001" } },
@@ -2251,28 +2268,360 @@ namespace 小白养基.Controllers
                 new GlobalIndexDefinition { Name = "道琼斯", Code = "DJIA", Market = "美股指数", Secids = new[] { "100.DJIA" } }
             };
 
+            // Non-debug, non-force: try combined cache first
+            if (!debug && !force)
+            {
+                string? legacyCache = await TryReadLegacyGlobalIndicesCacheAsync();
+                if (!string.IsNullOrWhiteSpace(legacyCache))
+                {
+                    Response.Headers["X-App-Cache"] = "redis";
+                    return Content(legacyCache, "application/json");
+                }
+            }
+
             var http = _httpClientFactory.CreateClient("EastMoneyQuote");
-            var results = (await Task.WhenAll(definitions.Select(idx => FetchGlobalIndexAsync(http, idx)))).ToList();
-            bool isComplete = IsCompleteGlobalIndicesResult(results);
+            var debugList = debug ? new List<GlobalIndexDebugDto>() : null;
+            var results = new List<GlobalIndexDto>();
 
-            if (isComplete)
+            foreach (var idx in definitions)
             {
-                await TryWriteGlobalIndicesCacheAsync(results);
-                Response.Headers["X-App-Cache"] = "build";
-                return Ok(results);
+                var (result, idxDebug) = await FetchGlobalIndexWithCacheAsync(http, idx, force, debug);
+                results.Add(result);
+                if (idxDebug != null) debugList!.Add(idxDebug);
             }
 
-            Console.WriteLine("[global-indices] build partial, skip redis write: " +
-                string.Join("; ", results.Where(x => x.Latest <= 0 || x.Klines.Count == 0).Select(x => $"{x.Name}/{x.Secid}/latest={x.Latest}/klines={x.Klines.Count}")));
-
-            if (!string.IsNullOrWhiteSpace(staleCache))
+            // Per-index stale merge: fill missing data from per-index stale cache
+            for (int i = 0; i < results.Count; i++)
             {
-                Response.Headers["X-App-Cache"] = "stale";
-                return Content(staleCache, "application/json");
+                if (results[i].Latest.HasValue && results[i].Latest.Value > 0) continue;
+                var stale = await ReadPerIndexStaleCacheAsync(definitions[i].Code);
+                if (stale != null && stale.Latest.HasValue && stale.Latest.Value > 0)
+                {
+                    stale.Source = "stale";
+                    results[i] = stale;
+                    if (debugList != null && i < debugList.Count)
+                        debugList[i] = new GlobalIndexDebugDto
+                        {
+                            Name = definitions[i].Name, Code = definitions[i].Code,
+                            Secid = stale.Secid, Source = "stale",
+                            Latest = stale.Latest, TodayRate = stale.TodayRate,
+                            YearRate = stale.YearRate, KlinesCount = stale.Klines.Count,
+                            Attempts = debugList[i].Attempts
+                        };
+                }
             }
 
-            Response.Headers["X-App-Cache"] = "partial";
+            // Write combined cache if enough valid results
+            int validCount = results.Count(x => x.Latest.HasValue && x.Latest.Value > 0);
+            if (validCount >= 5)
+            {
+                await TryWriteLegacyGlobalIndicesCacheAsync(results);
+            }
+
+            if (debug)
+            {
+                return Ok(new
+                {
+                    indices = results,
+                    debug = debugList,
+                    validCount,
+                    totalCount = definitions.Length
+                });
+            }
+
+            Response.Headers["X-App-Cache"] = validCount >= 7 ? "build" : "partial";
             return Ok(results);
+        }
+
+        private async Task<(GlobalIndexDto result, GlobalIndexDebugDto? debug)> FetchGlobalIndexWithCacheAsync(
+            HttpClient http, GlobalIndexDefinition idx, bool force, bool debug)
+        {
+            var attempts = debug ? new List<GlobalIndexAttemptDto>() : null;
+
+            // 1. Try per-index fresh cache (skip if force=true)
+            if (!force)
+            {
+                var fresh = await ReadPerIndexFreshCacheAsync(idx.Code);
+                if (fresh != null && fresh.Latest.HasValue && fresh.Latest.Value > 0)
+                {
+                    fresh.Source = "fresh";
+                    return (fresh, debug ? new GlobalIndexDebugDto
+                    {
+                        Name = idx.Name, Code = idx.Code,
+                        Secid = fresh.Secid, Source = "fresh",
+                        Latest = fresh.Latest, TodayRate = fresh.TodayRate,
+                        YearRate = fresh.YearRate, KlinesCount = fresh.Klines.Count,
+                        Attempts = attempts!
+                    } : null);
+                }
+            }
+
+            // 2. Try kline API
+            var (klineResult, klineAttempts) = await FetchGlobalIndexKlineAsync(http, idx);
+            attempts?.AddRange(klineAttempts);
+
+            if (klineResult != null && klineResult.Latest.HasValue && klineResult.Latest.Value > 0)
+            {
+                klineResult.Source = "fresh";
+                await WritePerIndexCacheAsync(idx.Code, klineResult);
+                return (klineResult, debug ? new GlobalIndexDebugDto
+                {
+                    Name = idx.Name, Code = idx.Code,
+                    Secid = klineResult.Secid, Source = "fresh",
+                    Latest = klineResult.Latest, TodayRate = klineResult.TodayRate,
+                    YearRate = klineResult.YearRate, KlinesCount = klineResult.Klines.Count,
+                    Attempts = attempts!
+                } : null);
+            }
+
+            // 3. Try quote API fallback
+            var (quoteResult, quoteAttempts) = await FetchGlobalIndexQuoteAsync(http, idx);
+            attempts?.AddRange(quoteAttempts);
+
+            if (quoteResult != null && quoteResult.Latest.HasValue && quoteResult.Latest.Value > 0)
+            {
+                var stale = await ReadPerIndexStaleCacheAsync(idx.Code);
+                if (stale != null && stale.Klines.Count > 0)
+                {
+                    quoteResult = new GlobalIndexDto
+                    {
+                        Name = quoteResult.Name, Code = quoteResult.Code,
+                        Market = quoteResult.Market, Secid = quoteResult.Secid,
+                        Latest = quoteResult.Latest, Point = quoteResult.Point,
+                        Close = quoteResult.Close, TodayRate = quoteResult.TodayRate,
+                        YearRate = stale.YearRate ?? quoteResult.YearRate,
+                        Klines = stale.Klines, Source = quoteResult.Source
+                    };
+                }
+                quoteResult.Source = "partial";
+                await WritePerIndexCacheAsync(idx.Code, quoteResult);
+                return (quoteResult, debug ? new GlobalIndexDebugDto
+                {
+                    Name = idx.Name, Code = idx.Code,
+                    Secid = quoteResult.Secid, Source = "partial",
+                    Latest = quoteResult.Latest, TodayRate = quoteResult.TodayRate,
+                    YearRate = quoteResult.YearRate, KlinesCount = quoteResult.Klines.Count,
+                    Attempts = attempts!
+                } : null);
+            }
+
+            // 4. All failed
+            var empty = new GlobalIndexDto
+            {
+                Name = idx.Name, Code = idx.Code, Market = idx.Market,
+                Secid = idx.Secids.FirstOrDefault() ?? string.Empty,
+                Source = "none"
+            };
+            return (empty, debug ? new GlobalIndexDebugDto
+            {
+                Name = idx.Name, Code = idx.Code,
+                Secid = empty.Secid, Source = "none",
+                Attempts = attempts!
+            } : null);
+        }
+
+        private async Task<(GlobalIndexDto? result, List<GlobalIndexAttemptDto> attempts)> FetchGlobalIndexKlineAsync(
+            HttpClient http, GlobalIndexDefinition idx)
+        {
+            var attempts = new List<GlobalIndexAttemptDto>();
+            foreach (string secid in idx.Secids)
+            {
+                string url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={Uri.EscapeDataString(secid)}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250";
+                try
+                {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    string response = await http.GetStringAsync(url, cts.Token);
+                    using var doc = JsonDocument.Parse(response);
+
+                    if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null)
+                    {
+                        attempts.Add(new GlobalIndexAttemptDto { Source = "kline", Url = url, Status = 200, Error = "data=null" });
+                        continue;
+                    }
+
+                    if (!data.TryGetProperty("klines", out var klines) || klines.ValueKind != JsonValueKind.Array || klines.GetArrayLength() == 0)
+                    {
+                        attempts.Add(new GlobalIndexAttemptDto { Source = "kline", Url = url, Status = 200, Error = "klines empty" });
+                        continue;
+                    }
+
+                    var parsedKlines = new List<(string Date, double Close, double Rate)>();
+                    foreach (var kline in klines.EnumerateArray())
+                    {
+                        string? raw = kline.GetString();
+                        if (string.IsNullOrWhiteSpace(raw)) continue;
+                        var parts = raw.Split(',');
+                        if (parts.Length <= 8) continue;
+                        if (!TryParseInvariantDouble(parts[2], out double close)) continue;
+                        if (!TryParseInvariantDouble(parts[8], out double rate)) rate = 0;
+                        parsedKlines.Add((parts[0], close, Math.Round(rate, 2)));
+                    }
+
+                    if (parsedKlines.Count == 0)
+                    {
+                        attempts.Add(new GlobalIndexAttemptDto { Source = "kline", Url = url, Status = 200, Error = "parse empty" });
+                        continue;
+                    }
+
+                    double latestClose = Math.Round(parsedKlines[^1].Close, 2);
+                    if (latestClose <= 0)
+                    {
+                        attempts.Add(new GlobalIndexAttemptDto { Source = "kline", Url = url, Status = 200, Error = $"latest={latestClose}" });
+                        continue;
+                    }
+
+                    double firstClose = parsedKlines[0].Close;
+                    double yearRate = firstClose > 0 ? Math.Round((latestClose - firstClose) / firstClose * 100, 2) : 0;
+                    double todayRate = parsedKlines[^1].Rate;
+
+                    attempts.Add(new GlobalIndexAttemptDto { Source = "kline", Url = url, Status = 200, ParsedCount = parsedKlines.Count });
+                    return (new GlobalIndexDto
+                    {
+                        Name = idx.Name, Code = idx.Code, Market = idx.Market, Secid = secid,
+                        Latest = latestClose, Point = latestClose, Close = latestClose,
+                        TodayRate = todayRate, YearRate = yearRate,
+                        Klines = parsedKlines.Select(x => new GlobalIndexKlineDto { Date = x.Date, Rate = x.Rate }).ToList()
+                    }, attempts);
+                }
+                catch (OperationCanceledException)
+                {
+                    attempts.Add(new GlobalIndexAttemptDto { Source = "kline", Url = url, Status = 0, Error = "timeout" });
+                }
+                catch (Exception ex)
+                {
+                    attempts.Add(new GlobalIndexAttemptDto { Source = "kline", Url = url, Status = 0, Error = ex.Message });
+                }
+            }
+            return (null, attempts);
+        }
+
+        private async Task<(GlobalIndexDto? result, List<GlobalIndexAttemptDto> attempts)> FetchGlobalIndexQuoteAsync(
+            HttpClient http, GlobalIndexDefinition idx)
+        {
+            var attempts = new List<GlobalIndexAttemptDto>();
+            foreach (string secid in idx.Secids)
+            {
+                string url = $"https://push2.eastmoney.com/api/qt/stock/get?secid={Uri.EscapeDataString(secid)}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields=f43,f170&fltt=2";
+                try
+                {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    string response = await http.GetStringAsync(url, cts.Token);
+                    using var doc = JsonDocument.Parse(response);
+
+                    if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null)
+                    {
+                        attempts.Add(new GlobalIndexAttemptDto { Source = "quote", Url = url, Status = 200, Error = "data=null" });
+                        continue;
+                    }
+
+                    double? latest = null;
+                    double? todayRate = null;
+                    if (data.TryGetProperty("f43", out var f43) && f43.ValueKind == JsonValueKind.Number)
+                        latest = Math.Round(f43.GetDouble(), 2);
+                    if (data.TryGetProperty("f170", out var f170) && f170.ValueKind == JsonValueKind.Number)
+                        todayRate = Math.Round(f170.GetDouble(), 2);
+
+                    if (latest.HasValue && latest.Value > 0)
+                    {
+                        attempts.Add(new GlobalIndexAttemptDto { Source = "quote", Url = url, Status = 200, ParsedCount = 1 });
+                        return (new GlobalIndexDto
+                        {
+                            Name = idx.Name, Code = idx.Code, Market = idx.Market, Secid = secid,
+                            Latest = latest, Point = latest, Close = latest,
+                            TodayRate = todayRate, YearRate = null,
+                            Klines = new List<GlobalIndexKlineDto>()
+                        }, attempts);
+                    }
+                    attempts.Add(new GlobalIndexAttemptDto { Source = "quote", Url = url, Status = 200, Error = $"latest={latest}" });
+                }
+                catch (OperationCanceledException)
+                {
+                    attempts.Add(new GlobalIndexAttemptDto { Source = "quote", Url = url, Status = 0, Error = "timeout" });
+                }
+                catch (Exception ex)
+                {
+                    attempts.Add(new GlobalIndexAttemptDto { Source = "quote", Url = url, Status = 0, Error = ex.Message });
+                }
+            }
+            return (null, attempts);
+        }
+
+        private async Task<string?> TryReadLegacyGlobalIndicesCacheAsync()
+        {
+            try
+            {
+                var db = _redis.GetDatabase();
+                var cached = await db.StringGetAsync(GlobalIndicesCacheKey);
+                if (!cached.HasValue) return null;
+                string json = cached.ToString();
+                var result = JsonSerializer.Deserialize<List<GlobalIndexDto>>(json, GlobalIndicesJsonOptions);
+                if (result == null) return null;
+                int validCount = result.Count(x => x.Latest.HasValue && x.Latest.Value > 0);
+                if (validCount < 5)
+                {
+                    Console.WriteLine($"[global-indices] redis cache ignored: only {validCount}/7 valid");
+                    return null;
+                }
+                return json;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[global-indices] redis read failed: {ex.Message}");
+                return null;
+            }
+        }
+
+        private async Task TryWriteLegacyGlobalIndicesCacheAsync(List<GlobalIndexDto> result)
+        {
+            try
+            {
+                var db = _redis.GetDatabase();
+                string json = JsonSerializer.Serialize(result, GlobalIndicesJsonOptions);
+                await db.StringSetAsync(GlobalIndicesCacheKey, json, GetExternalDataFreshTtl());
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[global-indices] redis write failed: {ex.Message}");
+            }
+        }
+
+        private async Task<GlobalIndexDto?> ReadPerIndexFreshCacheAsync(string code)
+        {
+            try
+            {
+                var db = _redis.GetDatabase();
+                var cached = await db.StringGetAsync($"{GlobalIndexCachePrefix}{code}:F");
+                if (!cached.HasValue) return null;
+                return JsonSerializer.Deserialize<GlobalIndexDto>(cached.ToString(), GlobalIndicesJsonOptions);
+            }
+            catch { return null; }
+        }
+
+        private async Task<GlobalIndexDto?> ReadPerIndexStaleCacheAsync(string code)
+        {
+            try
+            {
+                var db = _redis.GetDatabase();
+                var cached = await db.StringGetAsync($"{GlobalIndexCachePrefix}{code}:S");
+                if (!cached.HasValue) return null;
+                return JsonSerializer.Deserialize<GlobalIndexDto>(cached.ToString(), GlobalIndicesJsonOptions);
+            }
+            catch { return null; }
+        }
+
+        private async Task WritePerIndexCacheAsync(string code, GlobalIndexDto result)
+        {
+            try
+            {
+                var db = _redis.GetDatabase();
+                string json = JsonSerializer.Serialize(result, GlobalIndicesJsonOptions);
+                await db.StringSetAsync($"{GlobalIndexCachePrefix}{code}:F", json, GetExternalDataFreshTtl());
+                await db.StringSetAsync($"{GlobalIndexCachePrefix}{code}:S", json, TimeSpan.FromDays(7));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[global-indices] per-index cache write failed: {ex.Message}");
+            }
         }
 
         private async Task<string?> TryReadGlobalIndicesCacheAsync()

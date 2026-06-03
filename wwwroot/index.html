@@ -6054,7 +6054,16 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const res = await apiFetch(`/api/fund/global-indices${force === true ? '?force=true' : ''}`, { cache: 'no-store' });
                         if (!res.ok) throw new Error(await res.text());
                         const data = await res.json();
-                        globalIndices.value = Array.isArray(data) ? data : [];
+                        if (Array.isArray(data)) {
+                            globalIndices.value = data;
+                            const srcInfo = data.filter(x => x.source && x.source !== 'fresh').map(x => `${x.name}:${x.source}`);
+                            if (srcInfo.length > 0) console.log('[global-indices] source=' + srcInfo.join(', '));
+                        } else if (data && Array.isArray(data.indices)) {
+                            globalIndices.value = data.indices;
+                            if (data.debug) console.log('[global-indices]', JSON.stringify(data.debug));
+                        } else {
+                            globalIndices.value = [];
+                        }
                     } catch (e) { showToast("🌐 大盘数据读取失败", "error"); } finally { isIndicesLoading.value = false; }
                 };
 
