@@ -100,9 +100,9 @@ builder.Services.AddHttpClient("EastMoneyQuote", client =>
 {
     return new HttpClientHandler
     {
-        ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
         UseCookies = false,
-        MaxConnectionsPerServer = 10,
+        MaxConnectionsPerServer = 20,
+        SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13,
     };
 });
 
