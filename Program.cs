@@ -82,7 +82,7 @@ builder.Services.AddHttpClient("FundGz", client =>
 
 builder.Services.AddHttpClient("EastMoney", client =>
 {
-    client.Timeout = TimeSpan.FromSeconds(8);
+    client.Timeout = TimeSpan.FromSeconds(30);
     client.DefaultRequestVersion = new Version(1, 1);
     client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36");
     client.DefaultRequestHeaders.TryAddWithoutValidation("Referer", "http://fundf10.eastmoney.com/");
@@ -91,7 +91,7 @@ builder.Services.AddHttpClient("EastMoney", client =>
 
 builder.Services.AddHttpClient("EastMoneyQuote", client =>
 {
-    client.Timeout = TimeSpan.FromSeconds(8);
+    client.Timeout = TimeSpan.FromSeconds(30);
     client.DefaultRequestVersion = new Version(1, 1);
     client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36");
     client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "*/*");
@@ -108,7 +108,7 @@ builder.Services.AddHttpClient("EastMoneyQuote", client =>
 
 builder.Services.AddHttpClient("WeChatMiniProgram", client =>
 {
-    client.Timeout = TimeSpan.FromSeconds(8);
+    client.Timeout = TimeSpan.FromSeconds(30);
 });
 
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
