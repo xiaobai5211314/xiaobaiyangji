@@ -1645,19 +1645,47 @@ namespace 小白养基.Controllers
             var indexRawCount = 0;
             var indexParsedCount = 0;
             var indexError = (string?)null;
-            var idxFreshKey = $"PerfIdxClose:{indexDefinition.Key}:{startDate:yyyyMMdd}:{today:yyyyMMdd}";
-            var idxStaleKey = idxFreshKey + ":stale";
+            var idxMemFreshKey = $"PerfIdxClose:{indexDefinition.Key}:{startDate:yyyyMMdd}:{today:yyyyMMdd}";
+            var idxMemStaleKey = idxMemFreshKey + ":stale";
+            var idxRedisFreshKey = $"PerformanceIndexCloses:{indexDefinition.Key}:{normalizedPeriod}:{startDate:yyyyMMdd}:{today:yyyyMMdd}:F";
+            var idxRedisStaleKey = $"PerformanceIndexCloses:{indexDefinition.Key}:{normalizedPeriod}:{startDate:yyyyMMdd}:{today:yyyyMMdd}:S";
 
-            try
+            // A. IMemoryCache fresh
+            if (_cache.TryGetValue<List<PerformanceIndexClose>>(idxMemFreshKey, out var cachedFresh) && cachedFresh!.Count > 0)
             {
-                if (_cache.TryGetValue<List<PerformanceIndexClose>>(idxFreshKey, out var cachedFresh) && cachedFresh!.Count > 0)
+                indexCloses = cachedFresh.ToArray();
+                indexAvailable = true;
+                indexSource = "cache";
+                indexParsedCount = indexCloses.Length;
+            }
+
+            // B. Redis fresh
+            if (!indexAvailable)
+            {
+                try
                 {
-                    indexCloses = cachedFresh.ToArray();
-                    indexAvailable = true;
-                    indexSource = "cache";
-                    indexParsedCount = indexCloses.Length;
+                    var db = _redis.GetDatabase();
+                    var redisFresh = await db.StringGetAsync(idxRedisFreshKey);
+                    if (redisFresh.HasValue)
+                    {
+                        var deserialized = JsonSerializer.Deserialize<List<PerformanceIndexClose>>(redisFresh.ToString());
+                        if (deserialized is { Count: > 0 })
+                        {
+                            indexCloses = deserialized.ToArray();
+                            indexAvailable = true;
+                            indexSource = "cache";
+                            indexParsedCount = indexCloses.Length;
+                            _cache.Set(idxMemFreshKey, deserialized, GetExternalDataFreshTtl());
+                        }
+                    }
                 }
-                else
+                catch (Exception ex) { Console.WriteLine($"[performance-curve] redis fresh read failed: {ex.Message}"); }
+            }
+
+            // C. kline API
+            if (!indexAvailable)
+            {
+                try
                 {
                     var http = _httpClientFactory.CreateClient("EastMoneyQuote");
                     var fetched = await FetchPerformanceIndexClosesAsync(http, indexDefinition, startDate, today);
@@ -1668,24 +1696,54 @@ namespace 小白养基.Controllers
                     indexSource = indexAvailable ? "fresh" : "none";
                     if (indexAvailable)
                     {
-                        _cache.Set(idxFreshKey, fetched, GetExternalDataFreshTtl());
-                        _cache.Set(idxStaleKey, fetched, TimeSpan.FromHours(24));
+                        _cache.Set(idxMemFreshKey, fetched, GetExternalDataFreshTtl());
+                        _cache.Set(idxMemStaleKey, fetched, TimeSpan.FromHours(24));
+                        try
+                        {
+                            var db = _redis.GetDatabase();
+                            var json = JsonSerializer.Serialize(fetched);
+                            await db.StringSetAsync(idxRedisFreshKey, json, GetExternalDataFreshTtl());
+                            await db.StringSetAsync(idxRedisStaleKey, json, TimeSpan.FromDays(7));
+                        }
+                        catch (Exception rex) { Console.WriteLine($"[performance-curve] redis write failed: {rex.Message}"); }
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                indexError = ex.Message;
-                Console.WriteLine($"[performance-curve] index failed: {indexDefinition.Key} {ex.Message}");
+                catch (Exception ex)
+                {
+                    indexError = ex.Message;
+                    Console.WriteLine($"[performance-curve] index failed: {indexDefinition.Key} {ex.Message}");
+                }
             }
 
-            // 外部接口失败或返回空时，尝试 stale 缓存兜底
-            if (!indexAvailable && _cache.TryGetValue<List<PerformanceIndexClose>>(idxStaleKey, out var cachedStale) && cachedStale!.Count > 0)
+            // D. IMemoryCache stale
+            if (!indexAvailable && _cache.TryGetValue<List<PerformanceIndexClose>>(idxMemStaleKey, out var cachedStale) && cachedStale!.Count > 0)
             {
                 indexCloses = cachedStale.ToArray();
                 indexAvailable = true;
-                indexSource = "cache";
+                indexSource = "cache-stale";
                 indexParsedCount = indexCloses.Length;
+            }
+
+            // E. Redis stale
+            if (!indexAvailable)
+            {
+                try
+                {
+                    var db = _redis.GetDatabase();
+                    var redisStale = await db.StringGetAsync(idxRedisStaleKey);
+                    if (redisStale.HasValue)
+                    {
+                        var deserialized = JsonSerializer.Deserialize<List<PerformanceIndexClose>>(redisStale.ToString());
+                        if (deserialized is { Count: > 0 })
+                        {
+                            indexCloses = deserialized.ToArray();
+                            indexAvailable = true;
+                            indexSource = "cache-stale";
+                            indexParsedCount = indexCloses.Length;
+                        }
+                    }
+                }
+                catch (Exception ex) { Console.WriteLine($"[performance-curve] redis stale read failed: {ex.Message}"); }
             }
 
             var indexRatesByDate = indexAvailable
@@ -1715,6 +1773,8 @@ namespace 小白养基.Controllers
                 ? points.Where(p => p.IndexRate.HasValue).Select(p => p.IndexRate!.Value).Last()
                 : 0d;
 
+            Console.WriteLine($"[performance-curve] period={normalizedPeriod} indexSource={indexSource} indexParsedCount={indexParsedCount}");
+
             return Ok(new
             {
                 period = normalizedPeriod,
@@ -1730,7 +1790,11 @@ namespace 小白养基.Controllers
                 indexTotalRate = Math.Round(indexTotalRate, 2),
                 excessRate = hasIndexRate ? Math.Round(myTotalRate - indexTotalRate, 2) : 0d,
                 myTotalProfit = points.Count > 0 ? points[^1].MyProfit : 0d,
-                message = hasIndexRate ? (indexSource == "cache" ? "指数数据使用缓存" : "") : "指数数据暂不可用",
+                message = hasIndexRate ? indexSource switch
+                {
+                    "cache" or "cache-stale" => "指数数据使用缓存",
+                    _ => ""
+                } : "指数数据暂不可用",
                 points
             });
         }
@@ -2042,12 +2106,12 @@ namespace 小白养基.Controllers
                 catch (Exception ex) { Console.WriteLine($"[performance-curve] global-cache fallback failed: {ex.Message}"); }
             }
 
-            Console.WriteLine($"[performance-curve] indexSource={indexSource} indexParsedCount={indexParsedCount}");
+            Console.WriteLine($"[performance-curve] period=today indexSource={indexSource} indexParsedCount={indexParsedCount}");
 
-            var indexRatesByTime = indexAvailable
-                ? (fallbackIndexRate.HasValue
-                    ? timeline.Distinct().ToDictionary(t => t, t => fallbackIndexRate)
-                    : BuildAlignedIntradayIndexRates(timeline, indexTicks))
+            bool hasRealTicks = indexTicks.Length > 0;
+            bool isFallbackRate = fallbackIndexRate.HasValue && !hasRealTicks;
+            var indexRatesByTime = hasRealTicks
+                ? BuildAlignedIntradayIndexRates(timeline, indexTicks)
                 : new Dictionary<DateTime, double?>();
 
             var cursors = new int[series.Count];
@@ -2074,17 +2138,31 @@ namespace 小白养基.Controllers
                     totalProfit += point.ProfitOverride ?? item.Amount * point.Rate / 100d;
                 }
 
-                indexRatesByTime.TryGetValue(time, out var indexRate);
+                double? idxRate = null;
+                if (hasRealTicks)
+                {
+                    indexRatesByTime.TryGetValue(time, out idxRate);
+                }
                 var myRate = totalPrincipal > 0 ? totalProfit / totalPrincipal * 100d : 0d;
                 points.Add(new PerformanceCurvePoint(
                     time.ToString("yyyy-MM-dd HH:mm"),
                     time.ToString("yyyy-MM-dd"),
                     Math.Round(myRate, 2),
                     Math.Round(totalProfit, 2),
-                    indexRate.HasValue ? Math.Round(indexRate.Value, 2) : null,
+                    idxRate.HasValue ? Math.Round(idxRate.Value, 2) : null,
                     Math.Round(totalPrincipal + totalProfit, 2),
                     Math.Round(totalProfit, 2),
                     Math.Round(myRate, 2)));
+            }
+
+            // For fallback rates: only fill the last point's indexRate
+            if (isFallbackRate && points.Count > 0)
+            {
+                var last = points[^1];
+                points[^1] = new PerformanceCurvePoint(
+                    last.Time, last.Date, last.MyRate, last.MyProfit,
+                    Math.Round(fallbackIndexRate.Value, 2),
+                    last.Assets, last.DailyProfit, last.TotalRate);
             }
 
             var compactPoints = points
@@ -2153,12 +2231,12 @@ namespace 小白养基.Controllers
                 indexTotalRate = Math.Round(indexTotalRate, 2),
                 excessRate = hasIndexRate ? Math.Round(myTotalRate - indexTotalRate, 2) : 0d,
                 myTotalProfit = Math.Round(myTotalProfit, 2),
+                indexCurrentRate = isFallbackRate ? Math.Round(fallbackIndexRate!.Value, 2) : (double?)null,
                 message = hasIndexRate ? indexSource switch
                 {
                     "cache" or "cache-stale" => "指数数据使用缓存",
                     "daily-kline-fallback" => "指数盘中数据使用日线兜底",
-                    "quote-fallback" or "ulist-batch-fallback" => "指数盘中数据使用实时点位兜底",
-                    "global-cache-fallback" => "指数数据使用大盘缓存兜底",
+                    "quote-fallback" or "ulist-batch-fallback" or "global-cache-fallback" => "指数仅有当前涨跌幅，暂无盘中走势",
                     _ => ""
                 } : "指数盘中数据暂不可用",
                 points = compactPoints
@@ -2555,13 +2633,17 @@ namespace 小白养基.Controllers
                             if (results[i].Latest.HasValue && results[i].Latest.Value > 0) continue;
                             if (batchMap.TryGetValue(definitions[i].Code, out var bm))
                             {
+                                // Merge with stale klines if available
+                                var existingStale = await ReadPerIndexStaleCacheAsync(definitions[i].Code);
                                 var batchResult = new GlobalIndexDto
                                 {
                                     Name = definitions[i].Name, Code = definitions[i].Code,
                                     Market = definitions[i].Market, Secid = definitions[i].Secids[0],
                                     Latest = Math.Round(bm.price, 2), Point = Math.Round(bm.price, 2), Close = Math.Round(bm.price, 2),
-                                    TodayRate = Math.Round(bm.rate, 2), YearRate = null,
-                                    Klines = new List<GlobalIndexKlineDto>(), Source = "ulist-batch"
+                                    TodayRate = Math.Round(bm.rate, 2),
+                                    YearRate = existingStale?.YearRate,
+                                    Klines = existingStale?.Klines ?? new List<GlobalIndexKlineDto>(),
+                                    Source = "ulist-batch"
                                 };
                                 results[i] = batchResult;
                                 await WritePerIndexCacheAsync(definitions[i].Code, batchResult);
@@ -2571,7 +2653,7 @@ namespace 小白养基.Controllers
                                         Name = definitions[i].Name, Code = definitions[i].Code,
                                         Secid = definitions[i].Secids[0], Source = "ulist-batch",
                                         Latest = batchResult.Latest, TodayRate = batchResult.TodayRate,
-                                        YearRate = null, KlinesCount = 0,
+                                        YearRate = batchResult.YearRate, KlinesCount = batchResult.Klines.Count,
                                         Attempts = debugList[i].Attempts
                                     };
                             }
