@@ -106,31 +106,62 @@ namespace 小白养基.Services
             }
 
             var market = InferMarket(code);
-            var client = _httpClientFactory.CreateClient("EastMoneyQuote");
-            var fieldsCache = "f43,f44,f45,f46,f47,f48,f57,f58,f60,f107,f116,f169,f170,f86";
-            var url = $"https://push2.eastmoney.com/api/qt/stock/get?secid={Uri.EscapeDataString(ToSecId(code))}&fields={Uri.EscapeDataString(fieldsCache)}";
+            StockQuoteDto? quote = null;
 
-            using var response = await client.GetAsync(url, cancellationToken);
-            response.EnsureSuccessStatusCode();
+            // 源1: 东方财富 push2
+            try
+            {
+                var client = _httpClientFactory.CreateClient("EastMoneyQuote");
+                var fieldsCache = "f43,f44,f45,f46,f47,f48,f57,f58,f60,f107,f116,f169,f170,f86";
+                var url = $"https://push2.eastmoney.com/api/qt/stock/get?secid={Uri.EscapeDataString(ToSecId(code))}&fields={Uri.EscapeDataString(fieldsCache)}";
 
-            var json = await response.Content.ReadAsStringAsync(cancellationToken);
-            using var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null) return null;
+                using var response = await client.GetAsync(url, cancellationToken);
+                response.EnsureSuccessStatusCode();
 
-            var quote = new StockQuoteDto(
-                Code: NormalizeCode(GetString(data, "f57", code)),
-                Market: market,
-                Name: GetString(data, "f58", code),
-                Price: ScalePrice(GetDecimal(data, "f43"), market),
-                ChangeAmount: ScalePrice(GetDecimal(data, "f169"), market),
-                ChangeRate: ScalePercent(GetDecimal(data, "f170")),
-                Open: ScalePrice(GetDecimal(data, "f46"), market),
-                High: ScalePrice(GetDecimal(data, "f44"), market),
-                Low: ScalePrice(GetDecimal(data, "f45"), market),
-                PreviousClose: ScalePrice(GetDecimal(data, "f60"), market),
-                Volume: GetDecimal(data, "f47"),
-                Amount: GetDecimal(data, "f48"),
-                QuoteTime: DateTime.Now);
+                var json = await response.Content.ReadAsStringAsync(cancellationToken);
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind != JsonValueKind.Null)
+                {
+                    quote = new StockQuoteDto(
+                        Code: NormalizeCode(GetString(data, "f57", code)),
+                        Market: market,
+                        Name: GetString(data, "f58", code),
+                        Price: ScalePrice(GetDecimal(data, "f43"), market),
+                        ChangeAmount: ScalePrice(GetDecimal(data, "f169"), market),
+                        ChangeRate: ScalePercent(GetDecimal(data, "f170")),
+                        Open: ScalePrice(GetDecimal(data, "f46"), market),
+                        High: ScalePrice(GetDecimal(data, "f44"), market),
+                        Low: ScalePrice(GetDecimal(data, "f45"), market),
+                        PreviousClose: ScalePrice(GetDecimal(data, "f60"), market),
+                        Volume: GetDecimal(data, "f47"),
+                        Amount: GetDecimal(data, "f48"),
+                        QuoteTime: DateTime.Now);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "东方财富行情失败，尝试备用源：{Code}", code);
+            }
+
+            // 源2: 腾讯 qt.gtimg.cn
+            if (quote == null)
+            {
+                quote = await TryGetTencentQuoteAsync(code, market, cancellationToken);
+                if (quote != null) _logger.LogDebug("腾讯备用源成功：{Code}", code);
+            }
+
+            // 源3: 新浪 hq.sinajs.cn
+            if (quote == null)
+            {
+                quote = await TryGetSinaQuoteAsync(code, market, cancellationToken);
+                if (quote != null) _logger.LogDebug("新浪备用源成功：{Code}", code);
+            }
+
+            if (quote == null)
+            {
+                _logger.LogWarning("所有行情源均失败：{Code}", code);
+                return null;
+            }
 
             // 缓存结果
             _cache.Set(cacheKey, quote, _quoteCacheTtl);
@@ -415,6 +446,89 @@ namespace 小白养基.Services
 
         private static decimal ScalePercent(decimal value) => value == 0 ? 0 : Math.Round(value / 100m, 4);
         private static decimal ParseDecimal(string? value) => decimal.TryParse(value, out var d) ? d : 0;
+
+        private static string TencentSymbol(string code, string market)
+        {
+            return market switch
+            {
+                "SH" => $"sh{code}",
+                "BJ" => $"bj{code}",
+                "HK" => $"hk{code}",
+                _ => $"sz{code}"
+            };
+        }
+
+        private async Task<StockQuoteDto?> TryGetTencentQuoteAsync(string code, string market, CancellationToken ct)
+        {
+            try
+            {
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+                var symbol = TencentSymbol(code, market);
+                var text = await client.GetStringAsync($"https://qt.gtimg.cn/q={symbol}", ct);
+                // 格式: v_sh600519="1~贵州茅台~600519~1307.22~1309.60~1306.00~36362~...~...~...~-2.38~-0.18~1326.36~1301.00~..."
+                var start = text.IndexOf('"');
+                var end = text.LastIndexOf('"');
+                if (start < 0 || end <= start) return null;
+                var body = text.Substring(start + 1, end - start - 1);
+                var parts = body.Split('~');
+                if (parts.Length < 35) return null;
+                var price = ParseDecimal(parts[3]);
+                if (price <= 0) return null;
+                var prevClose = ParseDecimal(parts[4]);
+                var changeRate = ParseDecimal(parts[32]); // 已经是百分比
+                return new StockQuoteDto(
+                    Code: code, Market: market,
+                    Name: parts[1],
+                    Price: market == "HK" ? price : price,
+                    ChangeAmount: ParseDecimal(parts[31]),
+                    ChangeRate: changeRate,
+                    Open: ParseDecimal(parts[5]),
+                    High: ParseDecimal(parts[33]),
+                    Low: ParseDecimal(parts[34]),
+                    PreviousClose: prevClose,
+                    Volume: ParseDecimal(parts[6]),
+                    Amount: 0,
+                    QuoteTime: DateTime.Now);
+            }
+            catch { return null; }
+        }
+
+        private async Task<StockQuoteDto?> TryGetSinaQuoteAsync(string code, string market, CancellationToken ct)
+        {
+            try
+            {
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+                client.DefaultRequestHeaders.Add("Referer", "https://finance.sina.com.cn");
+                var symbol = TencentSymbol(code, market); // sh/sz/hk 前缀格式相同
+                var text = await client.GetStringAsync($"https://hq.sinajs.cn/list={symbol}", ct);
+                // 格式: var hq_str_sh600519="贵州茅台,1307.22,1309.60,...,2026-06-03,09:06:48,...";
+                var start = text.IndexOf('"');
+                var end = text.LastIndexOf('"');
+                if (start < 0 || end <= start) return null;
+                var body = text.Substring(start + 1, end - start - 1);
+                var parts = body.Split(',');
+                if (parts.Length < 10) return null;
+                var price = ParseDecimal(parts[3]);
+                if (price <= 0) return null;
+                var prevClose = ParseDecimal(parts[2]);
+                var changeAmount = prevClose > 0 ? price - prevClose : 0;
+                var changeRate = prevClose > 0 ? Math.Round(changeAmount / prevClose * 100m, 2) : 0;
+                return new StockQuoteDto(
+                    Code: code, Market: market,
+                    Name: parts[0],
+                    Price: price,
+                    ChangeAmount: changeAmount,
+                    ChangeRate: changeRate,
+                    Open: ParseDecimal(parts[1]),
+                    High: ParseDecimal(parts[4]),
+                    Low: ParseDecimal(parts[5]),
+                    PreviousClose: prevClose,
+                    Volume: ParseDecimal(parts[8]),
+                    Amount: 0,
+                    QuoteTime: DateTime.Now);
+            }
+            catch { return null; }
+        }
 
         private static decimal GetDecimal(JsonElement element, string name)
         {

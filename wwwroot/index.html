@@ -4846,8 +4846,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <div v-for="item in globalIndices" :key="item.code || item.name" @click="viewIndexHistory(item)" style="display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px dashed #334155; cursor: pointer;">
                             <div style="display: flex; flex-direction: column;"><span style="color:var(--text-main); font-weight: bold; font-size: 16px;">{{ item.name }}</span><span style="color:var(--text-muted); font-size: 13px;">点位: {{ formatIndexPoint(item.latest) }}</span></div>
                             <div style="display: flex; flex-direction: column; align-items: flex-end;">
-                                <span :style="{ color: item.todayRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold', fontSize: '16px' }">今: {{ formatIndexRate(item.todayRate) }}</span>
-                                <span :style="{ color: item.yearRate >= 0 ? '#ff4d4f' : '#10b981', fontSize: '13px', marginTop: '4px' }">1年: {{ formatIndexRate(item.yearRate) }}</span>
+                                <span :style="{ color: item.todayRate == null ? 'var(--text-muted)' : (item.todayRate >= 0 ? '#ff4d4f' : '#10b981'), fontWeight: 'bold', fontSize: '16px' }">今: {{ formatIndexRate(item.todayRate) }}</span>
+                                <span :style="{ color: item.yearRate == null ? 'var(--text-muted)' : (item.yearRate >= 0 ? '#ff4d4f' : '#10b981'), fontSize: '13px', marginTop: '4px' }">1年: {{ formatIndexRate(item.yearRate) }}</span>
                             </div>
                         </div>
                     </div>
@@ -5791,13 +5791,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 });
 
                 const globalIndices = ref([
-                    { name: '上证指数', secid: '1.000001', code: '000001', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '科创50', secid: '1.000688', code: '000688', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '创业板指', secid: '0.399006', code: '399006', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '恒生指数', secid: '100.HSI', code: 'HSI', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '纳斯达克', secid: '100.NDX', code: 'NDX', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '标普500', secid: '100.SPX', code: 'SPX', latest: 0, todayRate: 0, yearRate: 0, klines: [] },
-                    { name: '道琼斯', secid: '100.DJIA', code: 'DJIA', latest: 0, todayRate: 0, yearRate: 0, klines: [] }
+                    { name: '上证指数', secid: '1.000001', code: '000001', latest: null, todayRate: null, yearRate: null, klines: [] },
+                    { name: '科创50', secid: '1.000688', code: '000688', latest: null, todayRate: null, yearRate: null, klines: [] },
+                    { name: '创业板指', secid: '0.399006', code: '399006', latest: null, todayRate: null, yearRate: null, klines: [] },
+                    { name: '恒生指数', secid: '100.HSI', code: 'HSI', latest: null, todayRate: null, yearRate: null, klines: [] },
+                    { name: '纳斯达克', secid: '100.NDX', code: 'NDX', latest: null, todayRate: null, yearRate: null, klines: [] },
+                    { name: '标普500', secid: '100.SPX', code: 'SPX', latest: null, todayRate: null, yearRate: null, klines: [] },
+                    { name: '道琼斯', secid: '100.DJIA', code: 'DJIA', latest: null, todayRate: null, yearRate: null, klines: [] }
                 ]);
 
                 const showGlobalIndices = ref(false);
@@ -6036,11 +6036,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 };
 
                 const formatIndexPoint = (value) => {
+                    if (value === null || value === undefined) return '--';
                     const n = Number(value);
                     return Number.isFinite(n) ? n.toFixed(2) : '--';
                 };
 
                 const formatIndexRate = (value) => {
+                    if (value === null || value === undefined) return '--';
                     const n = Number(value);
                     if (!Number.isFinite(n)) return '--';
                     return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;

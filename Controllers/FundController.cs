@@ -1336,11 +1336,11 @@ namespace 小白养基.Controllers
             public string Code { get; init; } = string.Empty;
             public string Market { get; init; } = string.Empty;
             public string Secid { get; init; } = string.Empty;
-            public double Latest { get; init; }
-            public double Point { get; init; }
-            public double Close { get; init; }
-            public double TodayRate { get; init; }
-            public double YearRate { get; init; }
+            public double? Latest { get; init; }
+            public double? Point { get; init; }
+            public double? Close { get; init; }
+            public double? TodayRate { get; init; }
+            public double? YearRate { get; init; }
             public List<GlobalIndexKlineDto> Klines { get; init; } = new();
         }
 
@@ -2114,11 +2114,11 @@ namespace 小白养基.Controllers
                 Code = idx.Code,
                 Market = idx.Market,
                 Secid = idx.Secids.FirstOrDefault() ?? string.Empty,
-                Latest = 0,
-                Point = 0,
-                Close = 0,
-                TodayRate = 0,
-                YearRate = 0,
+                Latest = null,
+                Point = null,
+                Close = null,
+                TodayRate = null,
+                YearRate = null,
                 Klines = new List<GlobalIndexKlineDto>()
             };
         }
@@ -3256,7 +3256,8 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"主力资金流向获取失败: {ex.Message}");
+                Console.WriteLine($"[警告] 主力资金流向获取失败: {ex.Message}");
+                return Ok(new { rows = Array.Empty<object>(), inflow = Array.Empty<object>(), outflow = Array.Empty<object>(), source = "", updatedAt = "", message = "主力资金流数据暂不可用" });
             }
             finally
             {
