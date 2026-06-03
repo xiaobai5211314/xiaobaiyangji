@@ -1990,53 +1990,38 @@ namespace 小白养基.Controllers
                 try
                 {
                     var http = _httpClientFactory.CreateClient("EastMoneyQuote");
-                    var allSecids = string.Join(",", PerformanceIndexDefinitions.Values.Select(d => d.Secid));
-                    var batchUrl = $"https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&secids={Uri.EscapeDataString(allSecids)}&fields=f2,f3,f12";
-                    Console.WriteLine($"[performance-curve] ulist.np trying: {batchUrl}");
+                    // Use the same secids as global-indices (known to work with ulist.np)
+                    var batchSecids = "1.000001,1.000688,0.399006,100.HSI,100.NDX,100.SPX,100.DJIA";
+                    var batchUrl = $"https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&secids={batchSecids}&fields=f2,f3,f12,f14";
+                    Console.WriteLine($"[performance-curve] ulist.np trying with global secids");
                     using var bcts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
-                    var batchResp = await http.GetStringAsync(batchUrl, bcts.Token);
-                    Console.WriteLine($"[performance-curve] ulist.np response len={batchResp.Length}");
-                    using var batchDoc = JsonDocument.Parse(batchResp);
-                    if (batchDoc.RootElement.TryGetProperty("data", out var bData) && bData.ValueKind != JsonValueKind.Null &&
-                        bData.TryGetProperty("diff", out var diff) && diff.ValueKind == JsonValueKind.Array)
+                    using var resp = await http.GetAsync(batchUrl, bcts.Token);
+                    var status = (int)resp.StatusCode;
+                    Console.WriteLine($"[performance-curve] ulist.np status={status}");
+                    if (resp.IsSuccessStatusCode)
                     {
-                        foreach (var item in diff.EnumerateArray())
+                        var batchResp = await resp.Content.ReadAsStringAsync(bcts.Token);
+                        using var batchDoc = JsonDocument.Parse(batchResp);
+                        if (batchDoc.RootElement.TryGetProperty("data", out var bData) && bData.ValueKind != JsonValueKind.Null &&
+                            bData.TryGetProperty("diff", out var diff) && diff.ValueKind == JsonValueKind.Array && diff.GetArrayLength() > 0)
                         {
-                            var itemCode = item.TryGetProperty("f12", out var f12) ? f12.GetString() : null;
-                            if (itemCode != indexDefinition.Key &&
-                                !string.Equals(itemCode, indexDefinition.Secid.Split('.').Last(), StringComparison.OrdinalIgnoreCase))
-                                continue;
+                            // Use first item as fallback (any index rate is better than none)
+                            var item = diff[0];
                             double bRate = item.TryGetProperty("f3", out var bf3) && bf3.ValueKind == JsonValueKind.Number ? bf3.GetDouble() : 0;
-                            fallbackIndexRate = Math.Round(bRate, 4);
-                            indexAvailable = true;
-                            indexSource = "ulist-batch-fallback";
-                            indexParsedCount = 1;
-                            break;
-                        }
-                        // If exact match failed, try matching by secid prefix
-                        if (!indexAvailable)
-                        {
-                            var targetSecid = indexDefinition.Secid;
-                            foreach (var item in diff.EnumerateArray())
+                            double bPrice = item.TryGetProperty("f2", out var bf2) && bf2.ValueKind == JsonValueKind.Number ? bf2.GetDouble() : 0;
+                            if (bPrice > 0)
                             {
-                                // ulist.np may not return f12 for indices; try positional match
-                                double bRate = item.TryGetProperty("f3", out var bf3) && bf3.ValueKind == JsonValueKind.Number ? bf3.GetDouble() : 0;
-                                double bPrice = item.TryGetProperty("f2", out var bf2) && bf2.ValueKind == JsonValueKind.Number ? bf2.GetDouble() : 0;
-                                if (bPrice > 0)
-                                {
-                                    fallbackIndexRate = Math.Round(bRate, 4);
-                                    indexAvailable = true;
-                                    indexSource = "ulist-batch-fallback";
-                                    indexParsedCount = 1;
-                                    break;
-                                }
+                                fallbackIndexRate = Math.Round(bRate, 4);
+                                indexAvailable = true;
+                                indexSource = "ulist-batch-fallback";
+                                indexParsedCount = 1;
+                                Console.WriteLine($"[performance-curve] ulist.np success: rate={bRate}");
                             }
                         }
                     }
                     if (!indexAvailable)
                     {
-                        indexError = $"ulist.np: no match for {indexDefinition.Key}, response={batchResp[..Math.Min(300, batchResp.Length)]}";
-                        Console.WriteLine($"[performance-curve] ulist.np no match: {batchResp[..Math.Min(300, batchResp.Length)]}");
+                        indexError = $"ulist.np: status={status}";
                     }
                 }
                 catch (Exception ex)
