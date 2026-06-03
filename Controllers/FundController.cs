@@ -742,8 +742,31 @@ namespace 小白养基.Controllers
                 string currentLine = texts[i].Trim();
                 if (!Regex.IsMatch(currentLine, amountPattern)) continue;
 
-                string namePart = FindPreviousFundName(texts, i);
-                if (string.IsNullOrWhiteSpace(namePart)) continue;
+                // 收集金额行前1~3行候选名称行
+                var nameCandidates = CollectNameCandidateLines(texts, i);
+                if (nameCandidates.Count == 0) continue;
+
+                // 尝试多行拼接：从下往上拼（最靠近金额行的在前）
+                string namePart = nameCandidates[0];  // 默认取最近一行
+                if (nameCandidates.Count >= 2)
+                {
+                    // 尝试拼接2行（去掉截断省略号后拼接）
+                    string line1 = Regex.Replace(nameCandidates[0], @"…$", "").Replace("...", "");
+                    string line2 = Regex.Replace(nameCandidates[1], @"…$", "").Replace("...", "");
+                    string combined2 = line2 + line1;
+                    if (combined2.Length >= 4) namePart = combined2;
+                }
+                if (nameCandidates.Count >= 3)
+                {
+                    string line1 = Regex.Replace(nameCandidates[0], @"…$", "").Replace("...", "");
+                    string line2 = Regex.Replace(nameCandidates[1], @"…$", "").Replace("...", "");
+                    string line3 = Regex.Replace(nameCandidates[2], @"…$", "").Replace("...", "");
+                    string combined3 = line3 + line2 + line1;
+                    if (combined3.Length >= 6) namePart = combined3;
+                }
+
+                // 代码优先匹配
+                string? fundCode = TryExtractFundCode(texts, i);
 
                 double holdAmount = double.Parse(currentLine.Replace(",", ""));
                 double holdingIncome = 0;
@@ -816,7 +839,29 @@ namespace 小白养基.Controllers
 
                 SelectIncomeCandidates(holdAmount, holdingRate, signedNumbers, out holdingIncome, out yesterdayIncome);
 
-                var best = MatchOcrFund(namePart, potentialFragment, robustFundPool, corrections);
+                // 代码优先匹配
+                var best = (fund: (FundInfoCache?)null, score: 0d);
+                if (fundCode != null)
+                {
+                    var codeMatch = robustFundPool.FirstOrDefault(f => f.Code == fundCode);
+                    if (codeMatch != null) best = (codeMatch, 100.0);
+                }
+
+                // 名称匹配（拼接后的名称 + potentialFragment）
+                if (best.fund == null)
+                {
+                    best = MatchOcrFund(namePart, potentialFragment, robustFundPool, corrections);
+                }
+
+                // 如果拼接名称匹配分低，尝试每行单独匹配
+                if (best.score <= 65 && nameCandidates.Count >= 2)
+                {
+                    foreach (var candidate in nameCandidates)
+                    {
+                        var altBest = MatchOcrFund(candidate, potentialFragment, robustFundPool, corrections);
+                        if (altBest.score > best.score) best = altBest;
+                    }
+                }
 
                 if (best.fund == null || best.score <= 65 || holdAmount <= 0)
                 {
@@ -891,18 +936,40 @@ namespace 小白养基.Controllers
         }
         private static string FindPreviousFundName(List<string> texts, int amountIndex)
         {
-            for (int k = amountIndex - 1; k >= 0; k--)
+            // 兼容旧调用：取第一个非噪声行
+            var candidates = CollectNameCandidateLines(texts, amountIndex);
+            return candidates.Count > 0 ? candidates[0] : string.Empty;
+        }
+
+        private static List<string> CollectNameCandidateLines(List<string> texts, int amountIndex)
+        {
+            var result = new List<string>();
+            for (int k = amountIndex - 1; k >= Math.Max(0, amountIndex - 5); k--)
             {
                 string prev = texts[k].Trim();
                 if (string.IsNullOrWhiteSpace(prev) || IsNoiseLine(prev) || Regex.IsMatch(prev, @"^[-\d\.,%+]+$")) continue;
-                return prev;
+                result.Add(prev);
+                if (result.Count >= 3) break;  // 最多取3行候选
             }
-            return string.Empty;
+            return result;
+        }
+
+        private static string? TryExtractFundCode(List<string> texts, int amountIndex)
+        {
+            // 在金额行前1~5行中查找6位基金代码
+            for (int k = Math.Max(0, amountIndex - 5); k < amountIndex; k++)
+            {
+                var m = Regex.Match(texts[k], @"\b(\d{6})\b");
+                if (m.Success) return m.Groups[1].Value;
+            }
+            return null;
         }
 
         private static bool IsNoiseLine(string text)
         {
-            string[] noise = { "收益", "金额", "份额", "金选", "市场解读", "基金经理", "阶段", "趋势", "去看看", "更新" };
+            string[] noise = { "收益", "金额", "份额", "金选", "市场解读", "基金经理", "阶段", "趋势", "去看看", "更新",
+                               "财富号", "基金财富号", "我的持有", "持有收益", "昨日收益", "持有收益率", "更多产品",
+                               "买入", "卖出", "定投", "自选", "关注", "首页", "理财", "资产", "总资产" };
             return noise.Any(x => text.Contains(x, StringComparison.OrdinalIgnoreCase));
         }
 
@@ -1002,6 +1069,9 @@ namespace 小白养基.Controllers
                 string pureChinese = Regex.Replace(testName, @"[^\u4e00-\u9fa5]", "");
                 if (pureChinese.Length < 2) continue;
 
+                // \u63d0\u53d6\u5173\u952e\u8bcd\u7528\u4e8e token \u5339\u914d
+                var ocrTokens = ExtractChineseTokens(testName);
+
                 FundInfoCache? bestMatch = null;
                 double bestScore = 0;
 
@@ -1017,7 +1087,15 @@ namespace 小白养基.Controllers
                         (f.NormalizedName.Contains(pureChinese) || pureChinese.Contains(f.NormalizedName[..Math.Min(3, f.NormalizedName.Length)])));
                     foreach (var f in candidates)
                     {
-                        double currentScore = CalculateSimilarity(normalizedOcr, f.NormalizedName) * 100;
+                        double levScore = CalculateSimilarity(normalizedOcr, f.NormalizedName) * 100;
+                        // \u5173\u952e\u8bcd\u5339\u914d\u52a0\u5206\uff1aOCR \u5173\u952e\u8bcd\u5728\u57fa\u91d1\u540d\u4e2d\u547d\u4e2d\u8d8a\u591a\uff0c\u5206\u8d8a\u9ad8
+                        double tokenBonus = 0;
+                        if (ocrTokens.Count >= 2)
+                        {
+                            int hits = ocrTokens.Count(t => f.NormalizedName.Contains(t));
+                            tokenBonus = (double)hits / ocrTokens.Count * 15;  // \u6700\u591a\u52a015\u5206
+                        }
+                        double currentScore = Math.Min(100, levScore + tokenBonus);
                         if (currentScore > bestScore)
                         {
                             bestScore = currentScore;
@@ -1034,6 +1112,15 @@ namespace 小白养基.Controllers
             }
 
             return (finalBestMatch, finalBestScore);
+        }
+
+        private static List<string> ExtractChineseTokens(string text)
+        {
+            // \u63d0\u53d6\u8fde\u7eed\u4e2d\u6587\u7247\u6bb5\u4f5c\u4e3a\u5173\u952e\u8bcd\uff082\u5b57\u4ee5\u4e0a\uff09
+            var tokens = new List<string>();
+            var matches = Regex.Matches(text, @"[\u4e00-\u9fa5]{2,}");
+            foreach (Match m in matches) tokens.Add(m.Value);
+            return tokens;
         }
 
         private async Task<int> ApplyOcrImportRowsAsync(string username, List<OcrImportPreviewItem> items)
@@ -1649,6 +1736,46 @@ namespace 小白养基.Controllers
             var indexTotalRate = hasIndexRate
                 ? compactPoints.Where(p => p.IndexRate.HasValue).Select(p => p.IndexRate!.Value).Last()
                 : 0d;
+
+            // 用与 /api/fund/today 完全相同的口径重算 summary，覆盖最后一个点
+            if (compactPoints.Count > 0 && myFunds.Count > 0)
+            {
+                double sProfit = 0, sBase = 0, sAssets = 0, sCost = 0, sRealized = 0;
+                foreach (var config in myFunds)
+                {
+                    bool settled = config.LastSettledDate == todayDash;
+                    double baseAmt = GetDailyBaseAmount(config, todayDash);
+                    if (baseAmt <= 0) continue;
+
+                    // 与 /api/fund/today 相同的 rate 来源
+                    var fundRecords = recentRecords.Where(r => r.FundCode == config.FundCode && r.FetchTime >= today).OrderBy(r => r.FetchTime).ToList();
+                    lastRecordDict.TryGetValue(config.FundCode, out var lastRec);
+                    var pastRecs = pastActualDict.TryGetValue(config.FundCode, out var pList) ? pList : new();
+                    double aDiff = pastRecs.Count > 0 ? Math.Clamp(pastRecs.Average(r => r.ActualRate - r.EstimatedRate), -0.5, 0.5) : 0;
+                    double rateSim = settled ? config.LastSettledRate :
+                        (fundRecords.Count > 0 ? Math.Round(fundRecords.Last().EstimatedRate + aDiff, 2) :
+                         (lastRec != null ? Math.Round(lastRec.EstimatedRate + aDiff, 2) : 0));
+
+                    double profitVal = settled ? config.LastSettledProfit : Math.Round(baseAmt * rateSim / 100.0, 2);
+                    sProfit += profitVal;
+                    sBase += baseAmt;
+                    sAssets += settled ? config.HoldAmount : (config.HoldAmount + profitVal);
+                    sCost += config.CostAmount > 0 ? config.CostAmount : config.HoldAmount;
+                    sRealized += config.RealizedProfit;
+                }
+
+                if (sBase > 0)
+                {
+                    myTotalRate = Math.Round(sProfit / sBase * 100, 2);
+                    myTotalProfit = Math.Round(sProfit, 2);
+                    // 覆盖最后一个点
+                    var lastIdx = compactPoints.Count - 1;
+                    var old = compactPoints[lastIdx];
+                    compactPoints[lastIdx] = new PerformanceCurvePoint(
+                        old.Time, old.Date, myTotalRate, myTotalProfit,
+                        old.IndexRate, Math.Round(sAssets, 2), myTotalProfit, myTotalRate);
+                }
+            }
 
             return Ok(new
             {
