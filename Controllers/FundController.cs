@@ -2333,13 +2333,11 @@ namespace 小白养基.Controllers
             string response;
             try
             {
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-                response = await http.GetStringAsync(url, cts.Token);
+                response = await FetchWithRetryAsync(http, url);
             }
-            catch
+            catch (Exception ex)
             {
-                // Fallback: use curl (workaround for HttpClient TLS/network issues on some servers)
-                response = await CurlFetchAsync(url);
+                throw new HttpRequestException($"trends2 failed for {index.Secid}: {ex.Message}", ex);
             }
             Console.WriteLine($"[performance-curve] trends2 response len={response.Length} secid={index.Secid}");
             using var doc = JsonDocument.Parse(response);
@@ -2392,27 +2390,60 @@ namespace 小白养基.Controllers
                 preClose);
         }
 
+        private sealed class RetryAttemptDto
+        {
+            public int Attempt { get; init; }
+            public int StatusCode { get; init; }
+            public string? Error { get; init; }
+            public long TimeMs { get; init; }
+            public string Source { get; init; } = "http";
+        }
+
+        private static async Task<string> FetchWithRetryAsync(HttpClient http, string url, int maxRetries = 2)
+        {
+            Exception? lastEx = null;
+            for (int i = 0; i < maxRetries; i++)
+            {
+                if (i > 0) await Task.Delay(1500);
+                try
+                {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(12));
+                    var resp = await http.GetAsync(url, cts.Token);
+                    if (resp.IsSuccessStatusCode)
+                    {
+                        var body = await resp.Content.ReadAsStringAsync();
+                        if (!string.IsNullOrWhiteSpace(body)) return body;
+                    }
+                    lastEx = new HttpRequestException($"HTTP {(int)resp.StatusCode}");
+                }
+                catch (Exception ex) { lastEx = ex; }
+            }
+            // curl fallback (1 attempt)
+            try
+            {
+                var result = await CurlFetchAsync(url);
+                if (!string.IsNullOrWhiteSpace(result)) return result;
+            }
+            catch { }
+            throw lastEx ?? new HttpRequestException("FetchWithRetryAsync: all attempts failed");
+        }
+
         private static async Task<string> CurlFetchAsync(string url)
         {
-            // Retry up to 2 times with short delay
-            for (int attempt = 0; attempt < 3; attempt++)
+            var psi = new System.Diagnostics.ProcessStartInfo("curl")
             {
-                if (attempt > 0) await Task.Delay(1000);
-                var psi = new System.Diagnostics.ProcessStartInfo("curl")
-                {
-                    Arguments = $"-4 -sS --connect-timeout 10 --max-time 20 --http1.1 -H \"Referer: https://quote.eastmoney.com/\" \"{url}\"",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                };
-                using var process = System.Diagnostics.Process.Start(psi);
-                if (process == null) throw new InvalidOperationException("Failed to start curl");
-                var output = await process.StandardOutput.ReadToEndAsync();
-                await process.WaitForExitAsync();
-                if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output)) return output;
-            }
-            throw new HttpRequestException("curl: all 3 attempts failed");
+                Arguments = $"-4 -sS --connect-timeout 10 --max-time 20 --http1.1 -H \"Referer: https://quote.eastmoney.com/\" -H \"User-Agent: Mozilla/5.0\" \"{url}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            using var process = System.Diagnostics.Process.Start(psi);
+            if (process == null) throw new InvalidOperationException("Failed to start curl");
+            var output = await process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output)) return output;
+            throw new HttpRequestException($"curl exit={process.ExitCode}");
         }
 
         private static Dictionary<DateTime, double?> BuildAlignedIntradayIndexRates(
@@ -2499,12 +2530,11 @@ namespace 小白养基.Controllers
             string response;
             try
             {
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-                response = await http.GetStringAsync(url, cts.Token);
+                response = await FetchWithRetryAsync(http, url);
             }
-            catch
+            catch (Exception ex)
             {
-                response = await CurlFetchAsync(url);
+                throw new HttpRequestException($"kline failed for {index.Secid}: {ex.Message}", ex);
             }
             using var doc = JsonDocument.Parse(response);
 
@@ -2849,16 +2879,7 @@ namespace 小白养基.Controllers
                 string url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={Uri.EscapeDataString(secid)}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250";
                 try
                 {
-                    string response;
-                    try
-                    {
-                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-                        response = await http.GetStringAsync(url, cts.Token);
-                    }
-                    catch
-                    {
-                        response = await CurlFetchAsync(url);
-                    }
+                    string response = await FetchWithRetryAsync(http, url);
                     using var doc = JsonDocument.Parse(response);
 
                     if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null)
