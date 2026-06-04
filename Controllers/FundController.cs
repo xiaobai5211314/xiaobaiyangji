@@ -45,6 +45,32 @@ namespace 小白养基.Controllers
             public double BigNet { get; set; }
         }
 
+        public class CapitalFlowPayloadDto
+        {
+            public string Source { get; set; } = string.Empty;
+            public string UpdatedAt { get; set; } = string.Empty;
+            public bool IsFallback { get; set; }
+            public bool IsStale { get; set; }
+            public string Message { get; set; } = string.Empty;
+            public List<CapitalFlowRowDto> Rows { get; set; } = new();
+            public List<CapitalFlowRowDto> Inflow { get; set; } = new();
+            public List<CapitalFlowRowDto> Outflow { get; set; } = new();
+            public object? Debug { get; set; }
+        }
+
+        private sealed class ExternalDataAttemptDto
+        {
+            public string Source { get; init; } = string.Empty;
+            public string? Url { get; init; }
+            public int StatusCode { get; init; }
+            public string? Error { get; init; }
+            public int RawRowsCount { get; init; }
+            public int ParsedRowsCount { get; init; }
+            public bool CacheHit { get; init; }
+            public string? CacheSource { get; init; }
+            public long TimeMs { get; init; }
+        }
+
         public class FundInfoCache
         {
             public string Code { get; set; }
@@ -56,7 +82,12 @@ namespace 小白养基.Controllers
         private static Dictionary<string, FundInfoCache> _exactMatchDict = null;
         private static readonly SemaphoreSlim _sectorsRefreshLock = new(1, 1);
         private static readonly SemaphoreSlim _capitalFlowRefreshLock = new(1, 1);
+        private const string CapitalFlowLatestCacheKey = "capital_flow_latest";
         private static readonly TimeSpan _staleExternalDataTtl = TimeSpan.FromHours(6);
+        private static readonly TimeSpan _marketRealtimeFreshTtl = TimeSpan.FromSeconds(60);
+        private static readonly TimeSpan _historicalKlineFreshTtl = TimeSpan.FromDays(7);
+        private static readonly TimeSpan _capitalFlowFreshTtl = TimeSpan.FromMinutes(2);
+        private static readonly TimeSpan _capitalFlowStaleTtl = TimeSpan.FromDays(1);
 
         private static TimeSpan GetExternalDataFreshTtl()
         {
@@ -1509,6 +1540,7 @@ namespace 小白养基.Controllers
             public string Code { get; init; } = string.Empty;
             public string Market { get; init; } = string.Empty;
             public string[] Secids { get; init; } = Array.Empty<string>();
+            public string? SinaFuturesSymbol { get; init; }
         }
 
         private sealed class GlobalIndexKlineDto
@@ -1528,6 +1560,10 @@ namespace 小白养基.Controllers
             public double? Close { get; init; }
             public double? TodayRate { get; init; }
             public double? YearRate { get; init; }
+            public bool TodayAvailable { get; init; }
+            public bool YearAvailable { get; init; }
+            public int KlineCount { get; init; }
+            public string Message { get; init; } = string.Empty;
             public List<GlobalIndexKlineDto> Klines { get; init; } = new();
             public string? Source { get; set; }
         }
@@ -1565,7 +1601,13 @@ namespace 小白养基.Controllers
 
         private sealed record PerformanceIndexClose(DateTime Date, double Close);
 
+        private sealed record PerformanceIndexCloseResult(
+            List<PerformanceIndexClose> Closes,
+            int RawRowsCount);
+
         private sealed record PerformanceIndexTick(DateTime Time, double Price);
+
+        private sealed record MarketKlinePoint(DateTime Date, string DateText, double Close, double Rate);
 
         private sealed record PerformanceFundIntradayPoint(DateTime Time, double Rate, double? ProfitOverride);
 
@@ -1602,11 +1644,39 @@ namespace 小白养基.Controllers
             };
         }
 
+        private static string ResolveIndexCode(PerformanceIndexDefinition index)
+        {
+            var parts = index.Secid.Split('.', 2);
+            return parts.Length == 2 ? parts[1] : index.Secid;
+        }
+
+        private static string? ResolveTencentSymbolFromSecid(string secid)
+        {
+            var parts = secid.Split('.', 2);
+            if (parts.Length != 2 || string.IsNullOrWhiteSpace(parts[1])) return null;
+            return parts[0] switch
+            {
+                "1" => "sh" + parts[1],
+                "0" => "sz" + parts[1],
+                _ => null
+            };
+        }
+
+        private static string? ResolveSinaCnSymbolFromSecid(string secid)
+        {
+            var symbol = ResolveTencentSymbolFromSecid(secid);
+            return symbol?.StartsWith("sh", StringComparison.OrdinalIgnoreCase) == true ||
+                   symbol?.StartsWith("sz", StringComparison.OrdinalIgnoreCase) == true
+                ? symbol
+                : null;
+        }
+
         [HttpGet("performance-curve")]
         public async Task<IActionResult> GetPerformanceCurve(
             [FromQuery] string username,
             [FromQuery] string period = "today",
-            [FromQuery(Name = "index")] string indexKey = "hs300")
+            [FromQuery(Name = "index")] string indexKey = "hs300",
+            [FromQuery] bool debug = false)
         {
             if (string.IsNullOrWhiteSpace(username))
             {
@@ -1628,7 +1698,7 @@ namespace 小白养基.Controllers
 
             if (normalizedPeriod == "today")
             {
-                return await GetTodayPerformanceCurveAsync(username, normalizedIndex, indexDefinition);
+                return await GetTodayPerformanceCurveAsync(username, normalizedIndex, indexDefinition, debug);
             }
 
             var today = ChinaNow().Date;
@@ -1648,8 +1718,17 @@ namespace 小白养基.Controllers
                     period = normalizedPeriod,
                     index = normalizedIndex,
                     indexName = indexDefinition.Name,
+                    selectedIndex = normalizedIndex,
+                    resolvedIndexCode = ResolveIndexCode(indexDefinition),
+                    resolvedSecId = indexDefinition.Secid,
+                    indexSource = "none",
                     hasMyData = false,
                     indexAvailable = false,
+                    indexRawRowsCount = 0,
+                    indexParsedRowsCount = 0,
+                    pointsWithIndexRate = 0,
+                    indexMessage = "暂无历史收益曲线数据，请先保存每日档案",
+                    attempts = Array.Empty<ExternalDataAttemptDto>(),
                     myTotalRate = 0d,
                     indexTotalRate = 0d,
                     excessRate = 0d,
@@ -1665,6 +1744,7 @@ namespace 小白养基.Controllers
             var indexRawCount = 0;
             var indexParsedCount = 0;
             var indexError = (string?)null;
+            var attempts = new List<ExternalDataAttemptDto>();
             var idxMemFreshKey = $"PerfIdxClose:{indexDefinition.Key}:{startDate:yyyyMMdd}:{today:yyyyMMdd}";
             var idxMemStaleKey = idxMemFreshKey + ":stale";
             var idxRedisFreshKey = $"PerformanceIndexCloses:{indexDefinition.Key}:{normalizedPeriod}:{startDate:yyyyMMdd}:{today:yyyyMMdd}:F";
@@ -1677,6 +1757,13 @@ namespace 小白养基.Controllers
                 indexAvailable = true;
                 indexSource = "cache";
                 indexParsedCount = indexCloses.Length;
+                attempts.Add(new ExternalDataAttemptDto
+                {
+                    Source = "daily-kline-cache",
+                    ParsedRowsCount = indexParsedCount,
+                    CacheHit = true,
+                    CacheSource = "memory-fresh"
+                });
             }
 
             // B. Redis fresh
@@ -1695,7 +1782,14 @@ namespace 小白养基.Controllers
                             indexAvailable = true;
                             indexSource = "cache";
                             indexParsedCount = indexCloses.Length;
-                            _cache.Set(idxMemFreshKey, deserialized, GetExternalDataFreshTtl());
+                            _cache.Set(idxMemFreshKey, deserialized, _historicalKlineFreshTtl);
+                            attempts.Add(new ExternalDataAttemptDto
+                            {
+                                Source = "daily-kline-cache",
+                                ParsedRowsCount = indexParsedCount,
+                                CacheHit = true,
+                                CacheSource = "redis-fresh"
+                            });
                         }
                     }
                 }
@@ -1708,22 +1802,22 @@ namespace 小白养基.Controllers
                 try
                 {
                     var http = _httpClientFactory.CreateClient("EastMoneyQuote");
-                    var fetched = await FetchPerformanceIndexClosesAsync(http, indexDefinition, startDate, today);
-                    indexRawCount = fetched.Count;
-                    indexParsedCount = fetched.Count;
-                    indexCloses = fetched.ToArray();
+                    var fetched = await FetchPerformanceIndexClosesAsync(http, indexDefinition, startDate, today, attempts);
+                    indexRawCount = fetched.RawRowsCount;
+                    indexParsedCount = fetched.Closes.Count;
+                    indexCloses = fetched.Closes.ToArray();
                     indexAvailable = indexCloses.Length > 0;
                     indexSource = indexAvailable ? "fresh" : "none";
                     if (indexAvailable)
                     {
-                        _cache.Set(idxMemFreshKey, fetched, GetExternalDataFreshTtl());
-                        _cache.Set(idxMemStaleKey, fetched, TimeSpan.FromHours(24));
+                        _cache.Set(idxMemFreshKey, fetched.Closes, _historicalKlineFreshTtl);
+                        _cache.Set(idxMemStaleKey, fetched.Closes, TimeSpan.FromDays(30));
                         try
                         {
                             var db = _redis.GetDatabase();
-                            var json = JsonSerializer.Serialize(fetched);
-                            await db.StringSetAsync(idxRedisFreshKey, json, GetExternalDataFreshTtl());
-                            await db.StringSetAsync(idxRedisStaleKey, json, TimeSpan.FromDays(7));
+                            var json = JsonSerializer.Serialize(fetched.Closes);
+                            await db.StringSetAsync(idxRedisFreshKey, json, _historicalKlineFreshTtl);
+                            await db.StringSetAsync(idxRedisStaleKey, json, TimeSpan.FromDays(30));
                         }
                         catch (Exception rex) { Console.WriteLine($"[performance-curve] redis write failed: {rex.Message}"); }
                     }
@@ -1742,6 +1836,13 @@ namespace 小白养基.Controllers
                 indexAvailable = true;
                 indexSource = "cache-stale";
                 indexParsedCount = indexCloses.Length;
+                attempts.Add(new ExternalDataAttemptDto
+                {
+                    Source = "daily-kline-cache",
+                    ParsedRowsCount = indexParsedCount,
+                    CacheHit = true,
+                    CacheSource = "memory-stale"
+                });
             }
 
             // E. Redis stale
@@ -1760,6 +1861,13 @@ namespace 小白养基.Controllers
                             indexAvailable = true;
                             indexSource = "cache-stale";
                             indexParsedCount = indexCloses.Length;
+                            attempts.Add(new ExternalDataAttemptDto
+                            {
+                                Source = "daily-kline-cache",
+                                ParsedRowsCount = indexParsedCount,
+                                CacheHit = true,
+                                CacheSource = "redis-stale"
+                            });
                         }
                     }
                 }
@@ -1789,9 +1897,16 @@ namespace 小白养基.Controllers
 
             var myTotalRate = points.Count > 0 ? points[^1].MyRate : 0d;
             var hasIndexRate = points.Any(p => p.IndexRate.HasValue);
+            var pointsWithIndexRate = points.Count(p => p.IndexRate.HasValue);
             var indexTotalRate = hasIndexRate
                 ? points.Where(p => p.IndexRate.HasValue).Select(p => p.IndexRate!.Value).Last()
                 : 0d;
+            var indexMessage = hasIndexRate ? indexSource switch
+            {
+                "cache" => "指数历史K线使用缓存",
+                "cache-stale" => "指数历史K线使用过期缓存",
+                _ => ""
+            } : "指数数据暂不可用";
 
             Console.WriteLine($"[performance-curve] period={normalizedPeriod} indexSource={indexSource} indexParsedCount={indexParsedCount}");
 
@@ -1800,21 +1915,25 @@ namespace 小白养基.Controllers
                 period = normalizedPeriod,
                 index = normalizedIndex,
                 indexName = indexDefinition.Name,
+                selectedIndex = normalizedIndex,
+                resolvedIndexCode = ResolveIndexCode(indexDefinition),
+                resolvedSecId = indexDefinition.Secid,
                 hasMyData = true,
                 indexAvailable = hasIndexRate,
                 indexSource,
                 indexRawCount,
                 indexParsedCount,
+                indexRawRowsCount = indexRawCount,
+                indexParsedRowsCount = indexParsedCount,
+                pointsWithIndexRate,
+                indexMessage,
+                attempts,
                 indexError,
                 myTotalRate = Math.Round(myTotalRate, 2),
                 indexTotalRate = Math.Round(indexTotalRate, 2),
                 excessRate = hasIndexRate ? Math.Round(myTotalRate - indexTotalRate, 2) : 0d,
                 myTotalProfit = points.Count > 0 ? points[^1].MyProfit : 0d,
-                message = hasIndexRate ? indexSource switch
-                {
-                    "cache" or "cache-stale" => "指数数据使用缓存",
-                    _ => ""
-                } : "指数数据暂不可用",
+                message = indexMessage,
                 points
             });
         }
@@ -1822,7 +1941,8 @@ namespace 小白养基.Controllers
         private async Task<IActionResult> GetTodayPerformanceCurveAsync(
             string username,
             string normalizedIndex,
-            PerformanceIndexDefinition indexDefinition)
+            PerformanceIndexDefinition indexDefinition,
+            bool debug)
         {
             var localTime = ChinaNow();
             var today = localTime.Date;
@@ -1841,8 +1961,17 @@ namespace 小白养基.Controllers
                     period = "today",
                     index = normalizedIndex,
                     indexName = indexDefinition.Name,
+                    selectedIndex = normalizedIndex,
+                    resolvedIndexCode = ResolveIndexCode(indexDefinition),
+                    resolvedSecId = indexDefinition.Secid,
                     hasMyData = false,
                     indexAvailable = false,
+                    indexSource = "none",
+                    indexRawRowsCount = 0,
+                    indexParsedRowsCount = 0,
+                    pointsWithIndexRate = 0,
+                    indexMessage = "暂无今日盘中收益数据",
+                    attempts = Array.Empty<ExternalDataAttemptDto>(),
                     myTotalRate = 0d,
                     indexTotalRate = 0d,
                     excessRate = 0d,
@@ -1888,8 +2017,17 @@ namespace 小白养基.Controllers
                     period = "today",
                     index = normalizedIndex,
                     indexName = indexDefinition.Name,
+                    selectedIndex = normalizedIndex,
+                    resolvedIndexCode = ResolveIndexCode(indexDefinition),
+                    resolvedSecId = indexDefinition.Secid,
                     hasMyData = false,
                     indexAvailable = false,
+                    indexSource = "none",
+                    indexRawRowsCount = 0,
+                    indexParsedRowsCount = 0,
+                    pointsWithIndexRate = 0,
+                    indexMessage = "暂无今日盘中收益数据",
+                    attempts = Array.Empty<ExternalDataAttemptDto>(),
                     myTotalRate = 0d,
                     indexTotalRate = 0d,
                     excessRate = 0d,
@@ -1905,13 +2043,18 @@ namespace 小白养基.Controllers
             var indexRawCount = 0;
             var indexParsedCount = 0;
             var indexError = (string?)null;
+            var attempts = new List<ExternalDataAttemptDto>();
             double? fallbackIndexRate = null;
             double? preCloseFromTrends2 = null;
             var idxDateStr = today.ToString("yyyyMMdd");
             var idxFreshMemKey = $"PerfIdxTick:{indexDefinition.Key}:{idxDateStr}";
             var idxStaleMemKey = idxFreshMemKey + ":stale";
+            var idxFreshPreCloseMemKey = idxFreshMemKey + ":preclose";
+            var idxStalePreCloseMemKey = idxStaleMemKey + ":preclose";
             var idxRedisFreshKey = $"PerformanceIndexTicks:{indexDefinition.Key}:{idxDateStr}:F";
             var idxRedisStaleKey = $"PerformanceIndexTicks:{indexDefinition.Key}:{idxDateStr}:S";
+            var idxRedisFreshPreCloseKey = idxRedisFreshKey + ":PC";
+            var idxRedisStalePreCloseKey = idxRedisStaleKey + ":PC";
 
             // A. IMemoryCache fresh
             if (_cache.TryGetValue<List<PerformanceIndexTick>>(idxFreshMemKey, out var cachedFreshTicks) && cachedFreshTicks!.Count > 0)
@@ -1920,6 +2063,17 @@ namespace 小白养基.Controllers
                 indexAvailable = true;
                 indexSource = "cache";
                 indexParsedCount = indexTicks.Length;
+                if (_cache.TryGetValue<double>(idxFreshPreCloseMemKey, out var cachedPreClose) && cachedPreClose > 0)
+                {
+                    preCloseFromTrends2 = cachedPreClose;
+                }
+                attempts.Add(new ExternalDataAttemptDto
+                {
+                    Source = "trends2-cache",
+                    ParsedRowsCount = indexParsedCount,
+                    CacheHit = true,
+                    CacheSource = "memory-fresh"
+                });
             }
 
             // B. Redis fresh
@@ -1938,7 +2092,20 @@ namespace 小白养基.Controllers
                             indexAvailable = true;
                             indexSource = "cache";
                             indexParsedCount = indexTicks.Length;
-                            _cache.Set(idxFreshMemKey, deserialized, GetExternalDataFreshTtl());
+                            _cache.Set(idxFreshMemKey, deserialized, _marketRealtimeFreshTtl);
+                            var redisPreClose = await db.StringGetAsync(idxRedisFreshPreCloseKey);
+                            if (redisPreClose.HasValue && TryParseInvariantDouble(redisPreClose.ToString(), out var pc) && pc > 0)
+                            {
+                                preCloseFromTrends2 = pc;
+                                _cache.Set(idxFreshPreCloseMemKey, pc, _marketRealtimeFreshTtl);
+                            }
+                            attempts.Add(new ExternalDataAttemptDto
+                            {
+                                Source = "trends2-cache",
+                                ParsedRowsCount = indexParsedCount,
+                                CacheHit = true,
+                                CacheSource = "redis-fresh"
+                            });
                         }
                     }
                 }
@@ -1951,8 +2118,8 @@ namespace 小白养基.Controllers
                 try
                 {
                     var http = _httpClientFactory.CreateClient("EastMoneyQuote");
-                    var trendResult = await FetchPerformanceIndexTicksAsync(http, indexDefinition, today);
-                    indexRawCount = trendResult.Ticks.Count;
+                    var trendResult = await FetchPerformanceIndexTicksAsync(http, indexDefinition, today, attempts);
+                    indexRawCount = trendResult.RawRowsCount;
                     indexParsedCount = trendResult.Ticks.Count;
                     indexTicks = trendResult.Ticks.ToArray();
                     preCloseFromTrends2 = trendResult.PreClose;
@@ -1964,14 +2131,24 @@ namespace 小白养基.Controllers
                     }
                     if (indexAvailable)
                     {
-                        _cache.Set(idxFreshMemKey, trendResult.Ticks, GetExternalDataFreshTtl());
+                        _cache.Set(idxFreshMemKey, trendResult.Ticks, _marketRealtimeFreshTtl);
                         _cache.Set(idxStaleMemKey, trendResult.Ticks, TimeSpan.FromHours(24));
+                        if (trendResult.PreClose.HasValue && trendResult.PreClose.Value > 0)
+                        {
+                            _cache.Set(idxFreshPreCloseMemKey, trendResult.PreClose.Value, _marketRealtimeFreshTtl);
+                            _cache.Set(idxStalePreCloseMemKey, trendResult.PreClose.Value, TimeSpan.FromHours(24));
+                        }
                         try
                         {
                             var db = _redis.GetDatabase();
                             var json = JsonSerializer.Serialize(trendResult.Ticks);
-                            await db.StringSetAsync(idxRedisFreshKey, json, GetExternalDataFreshTtl());
+                            await db.StringSetAsync(idxRedisFreshKey, json, _marketRealtimeFreshTtl);
                             await db.StringSetAsync(idxRedisStaleKey, json, TimeSpan.FromDays(7));
+                            if (trendResult.PreClose.HasValue && trendResult.PreClose.Value > 0)
+                            {
+                                await db.StringSetAsync(idxRedisFreshPreCloseKey, trendResult.PreClose.Value.ToString(CultureInfo.InvariantCulture), _marketRealtimeFreshTtl);
+                                await db.StringSetAsync(idxRedisStalePreCloseKey, trendResult.PreClose.Value.ToString(CultureInfo.InvariantCulture), TimeSpan.FromDays(7));
+                            }
                         }
                         catch (Exception rex) { Console.WriteLine($"[performance-curve] redis write failed: {rex.Message}"); }
                     }
@@ -1990,6 +2167,17 @@ namespace 小白养基.Controllers
                 indexAvailable = true;
                 indexSource = "cache-stale";
                 indexParsedCount = indexTicks.Length;
+                if (_cache.TryGetValue<double>(idxStalePreCloseMemKey, out var cachedStalePreClose) && cachedStalePreClose > 0)
+                {
+                    preCloseFromTrends2 = cachedStalePreClose;
+                }
+                attempts.Add(new ExternalDataAttemptDto
+                {
+                    Source = "trends2-cache",
+                    ParsedRowsCount = indexParsedCount,
+                    CacheHit = true,
+                    CacheSource = "memory-stale"
+                });
             }
 
             // E. Redis stale
@@ -2008,6 +2196,19 @@ namespace 小白养基.Controllers
                             indexAvailable = true;
                             indexSource = "cache-stale";
                             indexParsedCount = indexTicks.Length;
+                            var redisPreClose = await db.StringGetAsync(idxRedisStalePreCloseKey);
+                            if (redisPreClose.HasValue && TryParseInvariantDouble(redisPreClose.ToString(), out var pc) && pc > 0)
+                            {
+                                preCloseFromTrends2 = pc;
+                                _cache.Set(idxStalePreCloseMemKey, pc, TimeSpan.FromHours(24));
+                            }
+                            attempts.Add(new ExternalDataAttemptDto
+                            {
+                                Source = "trends2-cache",
+                                ParsedRowsCount = indexParsedCount,
+                                CacheHit = true,
+                                CacheSource = "redis-stale"
+                            });
                         }
                     }
                 }
@@ -2020,7 +2221,8 @@ namespace 小白养基.Controllers
                 try
                 {
                     var http = _httpClientFactory.CreateClient("EastMoneyQuote");
-                    var klineCloses = await FetchPerformanceIndexClosesAsync(http, indexDefinition, today.AddDays(-10), today);
+                    var klineResult = await FetchPerformanceIndexClosesAsync(http, indexDefinition, today.AddDays(-10), today, attempts);
+                    var klineCloses = klineResult.Closes;
                     if (klineCloses.Count >= 2)
                     {
                         var sorted = klineCloses.OrderBy(c => c.Date).ToList();
@@ -2031,7 +2233,7 @@ namespace 小白养基.Controllers
                             fallbackIndexRate = Math.Round((todayClose - prevClose) / prevClose * 100d, 4);
                             indexAvailable = true;
                             indexSource = "daily-kline-fallback";
-                            indexRawCount = klineCloses.Count;
+                            indexRawCount = klineResult.RawRowsCount;
                             indexParsedCount = 1;
                         }
                     }
@@ -2046,8 +2248,7 @@ namespace 小白养基.Controllers
                 {
                     var http = _httpClientFactory.CreateClient("EastMoneyQuote");
                     var quoteUrl = $"https://push2.eastmoney.com/api/qt/stock/get?secid={Uri.EscapeDataString(indexDefinition.Secid)}&fields=f43,f60,f170";
-                    using var qcts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                    var quoteResponse = await http.GetStringAsync(quoteUrl, qcts.Token);
+                    var quoteResponse = await FetchWithRetryAsync(http, quoteUrl, attempts: attempts, source: "quote");
                     using var quoteDoc = JsonDocument.Parse(quoteResponse);
                     if (quoteDoc.RootElement.TryGetProperty("data", out var qData) && qData.ValueKind != JsonValueKind.Null)
                     {
@@ -2068,13 +2269,53 @@ namespace 小白养基.Controllers
                             indexAvailable = true;
                             indexSource = "quote-fallback";
                             indexParsedCount = 1;
+                            attempts.Add(new ExternalDataAttemptDto
+                            {
+                                Source = "quote-parse",
+                                Url = quoteUrl,
+                                StatusCode = 200,
+                                ParsedRowsCount = 1
+                            });
                         }
                     }
                 }
                 catch (Exception ex) { Console.WriteLine($"[performance-curve] quote fallback failed: {ex.Message}"); }
             }
 
-            // H. ulist.np batch fallback
+            // H. Tencent quote fallback
+            if (!indexAvailable)
+            {
+                var tencentSymbol = ResolveTencentSymbolFromSecid(indexDefinition.Secid);
+                if (!string.IsNullOrWhiteSpace(tencentSymbol))
+                {
+                    try
+                    {
+                        var http = _httpClientFactory.CreateClient("EastMoneyQuote");
+                        var quote = await FetchTencentQuoteRateAsync(http, tencentSymbol);
+                        attempts.Add(new ExternalDataAttemptDto
+                        {
+                            Source = "tencent-quote",
+                            Url = quote.Url,
+                            StatusCode = 200,
+                            ParsedRowsCount = quote.Rate.HasValue ? 1 : 0
+                        });
+                        if (quote.Rate.HasValue)
+                        {
+                            fallbackIndexRate = quote.Rate;
+                            indexAvailable = true;
+                            indexSource = "tencent-quote-fallback";
+                            indexParsedCount = 1;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        attempts.Add(new ExternalDataAttemptDto { Source = "tencent-quote", StatusCode = 0, Error = ex.Message });
+                        Console.WriteLine($"[performance-curve] tencent quote fallback failed: {ex.Message}");
+                    }
+                }
+            }
+
+            // I. ulist.np batch fallback
             if (!indexAvailable)
             {
                 try
@@ -2082,11 +2323,7 @@ namespace 小白养基.Controllers
                     var http = _httpClientFactory.CreateClient("EastMoneyQuote");
                     var batchSecids = "1.000001,1.000688,0.399006,100.HSI,100.NDX,100.SPX,100.DJIA";
                     var batchUrl = $"https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&secids={batchSecids}&fields=f2,f3,f12,f14";
-                    using var bcts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
-                    using var resp = await http.GetAsync(batchUrl, bcts.Token);
-                    if (resp.IsSuccessStatusCode)
-                    {
-                        var batchResp = await resp.Content.ReadAsStringAsync(bcts.Token);
+                    var batchResp = await FetchWithRetryAsync(http, batchUrl, attempts: attempts, source: "ulist-batch");
                         using var batchDoc = JsonDocument.Parse(batchResp);
                         if (batchDoc.RootElement.TryGetProperty("data", out var bData) && bData.ValueKind != JsonValueKind.Null &&
                             bData.TryGetProperty("diff", out var diff) && diff.ValueKind == JsonValueKind.Array && diff.GetArrayLength() > 0)
@@ -2100,32 +2337,53 @@ namespace 小白养基.Controllers
                                 indexAvailable = true;
                                 indexSource = "ulist-batch-fallback";
                                 indexParsedCount = 1;
+                                attempts.Add(new ExternalDataAttemptDto
+                                {
+                                    Source = "ulist-batch-parse",
+                                    Url = batchUrl,
+                                    StatusCode = 200,
+                                    RawRowsCount = diff.GetArrayLength(),
+                                    ParsedRowsCount = 1
+                                });
                             }
                         }
-                    }
                 }
                 catch (Exception ex) { Console.WriteLine($"[performance-curve] ulist.np fallback failed: {ex.Message}"); }
             }
 
-            // I. Global-indices stale cache as last resort (use A-stock index todayRate)
+            // J. Global-indices stale cache as last resort (use A-stock index todayRate)
             if (!indexAvailable)
             {
                 try
                 {
-                    var db = _redis.GetDatabase();
-                    foreach (var giCode in new[] { "000001", "000688", "399006" })
+                    var giCode = normalizedIndex switch
                     {
+                        "cyb" => "399006",
+                        "kc50" => "000688",
+                        _ => null
+                    };
+                    if (!string.IsNullOrWhiteSpace(giCode))
+                    {
+                        var db = _redis.GetDatabase();
                         var cached = await db.StringGetAsync($"{GlobalIndexCachePrefix}{giCode}:S");
-                        if (!cached.HasValue) continue;
-                        var gi = JsonSerializer.Deserialize<GlobalIndexDto>(cached.ToString(), GlobalIndicesJsonOptions);
-                        if (gi != null && gi.TodayRate.HasValue && gi.Latest.HasValue && gi.Latest.Value > 0)
+                        if (cached.HasValue)
                         {
-                            fallbackIndexRate = Math.Round(gi.TodayRate.Value, 4);
-                            indexAvailable = true;
-                            indexSource = "global-cache-fallback";
-                            indexParsedCount = 1;
-                            Console.WriteLine($"[performance-curve] using global-indices cache for {giCode}: rate={gi.TodayRate.Value}");
-                            break;
+                            var gi = JsonSerializer.Deserialize<GlobalIndexDto>(cached.ToString(), GlobalIndicesJsonOptions);
+                            if (gi != null && gi.TodayRate.HasValue && gi.Latest.HasValue && gi.Latest.Value > 0)
+                            {
+                                fallbackIndexRate = Math.Round(gi.TodayRate.Value, 4);
+                                indexAvailable = true;
+                                indexSource = "global-cache-fallback";
+                                indexParsedCount = 1;
+                                attempts.Add(new ExternalDataAttemptDto
+                                {
+                                    Source = "global-index-cache",
+                                    ParsedRowsCount = 1,
+                                    CacheHit = true,
+                                    CacheSource = $"redis-stale:{giCode}"
+                                });
+                                Console.WriteLine($"[performance-curve] using global-indices cache for {giCode}: rate={gi.TodayRate.Value}");
+                            }
                         }
                     }
                 }
@@ -2196,6 +2454,7 @@ namespace 小白养基.Controllers
                 .Select(g => g.Last())
                 .ToList();
             var hasIndexRate = compactPoints.Any(p => p.IndexRate.HasValue);
+            var pointsWithIndexRate = compactPoints.Count(p => p.IndexRate.HasValue);
             var myTotalRate = compactPoints.Count > 0 ? compactPoints[^1].MyRate : 0d;
             var myTotalProfit = compactPoints.Count > 0 ? compactPoints[^1].MyProfit : 0d;
             var indexTotalRate = hasIndexRate
@@ -2242,29 +2501,39 @@ namespace 小白养基.Controllers
                 }
             }
 
+            var indexMessage = hasIndexRate ? indexSource switch
+            {
+                "cache" => "指数盘中走势使用缓存",
+                "cache-stale" => "指数盘中走势使用过期缓存",
+                "daily-kline-fallback" or "quote-fallback" or "ulist-batch-fallback" or "global-cache-fallback" => "指数仅有当前涨跌幅，暂无盘中走势",
+                _ => ""
+            } : "指数盘中数据暂不可用";
+
             return Ok(new
             {
                 period = "today",
                 index = normalizedIndex,
                 indexName = indexDefinition.Name,
+                selectedIndex = normalizedIndex,
+                resolvedIndexCode = ResolveIndexCode(indexDefinition),
+                resolvedSecId = indexDefinition.Secid,
                 hasMyData = compactPoints.Count > 0,
                 indexAvailable = hasIndexRate,
                 indexSource,
                 indexRawCount,
                 indexParsedCount,
+                indexRawRowsCount = indexRawCount,
+                indexParsedRowsCount = indexParsedCount,
+                pointsWithIndexRate,
+                indexMessage,
+                attempts,
                 indexError,
                 myTotalRate = Math.Round(myTotalRate, 2),
                 indexTotalRate = Math.Round(indexTotalRate, 2),
                 excessRate = hasIndexRate ? Math.Round(myTotalRate - indexTotalRate, 2) : 0d,
                 myTotalProfit = Math.Round(myTotalProfit, 2),
                 indexCurrentRate = isFallbackRate ? Math.Round(fallbackIndexRate!.Value, 2) : (double?)null,
-                message = hasIndexRate ? indexSource switch
-                {
-                    "cache" or "cache-stale" => "指数数据使用缓存",
-                    "daily-kline-fallback" => "指数盘中数据使用日线兜底",
-                    "quote-fallback" or "ulist-batch-fallback" or "global-cache-fallback" => "指数仅有当前涨跌幅，暂无盘中走势",
-                    _ => ""
-                } : "指数盘中数据暂不可用",
+                message = indexMessage,
                 points = compactPoints
             });
         }
@@ -2339,12 +2608,14 @@ namespace 小白养基.Controllers
 
         private sealed record PerformanceIndexTickResult(
             List<PerformanceIndexTick> Ticks,
-            double? PreClose);
+            double? PreClose,
+            int RawRowsCount);
 
         private static async Task<PerformanceIndexTickResult> FetchPerformanceIndexTicksAsync(
             HttpClient http,
             PerformanceIndexDefinition index,
-            DateTime today)
+            DateTime today,
+            List<ExternalDataAttemptDto>? attempts = null)
         {
             var fields1 = "f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11";
             var fields2 = "f51,f52,f53,f54,f55,f56,f57,f58";
@@ -2353,7 +2624,7 @@ namespace 小白养基.Controllers
             string response;
             try
             {
-                response = await FetchWithRetryAsync(http, url);
+                response = await FetchWithRetryAsync(http, url, attempts: attempts, source: "trends2");
             }
             catch (Exception ex)
             {
@@ -2365,15 +2636,18 @@ namespace 小白养基.Controllers
                 data.ValueKind == JsonValueKind.Null)
             {
                 Console.WriteLine($"[performance-curve] trends2 data=null");
-                return new PerformanceIndexTickResult(new List<PerformanceIndexTick>(), null);
+                attempts?.Add(new ExternalDataAttemptDto { Source = "trends2-parse", Url = url, StatusCode = 200, Error = "data=null" });
+                return new PerformanceIndexTickResult(new List<PerformanceIndexTick>(), null, 0);
             }
             if (!data.TryGetProperty("trends", out var trends) ||
                 trends.ValueKind != JsonValueKind.Array)
             {
                 Console.WriteLine($"[performance-curve] trends2 trends missing or not array");
-                return new PerformanceIndexTickResult(new List<PerformanceIndexTick>(), null);
+                attempts?.Add(new ExternalDataAttemptDto { Source = "trends2-parse", Url = url, StatusCode = 200, Error = "trends missing" });
+                return new PerformanceIndexTickResult(new List<PerformanceIndexTick>(), null, 0);
             }
-            Console.WriteLine($"[performance-curve] trends2 trends count={trends.GetArrayLength()}");
+            var rawRowsCount = trends.GetArrayLength();
+            Console.WriteLine($"[performance-curve] trends2 trends count={rawRowsCount}");
 
             double? preClose = null;
             if (data.TryGetProperty("preClose", out var preCloseElem) && preCloseElem.ValueKind == JsonValueKind.Number)
@@ -2405,9 +2679,20 @@ namespace 小白养基.Controllers
                 }
             }
 
+            var ordered = result.OrderBy(p => p.Time).ToList();
+            attempts?.Add(new ExternalDataAttemptDto
+            {
+                Source = "trends2-parse",
+                Url = url,
+                StatusCode = 200,
+                RawRowsCount = rawRowsCount,
+                ParsedRowsCount = ordered.Count
+            });
+
             return new PerformanceIndexTickResult(
-                result.OrderBy(p => p.Time).ToList(),
-                preClose);
+                ordered,
+                preClose,
+                rawRowsCount);
         }
 
         private sealed class RetryAttemptDto
@@ -2419,32 +2704,116 @@ namespace 小白养基.Controllers
             public string Source { get; init; } = "http";
         }
 
-        private static async Task<string> FetchWithRetryAsync(HttpClient http, string url, int maxRetries = 2)
+        private static async Task<string> FetchWithRetryAsync(
+            HttpClient http,
+            string url,
+            int maxAttempts = 2,
+            List<ExternalDataAttemptDto>? attempts = null,
+            string source = "http")
         {
-            for (int i = 0; i < maxRetries; i++)
+            maxAttempts = Math.Clamp(maxAttempts, 1, 2);
+            Exception? lastException = null;
+
+            for (int i = 1; i <= maxAttempts; i++)
             {
-                if (i > 0) await Task.Delay(2000);
+                if (i > 1) await Task.Delay(350);
+
+                var sw = System.Diagnostics.Stopwatch.StartNew();
                 try
                 {
                     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                    var resp = await http.GetAsync(url, cts.Token);
-                    if (resp.IsSuccessStatusCode)
+                    using var resp = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cts.Token);
+                    var statusCode = (int)resp.StatusCode;
+                    var body = await resp.Content.ReadAsStringAsync(cts.Token);
+                    sw.Stop();
+
+                    if (resp.IsSuccessStatusCode && !string.IsNullOrWhiteSpace(body) && body.Length > 20)
                     {
-                        var body = await resp.Content.ReadAsStringAsync();
-                        if (!string.IsNullOrWhiteSpace(body) && body.Length > 50) return body;
+                        attempts?.Add(new ExternalDataAttemptDto
+                        {
+                            Source = source,
+                            Url = url,
+                            StatusCode = statusCode,
+                            TimeMs = sw.ElapsedMilliseconds
+                        });
+                        return body;
+                    }
+
+                    var error = resp.IsSuccessStatusCode ? "empty body" : resp.ReasonPhrase;
+                    attempts?.Add(new ExternalDataAttemptDto
+                    {
+                        Source = source,
+                        Url = url,
+                        StatusCode = statusCode,
+                        Error = error,
+                        TimeMs = sw.ElapsedMilliseconds
+                    });
+
+                    lastException = new HttpRequestException($"{source} returned {statusCode}: {error}");
+                    if (!IsRetryableStatus(statusCode))
+                    {
+                        break;
                     }
                 }
-                catch { }
+                catch (OperationCanceledException ex)
+                {
+                    sw.Stop();
+                    lastException = ex;
+                    attempts?.Add(new ExternalDataAttemptDto
+                    {
+                        Source = source,
+                        Url = url,
+                        StatusCode = 0,
+                        Error = "timeout",
+                        TimeMs = sw.ElapsedMilliseconds
+                    });
+                }
+                catch (HttpRequestException ex)
+                {
+                    sw.Stop();
+                    lastException = ex;
+                    if (i == maxAttempts)
+                    {
+                        attempts?.Add(new ExternalDataAttemptDto
+                        {
+                            Source = source,
+                            Url = url,
+                            StatusCode = 0,
+                            Error = ex.Message,
+                            TimeMs = sw.ElapsedMilliseconds
+                        });
+                    }
+                }
             }
-            // curl fallback
-            try
-            {
-                var result = await CurlFetchAsync(url);
-                if (!string.IsNullOrWhiteSpace(result) && result.Length > 50) return result;
-            }
-            catch { }
-            throw new HttpRequestException("push2his: all attempts returned empty");
+
+            throw new HttpRequestException($"{source}: all attempts failed", lastException);
         }
+
+        private static async Task<(double? Rate, string Url)> FetchTencentQuoteRateAsync(HttpClient http, string symbol)
+        {
+            var url = $"https://qt.gtimg.cn/q={Uri.EscapeDataString(symbol)}";
+            var response = await FetchWithRetryAsync(http, url, source: "tencent-quote");
+            var firstQuote = response
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault(line => line.Contains($"v_{symbol}=", StringComparison.OrdinalIgnoreCase)) ?? response;
+            var start = firstQuote.IndexOf('"');
+            var end = firstQuote.LastIndexOf('"');
+            if (start < 0 || end <= start) return (null, url);
+
+            var parts = firstQuote.Substring(start + 1, end - start - 1).Split('~');
+            if (parts.Length <= 4) return (null, url);
+            if (TryParseInvariantDouble(parts[3], out var latest) &&
+                TryParseInvariantDouble(parts[4], out var previousClose) &&
+                previousClose > 0)
+            {
+                return (Math.Round((latest - previousClose) / previousClose * 100d, 4), url);
+            }
+
+            return (null, url);
+        }
+
+        private static bool IsRetryableStatus(int statusCode)
+            => statusCode is 0 or 502 or 503 or 504;
 
         private static async Task<string> CurlFetchAsync(string url)
         {
@@ -2536,59 +2905,254 @@ namespace 小白养基.Controllers
                 .ToList();
         }
 
-        private static async Task<List<PerformanceIndexClose>> FetchPerformanceIndexClosesAsync(
+        private static async Task<PerformanceIndexCloseResult> FetchPerformanceIndexClosesAsync(
             HttpClient http,
             PerformanceIndexDefinition index,
             DateTime startDate,
-            DateTime endDate)
+            DateTime endDate,
+            List<ExternalDataAttemptDto>? attempts = null)
         {
             var limit = Math.Clamp((endDate - startDate).Days + 40, 80, 430);
             var url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={Uri.EscapeDataString(index.Secid)}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt={limit}";
 
-            string response;
             try
             {
-                response = await FetchWithRetryAsync(http, url);
+                string response = await FetchWithRetryAsync(http, url, attempts: attempts, source: "daily-kline");
+                using var doc = JsonDocument.Parse(response);
+
+                if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null ||
+                    !data.TryGetProperty("klines", out var klines) || klines.ValueKind != JsonValueKind.Array)
+                {
+                    attempts?.Add(new ExternalDataAttemptDto { Source = "daily-kline-parse", Url = url, StatusCode = 200, Error = "klines missing" });
+                }
+                else
+                {
+                    var result = new List<PerformanceIndexClose>();
+                    var rawRowsCount = klines.GetArrayLength();
+                    foreach (var kline in klines.EnumerateArray())
+                    {
+                        var raw = kline.GetString();
+                        if (string.IsNullOrWhiteSpace(raw))
+                        {
+                            continue;
+                        }
+
+                        var parts = raw.Split(',');
+                        if (parts.Length < 3 ||
+                            !DateTime.TryParse(parts[0], CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ||
+                            !TryParseInvariantDouble(parts[2], out var close))
+                        {
+                            continue;
+                        }
+
+                        var archiveDate = date.Date;
+                        if (archiveDate >= startDate && archiveDate <= endDate)
+                        {
+                            result.Add(new PerformanceIndexClose(archiveDate, close));
+                        }
+                    }
+
+                    var ordered = result
+                        .OrderBy(p => p.Date)
+                        .ToList();
+                    attempts?.Add(new ExternalDataAttemptDto
+                    {
+                        Source = "daily-kline-parse",
+                        Url = url,
+                        StatusCode = 200,
+                        RawRowsCount = rawRowsCount,
+                        ParsedRowsCount = ordered.Count
+                    });
+                    if (ordered.Count > 0)
+                    {
+                        return new PerformanceIndexCloseResult(ordered, rawRowsCount);
+                    }
+                }
             }
             catch (Exception ex)
             {
-                throw new HttpRequestException($"kline failed for {index.Secid}: {ex.Message}", ex);
+                attempts?.Add(new ExternalDataAttemptDto { Source = "daily-kline", Url = url, StatusCode = 0, Error = ex.Message });
             }
+
+            var tencentSymbol = ResolveTencentSymbolFromSecid(index.Secid);
+            if (!string.IsNullOrWhiteSpace(tencentSymbol))
+            {
+                try
+                {
+                    var tencent = await FetchTencentKlinePointsAsync(http, tencentSymbol, limit);
+                    var closes = tencent.Points
+                        .Where(p => p.Date >= startDate && p.Date <= endDate)
+                        .Select(p => new PerformanceIndexClose(p.Date, p.Close))
+                        .OrderBy(p => p.Date)
+                        .ToList();
+                    attempts?.Add(new ExternalDataAttemptDto
+                    {
+                        Source = "tencent-daily-kline",
+                        Url = tencent.Url,
+                        StatusCode = 200,
+                        RawRowsCount = tencent.RawRowsCount,
+                        ParsedRowsCount = closes.Count
+                    });
+                    if (closes.Count > 0)
+                    {
+                        return new PerformanceIndexCloseResult(closes, tencent.RawRowsCount);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    attempts?.Add(new ExternalDataAttemptDto { Source = "tencent-daily-kline", StatusCode = 0, Error = ex.Message });
+                }
+
+                var sinaSymbol = ResolveSinaCnSymbolFromSecid(index.Secid);
+                if (!string.IsNullOrWhiteSpace(sinaSymbol))
+                {
+                    try
+                    {
+                        var sina = await FetchSinaCnKlinePointsAsync(http, sinaSymbol, limit);
+                        var closes = sina.Points
+                            .Where(p => p.Date >= startDate && p.Date <= endDate)
+                            .Select(p => new PerformanceIndexClose(p.Date, p.Close))
+                            .OrderBy(p => p.Date)
+                            .ToList();
+                        attempts?.Add(new ExternalDataAttemptDto
+                        {
+                            Source = "sina-cn-daily-kline",
+                            Url = sina.Url,
+                            StatusCode = 200,
+                            RawRowsCount = sina.RawRowsCount,
+                            ParsedRowsCount = closes.Count
+                        });
+                        if (closes.Count > 0)
+                        {
+                            return new PerformanceIndexCloseResult(closes, sina.RawRowsCount);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        attempts?.Add(new ExternalDataAttemptDto { Source = "sina-cn-daily-kline", StatusCode = 0, Error = ex.Message });
+                    }
+                }
+            }
+
+            return new PerformanceIndexCloseResult(new List<PerformanceIndexClose>(), 0);
+        }
+
+        private static async Task<(List<MarketKlinePoint> Points, int RawRowsCount, string Url)> FetchTencentKlinePointsAsync(HttpClient http, string symbol, int limit)
+        {
+            var normalizedLimit = Math.Clamp(limit, 20, 430);
+            var url = $"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={Uri.EscapeDataString(symbol)},day,,,{normalizedLimit},qfq";
+            var response = await FetchWithRetryAsync(http, url, source: "tencent-kline");
             using var doc = JsonDocument.Parse(response);
-
-            if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null ||
-                !data.TryGetProperty("klines", out var klines) || klines.ValueKind != JsonValueKind.Array)
+            if (!doc.RootElement.TryGetProperty("data", out var data) ||
+                !data.TryGetProperty(symbol, out var symbolNode))
             {
-                return new List<PerformanceIndexClose>();
+                return (new List<MarketKlinePoint>(), 0, url);
             }
 
-            var result = new List<PerformanceIndexClose>();
-            foreach (var kline in klines.EnumerateArray())
+            JsonElement rows;
+            if (symbolNode.TryGetProperty("day", out rows) && rows.ValueKind == JsonValueKind.Array)
             {
-                var raw = kline.GetString();
-                if (string.IsNullOrWhiteSpace(raw))
-                {
-                    continue;
-                }
-
-                var parts = raw.Split(',');
-                if (parts.Length < 3 ||
-                    !DateTime.TryParse(parts[0], CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ||
-                    !TryParseInvariantDouble(parts[2], out var close))
-                {
-                    continue;
-                }
-
-                var archiveDate = date.Date;
-                if (archiveDate >= startDate && archiveDate <= endDate)
-                {
-                    result.Add(new PerformanceIndexClose(archiveDate, close));
-                }
+                return (ParseTencentKlineRows(rows), rows.GetArrayLength(), url);
             }
 
-            return result
-                .OrderBy(p => p.Date)
+            if (symbolNode.TryGetProperty("qfqday", out rows) && rows.ValueKind == JsonValueKind.Array)
+            {
+                return (ParseTencentKlineRows(rows), rows.GetArrayLength(), url);
+            }
+
+            return (new List<MarketKlinePoint>(), 0, url);
+        }
+
+        private static List<MarketKlinePoint> ParseTencentKlineRows(JsonElement rows)
+        {
+            var closeRows = new List<(DateTime Date, string DateText, double Close)>();
+            foreach (var row in rows.EnumerateArray())
+            {
+                if (row.ValueKind != JsonValueKind.Array || row.GetArrayLength() < 3) continue;
+                var dateText = row[0].GetString() ?? string.Empty;
+                var closeText = row[2].GetString() ?? string.Empty;
+                if (!DateTime.TryParse(dateText, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)) continue;
+                if (!TryParseInvariantDouble(closeText, out var close) || close <= 0) continue;
+                closeRows.Add((date.Date, dateText, close));
+            }
+
+            return BuildMarketKlinePoints(closeRows);
+        }
+
+        private static async Task<(List<MarketKlinePoint> Points, int RawRowsCount, string Url)> FetchSinaCnKlinePointsAsync(HttpClient http, string symbol, int limit)
+        {
+            var normalizedLimit = Math.Clamp(limit, 20, 430);
+            var url = $"https://quotes.sina.cn/cn/api/json_v2.php/CN_MarketData.getKLineData?symbol={Uri.EscapeDataString(symbol)}&scale=240&ma=no&datalen={normalizedLimit}";
+            var response = await FetchWithRetryAsync(http, url, source: "sina-cn-kline");
+            using var doc = JsonDocument.Parse(response);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+            {
+                return (new List<MarketKlinePoint>(), 0, url);
+            }
+
+            var closeRows = new List<(DateTime Date, string DateText, double Close)>();
+            foreach (var row in doc.RootElement.EnumerateArray())
+            {
+                var dateText = row.TryGetProperty("day", out var day) ? day.GetString() ?? string.Empty : string.Empty;
+                var closeText = row.TryGetProperty("close", out var closeNode) ? closeNode.GetString() ?? string.Empty : string.Empty;
+                if (!DateTime.TryParse(dateText, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)) continue;
+                if (!TryParseInvariantDouble(closeText, out var close) || close <= 0) continue;
+                closeRows.Add((date.Date, dateText, close));
+            }
+
+            return (BuildMarketKlinePoints(closeRows), doc.RootElement.GetArrayLength(), url);
+        }
+
+        private static async Task<(List<MarketKlinePoint> Points, int RawRowsCount, string Url)> FetchSinaFuturesKlinePointsAsync(HttpClient http, string symbol)
+        {
+            var url = $"https://stock2.finance.sina.com.cn/futures/api/jsonp.php/var%20_{Uri.EscapeDataString(symbol)}=/GlobalFuturesService.getGlobalFuturesDailyKLine?symbol={Uri.EscapeDataString(symbol)}";
+            var response = await FetchWithRetryAsync(http, url, maxAttempts: 1, source: "sina-futures-kline");
+            var start = response.IndexOf('[');
+            var end = response.LastIndexOf(']');
+            if (start < 0 || end <= start)
+            {
+                return (new List<MarketKlinePoint>(), 0, url);
+            }
+
+            var json = response.Substring(start, end - start + 1);
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+            {
+                return (new List<MarketKlinePoint>(), 0, url);
+            }
+
+            var cutoff = ChinaNow().Date.AddYears(-1).AddDays(-10);
+            var closeRows = new List<(DateTime Date, string DateText, double Close)>();
+            foreach (var row in doc.RootElement.EnumerateArray())
+            {
+                var dateText = row.TryGetProperty("date", out var dateNode) ? dateNode.GetString() ?? string.Empty : string.Empty;
+                var closeText = row.TryGetProperty("close", out var closeNode) ? closeNode.GetString() ?? string.Empty : string.Empty;
+                if (!DateTime.TryParse(dateText, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)) continue;
+                if (date.Date < cutoff) continue;
+                if (!TryParseInvariantDouble(closeText, out var close) || close <= 0) continue;
+                closeRows.Add((date.Date, dateText, close));
+            }
+
+            return (BuildMarketKlinePoints(closeRows), doc.RootElement.GetArrayLength(), url);
+        }
+
+        private static List<MarketKlinePoint> BuildMarketKlinePoints(List<(DateTime Date, string DateText, double Close)> closeRows)
+        {
+            var ordered = closeRows
+                .OrderBy(x => x.Date)
                 .ToList();
+            var result = new List<MarketKlinePoint>();
+            double? prevClose = null;
+            foreach (var row in ordered)
+            {
+                var rate = prevClose.HasValue && prevClose.Value > 0
+                    ? Math.Round((row.Close - prevClose.Value) / prevClose.Value * 100d, 2)
+                    : 0d;
+                result.Add(new MarketKlinePoint(row.Date, row.DateText, row.Close, rate));
+                prevClose = row.Close;
+            }
+
+            return result;
         }
 
         private static Dictionary<DateTime, double?> BuildAlignedIndexRates(
@@ -2641,10 +3205,10 @@ namespace 小白养基.Controllers
                 new GlobalIndexDefinition { Name = "上证指数", Code = "000001", Market = "A股指数", Secids = new[] { "1.000001" } },
                 new GlobalIndexDefinition { Name = "科创50", Code = "000688", Market = "A股指数", Secids = new[] { "1.000688" } },
                 new GlobalIndexDefinition { Name = "创业板指", Code = "399006", Market = "A股指数", Secids = new[] { "0.399006" } },
-                new GlobalIndexDefinition { Name = "恒生指数", Code = "HSI", Market = "港股指数", Secids = new[] { "100.HSI", "124.HSI" } },
-                new GlobalIndexDefinition { Name = "纳斯达克", Code = "NDX", Market = "美股指数", Secids = new[] { "100.NDX", "105.IXIC" } },
-                new GlobalIndexDefinition { Name = "标普500", Code = "SPX", Market = "美股指数", Secids = new[] { "100.SPX", "109.SPX" } },
-                new GlobalIndexDefinition { Name = "道琼斯", Code = "DJIA", Market = "美股指数", Secids = new[] { "100.DJIA" } }
+                new GlobalIndexDefinition { Name = "恒生指数", Code = "HSI", Market = "港股指数", Secids = new[] { "100.HSI", "124.HSI" }, SinaFuturesSymbol = "HSI" },
+                new GlobalIndexDefinition { Name = "纳斯达克", Code = "NDX", Market = "美股指数", Secids = new[] { "100.NDX", "105.IXIC" }, SinaFuturesSymbol = "NQ" },
+                new GlobalIndexDefinition { Name = "标普500", Code = "SPX", Market = "美股指数", Secids = new[] { "100.SPX", "109.SPX" }, SinaFuturesSymbol = "ES" },
+                new GlobalIndexDefinition { Name = "道琼斯", Code = "DJIA", Market = "美股指数", Secids = new[] { "100.DJIA" }, SinaFuturesSymbol = "YM" }
             };
 
             // Non-debug, non-force: try combined cache first
@@ -2662,11 +3226,14 @@ namespace 小白养基.Controllers
             var debugList = debug ? new List<GlobalIndexDebugDto>() : null;
             var results = new List<GlobalIndexDto>();
 
-            foreach (var idx in definitions)
+            var fetchTasks = definitions
+                .Select(idx => FetchGlobalIndexWithCacheAsync(http, idx, force, debug))
+                .ToArray();
+            var fetchedResults = await Task.WhenAll(fetchTasks);
+            foreach (var item in fetchedResults)
             {
-                var (result, idxDebug) = await FetchGlobalIndexWithCacheAsync(http, idx, force, debug);
-                results.Add(result);
-                if (idxDebug != null) debugList!.Add(idxDebug);
+                results.Add(item.result);
+                if (item.debug != null) debugList!.Add(item.debug);
             }
 
             // Per-index stale merge: fill missing data from per-index stale cache or legacy combined cache
@@ -2754,6 +3321,10 @@ namespace 小白养基.Controllers
                                     Latest = Math.Round(bm.price, 2), Point = Math.Round(bm.price, 2), Close = Math.Round(bm.price, 2),
                                     TodayRate = Math.Round(bm.rate, 2),
                                     YearRate = existingStale?.YearRate,
+                                    TodayAvailable = true,
+                                    YearAvailable = existingStale?.YearRate.HasValue == true,
+                                    KlineCount = existingStale?.Klines.Count ?? 0,
+                                    Message = existingStale?.YearRate.HasValue == true ? string.Empty : "一年K线不可用",
                                     Klines = existingStale?.Klines ?? new List<GlobalIndexKlineDto>(),
                                     Source = "ulist-batch"
                                 };
@@ -2778,6 +3349,10 @@ namespace 小白养基.Controllers
                     Console.WriteLine($"[global-indices] ulist.np batch failed: {ex.Message}");
                 }
             }
+
+            results = results
+                .Select(NormalizeGlobalIndexAvailability)
+                .ToList();
 
             // Write combined cache if enough valid results
             int validCount = results.Count(x => x.Latest.HasValue && x.Latest.Value > 0);
@@ -2830,12 +3405,12 @@ namespace 小白养基.Controllers
 
             if (klineResult != null && klineResult.Latest.HasValue && klineResult.Latest.Value > 0)
             {
-                klineResult.Source = "fresh";
+                klineResult.Source ??= "fresh";
                 await WritePerIndexCacheAsync(idx.Code, klineResult);
                 return (klineResult, debug ? new GlobalIndexDebugDto
                 {
                     Name = idx.Name, Code = idx.Code,
-                    Secid = klineResult.Secid, Source = "fresh",
+                    Secid = klineResult.Secid, Source = klineResult.Source ?? "fresh",
                     Latest = klineResult.Latest, TodayRate = klineResult.TodayRate,
                     YearRate = klineResult.YearRate, KlinesCount = klineResult.Klines.Count,
                     Attempts = attempts!
@@ -2858,6 +3433,10 @@ namespace 小白养基.Controllers
                         Latest = quoteResult.Latest, Point = quoteResult.Point,
                         Close = quoteResult.Close, TodayRate = quoteResult.TodayRate,
                         YearRate = stale.YearRate ?? quoteResult.YearRate,
+                        TodayAvailable = quoteResult.TodayRate.HasValue,
+                        YearAvailable = stale.YearRate.HasValue || quoteResult.YearRate.HasValue,
+                        KlineCount = stale.Klines.Count,
+                        Message = stale.YearRate.HasValue || quoteResult.YearRate.HasValue ? string.Empty : "一年K线不可用",
                         Klines = stale.Klines, Source = quoteResult.Source
                     };
                 }
@@ -2878,6 +3457,10 @@ namespace 小白养基.Controllers
             {
                 Name = idx.Name, Code = idx.Code, Market = idx.Market,
                 Secid = idx.Secids.FirstOrDefault() ?? string.Empty,
+                TodayAvailable = false,
+                YearAvailable = false,
+                KlineCount = 0,
+                Message = "指数数据暂不可用",
                 Source = "none"
             };
             return (empty, debug ? new GlobalIndexDebugDto
@@ -2888,13 +3471,44 @@ namespace 小白养基.Controllers
             } : null);
         }
 
+        private static GlobalIndexDto NormalizeGlobalIndexAvailability(GlobalIndexDto item)
+        {
+            var klineCount = item.KlineCount > 0 ? item.KlineCount : item.Klines.Count;
+            var todayAvailable = item.TodayAvailable || item.TodayRate.HasValue;
+            var yearAvailable = item.YearAvailable || item.YearRate.HasValue;
+            var message = item.Message;
+            if (!yearAvailable && string.IsNullOrWhiteSpace(message) && item.Latest.HasValue)
+            {
+                message = "一年K线不可用";
+            }
+
+            return new GlobalIndexDto
+            {
+                Name = item.Name,
+                Code = item.Code,
+                Market = item.Market,
+                Secid = item.Secid,
+                Latest = item.Latest,
+                Point = item.Point,
+                Close = item.Close,
+                TodayRate = item.TodayRate,
+                YearRate = item.YearRate,
+                TodayAvailable = todayAvailable,
+                YearAvailable = yearAvailable,
+                KlineCount = klineCount,
+                Message = message,
+                Klines = item.Klines,
+                Source = item.Source
+            };
+        }
+
         private async Task<(GlobalIndexDto? result, List<GlobalIndexAttemptDto> attempts)> FetchGlobalIndexKlineAsync(
             HttpClient http, GlobalIndexDefinition idx)
         {
             var attempts = new List<GlobalIndexAttemptDto>();
             foreach (string secid in idx.Secids)
             {
-                string url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={Uri.EscapeDataString(secid)}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=250";
+                string url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={Uri.EscapeDataString(secid)}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&klt=101&fqt=1&end=20500101&lmt=370";
                 try
                 {
                     string response = await FetchWithRetryAsync(http, url);
@@ -2912,16 +3526,17 @@ namespace 小白养基.Controllers
                         continue;
                     }
 
-                    var parsedKlines = new List<(string Date, double Close, double Rate)>();
+                    var parsedKlines = new List<(DateTime Date, string DateText, double Close, double Rate)>();
                     foreach (var kline in klines.EnumerateArray())
                     {
                         string? raw = kline.GetString();
                         if (string.IsNullOrWhiteSpace(raw)) continue;
                         var parts = raw.Split(',');
                         if (parts.Length <= 8) continue;
+                        if (!DateTime.TryParse(parts[0], CultureInfo.InvariantCulture, DateTimeStyles.None, out var klineDate)) continue;
                         if (!TryParseInvariantDouble(parts[2], out double close)) continue;
                         if (!TryParseInvariantDouble(parts[8], out double rate)) rate = 0;
-                        parsedKlines.Add((parts[0], close, Math.Round(rate, 2)));
+                        parsedKlines.Add((klineDate.Date, parts[0], close, Math.Round(rate, 2)));
                     }
 
                     if (parsedKlines.Count == 0)
@@ -2930,6 +3545,10 @@ namespace 小白养基.Controllers
                         continue;
                     }
 
+                    parsedKlines = parsedKlines
+                        .OrderBy(x => x.Date)
+                        .ToList();
+
                     double latestClose = Math.Round(parsedKlines[^1].Close, 2);
                     if (latestClose <= 0)
                     {
@@ -2937,8 +3556,22 @@ namespace 小白养基.Controllers
                         continue;
                     }
 
-                    double firstClose = parsedKlines[0].Close;
-                    double yearRate = firstClose > 0 ? Math.Round((latestClose - firstClose) / firstClose * 100, 2) : 0;
+                    var latestDate = parsedKlines[^1].Date;
+                    var yearAgoTarget = latestDate.AddYears(-1);
+                    var yearAgoPoint = parsedKlines
+                        .Where(x => x.Date <= yearAgoTarget && x.Close > 0)
+                        .OrderByDescending(x => x.Date)
+                        .FirstOrDefault();
+                    if (yearAgoPoint.Close <= 0)
+                    {
+                        yearAgoPoint = parsedKlines
+                            .Where(x => x.Date >= yearAgoTarget && x.Close > 0)
+                            .OrderBy(x => x.Date)
+                            .FirstOrDefault();
+                    }
+                    double? yearRate = yearAgoPoint.Close > 0
+                        ? Math.Round((latestClose - yearAgoPoint.Close) / yearAgoPoint.Close * 100, 2)
+                        : null;
                     double todayRate = parsedKlines[^1].Rate;
 
                     attempts.Add(new GlobalIndexAttemptDto { Source = "kline", Url = url, Status = 200, ParsedCount = parsedKlines.Count });
@@ -2947,7 +3580,11 @@ namespace 小白养基.Controllers
                         Name = idx.Name, Code = idx.Code, Market = idx.Market, Secid = secid,
                         Latest = latestClose, Point = latestClose, Close = latestClose,
                         TodayRate = todayRate, YearRate = yearRate,
-                        Klines = parsedKlines.Select(x => new GlobalIndexKlineDto { Date = x.Date, Rate = x.Rate }).ToList()
+                        TodayAvailable = true,
+                        YearAvailable = yearRate.HasValue,
+                        KlineCount = parsedKlines.Count,
+                        Message = yearRate.HasValue ? string.Empty : "一年K线基准不可用",
+                        Klines = parsedKlines.Select(x => new GlobalIndexKlineDto { Date = x.DateText, Rate = x.Rate }).ToList()
                     }, attempts);
                 }
                 catch (OperationCanceledException)
@@ -2959,7 +3596,110 @@ namespace 小白养基.Controllers
                     attempts.Add(new GlobalIndexAttemptDto { Source = "kline", Url = url, Status = 0, Error = ex.Message });
                 }
             }
+
+            var tencentSymbol = idx.Secids
+                .Select(ResolveTencentSymbolFromSecid)
+                .FirstOrDefault(symbol => !string.IsNullOrWhiteSpace(symbol));
+            if (!string.IsNullOrWhiteSpace(tencentSymbol))
+            {
+                try
+                {
+                    var tencent = await FetchTencentKlinePointsAsync(http, tencentSymbol, 370);
+                    var result = BuildGlobalIndexDtoFromKlinePoints(idx, tencent.Points, tencentSymbol, "tencent-kline", "腾讯日K");
+                    attempts.Add(new GlobalIndexAttemptDto { Source = "tencent-kline", Url = tencent.Url, Status = 200, ParsedCount = tencent.Points.Count });
+                    if (result != null) return (result, attempts);
+                }
+                catch (Exception ex)
+                {
+                    attempts.Add(new GlobalIndexAttemptDto { Source = "tencent-kline", Status = 0, Error = ex.Message });
+                }
+
+                var sinaSymbol = idx.Secids
+                    .Select(ResolveSinaCnSymbolFromSecid)
+                    .FirstOrDefault(symbol => !string.IsNullOrWhiteSpace(symbol));
+                if (!string.IsNullOrWhiteSpace(sinaSymbol))
+                {
+                    try
+                    {
+                        var sina = await FetchSinaCnKlinePointsAsync(http, sinaSymbol, 370);
+                        var result = BuildGlobalIndexDtoFromKlinePoints(idx, sina.Points, sinaSymbol, "sina-cn-kline", "新浪日K");
+                        attempts.Add(new GlobalIndexAttemptDto { Source = "sina-cn-kline", Url = sina.Url, Status = 200, ParsedCount = sina.Points.Count });
+                        if (result != null) return (result, attempts);
+                    }
+                    catch (Exception ex)
+                    {
+                        attempts.Add(new GlobalIndexAttemptDto { Source = "sina-cn-kline", Status = 0, Error = ex.Message });
+                    }
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(idx.SinaFuturesSymbol))
+            {
+                try
+                {
+                    var sinaFutures = await FetchSinaFuturesKlinePointsAsync(http, idx.SinaFuturesSymbol);
+                    var result = BuildGlobalIndexDtoFromKlinePoints(idx, sinaFutures.Points, idx.Secids.FirstOrDefault() ?? idx.Code, "sina-futures-kline", "新浪期货日K");
+                    attempts.Add(new GlobalIndexAttemptDto { Source = "sina-futures-kline", Url = sinaFutures.Url, Status = 200, ParsedCount = sinaFutures.Points.Count });
+                    if (result != null) return (result, attempts);
+                }
+                catch (Exception ex)
+                {
+                    attempts.Add(new GlobalIndexAttemptDto { Source = "sina-futures-kline", Status = 0, Error = ex.Message });
+                }
+            }
+
             return (null, attempts);
+        }
+
+        private static GlobalIndexDto? BuildGlobalIndexDtoFromKlinePoints(
+            GlobalIndexDefinition idx,
+            List<MarketKlinePoint> points,
+            string secid,
+            string source,
+            string sourceLabel)
+        {
+            var ordered = points
+                .Where(x => x.Close > 0)
+                .OrderBy(x => x.Date)
+                .ToList();
+            if (ordered.Count == 0) return null;
+
+            var latest = ordered[^1];
+            var yearAgoTarget = latest.Date.AddYears(-1);
+            var yearAgoPoint = ordered
+                .Where(x => x.Date <= yearAgoTarget && x.Close > 0)
+                .OrderByDescending(x => x.Date)
+                .FirstOrDefault();
+            if (yearAgoPoint == null)
+            {
+                yearAgoPoint = ordered
+                    .Where(x => x.Date >= yearAgoTarget && x.Close > 0)
+                    .OrderBy(x => x.Date)
+                    .FirstOrDefault();
+            }
+
+            double? yearRate = yearAgoPoint != null && yearAgoPoint.Close > 0
+                ? Math.Round((latest.Close - yearAgoPoint.Close) / yearAgoPoint.Close * 100d, 2)
+                : null;
+
+            return new GlobalIndexDto
+            {
+                Name = idx.Name,
+                Code = idx.Code,
+                Market = idx.Market,
+                Secid = secid,
+                Latest = Math.Round(latest.Close, 2),
+                Point = Math.Round(latest.Close, 2),
+                Close = Math.Round(latest.Close, 2),
+                TodayRate = Math.Round(latest.Rate, 2),
+                YearRate = yearRate,
+                TodayAvailable = true,
+                YearAvailable = yearRate.HasValue,
+                KlineCount = ordered.Count,
+                Message = yearRate.HasValue ? string.Empty : $"{sourceLabel}一年基准不可用",
+                Klines = ordered.Select(x => new GlobalIndexKlineDto { Date = x.DateText, Rate = x.Rate }).ToList(),
+                Source = source
+            };
         }
 
         private async Task<(GlobalIndexDto? result, List<GlobalIndexAttemptDto> attempts)> FetchGlobalIndexQuoteAsync(
@@ -3015,6 +3755,10 @@ namespace 小白养基.Controllers
                             Name = idx.Name, Code = idx.Code, Market = idx.Market, Secid = secid,
                             Latest = latest, Point = latest, Close = latest,
                             TodayRate = todayRate, YearRate = null,
+                            TodayAvailable = todayRate.HasValue,
+                            YearAvailable = false,
+                            KlineCount = 0,
+                            Message = "一年K线不可用",
                             Klines = new List<GlobalIndexKlineDto>()
                         }, attempts);
                     }
@@ -3075,7 +3819,7 @@ namespace 小白养基.Controllers
             {
                 var db = _redis.GetDatabase();
                 string json = JsonSerializer.Serialize(result, GlobalIndicesJsonOptions);
-                await db.StringSetAsync(GlobalIndicesCacheKey, json, GetExternalDataFreshTtl());
+                await db.StringSetAsync(GlobalIndicesCacheKey, json, _marketRealtimeFreshTtl);
             }
             catch (Exception ex)
             {
@@ -3113,7 +3857,7 @@ namespace 小白养基.Controllers
             {
                 var db = _redis.GetDatabase();
                 string json = JsonSerializer.Serialize(result, GlobalIndicesJsonOptions);
-                await db.StringSetAsync($"{GlobalIndexCachePrefix}{code}:F", json, GetExternalDataFreshTtl());
+                await db.StringSetAsync($"{GlobalIndexCachePrefix}{code}:F", json, _marketRealtimeFreshTtl);
                 await db.StringSetAsync($"{GlobalIndexCachePrefix}{code}:S", json, TimeSpan.FromDays(7));
             }
             catch (Exception ex)
@@ -3153,7 +3897,7 @@ namespace 小白养基.Controllers
             {
                 var db = _redis.GetDatabase();
                 string json = JsonSerializer.Serialize(result, GlobalIndicesJsonOptions);
-                await db.StringSetAsync(GlobalIndicesCacheKey, json, GetExternalDataFreshTtl());
+                await db.StringSetAsync(GlobalIndicesCacheKey, json, _marketRealtimeFreshTtl);
             }
             catch (Exception ex)
             {
@@ -4432,42 +5176,93 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 row.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase));
         }
 
-        [HttpGet("capital-flow")]
-        public async Task<IActionResult> GetCapitalFlow([FromQuery] bool force = false, [FromQuery] int limit = 30)
+        private sealed class CapitalFlowSourceException : HttpRequestException
         {
-            limit = Math.Clamp(limit, 10, 80);
-            string freshKey = $"CapitalFlowV3_{limit}";
-            string staleKey = $"CapitalFlowV3_{limit}_Stale";
-
-            if (!force && _cache.TryGetValue(freshKey, out object fresh))
+            public CapitalFlowSourceException(string message, IReadOnlyList<ExternalDataAttemptDto> attempts)
+                : base(message)
             {
-                return Ok(fresh);
+                Attempts = attempts;
             }
 
-            if (_cache.TryGetValue(staleKey, out object stale))
+            public IReadOnlyList<ExternalDataAttemptDto> Attempts { get; }
+        }
+
+        [HttpGet("capital-flow")]
+        public async Task<IActionResult> GetCapitalFlow(
+            [FromQuery] bool force = false,
+            [FromQuery] int limit = 30,
+            [FromQuery] bool debug = false)
+        {
+            limit = Math.Clamp(limit, 10, 80);
+            string freshKey = $"CapitalFlowV4_{limit}";
+            string staleKey = $"CapitalFlowV4_{limit}_Stale";
+
+            if (!force && _cache.TryGetValue<CapitalFlowPayloadDto>(freshKey, out var fresh) && fresh != null)
+            {
+                return Ok(debug ? AttachCapitalFlowDebug(fresh, new[] { new ExternalDataAttemptDto { Source = "capital-flow-cache", CacheHit = true, CacheSource = "memory-fresh", ParsedRowsCount = fresh.Rows.Count } }) : fresh);
+            }
+
+            if (!force && _cache.TryGetValue<CapitalFlowPayloadDto>(staleKey, out var stale) && stale != null)
             {
                 _ = Task.Run(() => RefreshCapitalFlowCacheQuietlyAsync(limit));
-                return Ok(stale);
+                return Ok(CloneCapitalFlowPayload(stale, true, true, "主力资金流使用缓存数据", "cache", debug
+                    ? new[] { new ExternalDataAttemptDto { Source = "capital-flow-cache", CacheHit = true, CacheSource = "memory-stale", ParsedRowsCount = stale.Rows.Count } }
+                    : null));
             }
 
             if (!await _capitalFlowRefreshLock.WaitAsync(0))
             {
-                return StatusCode(503, "主力资金流向正在刷新，请稍后重试");
+                var fallbackWhileBusy = await TryGetCapitalFlowFallbackAsync(limit);
+                if (fallbackWhileBusy != null)
+                {
+                    return Ok(CloneCapitalFlowPayload(fallbackWhileBusy, true, true, "主力资金流使用缓存数据", "cache", debug
+                        ? new[] { new ExternalDataAttemptDto { Source = "capital-flow-cache", CacheHit = true, CacheSource = "fallback-while-refresh", ParsedRowsCount = fallbackWhileBusy.Rows.Count } }
+                        : null));
+                }
+
+                return Ok(CreateUnavailableCapitalFlowPayload(debug
+                    ? new[] { new ExternalDataAttemptDto { Source = "capital-flow-lock", Error = "refresh in progress" } }
+                    : null));
             }
 
             try
             {
-                if (!force && _cache.TryGetValue(freshKey, out fresh)) return Ok(fresh);
-                if (_cache.TryGetValue(staleKey, out stale)) return Ok(stale);
+                if (!force && _cache.TryGetValue<CapitalFlowPayloadDto>(freshKey, out fresh) && fresh != null)
+                {
+                    return Ok(debug ? AttachCapitalFlowDebug(fresh, new[] { new ExternalDataAttemptDto { Source = "capital-flow-cache", CacheHit = true, CacheSource = "memory-fresh-after-lock", ParsedRowsCount = fresh.Rows.Count } }) : fresh);
+                }
 
-                var payload = await BuildCapitalFlowPayloadAsync(limit);
-                SetCapitalFlowCache(limit, payload);
+                if (!force && _cache.TryGetValue<CapitalFlowPayloadDto>(staleKey, out stale) && stale != null)
+                {
+                    return Ok(CloneCapitalFlowPayload(stale, true, true, "主力资金流使用缓存数据", "cache", debug
+                        ? new[] { new ExternalDataAttemptDto { Source = "capital-flow-cache", CacheHit = true, CacheSource = "memory-stale-after-lock", ParsedRowsCount = stale.Rows.Count } }
+                        : null));
+                }
+
+                var payload = await BuildCapitalFlowPayloadAsync(limit, debug);
+                await SetCapitalFlowCacheAsync(limit, payload);
                 return Ok(payload);
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[警告] 主力资金流向获取失败: {ex.Message}");
-                return Ok(new { rows = Array.Empty<object>(), inflow = Array.Empty<object>(), outflow = Array.Empty<object>(), source = "", updatedAt = "", message = "主力资金流数据暂不可用" });
+                var failureAttempts = ex is CapitalFlowSourceException sourceException
+                    ? sourceException.Attempts.ToList()
+                    : new List<ExternalDataAttemptDto> { new() { Source = "capital-flow", Error = ex.Message } };
+
+                var fallback = await TryGetCapitalFlowFallbackAsync(limit);
+                if (fallback != null)
+                {
+                    var fallbackAttempts = failureAttempts
+                        .Concat(new[] { new ExternalDataAttemptDto { Source = "capital-flow-cache", CacheHit = true, CacheSource = "fallback-after-error", Error = ex.Message, ParsedRowsCount = fallback.Rows.Count } });
+                    return Ok(CloneCapitalFlowPayload(fallback, true, true, "主力资金流使用缓存数据", "cache", debug
+                        ? fallbackAttempts
+                        : null));
+                }
+
+                return Ok(CreateUnavailableCapitalFlowPayload(debug
+                    ? failureAttempts
+                    : null));
             }
             finally
             {
@@ -4481,8 +5276,8 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
             try
             {
-                var payload = await BuildCapitalFlowPayloadAsync(limit);
-                SetCapitalFlowCache(limit, payload);
+                var payload = await BuildCapitalFlowPayloadAsync(limit, false);
+                await SetCapitalFlowCacheAsync(limit, payload);
             }
             catch (Exception ex)
             {
@@ -4494,84 +5289,222 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             }
         }
 
-        private void SetCapitalFlowCache(int limit, object payload)
+        private async Task SetCapitalFlowCacheAsync(int limit, CapitalFlowPayloadDto payload)
         {
-            _cache.Set($"CapitalFlowV3_{limit}", payload, GetExternalDataFreshTtl());
-            _cache.Set($"CapitalFlowV3_{limit}_Stale", payload, _staleExternalDataTtl);
+            var cachePayload = CloneCapitalFlowPayload(payload, payload.IsFallback, payload.IsStale, payload.Message, payload.Source);
+            _cache.Set($"CapitalFlowV4_{limit}", cachePayload, _capitalFlowFreshTtl);
+            _cache.Set($"CapitalFlowV4_{limit}_Stale", cachePayload, _capitalFlowStaleTtl);
+
+            try
+            {
+                var db = _redis.GetDatabase();
+                var json = JsonSerializer.Serialize(cachePayload, GlobalIndicesJsonOptions);
+                await db.StringSetAsync(CapitalFlowLatestCacheKey, json, _capitalFlowStaleTtl);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[capital-flow] redis cache write failed: {ex.Message}");
+            }
         }
 
-        private async Task<object> BuildCapitalFlowPayloadAsync(int limit)
+        private async Task<CapitalFlowPayloadDto?> TryGetCapitalFlowFallbackAsync(int limit)
         {
-            async Task<List<CapitalFlowRowDto>> FetchRowsAsync(int po)
+            if (_cache.TryGetValue<CapitalFlowPayloadDto>($"CapitalFlowV4_{limit}_Stale", out var stale) && stale != null)
             {
-                long ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                int requestSize = Math.Clamp(limit * 5, 120, 300);
-                string url = $"https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz={requestSize}&po={po}&np=1&fltt=2&invt=2&fid=f62&fs=m:90+t:2,m:90+t:3&fields=f12,f14,f3,f62,f184,f66,f72&_={ts}";
-                using var handler = new HttpClientHandler { ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true };
-                using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(6) };
-                client.DefaultRequestVersion = new Version(1, 1);
-                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
-                client.DefaultRequestHeaders.Add("Referer", "https://data.eastmoney.com/bkzj/");
-
-                string body = await client.GetStringAsync(url);
-                using var doc = JsonDocument.Parse(body);
-                var list = doc.RootElement.GetProperty("data").GetProperty("diff");
-
-                var result = new List<CapitalFlowRowDto>();
-                foreach (var item in list.EnumerateArray())
-                {
-                    string code = item.TryGetProperty("f12", out var f12) ? f12.GetString() ?? "" : "";
-                    string name = item.TryGetProperty("f14", out var f14) ? f14.GetString() ?? "" : "";
-                    double rate = item.TryGetProperty("f3", out var f3) && f3.ValueKind == JsonValueKind.Number ? f3.GetDouble() : 0;
-                    double mainNet = item.TryGetProperty("f62", out var f62) && f62.ValueKind == JsonValueKind.Number ? f62.GetDouble() : 0;
-                    double mainRatio = item.TryGetProperty("f184", out var f184) && f184.ValueKind == JsonValueKind.Number ? f184.GetDouble() : 0;
-                    double superNet = item.TryGetProperty("f66", out var f66) && f66.ValueKind == JsonValueKind.Number ? f66.GetDouble() : 0;
-                    double bigNet = item.TryGetProperty("f72", out var f72) && f72.ValueKind == JsonValueKind.Number ? f72.GetDouble() : 0;
-
-                    if (string.IsNullOrWhiteSpace(name)) continue;
-
-                    result.Add(new CapitalFlowRowDto
-                    {
-                        Code = code,
-                        Name = name,
-                        Rate = Math.Round(rate, 2),
-                        MainNet = mainNet,
-                        MainNetText = FormatMoneyWanYi(mainNet),
-                        MainRatio = Math.Round(mainRatio, 2),
-                        SuperNet = superNet,
-                        BigNet = bigNet
-                    });
-                }
-
-                return result;
+                return stale;
             }
 
-            var inflow = (await FetchRowsAsync(1))
-                .Where(IsIndustryCapitalFlowRow)
-                .OrderByDescending(x => x.MainNet)
-                .Take(limit)
-                .ToList();
-
-            var outflow = (await FetchRowsAsync(0))
-                .Where(IsIndustryCapitalFlowRow)
-                .OrderBy(x => x.MainNet)
-                .Take(limit)
-                .ToList();
-
-            var rows = inflow.Concat(outflow)
-                .GroupBy(x => x.Code)
-                .Select(g => g.OrderByDescending(x => Math.Abs(x.MainNet)).First())
-                .OrderByDescending(x => x.MainNet)
-                .ToList();
-
-            return new
+            if (_cache.TryGetValue<CapitalFlowPayloadDto>(CapitalFlowLatestCacheKey, out var latest) && latest != null)
             {
-                source = "东方财富行业板块资金流向",
-                updatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
-                rows,
-                inflow,
-                outflow
+                return latest;
+            }
+
+            try
+            {
+                var db = _redis.GetDatabase();
+                var cached = await db.StringGetAsync(CapitalFlowLatestCacheKey);
+                if (!cached.HasValue) return null;
+                var payload = JsonSerializer.Deserialize<CapitalFlowPayloadDto>(cached.ToString(), GlobalIndicesJsonOptions);
+                if (payload == null) return null;
+                payload.Rows ??= new List<CapitalFlowRowDto>();
+                payload.Inflow ??= new List<CapitalFlowRowDto>();
+                payload.Outflow ??= new List<CapitalFlowRowDto>();
+                if (payload.Rows.Count == 0 && payload.Inflow.Count == 0 && payload.Outflow.Count == 0) return null;
+                _cache.Set(CapitalFlowLatestCacheKey, payload, _capitalFlowStaleTtl);
+                return payload;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[capital-flow] redis cache read failed: {ex.Message}");
+                return null;
+            }
+        }
+
+        private static CapitalFlowPayloadDto AttachCapitalFlowDebug(CapitalFlowPayloadDto payload, IEnumerable<ExternalDataAttemptDto> attempts)
+        {
+            return CloneCapitalFlowPayload(payload, payload.IsFallback, payload.IsStale, payload.Message, payload.Source, attempts);
+        }
+
+        private static CapitalFlowPayloadDto CloneCapitalFlowPayload(
+            CapitalFlowPayloadDto payload,
+            bool isFallback,
+            bool isStale,
+            string message,
+            string? sourceOverride = null,
+            IEnumerable<ExternalDataAttemptDto>? attempts = null)
+        {
+            return new CapitalFlowPayloadDto
+            {
+                Source = sourceOverride ?? payload.Source,
+                UpdatedAt = payload.UpdatedAt,
+                IsFallback = isFallback,
+                IsStale = isStale,
+                Message = message,
+                Rows = payload.Rows?.ToList() ?? new List<CapitalFlowRowDto>(),
+                Inflow = payload.Inflow?.ToList() ?? new List<CapitalFlowRowDto>(),
+                Outflow = payload.Outflow?.ToList() ?? new List<CapitalFlowRowDto>(),
+                Debug = attempts == null ? null : new { attempts = attempts.ToList(), cacheHit = true, cacheSource = sourceOverride ?? payload.Source }
             };
+        }
+
+        private static CapitalFlowPayloadDto CreateUnavailableCapitalFlowPayload(IEnumerable<ExternalDataAttemptDto>? attempts = null)
+        {
+            return new CapitalFlowPayloadDto
+            {
+                Source = string.Empty,
+                UpdatedAt = string.Empty,
+                IsFallback = false,
+                IsStale = true,
+                Message = "主力资金流暂不可用",
+                Rows = new List<CapitalFlowRowDto>(),
+                Inflow = new List<CapitalFlowRowDto>(),
+                Outflow = new List<CapitalFlowRowDto>(),
+                Debug = attempts == null ? null : new { attempts = attempts.ToList(), cacheHit = false }
+            };
+        }
+
+        private async Task<CapitalFlowPayloadDto> BuildCapitalFlowPayloadAsync(int limit, bool debug)
+        {
+            var attempts = new List<ExternalDataAttemptDto>();
+            var sources = new[]
+            {
+                new { Name = "东方财富行业板块主力资金", Key = "industry", Fs = "m:90+t:2" },
+                new { Name = "东方财富概念板块主力资金", Key = "concept", Fs = "m:90+t:3" }
+            };
+
+            var http = _httpClientFactory.CreateClient("EastMoneyQuote");
+            foreach (var source in sources)
+            {
+                try
+                {
+                    var inflowTask = FetchCapitalFlowRowsAsync(http, source.Key, source.Fs, 1, limit, attempts);
+                    var outflowTask = FetchCapitalFlowRowsAsync(http, source.Key, source.Fs, 0, limit, attempts);
+                    await Task.WhenAll(inflowTask, outflowTask);
+
+                    var inflow = inflowTask.Result
+                        .Where(IsIndustryCapitalFlowRow)
+                        .OrderByDescending(x => x.MainNet)
+                        .Take(limit)
+                        .ToList();
+
+                    var outflow = outflowTask.Result
+                        .Where(IsIndustryCapitalFlowRow)
+                        .OrderBy(x => x.MainNet)
+                        .Take(limit)
+                        .ToList();
+
+                    var rows = inflow.Concat(outflow)
+                        .GroupBy(x => x.Code)
+                        .Select(g => g.OrderByDescending(x => Math.Abs(x.MainNet)).First())
+                        .OrderByDescending(x => x.MainNet)
+                        .ToList();
+
+                    if (rows.Count == 0)
+                    {
+                        attempts.Add(new ExternalDataAttemptDto { Source = source.Key, Error = "parsed rows empty" });
+                        continue;
+                    }
+
+                    return new CapitalFlowPayloadDto
+                    {
+                        Source = source.Name,
+                        UpdatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
+                        IsFallback = false,
+                        IsStale = false,
+                        Message = string.Empty,
+                        Rows = rows,
+                        Inflow = inflow,
+                        Outflow = outflow,
+                        Debug = debug ? new { attempts } : null
+                    };
+                }
+                catch (Exception ex)
+                {
+                    attempts.Add(new ExternalDataAttemptDto { Source = source.Key, Error = ex.Message });
+                }
+            }
+
+            throw new CapitalFlowSourceException("主力资金流实时源全部不可用", attempts);
+        }
+
+        private static async Task<List<CapitalFlowRowDto>> FetchCapitalFlowRowsAsync(
+            HttpClient http,
+            string source,
+            string fs,
+            int po,
+            int limit,
+            List<ExternalDataAttemptDto> attempts)
+        {
+            long ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            int requestSize = Math.Clamp(limit * 5, 120, 300);
+            string url = $"https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz={requestSize}&po={po}&np=1&fltt=2&invt=2&fid=f62&fs={Uri.EscapeDataString(fs)}&fields=f12,f14,f3,f62,f184,f66,f72&_={ts}";
+
+            string body = await FetchWithRetryAsync(http, url, attempts: attempts, source: $"capital-flow-{source}-{(po > 0 ? "inflow" : "outflow")}");
+            using var doc = JsonDocument.Parse(body);
+            if (!doc.RootElement.TryGetProperty("data", out var data) ||
+                data.ValueKind == JsonValueKind.Null ||
+                !data.TryGetProperty("diff", out var list) ||
+                list.ValueKind != JsonValueKind.Array)
+            {
+                attempts.Add(new ExternalDataAttemptDto { Source = $"capital-flow-{source}-parse", Url = url, StatusCode = 200, Error = "diff missing" });
+                return new List<CapitalFlowRowDto>();
+            }
+
+            var result = new List<CapitalFlowRowDto>();
+            foreach (var item in list.EnumerateArray())
+            {
+                string code = item.TryGetProperty("f12", out var f12) ? f12.GetString() ?? "" : "";
+                string name = item.TryGetProperty("f14", out var f14) ? f14.GetString() ?? "" : "";
+                double rate = item.TryGetProperty("f3", out var f3) && f3.ValueKind == JsonValueKind.Number ? f3.GetDouble() : 0;
+                double mainNet = item.TryGetProperty("f62", out var f62) && f62.ValueKind == JsonValueKind.Number ? f62.GetDouble() : 0;
+                double mainRatio = item.TryGetProperty("f184", out var f184) && f184.ValueKind == JsonValueKind.Number ? f184.GetDouble() : 0;
+                double superNet = item.TryGetProperty("f66", out var f66) && f66.ValueKind == JsonValueKind.Number ? f66.GetDouble() : 0;
+                double bigNet = item.TryGetProperty("f72", out var f72) && f72.ValueKind == JsonValueKind.Number ? f72.GetDouble() : 0;
+
+                if (string.IsNullOrWhiteSpace(name)) continue;
+
+                result.Add(new CapitalFlowRowDto
+                {
+                    Code = code,
+                    Name = name,
+                    Rate = Math.Round(rate, 2),
+                    MainNet = mainNet,
+                    MainNetText = FormatMoneyWanYi(mainNet),
+                    MainRatio = Math.Round(mainRatio, 2),
+                    SuperNet = superNet,
+                    BigNet = bigNet
+                });
+            }
+
+            attempts.Add(new ExternalDataAttemptDto
+            {
+                Source = $"capital-flow-{source}-parse",
+                Url = url,
+                StatusCode = 200,
+                RawRowsCount = list.GetArrayLength(),
+                ParsedRowsCount = result.Count
+            });
+            return result;
         }
         [HttpGet("sector-details")]
         public async Task<IActionResult> GetSectorDetails([FromQuery] string secCode)

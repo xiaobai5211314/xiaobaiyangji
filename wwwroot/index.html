@@ -4458,7 +4458,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <button class="btn" @click="fetchCapitalFlow(true)">🔄</button>
                     </div>
                     <div v-if="isCapitalLoading" class="news-empty">📡 正在同步主力资金...</div>
+                    <div v-else-if="capitalFlowRows.length === 0" class="news-empty">{{ capitalFlowError || '主力资金流暂不可用' }}</div>
                     <div v-else class="capital-two-col">
+                        <div v-if="capitalFlowError" class="performance-status" style="grid-column:1 / -1;">{{ capitalFlowError }}</div>
                         <div class="capital-box">
                             <div class="capital-box-title"><span>🔴 行业板块流入</span><span style="color:var(--text-muted);font-size:11px;">TOP {{ capitalFlowInRows.length }}</span></div>
                             <div class="capital-row capital-head"><span>板块</span><span class="capital-value">净流入</span><span class="capital-value">净占比</span></div>
@@ -5219,6 +5221,19 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     if (excess === 0) return `跑平 ${data.indexName || selectedPerformanceIndexName.value}`;
                     return `${excess > 0 ? '跑赢' : '跑输'} ${data.indexName || selectedPerformanceIndexName.value} ${formatPerformancePercent(excess)}`;
                 });
+                const normalizePerformanceMessage = (data) => {
+                    const raw = String(data?.message || data?.indexMessage || '');
+                    if (!raw) return '';
+                    const parts = [];
+                    if (raw.includes('旧估值') || raw.includes('快照')) parts.push('含旧估值，曲线为估算值');
+                    if (raw.includes('缺失估值') || raw.includes('暂缺')) parts.push('部分估值暂缺');
+                    if (raw.includes('指数仅有当前涨跌幅')) parts.push('指数仅有当前涨跌幅，暂无盘中走势');
+                    if (raw.includes('指数历史K线使用缓存')) parts.push('指数历史K线使用缓存');
+                    if (raw.includes('指数盘中走势使用缓存')) parts.push('指数盘中走势使用缓存');
+                    if (raw.includes('指数盘中数据暂不可用')) parts.push('指数盘中数据暂不可用');
+                    if (raw.includes('指数数据暂不可用')) parts.push('指数数据暂不可用');
+                    return parts.length > 0 ? Array.from(new Set(parts)).join(' · ') : raw;
+                };
                 let timer = null;
                 let isFetchingData = false;
                 let lastDataFetchAt = 0;
@@ -5293,6 +5308,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const capitalFlowOutRows = ref([]);
                 const capitalFlowSource = ref('');
                 const capitalFlowUpdatedAt = ref('');
+                const capitalFlowError = ref('');
                 const isCapitalLoading = ref(false);
                 const showSectorRadar = ref(false);
                 const isSectorLoading = ref(false);
@@ -6465,6 +6481,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     capitalFlowOutRows.value = normalizeCapitalRows(data.outflow || rows).filter(x => (x.mainNet || 0) < 0).sort((a, b) => (a.mainNet || 0) - (b.mainNet || 0));
                     capitalFlowSource.value = data.source || '东方财富板块资金流向';
                     capitalFlowUpdatedAt.value = data.updatedAt || '';
+                    const msg = String(data.message || '');
+                    capitalFlowError.value = data.isFallback
+                        ? '使用缓存数据'
+                        : (rows.length === 0 ? (msg || '主力资金流暂不可用') : msg);
                     capitalCacheTime = Date.now();
                 };
                 const fetchCapitalFlow = async (force = false) => {
@@ -6482,7 +6502,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         applyCapitalPayload(data);
                         writeJsonCache('capital_flow_cache_v1', data);
                     } catch (e) {
-                        if (capitalFlowRows.value.length === 0) showToast('主力资金流获取失败', 'error');
+                        if (capitalFlowRows.value.length === 0) {
+                            capitalFlowError.value = '主力资金流暂不可用';
+                        }
                     } finally {
                         isCapitalLoading.value = false;
                     }
@@ -6537,7 +6559,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         performanceChartInstance.value = echarts.init(performanceChartRef.value, 'dark');
                     }
 
-                    const hasIndexLine = points.some(p => p.indexRate !== null && p.indexRate !== undefined && Number.isFinite(Number(p.indexRate)));
+                    const hasIndexLine = performanceCurve.value?.indexAvailable === true &&
+                        points.some(p => p.indexRate !== null && p.indexRate !== undefined && Number.isFinite(Number(p.indexRate)));
                     const series = [
                         {
                             name: '我的收益率',
@@ -6623,8 +6646,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         if (!res.ok) throw new Error(await res.text());
                         const data = await res.json();
                         performanceCurve.value = data || null;
-                        performanceMessage.value = data?.message || '';
-                        if (data?.indexSource) console.log(`[performance-curve] period=${data.period || '?'} indexSource=${data.indexSource} indexParsedCount=${data.indexParsedCount || 0}`);
+                        performanceMessage.value = normalizePerformanceMessage(data);
+                        if (data?.indexSource) console.log(`[performance-curve] period=${data.period || '?'} indexSource=${data.indexSource} indexParsedRowsCount=${data.indexParsedRowsCount || data.indexParsedCount || 0}`);
                         await nextTick();
                         await renderPerformanceChart();
                     } catch (e) {
@@ -7123,7 +7146,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     performanceCurve, performancePeriod, performanceIndex, performanceLoading, performancePeriods, performanceIndices, selectedPerformanceIndexName, performanceIsToday, showPerformanceAmount, canShowPerformanceAmount, togglePerformanceAmount, performanceMessage, performanceVerdict, performanceExcessClass, fetchPerformanceCurve, renderPerformanceChart, switchPerformancePeriod, formatPerformancePercent, formatPerformanceMoney,
                     handleLogin, handleRegister, handleLogout, saveUserProfile, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, confirmOcrImport, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
-                    sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, isCapitalLoading, fetchCapitalFlow,
+                    sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, capitalFlowError, isCapitalLoading, fetchCapitalFlow,
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, isDetailsLoading, expandedSectors, toggleSector,
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices, formatIndexPoint, formatIndexRate,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,

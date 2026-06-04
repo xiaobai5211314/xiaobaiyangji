@@ -91,7 +91,7 @@ builder.Services.AddHttpClient("EastMoney", client =>
 
 builder.Services.AddHttpClient("EastMoneyQuote", client =>
 {
-    client.Timeout = TimeSpan.FromSeconds(30);
+    client.Timeout = TimeSpan.FromSeconds(12);
     client.DefaultRequestVersion = System.Net.HttpVersion.Version11;
     client.DefaultVersionPolicy = System.Net.Http.HttpVersionPolicy.RequestVersionExact;
     client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36");
@@ -102,6 +102,7 @@ builder.Services.AddHttpClient("EastMoneyQuote", client =>
 {
     return new SocketsHttpHandler
     {
+        ConnectTimeout = TimeSpan.FromSeconds(5),
         PooledConnectionLifetime = TimeSpan.Zero,
         UseCookies = false,
     };
