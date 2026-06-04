@@ -4286,7 +4286,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             <div v-if="recoveryWatchList.length===0" class="feature-subtitle" style="padding:14px 0;">当前没有需要回本的持仓。</div>
                             <div v-for="fund in recoveryWatchList" :key="'home-rw-'+fund.code" class="report-line">
                                 <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;">{{ fund.name }}</span>
-                                <strong style="color:#fbbf24;">{{ Number(fund.breakEvenRate || 0).toFixed(2) }}%</strong>
+                                <strong style="color:#fbbf24;">{{ formatFinitePercent(fund.breakEvenRate) }}</strong>
                             </div>
                         </div>
                     </div>
@@ -4458,7 +4458,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <button class="btn" @click="fetchCapitalFlow(true)">🔄</button>
                     </div>
                     <div v-if="isCapitalLoading" class="news-empty">📡 正在同步主力资金...</div>
-                    <div v-else-if="capitalFlowRows.length === 0" class="news-empty">{{ capitalFlowError || '主力资金流暂不可用' }}</div>
+                    <div v-else-if="capitalFlowInRows.length === 0 && capitalFlowOutRows.length === 0" class="news-empty">{{ capitalFlowError || '主力资金流暂不可用：实时源失败且暂无缓存' }}</div>
                     <div v-else class="capital-two-col">
                         <div v-if="capitalFlowError" class="performance-status" style="grid-column:1 / -1;">{{ capitalFlowError }}</div>
                         <div class="capital-box">
@@ -4511,7 +4511,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 <div class="page-topbar glass-panel"><div><div class="page-title">📊 盈亏分析</div><div class="page-subtitle">每日战报、月历、盈利/亏损排行</div></div><div class="analysis-toolbar"><input type="month" v-model="analysisMonth" @change="fetchAnalysis(true)"><select v-model="analysisViewMode"><option value="profit">金额</option><option value="rate">收益率</option></select><button class="btn" @click="refreshAnalysisPage(true)">🔄</button></div></div>
                 <div class="feature-grid">
                     <div class="glass-panel feature-card"><div class="feature-title">🧾 每日收盘战报</div><div class="feature-subtitle">{{ selectedAnalysisDate }} · {{ dailyBattleReport.summary }}</div><div class="report-line"><span>今日收益</span><strong :style="{color:totalTodayProfit>=0?'#ff4d4f':'#10b981'}">{{ dailyBattleReport.todayProfitText }}</strong></div><div class="report-line"><span>贡献核心</span><strong style="color:#ff4d4f;">{{ dailyBattleReport.bestName }}</strong></div><div class="report-line"><span>风险拖累</span><strong style="color:#10b981;">{{ dailyBattleReport.worstName }}</strong></div></div>
-                    <div class="glass-panel feature-card"><div class="feature-title">🧭 回本总览</div><div class="feature-subtitle">全部未回本持仓，按回本所需涨幅排序。</div><div class="compact-scroll-list" style="margin-top:8px;max-height:170px;"><div v-if="recoveryWatchList.length===0" class="feature-subtitle" style="padding:10px 0;">当前没有需要回本的持仓。</div><div v-for="fund in recoveryWatchList" :key="'rw-'+fund.code" class="report-line"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;">{{ fund.name }}</span><strong style="color:#fbbf24;">{{ Number(fund.breakEvenRate || 0).toFixed(2) }}%</strong></div></div></div>
+                    <div class="glass-panel feature-card"><div class="feature-title">🧭 回本总览</div><div class="feature-subtitle">全部未回本持仓，按回本所需涨幅排序。</div><div class="compact-scroll-list" style="margin-top:8px;max-height:170px;"><div v-if="recoveryWatchList.length===0" class="feature-subtitle" style="padding:10px 0;">当前没有需要回本的持仓。</div><div v-for="fund in recoveryWatchList" :key="'rw-'+fund.code" class="report-line"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;">{{ fund.name }}</span><strong style="color:#fbbf24;">{{ formatFinitePercent(fund.breakEvenRate) }}</strong></div></div></div>
                 </div>
                 <div class="analysis-grid">
                     <div class="glass-panel" style="padding:16px;">
@@ -4564,7 +4564,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 <div class="modal-content" style="max-width:520px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><h3 style="margin:0;color:#fbbf24;">🧭 回本路径模拟器</h3><span @click="recoveryModal.show=false" style="font-size:24px;color:var(--text-muted);cursor:pointer;">&times;</span></div>
                     <div style="color:var(--text-muted);font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ recoveryModal.name }}</div>
-                    <div class="feature-subtitle" style="margin:6px 0 12px;">当前亏损 {{ recoveryModal.loss.toFixed(2) }} 元，回本需要上涨 {{ recoveryModal.breakEvenRate }}%。输入计划加仓金额后，实时估算新的回本涨幅。</div>
+                    <div class="feature-subtitle" style="margin:6px 0 12px;">当前亏损 {{ recoveryModal.loss.toFixed(2) }} 元，回本需要上涨 {{ formatFinitePercent(recoveryModal.breakEvenRate) }}。输入计划加仓金额后，实时估算新的回本涨幅。</div>
                     <div class="recovery-input-row">
                         <strong style="color:#93c5fd;">加仓金额</strong>
                         <input class="recovery-input" type="number" min="0" step="100" v-model="recoveryModal.addAmount" placeholder="例如 500" inputmode="decimal">
@@ -4572,7 +4572,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     <div v-if="customRecoveryPlan.amount > 0" class="recovery-plan-row">
                         <strong style="color:#93c5fd;">补 {{ customRecoveryPlan.amount.toFixed(2) }}</strong>
                         <div><div class="exposure-bar"><span :style="{width:Math.min(100, Math.max(5, 100-customRecoveryPlan.newBreakEven*6))+'%'}"></span></div><div class="feature-subtitle">新成本 {{ customRecoveryPlan.newCost.toFixed(2) }} · 新市值 {{ customRecoveryPlan.newAssets.toFixed(2) }}</div></div>
-                        <strong :style="{color:customRecoveryPlan.newBreakEven<=0?'#10b981':'#fbbf24',textAlign:'right'}">{{ customRecoveryPlan.newBreakEven<=0?'已回本':customRecoveryPlan.newBreakEven.toFixed(2)+'%' }}</strong>
+                        <strong :style="{color:customRecoveryPlan.newBreakEven!==null && customRecoveryPlan.newBreakEven<=0?'#10b981':'#fbbf24',textAlign:'right'}">{{ customRecoveryPlan.newBreakEven!==null && customRecoveryPlan.newBreakEven<=0?'已回本':formatFinitePercent(customRecoveryPlan.newBreakEven) }}</strong>
                     </div>
                     <div v-else class="feature-subtitle" style="padding:12px 0;border-top:1px dashed rgba(255,255,255,.08);">请输入大于 0 的加仓金额。</div>
                     <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:14px;" @click="recoveryModal.show=false">知道了</button>
@@ -5471,18 +5471,39 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     return Array.from(map.values()).sort((a, b) => Math.abs(b.score) - Math.abs(a.score)).slice(0, 6);
                 });
 
-                const recoveryWatchList = computed(() => fundsList.value.filter(f => Number(f.breakEvenRate || 0) > 0).sort((a, b) => Number(b.breakEvenRate || 0) - Number(a.breakEvenRate || 0)));
+                const toFiniteNumberOrNull = (value) => {
+                    const n = Number(value);
+                    return Number.isFinite(n) ? n : null;
+                };
+                const formatFinitePercent = (value) => {
+                    const n = toFiniteNumberOrNull(value);
+                    return n === null ? '--' : `${n.toFixed(2)}%`;
+                };
+                const hasRecoveryBase = (fund) => {
+                    if (fund?.inactiveHolding === true) return false;
+                    return [fund?.todayBaseAmount, fund?.todayAmount, fund?.amount, fund?.holdingValue]
+                        .some(value => {
+                            const n = toFiniteNumberOrNull(value);
+                            return n !== null && n > 0;
+                        });
+                };
+                const recoveryWatchList = computed(() => fundsList.value
+                    .filter(f => hasRecoveryBase(f))
+                    .map(f => ({ fund: f, rate: toFiniteNumberOrNull(f.breakEvenRate) }))
+                    .filter(x => x.rate !== null && x.rate > 0)
+                    .sort((a, b) => b.rate - a.rate)
+                    .map(x => x.fund));
                 const recoveryModal = reactive({ show: false, code: '', name: '', assets: 0, cost: 0, loss: 0, breakEvenRate: 0, addAmount: '' });
                 const openRecoveryModal = (fund) => {
-                    const assets = Number(fund.todayAmount || fund.amount || 0);
-                    const cost = Number(fund.cost || fund.amount || 0);
+                    const assets = toFiniteNumberOrNull(fund.todayAmount) ?? toFiniteNumberOrNull(fund.amount) ?? 0;
+                    const cost = toFiniteNumberOrNull(fund.cost) ?? toFiniteNumberOrNull(fund.amount) ?? 0;
                     recoveryModal.show = true;
                     recoveryModal.code = fund.code;
                     recoveryModal.name = fund.name;
                     recoveryModal.assets = assets;
                     recoveryModal.cost = cost;
                     recoveryModal.loss = Math.max(0, cost - assets);
-                    recoveryModal.breakEvenRate = Number(fund.breakEvenRate || 0);
+                    recoveryModal.breakEvenRate = toFiniteNumberOrNull(fund.breakEvenRate) ?? 0;
                     const savedRecovery = uiStateMap.value?.[`recovery_amount_${fund.code}`];
                     recoveryModal.addAmount = savedRecovery?.amount ? String(savedRecovery.amount) : '';
                 };
@@ -5490,7 +5511,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     const amount = Math.max(0, Number(recoveryModal.addAmount || 0));
                     const newAssets = recoveryModal.assets + amount;
                     const newCost = recoveryModal.cost + amount;
-                    const newBreakEven = amount > 0 && newAssets > 0 ? Math.max(0, (newCost / newAssets - 1) * 100) : recoveryModal.breakEvenRate;
+                    const calculated = amount > 0 && newAssets > 0 ? Math.max(0, (newCost / newAssets - 1) * 100) : recoveryModal.breakEvenRate;
+                    const newBreakEven = Number.isFinite(calculated) ? calculated : null;
                     return { amount, newAssets, newCost, newBreakEven };
                 });
 
@@ -6072,6 +6094,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
                 };
 
+                const sortIndexHistoryRowsDesc = (rows = []) => (Array.isArray(rows) ? rows : [])
+                    .slice()
+                    .sort((a, b) => {
+                        const ad = Date.parse(String(a?.date || ''));
+                        const bd = Date.parse(String(b?.date || ''));
+                        return (Number.isFinite(bd) ? bd : 0) - (Number.isFinite(ad) ? ad : 0);
+                    });
+
                 const fetchGlobalIndices = async (force = false) => {
                     showGlobalIndices.value = true; isIndicesLoading.value = true;
                     try {
@@ -6098,7 +6128,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                 const viewIndexHistory = (item) => {
                     const rows = Array.isArray(item.klines) ? item.klines : (Array.isArray(item.trend) ? item.trend : []);
-                    historyModal.show = true; historyModal.name = item.name; historyModal.isLoading = false; historyModal.data = rows;
+                    historyModal.show = true; historyModal.name = item.name; historyModal.isLoading = false; historyModal.data = sortIndexHistoryRowsDesc(rows);
                 };
 
                 const fetchHistory = (code, name) => {
@@ -6474,27 +6504,30 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     return true;
                 };
                 const normalizeCapitalRows = (rows = []) => (Array.isArray(rows) ? rows : []).filter(x => isBoardFlowName(x?.name));
+                const hasCapitalFlowData = () => capitalFlowInRows.value.length > 0 || capitalFlowOutRows.value.length > 0;
                 const applyCapitalPayload = (data) => {
                     const rows = normalizeCapitalRows(data.rows || []);
-                    capitalFlowRows.value = rows;
-                    capitalFlowInRows.value = normalizeCapitalRows(data.inflow || rows).filter(x => (x.mainNet || 0) > 0).sort((a, b) => (b.mainNet || 0) - (a.mainNet || 0));
-                    capitalFlowOutRows.value = normalizeCapitalRows(data.outflow || rows).filter(x => (x.mainNet || 0) < 0).sort((a, b) => (a.mainNet || 0) - (b.mainNet || 0));
+                    const inRows = normalizeCapitalRows(data.inflow || rows).filter(x => (x.mainNet || 0) > 0).sort((a, b) => (b.mainNet || 0) - (a.mainNet || 0));
+                    const outRows = normalizeCapitalRows(data.outflow || rows).filter(x => (x.mainNet || 0) < 0).sort((a, b) => (a.mainNet || 0) - (b.mainNet || 0));
+                    capitalFlowRows.value = rows.length > 0 ? rows : [...inRows, ...outRows];
+                    capitalFlowInRows.value = inRows;
+                    capitalFlowOutRows.value = outRows;
                     capitalFlowSource.value = data.source || '东方财富板块资金流向';
                     capitalFlowUpdatedAt.value = data.updatedAt || '';
                     const msg = String(data.message || '');
                     capitalFlowError.value = data.isFallback
                         ? '使用缓存数据'
-                        : (rows.length === 0 ? (msg || '主力资金流暂不可用') : msg);
+                        : (!hasCapitalFlowData() ? (msg || '主力资金流暂不可用：实时源失败且暂无缓存') : msg);
                     capitalCacheTime = Date.now();
                 };
                 const fetchCapitalFlow = async (force = false) => {
                     const now = Date.now();
-                    if (!force && capitalFlowRows.value.length > 0 && (now - capitalCacheTime) < 180000) return;
-                    if (!force && capitalFlowRows.value.length === 0) {
+                    if (!force && hasCapitalFlowData() && (now - capitalCacheTime) < 180000) return;
+                    if (!force && !hasCapitalFlowData()) {
                         const cached = readJsonCache('capital_flow_cache_v1', 20 * 60 * 1000);
                         if (cached) applyCapitalPayload(cached);
                     }
-                    isCapitalLoading.value = capitalFlowRows.value.length === 0;
+                    isCapitalLoading.value = !hasCapitalFlowData();
                     try {
                         const res = await fetch(`${API_BASE}/api/fund/capital-flow?limit=40${force ? '&force=true' : ''}&_t=${Date.now()}`, { cache: 'no-store' });
                         if (!res.ok) throw new Error(await res.text());
@@ -6502,8 +6535,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         applyCapitalPayload(data);
                         writeJsonCache('capital_flow_cache_v1', data);
                     } catch (e) {
-                        if (capitalFlowRows.value.length === 0) {
-                            capitalFlowError.value = '主力资金流暂不可用';
+                        if (!hasCapitalFlowData()) {
+                            capitalFlowError.value = '主力资金流暂不可用：实时源失败且暂无缓存';
                         }
                     } finally {
                         isCapitalLoading.value = false;
@@ -6937,13 +6970,16 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             fund.displayedProfit = Number(fund.displayedProfit) || 0;
                             fund.pendingRedeem = !!fund.pendingRedeem;
                             fund.soldCost = Number(fund.soldCost) || 0;
+                            fund.inactiveHolding = !!fund.inactiveHolding;
                             const floatProfit = (fund.cost && fund.cost > 0 && fund.shares > 0) ? (currentRealTimeAmount - fund.cost) : 0;
                             const allProfit = fund.shares > 0 ? (floatProfit + fund.displayedProfit) : fund.displayedProfit;
                             fund.estimatedProfit = allProfit.toFixed(2);
-                            fund.breakEvenRate = (fund.cost && fund.cost > currentRealTimeAmount) ? (((fund.cost / currentRealTimeAmount) - 1) * 100).toFixed(2) : "0.00";
+                            const safeBreakEvenRate = !fund.inactiveHolding && fund.cost && currentRealTimeAmount > 0 && fund.cost > currentRealTimeAmount
+                                ? ((fund.cost / currentRealTimeAmount) - 1) * 100
+                                : 0;
+                            fund.breakEvenRate = Number.isFinite(safeBreakEvenRate) ? safeBreakEvenRate.toFixed(2) : "--";
                             fund.existingReturnRate = (fund.cost && fund.cost > 0) ? ((allProfit / fund.cost) * 100).toFixed(2) : "0.00";
 
-                            fund.inactiveHolding = !!fund.inactiveHolding;
                             const rateBaseForToday = isAlreadySettled
                                 ? (currentAmount - todayProfitVal - todayAddAmount)
                                 : (currentAmount - todayAddAmount);
@@ -7151,7 +7187,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices, formatIndexPoint, formatIndexRate,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
                     analysisMonth, selectedAnalysisDate, analysisViewMode, analysisDetailMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, analysisProfitTop, analysisLossTop, analysisMonthTotal, fetchAnalysis, refreshAnalysisPage, goAnalysisToday, todayDashStr,
-                    assetMode, setAssetMode, stockHoldings, stockWatchList, stockSearchKeyword, stockSearchResults, stockOcrLoading, stockOcrPreview, selectedStock, stockKlinePeriod, stockKlinePeriods, stockChartRef, stockChartStatus, triggerStockOcr, handleStockOcrUpload, confirmStockOcr, loadStockDashboard, searchStocks, addStockWatch, openStockHoldingEditor, deleteStockHolding, deleteStockWatch, openStockDetail, switchStockKline, recalculateStockOcrItem, formatOcrNumber, signedOcrNumber, profitColor, dailyBattleReport, confidenceRows, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, calibrationRows,
+                    assetMode, setAssetMode, stockHoldings, stockWatchList, stockSearchKeyword, stockSearchResults, stockOcrLoading, stockOcrPreview, selectedStock, stockKlinePeriod, stockKlinePeriods, stockChartRef, stockChartStatus, triggerStockOcr, handleStockOcrUpload, confirmStockOcr, loadStockDashboard, searchStocks, addStockWatch, openStockHoldingEditor, deleteStockHolding, deleteStockWatch, openStockDetail, switchStockKline, recalculateStockOcrItem, formatOcrNumber, signedOcrNumber, profitColor, dailyBattleReport, confidenceRows, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, formatFinitePercent, calibrationRows,
                     globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, saveDailyArchive, ocrModal, ocrPreviewTotal, isConfirmingOcrImport,
                     reduceModal, openReduceModal, handleReducePosition, addModal, openAddModal, handleAddPosition
                 };

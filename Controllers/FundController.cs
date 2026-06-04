@@ -3217,8 +3217,12 @@ namespace 小白养基.Controllers
                 string? legacyCache = await TryReadLegacyGlobalIndicesCacheAsync();
                 if (!string.IsNullOrWhiteSpace(legacyCache))
                 {
-                    Response.Headers["X-App-Cache"] = "redis";
-                    return Content(legacyCache, "application/json");
+                    var cached = JsonSerializer.Deserialize<List<GlobalIndexDto>>(legacyCache, GlobalIndicesJsonOptions);
+                    if (cached != null)
+                    {
+                        Response.Headers["X-App-Cache"] = "redis";
+                        return Ok(cached.Select(NormalizeGlobalIndexAvailability).ToList());
+                    }
                 }
             }
 
@@ -3475,12 +3479,18 @@ namespace 小白养基.Controllers
         {
             var klineCount = item.KlineCount > 0 ? item.KlineCount : item.Klines.Count;
             var todayAvailable = item.TodayAvailable || item.TodayRate.HasValue;
-            var yearAvailable = item.YearAvailable || item.YearRate.HasValue;
+            var yearRate = item.YearRate.HasValue && double.IsFinite(item.YearRate.Value) && klineCount >= 2
+                ? item.YearRate
+                : null;
+            var yearAvailable = yearRate.HasValue;
             var message = item.Message;
             if (!yearAvailable && string.IsNullOrWhiteSpace(message) && item.Latest.HasValue)
             {
-                message = "一年K线不可用";
+                message = "缺少一年K线基准";
             }
+            var klines = (item.Klines ?? new List<GlobalIndexKlineDto>())
+                .OrderByDescending(x => DateTime.TryParse(x.Date, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : DateTime.MinValue)
+                .ToList();
 
             return new GlobalIndexDto
             {
@@ -3492,12 +3502,12 @@ namespace 小白养基.Controllers
                 Point = item.Point,
                 Close = item.Close,
                 TodayRate = item.TodayRate,
-                YearRate = item.YearRate,
+                YearRate = yearRate,
                 TodayAvailable = todayAvailable,
                 YearAvailable = yearAvailable,
                 KlineCount = klineCount,
                 Message = message,
-                Klines = item.Klines,
+                Klines = klines,
                 Source = item.Source
             };
         }
@@ -3569,7 +3579,7 @@ namespace 小白养基.Controllers
                             .OrderBy(x => x.Date)
                             .FirstOrDefault();
                     }
-                    double? yearRate = yearAgoPoint.Close > 0
+                    double? yearRate = yearAgoPoint.Close > 0 && yearAgoPoint.Date < latestDate
                         ? Math.Round((latestClose - yearAgoPoint.Close) / yearAgoPoint.Close * 100, 2)
                         : null;
                     double todayRate = parsedKlines[^1].Rate;
@@ -3583,8 +3593,11 @@ namespace 小白养基.Controllers
                         TodayAvailable = true,
                         YearAvailable = yearRate.HasValue,
                         KlineCount = parsedKlines.Count,
-                        Message = yearRate.HasValue ? string.Empty : "一年K线基准不可用",
-                        Klines = parsedKlines.Select(x => new GlobalIndexKlineDto { Date = x.DateText, Rate = x.Rate }).ToList()
+                        Message = yearRate.HasValue ? string.Empty : "缺少一年K线基准",
+                        Klines = parsedKlines
+                            .OrderByDescending(x => x.Date)
+                            .Select(x => new GlobalIndexKlineDto { Date = x.DateText, Rate = x.Rate })
+                            .ToList()
                     }, attempts);
                 }
                 catch (OperationCanceledException)
@@ -3678,7 +3691,7 @@ namespace 小白养基.Controllers
                     .FirstOrDefault();
             }
 
-            double? yearRate = yearAgoPoint != null && yearAgoPoint.Close > 0
+            double? yearRate = yearAgoPoint != null && yearAgoPoint.Close > 0 && yearAgoPoint.Date < latest.Date
                 ? Math.Round((latest.Close - yearAgoPoint.Close) / yearAgoPoint.Close * 100d, 2)
                 : null;
 
@@ -3696,8 +3709,11 @@ namespace 小白养基.Controllers
                 TodayAvailable = true,
                 YearAvailable = yearRate.HasValue,
                 KlineCount = ordered.Count,
-                Message = yearRate.HasValue ? string.Empty : $"{sourceLabel}一年基准不可用",
-                Klines = ordered.Select(x => new GlobalIndexKlineDto { Date = x.DateText, Rate = x.Rate }).ToList(),
+                Message = yearRate.HasValue ? string.Empty : $"{sourceLabel}缺少一年K线基准",
+                Klines = ordered
+                    .OrderByDescending(x => x.Date)
+                    .Select(x => new GlobalIndexKlineDto { Date = x.DateText, Rate = x.Rate })
+                    .ToList(),
                 Source = source
             };
         }
@@ -3929,7 +3945,7 @@ namespace 小白养基.Controllers
                         continue;
                     }
 
-                    var parsedKlines = new List<(string Date, double Close, double Rate)>();
+                    var parsedKlines = new List<(DateTime Date, string DateText, double Close, double Rate)>();
                     foreach (var kline in klines.EnumerateArray())
                     {
                         string? raw = kline.GetString();
@@ -3937,10 +3953,11 @@ namespace 小白养基.Controllers
 
                         var parts = raw.Split(',');
                         if (parts.Length <= 8) continue;
+                        if (!DateTime.TryParse(parts[0], CultureInfo.InvariantCulture, DateTimeStyles.None, out var klineDate)) continue;
                         if (!TryParseInvariantDouble(parts[2], out double close)) continue;
                         if (!TryParseInvariantDouble(parts[8], out double rate)) rate = 0;
 
-                        parsedKlines.Add((parts[0], close, Math.Round(rate, 2)));
+                        parsedKlines.Add((klineDate.Date, parts[0], close, Math.Round(rate, 2)));
                     }
 
                     if (parsedKlines.Count == 0)
@@ -3949,6 +3966,7 @@ namespace 小白养基.Controllers
                         continue;
                     }
 
+                    parsedKlines = parsedKlines.OrderBy(x => x.Date).ToList();
                     double latestClose = Math.Round(parsedKlines[^1].Close, 2);
                     if (latestClose <= 0)
                     {
@@ -3957,7 +3975,9 @@ namespace 小白养基.Controllers
                     }
 
                     double firstClose = parsedKlines[0].Close;
-                    double yearRate = firstClose > 0 ? Math.Round((latestClose - firstClose) / firstClose * 100, 2) : 0;
+                    double? yearRate = firstClose > 0 && parsedKlines[0].Date < parsedKlines[^1].Date
+                        ? Math.Round((latestClose - firstClose) / firstClose * 100, 2)
+                        : null;
                     double todayRate = parsedKlines[^1].Rate;
 
                     return new GlobalIndexDto
@@ -3971,7 +3991,10 @@ namespace 小白养基.Controllers
                         Close = latestClose,
                         TodayRate = todayRate,
                         YearRate = yearRate,
-                        Klines = parsedKlines.Select(x => new GlobalIndexKlineDto { Date = x.Date, Rate = x.Rate }).ToList()
+                        Klines = parsedKlines
+                            .OrderByDescending(x => x.Date)
+                            .Select(x => new GlobalIndexKlineDto { Date = x.DateText, Rate = x.Rate })
+                            .ToList()
                     };
                 }
                 catch (OperationCanceledException ex)
@@ -5345,6 +5368,25 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             return CloneCapitalFlowPayload(payload, payload.IsFallback, payload.IsStale, payload.Message, payload.Source, attempts);
         }
 
+        private static object BuildCapitalFlowDebug(IEnumerable<ExternalDataAttemptDto> attempts, bool cacheHit, string? cacheSource = null)
+        {
+            var list = attempts.ToList();
+            var selected = list.LastOrDefault(x => x.ParsedRowsCount > 0)
+                ?? list.LastOrDefault(x => !string.IsNullOrWhiteSpace(x.Error))
+                ?? list.LastOrDefault();
+            return new
+            {
+                source = selected?.Source ?? string.Empty,
+                statusCode = selected?.StatusCode ?? 0,
+                url = selected?.Url,
+                parsedRowsCount = selected?.ParsedRowsCount ?? 0,
+                cacheHit,
+                cacheSource,
+                error = selected?.Error,
+                attempts = list
+            };
+        }
+
         private static CapitalFlowPayloadDto CloneCapitalFlowPayload(
             CapitalFlowPayloadDto payload,
             bool isFallback,
@@ -5363,7 +5405,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 Rows = payload.Rows?.ToList() ?? new List<CapitalFlowRowDto>(),
                 Inflow = payload.Inflow?.ToList() ?? new List<CapitalFlowRowDto>(),
                 Outflow = payload.Outflow?.ToList() ?? new List<CapitalFlowRowDto>(),
-                Debug = attempts == null ? null : new { attempts = attempts.ToList(), cacheHit = true, cacheSource = sourceOverride ?? payload.Source }
+                Debug = attempts == null ? null : BuildCapitalFlowDebug(attempts, true, sourceOverride ?? payload.Source)
             };
         }
 
@@ -5375,11 +5417,11 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 UpdatedAt = string.Empty,
                 IsFallback = false,
                 IsStale = true,
-                Message = "主力资金流暂不可用",
+                Message = "主力资金流暂不可用：实时源失败且暂无缓存",
                 Rows = new List<CapitalFlowRowDto>(),
                 Inflow = new List<CapitalFlowRowDto>(),
                 Outflow = new List<CapitalFlowRowDto>(),
-                Debug = attempts == null ? null : new { attempts = attempts.ToList(), cacheHit = false }
+                Debug = attempts == null ? null : BuildCapitalFlowDebug(attempts, false)
             };
         }
 
@@ -5435,7 +5477,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                         Rows = rows,
                         Inflow = inflow,
                         Outflow = outflow,
-                        Debug = debug ? new { attempts } : null
+                        Debug = debug ? BuildCapitalFlowDebug(attempts, false) : null
                     };
                 }
                 catch (Exception ex)
@@ -5457,9 +5499,24 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
         {
             long ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             int requestSize = Math.Clamp(limit * 5, 120, 300);
-            string url = $"https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz={requestSize}&po={po}&np=1&fltt=2&invt=2&fid=f62&fs={Uri.EscapeDataString(fs)}&fields=f12,f14,f3,f62,f184,f66,f72&_={ts}";
-
-            string body = await FetchWithRetryAsync(http, url, attempts: attempts, source: $"capital-flow-{source}-{(po > 0 ? "inflow" : "outflow")}");
+            var hosts = new[] { "push2.eastmoney.com", "82.push2.eastmoney.com", "84.push2.eastmoney.com" };
+            string? body = null;
+            string url = string.Empty;
+            var flowSide = po > 0 ? "inflow" : "outflow";
+            foreach (var host in hosts)
+            {
+                url = $"https://{host}/api/qt/clist/get?pn=1&pz={requestSize}&po={po}&np=1&fltt=2&invt=2&fid=f62&fs={Uri.EscapeDataString(fs)}&fields=f12,f14,f3,f62,f184,f66,f72&_={ts}";
+                try
+                {
+                    body = await FetchWithRetryAsync(http, url, attempts: attempts, source: $"capital-flow-{source}-{flowSide}-{host}");
+                    break;
+                }
+                catch when (host != hosts[^1])
+                {
+                    // Try another EastMoney quote host before falling back to stale cache.
+                }
+            }
+            if (string.IsNullOrWhiteSpace(body)) throw new HttpRequestException($"capital-flow-{source}-{flowSide}: all hosts failed");
             using var doc = JsonDocument.Parse(body);
             if (!doc.RootElement.TryGetProperty("data", out var data) ||
                 data.ValueKind == JsonValueKind.Null ||
