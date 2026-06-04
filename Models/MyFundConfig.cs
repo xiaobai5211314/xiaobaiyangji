@@ -19,6 +19,8 @@ namespace 小白养基.Models
         public double CostAmount { get; set; }
         // 🚀 新增：落袋为安小金库（记录历史变现的利润）
         public double RealizedProfit { get; set; } = 0;
+        // 平台累计收益（OCR 从蚂蚁基金识别的"累计收益"，赎回待确认时优先显示）
+        public double PlatformCumulativeProfit { get; set; } = 0;
         // 🚀 之前的落袋小金库
 
 

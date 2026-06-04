@@ -3395,9 +3395,32 @@ namespace 小白养基.Controllers
                     // For sold-out pending funds, use soldCost as display cost
                     if (config.HoldShares <= 0 && pendingRedeem && soldCost > 0)
                         costBasis = soldCost;
-                    double totalProfitPreview = Math.Round(currentAssetsPreview - costBasis + config.RealizedProfit, 2);
-                    double existingReturnRateValue = costBasis > 0 ? Math.Round(totalProfitPreview / costBasis * 100.0, 2) : 0;
-                    double breakEvenRateValue = currentAssetsPreview > 0 && totalProfitPreview < 0 ? Math.Round(-totalProfitPreview / currentAssetsPreview * 100.0, 2) : 0;
+
+                    // 累计收益显示优先级：平台累计收益 > 已确认落袋 > 待确认
+                    bool isSoldOut = config.HoldShares <= 0;
+                    double displayedProfit;
+                    string displayedProfitSource;
+                    if (isSoldOut && config.PlatformCumulativeProfit > 0)
+                    {
+                        displayedProfit = config.PlatformCumulativeProfit;
+                        displayedProfitSource = "platform_cumulative_profit";
+                    }
+                    else if (isSoldOut && pendingRedeem && config.RealizedProfit <= 0)
+                    {
+                        displayedProfit = 0;
+                        displayedProfitSource = "pending_redeem";
+                    }
+                    else
+                    {
+                        displayedProfit = config.RealizedProfit;
+                        displayedProfitSource = config.RealizedProfit > 0 ? "confirmed_redeem" : "none";
+                    }
+
+                    double totalProfitPreview = Math.Round(currentAssetsPreview - costBasis + displayedProfit, 2);
+                    double existingReturnRateValue = isSoldOut && displayedProfit > 0 && costBasis > 0
+                        ? Math.Round(displayedProfit / costBasis * 100.0, 2)
+                        : (costBasis > 0 ? Math.Round(totalProfitPreview / costBasis * 100.0, 2) : 0);
+                    double breakEvenRateValue = !isSoldOut && currentAssetsPreview > 0 && totalProfitPreview < 0 ? Math.Round(-totalProfitPreview / currentAssetsPreview * 100.0, 2) : 0;
                     double diffAbs = lastRecord != null ? Math.Abs(lastRecord.DiffRate) : 0;
                     int reliabilityScore = isSettled ? 100 : Math.Clamp(80 - (int)Math.Round(Math.Abs(avgDiff) * 40) - (diffAbs > 0.15 ? 10 : 0), 35, 92);
                     string reliabilityLevel = isSettled ? "真实净值确认" : reliabilityScore >= 80 ? "估值较稳" : reliabilityScore >= 60 ? "估值需观察" : "估值偏弱";
@@ -3414,6 +3437,9 @@ namespace 小白养基.Controllers
                         shares = config.HoldShares,
                         cost = isInactiveHolding ? (soldCost > 0 ? soldCost : (double?)null) : (config.CostAmount > 0 ? config.CostAmount : (double?)null),
                         realizedProfit = config.RealizedProfit,
+                        platformCumulativeProfit = config.PlatformCumulativeProfit,
+                        displayedProfit = displayedProfit,
+                        displayedProfitSource = displayedProfitSource,
                         pendingRedeem = pendingRedeem,
                         soldCost = soldCost,
                         inactiveHolding = isInactiveHolding,
@@ -3428,10 +3454,10 @@ namespace 小白养基.Controllers
                         reliabilityLevel = reliabilityLevel,
                         breakEvenSimulator = new[]
                         {
-                            new { scenario = "+1%", projectedAssets = Math.Round(currentAssetsPreview * 1.01, 2), projectedProfit = Math.Round(currentAssetsPreview * 1.01 - costBasis + config.RealizedProfit, 2) },
-                            new { scenario = "+3%", projectedAssets = Math.Round(currentAssetsPreview * 1.03, 2), projectedProfit = Math.Round(currentAssetsPreview * 1.03 - costBasis + config.RealizedProfit, 2) },
-                            new { scenario = "+5%", projectedAssets = Math.Round(currentAssetsPreview * 1.05, 2), projectedProfit = Math.Round(currentAssetsPreview * 1.05 - costBasis + config.RealizedProfit, 2) },
-                            new { scenario = "-3%", projectedAssets = Math.Round(currentAssetsPreview * 0.97, 2), projectedProfit = Math.Round(currentAssetsPreview * 0.97 - costBasis + config.RealizedProfit, 2) }
+                            new { scenario = "+1%", projectedAssets = Math.Round(currentAssetsPreview * 1.01, 2), projectedProfit = Math.Round(currentAssetsPreview * 1.01 - costBasis + displayedProfit, 2) },
+                            new { scenario = "+3%", projectedAssets = Math.Round(currentAssetsPreview * 1.03, 2), projectedProfit = Math.Round(currentAssetsPreview * 1.03 - costBasis + displayedProfit, 2) },
+                            new { scenario = "+5%", projectedAssets = Math.Round(currentAssetsPreview * 1.05, 2), projectedProfit = Math.Round(currentAssetsPreview * 1.05 - costBasis + displayedProfit, 2) },
+                            new { scenario = "-3%", projectedAssets = Math.Round(currentAssetsPreview * 0.97, 2), projectedProfit = Math.Round(currentAssetsPreview * 0.97 - costBasis + displayedProfit, 2) }
                         },
                         diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
                         calibrationOffset = Math.Round(avgDiff, 4),
@@ -3453,7 +3479,7 @@ namespace 小白养基.Controllers
                 {
                     if (fund.inactiveHolding)
                     {
-                        summaryRealized += fund.realizedProfit;
+                        summaryRealized += fund.displayedProfit;
                         continue;
                     }
                     double amt = fund.amount;
@@ -3674,11 +3700,14 @@ namespace 小白养基.Controllers
 
         // 🚀 2. 战术减仓接口：日期支持，金额可选 (留空则系统自动按份额比例算)
         [HttpPost("reduce-position")]
-        public async Task<IActionResult> ReducePosition([FromForm] string username, [FromForm] string code, [FromForm] double reduceShares, [FromForm] double? reduceAmount, [FromForm] string tradeDate)
+        public async Task<IActionResult> ReducePosition([FromForm] string username, [FromForm] string code, [FromForm] double reduceShares, [FromForm] double? reduceAmount, [FromForm] string tradeDate, [FromForm] double? platformCumulativeProfit)
         {
             if (string.IsNullOrEmpty(username)) return Unauthorized("未授权");
             var fund = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && f.FundCode == code);
             if (fund == null) return BadRequest("未找到基金");
+
+            if (platformCumulativeProfit.HasValue)
+                fund.PlatformCumulativeProfit = platformCumulativeProfit.Value;
 
             double profit;
             try
