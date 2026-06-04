@@ -247,7 +247,22 @@ namespace 小白养基.Services
             {
                 if (fund.HoldShares <= 0)
                 {
-                    totalRealized += fund.RealizedProfit;
+                    double soldProfit = fund.PlatformCumulativeProfit > 0 ? fund.PlatformCumulativeProfit : fund.RealizedProfit;
+                    double soldCost = PortfolioSettlementService.GetSoldCost(fund);
+                    double soldRate = soldCost > 0 ? soldProfit / soldCost * 100.0 : 0;
+                    rows.Add(new DailyArchive
+                    {
+                        Username = username,
+                        FundCode = fund.FundCode,
+                        FundName = fund.FundName,
+                        RecordDate = date,
+                        Assets = 0,
+                        DailyProfit = 0,
+                        DailyRate = 0,
+                        TotalProfit = Math.Round(soldProfit, 2),
+                        TotalRate = Math.Round(soldRate, 2)
+                    });
+                    totalRealized += soldProfit;
                     continue;
                 }
                 latestRecordDict.TryGetValue(fund.FundCode, out var record);
