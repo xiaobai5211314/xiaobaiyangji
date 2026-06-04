@@ -96,40 +96,70 @@ namespace 小白养基.Services
             }
         }
 
+        // Pending sell marker: -(soldCost + 1) in LastAddAmount when HoldShares=0 and no confirmed amount
+        private const double PendingMarkerOffset = 1.0;
+
+        public static bool IsPendingRedeem(MyFundConfig fund)
+            => fund.HoldShares <= 0 && fund.LastAddAmount < -PendingMarkerOffset;
+
+        public static double GetSoldCost(MyFundConfig fund)
+            => IsPendingRedeem(fund) ? Math.Abs(fund.LastAddAmount) - PendingMarkerOffset : 0;
+
         public double ReducePosition(MyFundConfig fund, double reduceShares, double? reduceAmount, string tradeDate)
         {
             if (reduceShares <= 0) throw new ArgumentOutOfRangeException(nameof(reduceShares), "减仓份额必须大于 0。");
             if (fund.HoldShares <= 0) throw new InvalidOperationException("当前基金未记录有效份额，无法按份额减仓。");
             if (reduceShares > fund.HoldShares) throw new InvalidOperationException("减仓份额不能大于持仓份额。");
 
-            double finalReduceAmount = reduceAmount.GetValueOrDefault();
-            if (finalReduceAmount <= 0)
-            {
-                finalReduceAmount = fund.HoldAmount / fund.HoldShares * reduceShares;
-            }
-
             double oldShares = fund.HoldShares;
             double unitCost = fund.CostAmount / oldShares;
             double unitAmount = fund.HoldAmount / oldShares;
             double soldCost = unitCost * reduceShares;
-            double profit = finalReduceAmount - soldCost;
+            bool isFullSell = Math.Abs(reduceShares - oldShares) < 0.0001;
 
-            fund.HoldShares = Math.Round(fund.HoldShares - reduceShares, 4);
-            fund.CostAmount = Math.Round(fund.CostAmount - soldCost, 2);
-            fund.HoldAmount = Math.Round(fund.HoldAmount - unitAmount * reduceShares, 2);
-            fund.RealizedProfit = Math.Round(fund.RealizedProfit + profit, 2);
+            double confirmedAmount = reduceAmount.GetValueOrDefault();
+            bool hasConfirmed = confirmedAmount > 0;
 
-            if (fund.LastTradeDate == tradeDate)
+            if (hasConfirmed)
             {
-                fund.LastAddAmount = Math.Round(fund.LastAddAmount - finalReduceAmount, 2);
+                // Confirmed: calculate realized profit normally
+                double profit = confirmedAmount - soldCost;
+                fund.HoldShares = Math.Round(fund.HoldShares - reduceShares, 4);
+                fund.CostAmount = Math.Round(fund.CostAmount - soldCost, 2);
+                if (fund.HoldShares <= 0) fund.CostAmount = 0;
+                fund.HoldAmount = Math.Round(fund.HoldAmount - unitAmount * reduceShares, 2);
+                fund.RealizedProfit = Math.Round(fund.RealizedProfit + profit, 2);
+
+                if (fund.LastTradeDate == tradeDate)
+                    fund.LastAddAmount = Math.Round(fund.LastAddAmount - confirmedAmount, 2);
+                else
+                {
+                    fund.LastTradeDate = tradeDate;
+                    fund.LastAddAmount = Math.Round(-confirmedAmount, 2);
+                }
+                return Math.Round(profit, 2);
             }
             else
             {
-                fund.LastTradeDate = tradeDate;
-                fund.LastAddAmount = Math.Round(-finalReduceAmount, 2);
+                // No confirmed amount: mark as pending
+                fund.HoldShares = Math.Round(fund.HoldShares - reduceShares, 4);
+                if (isFullSell)
+                {
+                    // Preserve original cost for display; soldCost encoded in LastAddAmount
+                    fund.LastTradeDate = tradeDate;
+                    fund.LastAddAmount = Math.Round(-(soldCost + PendingMarkerOffset), 2);
+                    fund.CostAmount = 0;
+                }
+                else
+                {
+                    fund.CostAmount = Math.Round(fund.CostAmount - soldCost, 2);
+                    fund.LastTradeDate = tradeDate;
+                    fund.LastAddAmount = Math.Round(-soldCost, 2);
+                }
+                fund.HoldAmount = Math.Round(fund.HoldAmount - unitAmount * reduceShares, 2);
+                // RealizedProfit NOT updated — waiting for confirmed amount
+                return 0;
             }
-
-            return Math.Round(profit, 2);
         }
 
         public double GetRecordRateForToday(FundData? record)

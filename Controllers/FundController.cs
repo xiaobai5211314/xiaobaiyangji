@@ -3385,6 +3385,11 @@ namespace 小白养基.Controllers
                     double todayProfitPreview = isSettled ? config.LastSettledProfit : Math.Round(todayBaseAmount * todayRateForSimulation / 100.0, 2);
                     double currentAssetsPreview = isSettled ? config.HoldAmount : Math.Round(config.HoldAmount + todayProfitPreview, 2);
                     double costBasis = config.CostAmount > 0 ? config.CostAmount : config.HoldAmount;
+                    bool pendingRedeem = PortfolioSettlementService.IsPendingRedeem(config);
+                    double soldCost = PortfolioSettlementService.GetSoldCost(config);
+                    // For sold-out pending funds, use soldCost as display cost
+                    if (config.HoldShares <= 0 && pendingRedeem && soldCost > 0)
+                        costBasis = soldCost;
                     double totalProfitPreview = Math.Round(currentAssetsPreview - costBasis + config.RealizedProfit, 2);
                     double existingReturnRateValue = costBasis > 0 ? Math.Round(totalProfitPreview / costBasis * 100.0, 2) : 0;
                     double breakEvenRateValue = currentAssetsPreview > 0 && totalProfitPreview < 0 ? Math.Round(-totalProfitPreview / currentAssetsPreview * 100.0, 2) : 0;
@@ -3399,8 +3404,10 @@ namespace 小白养基.Controllers
                         name = config.FundName,
                         amount = config.HoldAmount,
                         shares = config.HoldShares,
-                        cost = config.CostAmount > 0 ? config.CostAmount : (double?)null,
+                        cost = config.CostAmount > 0 ? config.CostAmount : (soldCost > 0 ? soldCost : (double?)null),
                         realizedProfit = config.RealizedProfit,
+                        pendingRedeem = pendingRedeem,
+                        soldCost = soldCost,
                         lastTradeDate = config.LastTradeDate,
                         lastAddAmount = config.LastAddAmount,
                         lastSettledDate = config.LastSettledDate,
@@ -3673,7 +3680,11 @@ namespace 小白养基.Controllers
             await _context.SaveChangesAsync();
             ClearTodayCache(username);
 
-            return Ok(new { success = true, msg = $"[{tradeDate}] 减仓完毕！归库利润: {profit:F2} 元" });
+            bool isPending = fund.HoldShares <= 0 && profit == 0 && !(reduceAmount.GetValueOrDefault() > 0);
+            string msg = isPending
+                ? $"[{tradeDate}] 减仓已记录，赎回金额待确认。请在蚂蚁财富查看确认金额后，再次减仓并填写实际到手金额。"
+                : $"[{tradeDate}] 减仓完毕！归库利润: {profit:F2} 元";
+            return Ok(new { success = true, msg, pendingRedeem = isPending });
         }
 
         // =========================================================================
