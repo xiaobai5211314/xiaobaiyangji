@@ -19,6 +19,7 @@ namespace 小白养基.Models
         public DbSet<StockOcrImportItem> StockOcrImportItems { get; set; }
         public DbSet<StockQuoteSnapshot> StockQuoteSnapshots { get; set; }
         public DbSet<StockKLineCache> StockKLineCaches { get; set; }
+        public DbSet<MarketDataCache> MarketDataCaches { get; set; }
 
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
         {
@@ -182,6 +183,15 @@ namespace 小白养基.Models
                 .HasIndex(x => new { x.StockCode, x.Period })
                 .IsUnique()
                 .HasDatabaseName("IX_StockKLine_Code_Period");
+
+            modelBuilder.Entity<MarketDataCache>()
+                .HasIndex(x => x.CacheKey)
+                .IsUnique()
+                .HasDatabaseName("IX_MarketDataCache_Key");
+
+            modelBuilder.Entity<MarketDataCache>()
+                .HasIndex(x => new { x.DataType, x.UpdatedAt })
+                .HasDatabaseName("IX_MarketDataCache_Type_Updated");
         }
     }
 }

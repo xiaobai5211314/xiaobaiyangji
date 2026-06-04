@@ -8,6 +8,10 @@
       <text class="chip">{{ sectorCount }} 个主题</text>
     </view>
 
+    <view v-if="isStaleData && !loading" class="stale-indicator">
+      <text class="stale-text">使用缓存 · 后台更新中</text>
+    </view>
+
     <view class="glass-card notice-card">
       <view class="notice-text">数据仅供个人记录与行情参考，不构成投资建议，实际数据以基金公司、交易所或券商披露为准。</view>
     </view>
@@ -152,6 +156,7 @@ import {
 } from '../../services/api/sector';
 import { optionalProfitClass, signedMoney, signedPercent } from '../../utils/format';
 import { loadTheme, themeClass } from '../../stores/theme';
+import { getLocalStorageCache, setLocalStorageCache } from '../../services/request';
 
 const loading = ref(false);
 const sectorPayload = ref<SectorRadarResponse>({});
@@ -159,6 +164,8 @@ const flowPayload = ref<CapitalFlowResponse>({});
 const indices = ref<GlobalIndexItem[]>([]);
 const PAGE_CACHE_TTL = 60000;
 const loadedAt = ref(0);
+const isStaleData = ref(false);
+const staleUpdatedAt = ref('');
 const DEBUG_FIELD_AUDIT =
   (import.meta as ImportMeta & { env?: { VITE_DEBUG_MARKET_INDEX?: string } }).env?.VITE_DEBUG_MARKET_INDEX === 'true';
 
@@ -221,32 +228,57 @@ async function loadData(force: boolean) {
   const hasPageData = allSectors.value.length > 0 || flowRows.value.length > 0 || indices.value.length > 0;
   if (!force && hasPageData && Date.now() - loadedAt.value < PAGE_CACHE_TTL) return;
 
+  if (!force && !hasPageData) {
+    const cachedSectors = getLocalStorageCache<SectorRadarResponse>('sector_radar_cache');
+    const cachedFlow = getLocalStorageCache<CapitalFlowResponse>('capital_flow_cache');
+    const cachedIndices = getLocalStorageCache<GlobalIndexItem[]>('global_indices_cache');
+    if (cachedSectors || cachedFlow || cachedIndices) {
+      if (cachedSectors) sectorPayload.value = cachedSectors;
+      if (cachedFlow) flowPayload.value = cachedFlow;
+      if (cachedIndices) indices.value = cachedIndices;
+      isStaleData.value = true;
+      staleUpdatedAt.value = '使用缓存';
+    }
+  }
+
   loading.value = true;
   try {
+    const hasCachedData = allSectors.value.length > 0 || flowRows.value.length > 0 || indices.value.length > 0;
     const [sectorsResult, flowResult, indicesResult] = await Promise.allSettled([
-      getSectors(force),
-      getCapitalFlow(force, 100),
-      getGlobalIndices(force)
+      getSectors(force, hasCachedData),
+      getCapitalFlow(force, 100, hasCachedData),
+      getGlobalIndices(force, hasCachedData)
     ]);
 
+    let anySuccess = false;
     if (sectorsResult.status === 'fulfilled') {
       sectorPayload.value = sectorsResult.value || {};
+      setLocalStorageCache('sector_radar_cache', sectorsResult.value, 3600000);
+      anySuccess = true;
     } else {
       console.warn('[sector:sectors]', sectorsResult.reason);
     }
 
     if (flowResult.status === 'fulfilled') {
       flowPayload.value = flowResult.value || {};
+      setLocalStorageCache('capital_flow_cache', flowResult.value, 3600000);
+      anySuccess = true;
     } else {
       console.warn('[sector:capital-flow]', flowResult.reason);
     }
 
     if (indicesResult.status === 'fulfilled') {
       indices.value = Array.isArray(indicesResult.value) ? indicesResult.value : [];
+      setLocalStorageCache('global_indices_cache', indices.value, 3600000);
+      anySuccess = true;
     } else {
       console.warn('[sector:global-indices]', indicesResult.reason);
     }
 
+    if (anySuccess) {
+      isStaleData.value = false;
+      staleUpdatedAt.value = '';
+    }
     loadedAt.value = Date.now();
     logGlobalIndicesAudit(indices.value);
   } finally {
@@ -447,6 +479,17 @@ function logGlobalIndicesAudit(rows: GlobalIndexItem[]) {
   flex-direction: column;
   gap: 30rpx;
   padding-top: 34rpx;
+}
+
+.stale-indicator {
+  text-align: center;
+  padding: 8rpx 0;
+}
+
+.stale-text {
+  font-size: 22rpx;
+  color: rgba(255, 200, 60, 0.8);
+  letter-spacing: 1rpx;
 }
 
 .hero-card,

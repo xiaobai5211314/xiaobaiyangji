@@ -73,6 +73,7 @@ builder.Services.AddScoped<PortfolioSettlementService>();
 builder.Services.AddScoped<IStockQuoteService, EastmoneyStockQuoteService>();
 builder.Services.AddScoped<StockOcrParserService>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+builder.Services.AddScoped<MarketCacheService>();
 
 builder.Services.AddHttpClient("FundGz", client =>
 {

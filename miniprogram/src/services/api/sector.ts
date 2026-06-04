@@ -149,24 +149,27 @@ export interface GlobalIndexItem {
   [key: string]: unknown;
 }
 
-export function getSectors(force = false) {
+export function getSectors(force = false, silent = false) {
   return get<SectorRadarResponse>(`/api/fund/sectors${force ? '?force=true' : ''}`, {
     loadingText: '读取板块',
+    silent,
     fallbackData: { top: [], bottom: [], all: [] }
   });
 }
 
-export function getCapitalFlow(force = false, limit = 30) {
+export function getCapitalFlow(force = false, limit = 30, silent = false) {
   const query = `limit=${limit}${force ? '&force=true' : ''}`;
   return get<CapitalFlowResponse>(`/api/fund/capital-flow?${query}`, {
     loadingText: '读取资金',
+    silent,
     fallbackData: { rows: [], inflow: [], outflow: [] }
   }).then(normalizeCapitalFlowResponse);
 }
 
-export function getGlobalIndices(force = false) {
+export function getGlobalIndices(force = false, silent = false) {
   return get<unknown>(`/api/fund/global-indices${force ? '?force=true' : ''}`, {
     loadingText: '读取大盘',
+    silent,
     fallbackData: []
   }).then((payload) => {
     if (DEBUG_MARKET_INDEX) console.warn('[global-indices raw response]', payload);

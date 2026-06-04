@@ -112,10 +112,11 @@ export interface FundArchiveRow {
   [key: string]: unknown;
 }
 
-export function getTodayFunds(username: string, force = false) {
+export function getTodayFunds(username: string, force = false, silent = false) {
   const query = `username=${encodeURIComponent(username)}${force ? '&force=true' : ''}`;
   return get<unknown>(`/api/fund/today?${query}`, {
     loadingText: '读取持仓',
+    silent,
     fallbackData: []
   }).then((raw) => {
     if (Array.isArray(raw)) return raw as FundTodayItem[];
@@ -178,5 +179,20 @@ export function previewFundOcr(username: string, filePath: string) {
 export function confirmFundOcr(payload: OcrImportConfirmRequest) {
   return postJson<OcrImportConfirmResponse, OcrImportConfirmRequest>('/api/Fund/import-ocr-confirm', payload, {
     loadingText: '确认导入'
+  });
+}
+
+export interface FundNavHistoryItem {
+  date?: string;
+  nav?: string | number;
+  rate?: string | number;
+  [key: string]: unknown;
+}
+
+export function getFundNavHistory(code: string, period = '1y') {
+  return get<FundNavHistoryItem[]>(`/api/fund/nav-history?code=${encodeURIComponent(code)}&period=${period}`, {
+    loadingText: '读取走势',
+    silent: true,
+    fallbackData: []
   });
 }

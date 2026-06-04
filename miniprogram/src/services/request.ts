@@ -48,6 +48,8 @@ const DEBUG_REQUEST =
 const GET_CACHE_TTL = 60000;
 const getCache = new Map<string, { expiresAt: number; data: unknown }>();
 const inFlightGets = new Map<string, Promise<unknown>>();
+const recentErrorToasts = new Map<string, number>();
+const ERROR_TOAST_DEDUP_MS = 60000;
 
 function normalizePath(path: string) {
   return path.startsWith('/') ? path : `/${path}`;
@@ -131,6 +133,43 @@ function logRequestFailure(params: {
   });
 }
 
+function shouldShowErrorToast(message: string): boolean {
+  const now = Date.now();
+  const lastShown = recentErrorToasts.get(message);
+  if (lastShown && now - lastShown < ERROR_TOAST_DEDUP_MS) return false;
+  recentErrorToasts.set(message, now);
+  for (const [key, time] of recentErrorToasts) {
+    if (now - time > ERROR_TOAST_DEDUP_MS * 2) recentErrorToasts.delete(key);
+  }
+  return true;
+}
+
+function showDedupedToast(message: string, duration = 2200) {
+  if (shouldShowErrorToast(message)) {
+    uni.showToast({ title: message, icon: 'none', duration });
+  }
+}
+
+export function getLocalStorageCache<T>(key: string): T | null {
+  try {
+    const raw = uni.getStorageSync(key);
+    if (!raw) return null;
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (parsed && typeof parsed === 'object' && 'expiresAt' in parsed && parsed.expiresAt > Date.now()) {
+      return parsed.data as T;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function setLocalStorageCache<T>(key: string, data: T, ttlMs: number) {
+  try {
+    uni.setStorageSync(key, JSON.stringify({ expiresAt: Date.now() + ttlMs, data }));
+  } catch { /* ignore */ }
+}
+
 export async function request<TResponse = unknown, TData = unknown>(
   path: string,
   options: RequestOptions<TData> = {}
@@ -202,7 +241,7 @@ export async function request<TResponse = unknown, TData = unknown>(
       const fallback = resolveFallback<TResponse>(options);
       if (fallback.hasFallback) {
         if (showErrorToast) {
-          uni.showToast({ title: message, icon: 'none', duration: 2200 });
+          showDedupedToast(message, 2200);
         }
         return fallback.value;
       }
@@ -238,7 +277,7 @@ export async function request<TResponse = unknown, TData = unknown>(
       data: maskSensitiveData(options.data)
     });
     if (showErrorToast) {
-      uni.showToast({ title: message, icon: 'none', duration: 2600 });
+      showDedupedToast(message, 2600);
     }
 
     const fallback = resolveFallback<TResponse>(options);

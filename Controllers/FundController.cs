@@ -105,13 +105,15 @@ namespace 小白养基.Controllers
             return isTradingTime ? TimeSpan.FromMinutes(2) : TimeSpan.FromMinutes(30);
         }
         private readonly IConnectionMultiplexer _redis;
+        private readonly MarketCacheService _marketCache;
         public FundController(
       AppDbContext context,
       IMemoryCache cache,
       IHttpClientFactory httpClientFactory,
       IBaiduOcrService ocrService,
       PortfolioSettlementService portfolioSettlement,
-      IConnectionMultiplexer redis)
+      IConnectionMultiplexer redis,
+      MarketCacheService marketCache)
         {
             _context = context;
             _cache = cache;
@@ -119,6 +121,7 @@ namespace 小白养基.Controllers
             _ocrService = ocrService;
             _portfolioSettlement = portfolioSettlement;
             _redis = redis;
+            _marketCache = marketCache;
         }
 
         private static DateTime ChinaNow() => DateTime.UtcNow.AddHours(8);
@@ -3224,6 +3227,14 @@ namespace 小白养基.Controllers
                         return Ok(cached.Select(NormalizeGlobalIndexAvailability).ToList());
                     }
                 }
+
+                var (dbCached, dbSource) = await _marketCache.TryGetAsync<List<GlobalIndexDto>>("global_indices_1y_v2");
+                if (dbCached != null && dbSource != null && dbCached.Count >= 5)
+                {
+                    Response.Headers["X-App-Cache"] = dbSource;
+                    Response.Headers["X-Cache-Source"] = dbSource;
+                    return Ok(dbCached.Select(NormalizeGlobalIndexAvailability).ToList());
+                }
             }
 
             var http = _httpClientFactory.CreateClient("EastMoneyQuote");
@@ -3363,7 +3374,32 @@ namespace 小白养基.Controllers
             if (validCount >= 5)
             {
                 await TryWriteLegacyGlobalIndicesCacheAsync(results);
+                try
+                {
+                    await _marketCache.SetAsync("global_indices_1y_v2", results, _marketRealtimeFreshTtl, TimeSpan.FromDays(7), "build");
+                }
+                catch { }
             }
+            else if (validCount < 3)
+            {
+                // Not enough fresh data - try DB stale fallback
+                var (staleData, _) = await _marketCache.TryGetStaleAsync<List<GlobalIndexDto>>("global_indices_1y_v2", TimeSpan.FromDays(7));
+                if (staleData != null && staleData.Count >= 5)
+                {
+                    for (int i = 0; i < results.Count; i++)
+                    {
+                        if (results[i].Latest.HasValue && results[i].Latest.Value > 0) continue;
+                        var staleItem = staleData.FirstOrDefault(x => x.Code == definitions[i].Code);
+                        if (staleItem != null && staleItem.Latest.HasValue && staleItem.Latest.Value > 0)
+                        {
+                            staleItem.Source = "db-stale";
+                            results[i] = staleItem;
+                        }
+                    }
+                }
+            }
+
+            results = results.Select(NormalizeGlobalIndexAvailability).ToList();
 
             if (debug)
             {
@@ -3372,11 +3408,13 @@ namespace 小白养基.Controllers
                     indices = results,
                     debug = debugList,
                     validCount,
-                    totalCount = definitions.Length
+                    cacheSource = validCount >= 5 ? "build" : "db-stale-fallback",
+                    returnedCount = results.Count(x => x.Latest.HasValue && x.Latest.Value > 0)
                 });
             }
 
             Response.Headers["X-App-Cache"] = validCount >= 7 ? "build" : "partial";
+            Response.Headers["X-Cache-Source"] = validCount >= 5 ? "build" : "stale-fallback";
             return Ok(results);
         }
 
@@ -4921,6 +4959,17 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 }
             }
 
+            // 1b. 普通请求：Redis 没命中，读数据库缓存。
+            if (!force)
+            {
+                var (dbData, dbSource) = await _marketCache.TryGetAsync<string>("sector_radar_v2");
+                if (dbData != null && dbSource != null)
+                {
+                    SetCacheHeader(dbSource);
+                    return Content(dbData, "application/json");
+                }
+            }
+
             // 2. 普通请求：Redis 没命中，再读内存 fresh，并回填 Redis。
             if (!force && _cache.TryGetValue(freshKey, out object fresh))
             {
@@ -5002,6 +5051,8 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
                 await TrySetRedisAsync(payloadJson, payloadTtl);
 
+                try { await _marketCache.SetAsync("sector_radar_v2", payloadJson, payloadTtl, TimeSpan.FromDays(3), "build"); } catch { }
+
                 SetCacheHeader("build", payloadTtl);
                 return Content(payloadJson, "application/json");
             }
@@ -5015,6 +5066,18 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                     SetCacheHeader("memory-stale-fallback", TimeSpan.FromMinutes(10));
                     return Content(json, "application/json");
                 }
+
+                // 9b. 内存 stale 也没有，尝试数据库 stale。
+                try
+                {
+                    var (dbStale, _) = await _marketCache.TryGetStaleAsync<string>("sector_radar_v2", TimeSpan.FromDays(3));
+                    if (dbStale != null)
+                    {
+                        SetCacheHeader("db-stale-fallback");
+                        return Content(dbStale, "application/json");
+                    }
+                }
+                catch { }
 
                 SetCacheHeader("error");
                 return StatusCode(500, $"板块基金雷达故障: {ex.Message}");
@@ -5328,6 +5391,12 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             {
                 Console.WriteLine($"[capital-flow] redis cache write failed: {ex.Message}");
             }
+
+            try
+            {
+                await _marketCache.SetAsync($"capital_flow_sector_v2_{limit}", cachePayload, _capitalFlowFreshTtl, TimeSpan.FromDays(7), "build");
+            }
+            catch { }
         }
 
         private async Task<CapitalFlowPayloadDto?> TryGetCapitalFlowFallbackAsync(int limit)
@@ -5359,8 +5428,20 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             catch (Exception ex)
             {
                 Console.WriteLine($"[capital-flow] redis cache read failed: {ex.Message}");
-                return null;
             }
+
+            try
+            {
+                var (dbStale, _) = await _marketCache.TryGetStaleAsync<CapitalFlowPayloadDto>($"capital_flow_sector_v2_{limit}", TimeSpan.FromDays(7));
+                if (dbStale != null && (dbStale.Rows?.Count > 0 || dbStale.Inflow?.Count > 0))
+                {
+                    _cache.Set($"CapitalFlowV4_{limit}_Stale", dbStale, _capitalFlowStaleTtl);
+                    return dbStale;
+                }
+            }
+            catch { }
+
+            return null;
         }
 
         private static CapitalFlowPayloadDto AttachCapitalFlowDebug(CapitalFlowPayloadDto payload, IEnumerable<ExternalDataAttemptDto> attempts)
@@ -5578,7 +5659,18 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             limit = Math.Clamp(limit, 5, 40);
             var def = ResolveSector(sectorName);
             string cacheKey = $"SectorFundsV5_{def.Key}_{limit}";
+            string dbCacheKey = $"sector_funds_v2_{def.Key}_{limit}";
             if (!force && _cache.TryGetValue(cacheKey, out object cached)) return Ok(cached);
+
+            if (!force)
+            {
+                var (dbData, _) = await _marketCache.TryGetAsync<object>(dbCacheKey);
+                if (dbData != null)
+                {
+                    _cache.Set(cacheKey, dbData, TimeSpan.FromMinutes(3));
+                    return Ok(dbData);
+                }
+            }
 
             try
             {
@@ -5595,10 +5687,22 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                     funds = quotes.OrderByDescending(q => q.Rate).ToList()
                 };
                 _cache.Set(cacheKey, payload, TimeSpan.FromMinutes(3));
+                try { await _marketCache.SetAsync(dbCacheKey, payload, TimeSpan.FromMinutes(10), TimeSpan.FromDays(3), "build"); } catch { }
                 return Ok(payload);
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"[sector-funds] build failed for {def.Key}: {ex.Message}");
+                try
+                {
+                    var (dbStale, _) = await _marketCache.TryGetStaleAsync<object>(dbCacheKey, TimeSpan.FromDays(3));
+                    if (dbStale != null)
+                    {
+                        _cache.Set(cacheKey, dbStale, TimeSpan.FromMinutes(3));
+                        return Ok(dbStale);
+                    }
+                }
+                catch { }
                 return StatusCode(500, $"找基失败: {ex.Message}");
             }
         }
@@ -6169,7 +6273,88 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             return Ok(records);
         }
 
-        [HttpGet("portfolio-exposure")]
+        [HttpGet("nav-history")]
+        public async Task<IActionResult> GetNavHistory([FromQuery] string code, [FromQuery] string period = "1y")
+        {
+            if (string.IsNullOrWhiteSpace(code)) return BadRequest("缺少基金代码");
+
+            string dbKey = $"fund_nav_history_{code}_{period}_v1";
+            var (dbData, dbSource) = await _marketCache.TryGetAsync<List<object>>(dbKey);
+            if (dbData != null && dbSource != null)
+            {
+                Response.Headers["X-App-Cache"] = dbSource;
+                return Ok(dbData);
+            }
+
+            try
+            {
+                var http = _httpClientFactory.CreateClient("EastMoneyQuote");
+                int limit = period switch
+                {
+                    "1m" => 30, "3m" => 90, "6m" => 180, "1y" => 365, "3y" => 365 * 3, "5y" => 365 * 5, _ => 365
+                };
+
+                var (navData, fetchSource) = await FetchFundNavHistoryAsync(http, code, limit);
+                if (navData != null && navData.Count > 0)
+                {
+                    var freshTtl = GetExternalDataFreshTtl();
+                    await _marketCache.SetAsync(dbKey, navData, freshTtl, TimeSpan.FromDays(30), fetchSource);
+                    return Ok(navData);
+                }
+
+                return Ok(new List<object>());
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[nav-history] fetch failed for {code}: {ex.Message}");
+                try
+                {
+                    var (stale, _) = await _marketCache.TryGetStaleAsync<List<object>>(dbKey, TimeSpan.FromDays(30));
+                    if (stale != null)
+                    {
+                        Response.Headers["X-App-Cache"] = "db-stale";
+                        return Ok(stale);
+                    }
+                }
+                catch { }
+                return Ok(new List<object>());
+            }
+        }
+
+        private async Task<(List<object>? data, string source)> FetchFundNavHistoryAsync(HttpClient http, string code, int limit)
+        {
+            var secids = new[] { $"0.{code}", $"1.{code}" };
+            foreach (var secid in secids)
+            {
+                try
+                {
+                    string url = $"https://push2his.eastmoney.com/api/qt/fund/kline/get?secid={Uri.EscapeDataString(secid)}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3&fields2=f51,f52,f53&klt=101&fqt=1&end=20500101&lmt={limit}";
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                    string response = await http.GetStringAsync(url, cts.Token);
+                    using var doc = JsonDocument.Parse(response);
+
+                    if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null)
+                        continue;
+                    if (!data.TryGetProperty("klines", out var klines) || klines.ValueKind != JsonValueKind.Array)
+                        continue;
+
+                    var result = new List<object>();
+                    foreach (var kline in klines.EnumerateArray())
+                    {
+                        string? raw = kline.GetString();
+                        if (string.IsNullOrWhiteSpace(raw)) continue;
+                        var parts = raw.Split(',');
+                        if (parts.Length < 3) continue;
+                        result.Add(new { date = parts[0], nav = parts[2], rate = parts.Length > 8 ? parts[8] : "0" });
+                    }
+
+                    if (result.Count > 0) return (result, "eastmoney-kline");
+                }
+                catch { continue; }
+            }
+
+            return (null, "none");
+        }
         public async Task<IActionResult> GetPortfolioExposure([FromQuery] string username)
         {
             if (string.IsNullOrWhiteSpace(username)) return Unauthorized("缺少账号");

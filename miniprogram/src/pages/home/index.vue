@@ -7,6 +7,10 @@
       <text class="chip">{{ headerCountText }}</text>
     </view>
 
+    <view v-if="dashboardStale && !loading" class="dashboard-stale-bar">
+      <text class="dashboard-stale-text">{{ dashboardUpdatedAt }}</text>
+    </view>
+
     <view class="glass-card action-card">
       <view class="action-buttons">
         <button class="ocr-button" :disabled="ocrBusy" @tap="handleSmartOcr">
@@ -644,6 +648,7 @@ import { loadSession, saveSession, sessionState } from '../../stores/session';
 import { loadTheme, themeClass } from '../../stores/theme';
 import { avatarInitial, formatMoney, profitClass, signedMoney, signedPercent } from '../../utils/format';
 import { getStorage, setStorage } from '../../utils/storage';
+import { getLocalStorageCache, setLocalStorageCache } from '../../services/request';
 import {
   buildPortfolioMetrics,
   maskByPrivacy,
@@ -705,6 +710,8 @@ const historyModal = ref({
 const fundLoadedAt = ref(0);
 const stockLoadedAt = ref(0);
 const profileLoadedAt = ref(0);
+const dashboardStale = ref(false);
+const dashboardUpdatedAt = ref('');
 const expandedTrendKeys = ref<Record<string, boolean>>({});
 
 const metrics = computed(() => buildPortfolioMetrics(rawFunds.value));
@@ -805,17 +812,39 @@ async function loadFunds(force: boolean) {
   if (!sessionState.username) {
     rawFunds.value = [];
     fundLoadedAt.value = 0;
+    dashboardStale.value = false;
+    dashboardUpdatedAt.value = '';
     return;
   }
   if (!force && rawFunds.value.length > 0 && Date.now() - fundLoadedAt.value < FUND_PAGE_CACHE_TTL) return;
 
+  const cacheKey = `dashboard_cache_${sessionState.username}_v1`;
+  if (!force && rawFunds.value.length === 0) {
+    const cached = getLocalStorageCache<FundTodayItem[]>(cacheKey);
+    if (cached && Array.isArray(cached) && cached.length > 0) {
+      rawFunds.value = cached;
+      dashboardStale.value = true;
+      dashboardUpdatedAt.value = '使用缓存';
+    }
+  }
+
   loading.value = true;
   try {
-    const data = await getTodayFunds(sessionState.username, force);
+    const hasCachedData = rawFunds.value.length > 0;
+    const data = await getTodayFunds(sessionState.username, force, hasCachedData);
     const items = Array.isArray(data) ? data : [];
     logFundTodayAudit(items);
     rawFunds.value = items;
     fundLoadedAt.value = Date.now();
+    dashboardStale.value = false;
+    dashboardUpdatedAt.value = '';
+    setLocalStorageCache(cacheKey, items, 3600000);
+  } catch (error) {
+    console.warn('[dashboard] load failed, keeping cached data:', error);
+    if (rawFunds.value.length > 0) {
+      dashboardStale.value = true;
+      dashboardUpdatedAt.value = '使用上次数据';
+    }
   } finally {
     loading.value = false;
   }
@@ -1741,6 +1770,17 @@ function getErrorMessage(error: unknown, fallback: string) {
   flex-direction: column;
   gap: 30rpx;
   padding-top: 34rpx;
+}
+
+.dashboard-stale-bar {
+  text-align: center;
+  padding: 8rpx 0;
+}
+
+.dashboard-stale-text {
+  font-size: 22rpx;
+  color: rgba(255, 200, 60, 0.8);
+  letter-spacing: 1rpx;
 }
 
 .home-header {
