@@ -2401,31 +2401,29 @@ namespace 小白养基.Controllers
 
         private static async Task<string> FetchWithRetryAsync(HttpClient http, string url, int maxRetries = 2)
         {
-            Exception? lastEx = null;
             for (int i = 0; i < maxRetries; i++)
             {
-                if (i > 0) await Task.Delay(1500);
+                if (i > 0) await Task.Delay(2000);
                 try
                 {
-                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(12));
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
                     var resp = await http.GetAsync(url, cts.Token);
                     if (resp.IsSuccessStatusCode)
                     {
                         var body = await resp.Content.ReadAsStringAsync();
-                        if (!string.IsNullOrWhiteSpace(body)) return body;
+                        if (!string.IsNullOrWhiteSpace(body) && body.Length > 50) return body;
                     }
-                    lastEx = new HttpRequestException($"HTTP {(int)resp.StatusCode}");
                 }
-                catch (Exception ex) { lastEx = ex; }
+                catch { }
             }
-            // curl fallback (1 attempt)
+            // curl fallback
             try
             {
                 var result = await CurlFetchAsync(url);
-                if (!string.IsNullOrWhiteSpace(result)) return result;
+                if (!string.IsNullOrWhiteSpace(result) && result.Length > 50) return result;
             }
             catch { }
-            throw lastEx ?? new HttpRequestException("FetchWithRetryAsync: all attempts failed");
+            throw new HttpRequestException("push2his: all attempts returned empty");
         }
 
         private static async Task<string> CurlFetchAsync(string url)
