@@ -126,8 +126,8 @@ namespace 小白养基.Services
                 double profit = confirmedAmount - soldCost;
                 fund.HoldShares = Math.Round(fund.HoldShares - reduceShares, 4);
                 fund.CostAmount = Math.Round(fund.CostAmount - soldCost, 2);
-                if (fund.HoldShares <= 0) fund.CostAmount = 0;
                 fund.HoldAmount = Math.Round(fund.HoldAmount - unitAmount * reduceShares, 2);
+                if (fund.HoldShares <= 0) { fund.CostAmount = 0; fund.HoldAmount = 0; }
                 fund.RealizedProfit = Math.Round(fund.RealizedProfit + profit, 2);
 
                 if (fund.LastTradeDate == tradeDate)
@@ -149,14 +149,15 @@ namespace 小白养基.Services
                     fund.LastTradeDate = tradeDate;
                     fund.LastAddAmount = Math.Round(-(soldCost + PendingMarkerOffset), 2);
                     fund.CostAmount = 0;
+                    fund.HoldAmount = 0;
                 }
                 else
                 {
                     fund.CostAmount = Math.Round(fund.CostAmount - soldCost, 2);
                     fund.LastTradeDate = tradeDate;
                     fund.LastAddAmount = Math.Round(-soldCost, 2);
+                    fund.HoldAmount = Math.Round(fund.HoldAmount - unitAmount * reduceShares, 2);
                 }
-                fund.HoldAmount = Math.Round(fund.HoldAmount - unitAmount * reduceShares, 2);
                 // RealizedProfit NOT updated — waiting for confirmed amount
                 return 0;
             }
@@ -184,6 +185,11 @@ namespace 小白养基.Services
 
             foreach (var fund in funds)
             {
+                if (fund.HoldShares <= 0)
+                {
+                    totalRealized += fund.RealizedProfit;
+                    continue;
+                }
                 latestRecordDict.TryGetValue(fund.FundCode, out var record);
 
                 double cost = fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount;

@@ -387,6 +387,11 @@ namespace 小白养基.Controllers
 
             foreach (var fund in funds)
             {
+                if (fund.HoldShares <= 0)
+                {
+                    totalRealized += fund.RealizedProfit;
+                    continue;
+                }
                 latestRecordDict.TryGetValue(fund.FundCode, out var record);
 
                 double cost = fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount;
@@ -3398,16 +3403,20 @@ namespace 小白养基.Controllers
                     string reliabilityLevel = isSettled ? "真实净值确认" : reliabilityScore >= 80 ? "估值较稳" : reliabilityScore >= 60 ? "估值需观察" : "估值偏弱";
 
                     // FundController.cs 中 GetTodayData 方法内部
+                    bool isInactiveHolding = config.HoldShares <= 0;
+                    double displayAmount = isInactiveHolding ? 0 : config.HoldAmount;
+
                     return new
                     {
                         code = config.FundCode,
                         name = config.FundName,
-                        amount = config.HoldAmount,
+                        amount = displayAmount,
                         shares = config.HoldShares,
-                        cost = config.CostAmount > 0 ? config.CostAmount : (soldCost > 0 ? soldCost : (double?)null),
+                        cost = isInactiveHolding ? (soldCost > 0 ? soldCost : (double?)null) : (config.CostAmount > 0 ? config.CostAmount : (double?)null),
                         realizedProfit = config.RealizedProfit,
                         pendingRedeem = pendingRedeem,
                         soldCost = soldCost,
+                        inactiveHolding = isInactiveHolding,
                         lastTradeDate = config.LastTradeDate,
                         lastAddAmount = config.LastAddAmount,
                         lastSettledDate = config.LastSettledDate,
@@ -3442,6 +3451,11 @@ namespace 小白养基.Controllers
                 double summaryProfit = 0, summaryBase = 0, summaryAssets = 0, summaryCost = 0, summaryRealized = 0;
                 foreach (var fund in finalResult)
                 {
+                    if (fund.inactiveHolding)
+                    {
+                        summaryRealized += fund.realizedProfit;
+                        continue;
+                    }
                     double amt = fund.amount;
                     bool settled = fund.isSettled;
                     double profitVal = settled
@@ -4964,9 +4978,10 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
                     foreach (var fund in userFunds)
                     {
+                        totalRealized += fund.RealizedProfit;
+                        if (fund.HoldShares <= 0) continue;
                         totalAssets += fund.HoldAmount;
                         totalCost += (fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount);
-                        totalRealized += fund.RealizedProfit; // 🚀 累加单只基金的落袋利润
 
                         var todayRecord = await _context.FundRecords
                             .Where(r => r.FundCode == fund.FundCode && r.FetchTime >= today)

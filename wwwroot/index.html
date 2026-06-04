@@ -5403,9 +5403,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const confidenceRows = computed(() => fundsList.value.map(getConfidence).sort((a, b) => a.score - b.score));
 
                 const portfolioExposure = computed(() => {
-                    const total = fundsList.value.reduce((sum, f) => sum + Number(f.todayAmount || f.amount || 0), 0);
+                    const activeFunds = fundsList.value.filter(f => !f.inactiveHolding);
+                    const total = activeFunds.reduce((sum, f) => sum + Number(f.todayAmount || f.amount || 0), 0);
                     const map = new Map();
-                    for (const fund of fundsList.value) {
+                    for (const fund of activeFunds) {
                         const name = classifyFundSector(fund);
                         const row = map.get(name) || { name, amount: 0, dailyProfit: 0, count: 0, funds: [] };
                         row.amount += Number(fund.todayAmount || fund.amount || 0);
@@ -5418,7 +5419,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 });
 
                 const dailyBattleReport = computed(() => {
-                    const rows = [...fundsList.value].map(f => ({ ...f, p: Number(f.todayProfit || 0), amountNum: Number(f.todayAmount || f.amount || 0) }));
+                    const activeFunds = fundsList.value.filter(f => !f.inactiveHolding);
+                    const rows = activeFunds.map(f => ({ ...f, p: Number(f.todayProfit || 0), amountNum: Number(f.todayAmount || f.amount || 0) }));
                     const best = rows.slice().sort((a, b) => b.p - a.p)[0];
                     const worst = rows.slice().sort((a, b) => a.p - b.p)[0];
                     const exposure = portfolioExposure.value[0];
@@ -5428,7 +5430,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     else if (exposure && exposure.ratio >= 45) actionHint = `${exposure.name} 集中度偏高`;
                     else if (profit > 0) actionHint = '盈利日先看净值确认';
                     return {
-                        summary: fundsList.value.length ? `${fundsList.value.length} 只持仓，主暴露 ${exposure?.name || '待识别'} ${exposure ? exposure.ratio.toFixed(1) : '0.0'}%。` : '暂无持仓数据。',
+                        summary: activeFunds.length ? `${activeFunds.length} 只持仓，主暴露 ${exposure?.name || '待识别'} ${exposure ? exposure.ratio.toFixed(1) : '0.0'}%。` : '暂无持仓数据。',
                         todayProfitText: `${profit >= 0 ? '+' : ''}${profit.toFixed(2)}`,
                         bestName: best ? `${best.name} ${best.p >= 0 ? '+' : ''}${best.p.toFixed(2)}` : '暂无',
                         worstName: worst ? `${worst.name} ${worst.p >= 0 ? '+' : ''}${worst.p.toFixed(2)}` : '暂无',
@@ -6913,10 +6915,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             fund.breakEvenRate = (fund.cost && fund.cost > currentRealTimeAmount) ? (((fund.cost / currentRealTimeAmount) - 1) * 100).toFixed(2) : "0.00";
                             fund.existingReturnRate = (fund.cost && fund.cost > 0) ? ((allProfit / fund.cost) * 100).toFixed(2) : "0.00";
 
+                            fund.inactiveHolding = !!fund.inactiveHolding;
                             const rateBaseForToday = isAlreadySettled
                                 ? (currentAmount - todayProfitVal - todayAddAmount)
                                 : (currentAmount - todayAddAmount);
-                            tPrincipal += currentAmount; tPrincipalForRate += rateBaseForToday; tCost += (fund.cost || currentAmount);
+                            if (!fund.inactiveHolding) {
+                                tPrincipal += currentAmount; tPrincipalForRate += rateBaseForToday; tCost += (fund.cost || currentAmount);
+                            }
                         });
 
                         fundsList.value = apiData;

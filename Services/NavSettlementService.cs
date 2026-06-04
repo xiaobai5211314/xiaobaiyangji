@@ -245,6 +245,11 @@ namespace 小白养基.Services
 
             foreach (var fund in funds)
             {
+                if (fund.HoldShares <= 0)
+                {
+                    totalRealized += fund.RealizedProfit;
+                    continue;
+                }
                 latestRecordDict.TryGetValue(fund.FundCode, out var record);
 
                 double cost = fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount;
