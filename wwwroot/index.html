@@ -6137,8 +6137,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     };
                     try {
                         const response = await fetch(`${API_BASE}/api/fund/save-archive`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                        if (response.ok) { if (!silent) showToast("✅ 今日收益已安全锁入密码箱！", "success"); } else { if (!silent) showToast("❌ 封存受阻", "error"); }
-                    } catch (e) { if (!silent) showToast("🌐 指挥中心失联", "error"); }
+                        if (response.ok) { if (!silent) showToast("今日收益已安全锁入", "success"); }
+                        else {
+                            let msg = `封存失败 HTTP ${response.status}`;
+                            try { const body = await response.json(); msg = body.message || body.msg || JSON.stringify(body).slice(0, 120); } catch { try { msg = await response.text(); msg = msg.slice(0, 120); } catch {} }
+                            console.warn('[save-archive] failed:', msg, payload);
+                            if (!silent) showToast(msg, "error");
+                        }
+                    } catch (e) { console.warn('[save-archive] error:', e); if (!silent) showToast("网络错误: " + (e.message || ""), "error"); }
                 };
 
                 const formatIndexPoint = (value) => {
