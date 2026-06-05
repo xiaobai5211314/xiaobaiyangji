@@ -6326,14 +6326,21 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
         {
             try
             {
-                var http = _httpClientFactory.CreateClient("FundGz");
+                var http = _httpClientFactory.CreateClient("EastMoney");
                 string url = $"https://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize={limit}";
                 var request = new HttpRequestMessage(HttpMethod.Get, url);
-                request.Headers.TryAddWithoutValidation("Referer", "https://fundf10.eastmoney.com/");
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                request.Headers.Referrer = new Uri("https://fundf10.eastmoney.com/");
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
                 var response = await http.SendAsync(request, cts.Token);
-                if (!response.IsSuccessStatusCode) return (null, "http-error");
+                Console.WriteLine($"[nav-history] {code} status={response.StatusCode}");
+                if (!response.IsSuccessStatusCode) return (null, $"http-{response.StatusCode}");
                 string body = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"[nav-history] {code} bodyLen={body.Length}");
+                if (body.Length < 10)
+                {
+                    Console.WriteLine($"[nav-history] {code} body={body}");
+                    return (null, "empty-body");
+                }
 
                 using var doc = JsonDocument.Parse(body);
                 if (!doc.RootElement.TryGetProperty("Data", out var data) || data.ValueKind == JsonValueKind.Null)
