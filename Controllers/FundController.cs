@@ -6326,44 +6326,46 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
         {
             try
             {
-                var http = _httpClientFactory.CreateClient("EastMoney");
-                string url = $"https://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize={limit}";
-                var request = new HttpRequestMessage(HttpMethod.Get, url);
-                request.Headers.Referrer = new Uri("https://fundf10.eastmoney.com/");
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-                var response = await http.SendAsync(request, cts.Token);
-                Console.WriteLine($"[nav-history] {code} status={response.StatusCode}");
-                if (!response.IsSuccessStatusCode) return (null, $"http-{response.StatusCode}");
-                string body = await response.Content.ReadAsStringAsync();
-                Console.WriteLine($"[nav-history] {code} bodyLen={body.Length}");
-                if (body.Length < 10)
-                {
-                    Console.WriteLine($"[nav-history] {code} body={body}");
-                    return (null, "empty-body");
-                }
-
-                using var doc = JsonDocument.Parse(body);
-                if (!doc.RootElement.TryGetProperty("Data", out var data) || data.ValueKind == JsonValueKind.Null)
+                var http = _httpClientFactory.CreateClient("FundGz");
+                string url = $"https://fund.eastmoney.com/pingzhongdata/{code}.js";
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                string jsBody = await http.GetStringAsync(url, cts.Token);
+                if (string.IsNullOrWhiteSpace(jsBody) || !jsBody.Contains("Data_netWorthTrend"))
                     return (null, "no-data");
-                if (!data.TryGetProperty("LSJZList", out var list) || list.ValueKind != JsonValueKind.Array)
-                    return (null, "no-list");
 
-                var result = new List<object>();
-                foreach (var item in list.EnumerateArray())
+                int start = jsBody.IndexOf("var Data_netWorthTrend=");
+                if (start < 0) return (null, "no-var");
+                start = jsBody.IndexOf('[', start);
+                if (start < 0) return (null, "no-array");
+                int depth = 0; int end = start;
+                for (int i = start; i < jsBody.Length && i < start + 500000; i++)
                 {
-                    string date = item.TryGetProperty("FSRQ", out var d) ? d.GetString() ?? "" : "";
-                    string nav = item.TryGetProperty("DWJZ", out var n) ? n.GetString() ?? "0" : "0";
-                    string rate = item.TryGetProperty("JZZZL", out var r) ? r.GetString() ?? "0" : "0";
-                    if (!string.IsNullOrEmpty(date))
-                        result.Add(new { date, nav, rate });
+                    if (jsBody[i] == '[') depth++;
+                    else if (jsBody[i] == ']') { depth--; if (depth == 0) { end = i + 1; break; } }
+                }
+                string arrJson = jsBody[start..end];
+
+                using var doc = JsonDocument.Parse(arrJson);
+                var result = new List<object>();
+                foreach (var item in doc.RootElement.EnumerateArray())
+                {
+                    if (!item.TryGetProperty("x", out var xProp) || !item.TryGetProperty("y", out var yProp))
+                        continue;
+                    long ts = xProp.GetInt64();
+                    double nav = yProp.GetDouble();
+                    string date = DateTimeOffset.FromUnixTimeMilliseconds(ts).ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd");
+                    double rate = item.TryGetProperty("equityReturn", out var rProp) && rProp.ValueKind == JsonValueKind.Number
+                        ? rProp.GetDouble() : 0;
+                    result.Add(new { date, nav = nav.ToString("F4"), rate = rate.ToString("F2") });
                 }
 
-                result.Reverse();
-                return result.Count > 0 ? (result, "eastmoney-lsjz") : (null, "empty");
+                if (result.Count > limit) result = result.Skip(result.Count - limit).ToList();
+                Console.WriteLine($"[nav-history] {code} parsed={result.Count} rows from pingzhongdata");
+                return result.Count > 0 ? (result, "pingzhongdata") : (null, "empty");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[nav-history] lsjz fetch failed for {code}: {ex.Message}");
+                Console.WriteLine($"[nav-history] fetch failed for {code}: {ex.Message}");
                 return (null, "error");
             }
         }
