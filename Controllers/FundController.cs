@@ -713,15 +713,18 @@ namespace 小白养基.Controllers
             public string PendingReason { get; set; } = string.Empty;
             public string? PendingConfirmDate { get; set; }
             public string PendingSource { get; set; } = string.Empty;
+            public string PendingEvidence { get; set; } = string.Empty;
             public double ConfirmedAmount { get; set; }
             public double TodayBaseAmount { get; set; }
             public bool ParticipatesToday { get; set; } = true;
+            public string ProfitUpdateState { get; set; } = "UNKNOWN";
         }
 
         public sealed class OcrImportPreviewResponse
         {
             public bool Success { get; set; }
             public int Count { get; set; }
+            public string ProfitUpdateState { get; set; } = "UNKNOWN";
             public List<OcrImportPreviewItem> Items { get; set; } = new();
             public List<string> Diagnostics { get; set; } = new();
         }
@@ -864,6 +867,8 @@ namespace 小白养基.Controllers
                 .Where(x => !string.IsNullOrWhiteSpace(x))
                 .ToList() ?? new List<string>();
             string fullOcrText = string.Join(" ", texts);
+            string profitUpdateState = DetectProfitUpdateState(fullOcrText, texts);
+            diagnostics.Add($"[收益更新状态] {profitUpdateState}");
 
             if (texts.Count == 0)
             {
@@ -999,12 +1004,19 @@ namespace 小白养基.Controllers
 
                 SelectIncomeCandidates(holdAmount, holdingRate, signedNumbers, out holdingIncome, out yesterdayIncome);
 
-                // 列表页 pending 优先判定：
-                // 昨日收益为"--" + 持有收益为0 + 持有收益率为0% → 买入待确认
+                // 列表页 pending 判定（需同时满足多项条件）：
+                // 1. 昨日收益为"--"
+                // 2. 持有收益为0、持有收益率为0%
+                // 3. 收益更新状态不是 NOT_UPDATED
+                // 4. 有 pendingEvidence（交易进行中/待确认/预计可查看收益等文字）
+                string pendingContext = BuildOcrPendingContext(texts, i);
+                bool hasPendingEvidence = HasPendingEvidenceInContext(pendingContext);
                 bool listPagePending = hasDashProfit
                     && (double.IsNaN(listPageHoldProfit) || Math.Abs(listPageHoldProfit) < 0.01)
                     && (double.IsNaN(listPageHoldProfitRate) || Math.Abs(listPageHoldProfitRate) < 0.01)
-                    && signedNumbers.Count == 0;
+                    && signedNumbers.Count == 0
+                    && profitUpdateState != "NOT_UPDATED"
+                    && hasPendingEvidence;
 
                 // 代码优先匹配
                 var best = (fund: (FundInfoCache?)null, score: 0d);
@@ -1051,7 +1063,6 @@ namespace 小白养基.Controllers
                 diagnostics.Add($"[OCR匹配] {namePart} → {best.fund.Name}({best.fund.Code}) 分={best.score:F1} 金额={holdAmount}");
 
                 string calcMethod = "识别提取";
-                string pendingContext = BuildOcrPendingContext(texts, i);
 
                 // OCR 截图里的持仓金额是平台当前完整持仓金额，份额校准必须使用完整金额。
                 // 如果扣掉最近加仓金额，确认导入后 HoldAmount 会是新值，但 HoldShares 仍是旧份额，
@@ -1094,14 +1105,32 @@ namespace 小白养基.Controllers
                 string pendingSource;
                 string? pendingConfirmDate;
                 bool isSuspicious = false;
+                string pendingEvidence = hasPendingEvidence ? "交易进行中/待确认/预计可查看收益" : "";
 
                 if (listPagePending)
                 {
-                    // 列表页模式：昨日收益为"--" + 持有收益为0 → 买入待确认
+                    // 列表页模式：有pendingEvidence + 昨日收益为"--" + 持有收益为0 → 买入待确认
                     pendingBuyAmount = holdAmount;
-                    pendingReason = "列表页昨日收益为--，持有收益为0，判定买入待确认";
+                    pendingReason = "列表页有pending文字证据且昨日收益为--，判定买入待确认";
                     pendingSource = "explicit_row_text";
                     pendingConfirmDate = EstimatePendingConfirmDate(best.fund.Name);
+                }
+                else if (hasDashProfit && profitUpdateState == "NOT_UPDATED")
+                {
+                    // 收益未更新时，"--"不作为pending证据
+                    pendingBuyAmount = 0;
+                    pendingReason = "收益未更新，暂不判断是否参与今日收益";
+                    pendingSource = "";
+                    pendingConfirmDate = null;
+                }
+                else if (hasDashProfit && profitUpdateState != "NOT_UPDATED" && !hasPendingEvidence)
+                {
+                    // 有"--"但无pending文字证据 → suspicious
+                    pendingBuyAmount = 0;
+                    pendingReason = "昨日收益为--但无pending文字证据，标记可疑";
+                    pendingSource = "suspicious";
+                    pendingConfirmDate = null;
+                    isSuspicious = true;
                 }
                 else
                 {
@@ -1136,10 +1165,15 @@ namespace 小白养基.Controllers
                 // 检测旧 pending 是否会被清除
                 double oldPending = existingForPending == null ? 0 : GetActivePendingBuyAmount(existingForPending, settleDate);
                 bool clearedOldPending = pendingBuyAmount <= 0 && oldPending > 0;
+                bool notUpdatedNoPending = hasDashProfit && profitUpdateState == "NOT_UPDATED" && pendingBuyAmount <= 0;
                 string warning;
                 if (pendingBuyAmount > 0)
                 {
                     warning = isSuspicious ? "疑似买入待确认，请核对；不参与今日收益" : "买入待确认，不参与今日收益";
+                }
+                else if (notUpdatedNoPending)
+                {
+                    warning = "收益未更新，暂不判断是否参与今日收益";
                 }
                 else if (clearedOldPending)
                 {
@@ -1176,9 +1210,11 @@ namespace 小白养基.Controllers
                         : pendingReason,
                     PendingConfirmDate = pendingConfirmDate,
                     PendingSource = pendingBuyAmount > 0 ? pendingSource : (clearedOldPending ? "cleared_old" : ""),
+                    PendingEvidence = pendingEvidence,
                     ConfirmedAmount = confirmedAmount,
-                    TodayBaseAmount = confirmedAmount,
-                    ParticipatesToday = pendingBuyAmount <= 0
+                    TodayBaseAmount = notUpdatedNoPending ? 0 : confirmedAmount,
+                    ParticipatesToday = pendingBuyAmount <= 0 && !notUpdatedNoPending,
+                    ProfitUpdateState = profitUpdateState
                 });
             }
 
@@ -1186,6 +1222,7 @@ namespace 小白养基.Controllers
             {
                 Success = true,
                 Count = items.Count,
+                ProfitUpdateState = profitUpdateState,
                 Items = items,
                 Diagnostics = diagnostics
             };
@@ -1303,6 +1340,50 @@ namespace 小白养基.Controllers
 
             // 无文字证据 → 不标记 pending
             return new OcrPendingBuyAssessment(false, false, 0, string.Empty, string.Empty, null);
+        }
+
+        private static string DetectProfitUpdateState(string fullOcrText, List<string> texts)
+        {
+            if (string.IsNullOrWhiteSpace(fullOcrText)) return "UNKNOWN";
+
+            // 已更新信号
+            if (Regex.IsMatch(fullOcrText, @"已更新|收益更新|当日收益|今日收益\s*\d|收益已更新"))
+                return "UPDATED";
+
+            // 未更新信号
+            if (Regex.IsMatch(fullOcrText, @"收益未更新|暂未更新|市场频繁轮动|收益尚未更新"))
+                return "NOT_UPDATED";
+
+            // 启发式：多数基金昨日收益为 "--" → 可能未更新
+            int dashCount = 0;
+            int totalProfitSlots = 0;
+            foreach (var line in texts)
+            {
+                if (Regex.IsMatch(line, @"^[-—–]{2,}$"))
+                {
+                    dashCount++;
+                    totalProfitSlots++;
+                }
+                else if (Regex.IsMatch(line, @"^[+-]?\d[\d,]*\.\d{2}$"))
+                {
+                    totalProfitSlots++;
+                }
+            }
+            if (totalProfitSlots >= 3 && dashCount > totalProfitSlots * 0.6)
+                return "NOT_UPDATED";
+
+            return "UNKNOWN";
+        }
+
+        private static bool HasPendingEvidenceInContext(string context)
+        {
+            if (string.IsNullOrWhiteSpace(context)) return false;
+            return context.Contains("交易进行中", StringComparison.OrdinalIgnoreCase)
+                || context.Contains("买入待确认", StringComparison.OrdinalIgnoreCase)
+                || context.Contains("确认中", StringComparison.OrdinalIgnoreCase)
+                || context.Contains("待确认", StringComparison.OrdinalIgnoreCase)
+                || Regex.IsMatch(context, @"预计.{0,24}(可|可以)?查看收益", RegexOptions.IgnoreCase)
+                || context.Contains("买入金额待确认", StringComparison.OrdinalIgnoreCase);
         }
 
         private static List<string> CollectNameCandidateLines(List<string> texts, int amountIndex)
