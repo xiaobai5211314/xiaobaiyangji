@@ -7080,13 +7080,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         }
 
                         if (!window.hasAutoSavedToday && !isNight.value && fundsList.value.length > 0) {
-                            const now = new Date(); const hour = now.getHours(); const isAfter15 = hour >= 15;
-                            if (isAfter15) {
+                            const now = new Date(); const hour = now.getHours();
+                            if (hour >= 15) {
                                 try {
-                                    const firstFund = fundsList.value[0]; const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-                                    window.jsonpgz = function (data) { if (data && data.gztime && data.gztime.startsWith(todayStr) && data.gztime >= todayStr + ' 15:00') { saveDailyArchive(true); window.hasAutoSavedToday = true; } delete window.jsonpgz; };
-                                    const scriptId = `jsonp_check_${firstFund.code}`; let oldScript = document.getElementById(scriptId); if (oldScript) oldScript.remove();
-                                    const script = document.createElement('script'); script.id = scriptId; script.src = `https://fundgz.1234567.com.cn/js/${firstFund.code}.js?rt=${Date.now()}`; document.body.appendChild(script);
+                                    const hasSettled = fundsList.value.some(f => f.isSettled || (f.actualRate != null && f.actualRate !== 0));
+                                    if (hasSettled || hour >= 17) {
+                                        saveDailyArchive(true);
+                                        window.hasAutoSavedToday = true;
+                                    }
                                 } catch (e) { }
                             }
                         }
