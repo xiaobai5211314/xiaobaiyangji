@@ -1089,6 +1089,23 @@ namespace 小白养基.Controllers
                 }
                 double confirmedAmount = Math.Max(0, Math.Round(holdAmount - pendingBuyAmount, 2));
 
+                // 检测旧 pending 是否会被清除
+                double oldPending = existingForPending == null ? 0 : GetActivePendingBuyAmount(existingForPending, settleDate);
+                bool clearedOldPending = pendingBuyAmount <= 0 && oldPending > 0;
+                string warning;
+                if (pendingBuyAmount > 0)
+                {
+                    warning = pendingAssessment.IsSuspicious ? "疑似买入待确认，请核对；不参与今日收益" : "买入待确认，不参与今日收益";
+                }
+                else if (clearedOldPending)
+                {
+                    warning = $"本次OCR无pending证据，清除旧遗留pending {oldPending:F2}元";
+                }
+                else
+                {
+                    warning = holdShares > 0 ? string.Empty : "未能推算份额";
+                }
+
                 items.Add(new OcrImportPreviewItem
                 {
                     OcrName = string.IsNullOrWhiteSpace(potentialFragment)
@@ -1106,15 +1123,15 @@ namespace 小白养基.Controllers
                     HoldingRate = Math.Round(holdingRate, 2),
                     HoldShares = Math.Round(holdShares, 6),
                     CalcMethod = calcMethod,
-                    Warning = pendingBuyAmount > 0
-                        ? (pendingAssessment.IsSuspicious ? "疑似买入待确认，请核对；不参与今日收益" : "买入待确认，不参与今日收益")
-                        : (holdShares > 0 ? string.Empty : "未能推算份额"),
+                    Warning = warning,
                     IsPendingBuy = pendingBuyAmount > 0,
                     IsSuspiciousPendingBuy = pendingAssessment.IsSuspicious,
                     PendingBuyAmount = Math.Round(pendingBuyAmount, 2),
-                    PendingReason = pendingReason,
+                    PendingReason = clearedOldPending
+                        ? $"本次OCR无pending证据，清除旧遗留({pendingAssessment.Source ?? pendingAssessment.Reason ?? "无"})"
+                        : pendingReason,
                     PendingConfirmDate = pendingAssessment.ConfirmDate,
-                    PendingSource = pendingAssessment.Source,
+                    PendingSource = pendingBuyAmount > 0 ? pendingAssessment.Source : (clearedOldPending ? "cleared_old" : ""),
                     ConfirmedAmount = confirmedAmount,
                     TodayBaseAmount = confirmedAmount,
                     ParticipatesToday = pendingBuyAmount <= 0
@@ -1670,8 +1687,13 @@ namespace 小白养基.Controllers
             {
                 MarkPendingBuy(exist, pendingAmount, todayDash, string.IsNullOrWhiteSpace(item.PendingSource) ? "ocr" : item.PendingSource, item.PendingConfirmDate);
             }
-            else if (item.HoldShares > 0 && GetActivePendingBuyAmount(exist, todayDash) <= 0)
+            else
             {
+                // 本次 OCR 无 pending 证据 → 清除旧 pending 状态（含旧 OCR 遗留）
+                if (GetActivePendingBuyAmount(exist, todayDash) > 0)
+                {
+                    Console.WriteLine($"[OCR清除旧pending] code={exist.FundCode}, 旧PendingBuyAmount={exist.PendingBuyAmount:F2}, 旧Source={exist.PendingSource ?? "null"}");
+                }
                 ClearPendingBuy(exist);
                 exist.LastSettledDate = null;
                 exist.LastSettledProfit = 0;
