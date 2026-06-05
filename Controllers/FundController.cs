@@ -6330,45 +6330,63 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
                 string url = $"https://fund.eastmoney.com/pingzhongdata/{code}.js";
                 string jsBody = await http.GetStringAsync(url);
-                Console.WriteLine($"[nav-history] {code} jsLen={jsBody?.Length ?? 0}");
-                if (string.IsNullOrWhiteSpace(jsBody) || !jsBody.Contains("Data_netWorthTrend"))
-                    return (null, "no-data");
-
-                int start = jsBody.IndexOf("var Data_netWorthTrend=");
-                if (start < 0) return (null, "no-var");
-                start = jsBody.IndexOf('[', start);
-                if (start < 0) return (null, "no-array");
-                int depth = 0; int end = start;
-                for (int i = start; i < jsBody.Length && i < start + 500000; i++)
+                if (!string.IsNullOrWhiteSpace(jsBody) && jsBody.Contains("Data_netWorthTrend"))
                 {
-                    if (jsBody[i] == '[') depth++;
-                    else if (jsBody[i] == ']') { depth--; if (depth == 0) { end = i + 1; break; } }
+                    int start = jsBody.IndexOf("var Data_netWorthTrend=");
+                    if (start >= 0)
+                    {
+                        start = jsBody.IndexOf('[', start);
+                        if (start >= 0)
+                        {
+                            int depth = 0; int end = start;
+                            for (int i = start; i < jsBody.Length && i < start + 500000; i++)
+                            {
+                                if (jsBody[i] == '[') depth++;
+                                else if (jsBody[i] == ']') { depth--; if (depth == 0) { end = i + 1; break; } }
+                            }
+                            using var doc = JsonDocument.Parse(jsBody[start..end]);
+                            var result = new List<object>();
+                            foreach (var item in doc.RootElement.EnumerateArray())
+                            {
+                                if (!item.TryGetProperty("x", out var xProp) || !item.TryGetProperty("y", out var yProp)) continue;
+                                long ts = xProp.GetInt64();
+                                double nav = yProp.GetDouble();
+                                string date = DateTimeOffset.FromUnixTimeMilliseconds(ts).ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd");
+                                double rate = item.TryGetProperty("equityReturn", out var rProp) && rProp.ValueKind == JsonValueKind.Number ? rProp.GetDouble() : 0;
+                                result.Add(new { date, nav = nav.ToString("F4"), rate = rate.ToString("F2") });
+                            }
+                            if (result.Count > limit) result = result.Skip(result.Count - limit).ToList();
+                            if (result.Count > 0) return (result, "pingzhongdata");
+                        }
+                    }
                 }
-                string arrJson = jsBody[start..end];
-
-                using var doc = JsonDocument.Parse(arrJson);
-                var result = new List<object>();
-                foreach (var item in doc.RootElement.EnumerateArray())
-                {
-                    if (!item.TryGetProperty("x", out var xProp) || !item.TryGetProperty("y", out var yProp))
-                        continue;
-                    long ts = xProp.GetInt64();
-                    double nav = yProp.GetDouble();
-                    string date = DateTimeOffset.FromUnixTimeMilliseconds(ts).ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd");
-                    double rate = item.TryGetProperty("equityReturn", out var rProp) && rProp.ValueKind == JsonValueKind.Number
-                        ? rProp.GetDouble() : 0;
-                    result.Add(new { date, nav = nav.ToString("F4"), rate = rate.ToString("F2") });
-                }
-
-                if (result.Count > limit) result = result.Skip(result.Count - limit).ToList();
-                Console.WriteLine($"[nav-history] {code} parsed={result.Count} rows from pingzhongdata");
-                return result.Count > 0 ? (result, "pingzhongdata") : (null, "empty");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[nav-history] fetch failed for {code}: {ex.Message}");
-                return (null, "error");
+                Console.WriteLine($"[nav-history] pingzhongdata failed for {code}: {ex.Message}");
             }
+
+            try
+            {
+                var archives = await _context.DailyArchives
+                    .AsNoTracking()
+                    .Where(a => a.FundCode == code)
+                    .OrderByDescending(a => a.RecordDate)
+                    .Take(limit)
+                    .Select(a => new { date = a.RecordDate.ToString("yyyy-MM-dd"), nav = "0", rate = Math.Round(a.DailyRate, 2).ToString("F2") })
+                    .ToListAsync();
+                if (archives.Count > 0)
+                {
+                    archives.Reverse();
+                    return (archives.Cast<object>().ToList(), "daily-archives");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[nav-history] daily-archives fallback failed for {code}: {ex.Message}");
+            }
+
+            return (null, "none");
         }
         public async Task<IActionResult> GetPortfolioExposure([FromQuery] string username)
         {
