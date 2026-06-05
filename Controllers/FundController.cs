@@ -6290,11 +6290,11 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             if (string.IsNullOrWhiteSpace(code)) return BadRequest("缺少基金代码");
 
             string dbKey = $"fund_nav_history_{code}_{period}_v1";
-            var (dbData, dbSource) = await _marketCache.TryGetAsync<List<object>>(dbKey);
-            if (dbData != null && dbSource != null && dbData.Count > 0)
+            var (dbCached, dbSource) = await _marketCache.TryGetAsync<NavHistoryResponse>(dbKey);
+            if (dbCached != null && dbSource != null && dbCached.Points.Count > 0)
             {
                 Response.Headers["X-App-Cache"] = dbSource;
-                return Ok(dbData);
+                return Ok(dbCached);
             }
 
             try
@@ -6307,34 +6307,64 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 var (navData, fetchSource) = await FetchFundNavHistoryAsync(code, limit);
                 if (navData != null && navData.Count > 0)
                 {
+                    bool hasNav = navData.Any(p => p is NavPoint np && np.Nav > 0);
+                    var response = new NavHistoryResponse
+                    {
+                        Available = true,
+                        NavAvailable = hasNav,
+                        Points = navData,
+                        Message = hasNav ? "" : "当前仅有收益率归档，无真实净值",
+                        Source = fetchSource,
+                        UpdatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss")
+                    };
                     var freshTtl = GetExternalDataFreshTtl();
-                    await _marketCache.SetAsync(dbKey, navData, freshTtl, TimeSpan.FromDays(30), fetchSource);
+                    await _marketCache.SetAsync(dbKey, response, freshTtl, TimeSpan.FromDays(30), fetchSource);
                     Response.Headers["X-App-Cache"] = "build";
-                    return Ok(navData);
+                    return Ok(response);
                 }
 
                 Response.Headers["X-App-Cache"] = "empty";
-                return Ok(new { available = false, points = Array.Empty<object>(), message = "基金历史净值暂无缓存，外部源不可达" });
+                return Ok(new NavHistoryResponse { Available = false, Message = "基金历史净值暂无缓存，外部源不可达" });
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[nav-history] fetch failed for {code}: {ex.Message}");
                 try
                 {
-                    var (stale, _) = await _marketCache.TryGetStaleAsync<List<object>>(dbKey, TimeSpan.FromDays(30));
-                    if (stale != null && stale.Count > 0)
+                    var (stale, _) = await _marketCache.TryGetStaleAsync<NavHistoryResponse>(dbKey, TimeSpan.FromDays(30));
+                    if (stale != null && stale.Points.Count > 0)
                     {
+                        stale.IsFallback = true;
+                        stale.Message = "使用缓存数据";
                         Response.Headers["X-App-Cache"] = "db-stale";
                         return Ok(stale);
                     }
                 }
                 catch { }
                 Response.Headers["X-App-Cache"] = "empty";
-                return Ok(new { available = false, points = Array.Empty<object>(), message = "基金历史净值暂无缓存，外部源不可达" });
+                return Ok(new NavHistoryResponse { Available = false, Message = "基金历史净值暂无缓存，外部源不可达" });
             }
         }
 
-        private async Task<(List<object>? data, string source)> FetchFundNavHistoryAsync(string code, int limit)
+        public class NavHistoryResponse
+        {
+            public bool Available { get; set; } = true;
+            public bool NavAvailable { get; set; } = true;
+            public bool IsFallback { get; set; }
+            public List<NavPoint> Points { get; set; } = new();
+            public string Message { get; set; } = "";
+            public string Source { get; set; } = "";
+            public string UpdatedAt { get; set; } = "";
+        }
+
+        public class NavPoint
+        {
+            public string Date { get; set; } = "";
+            public double? Nav { get; set; }
+            public double Rate { get; set; }
+        }
+
+        private async Task<(List<NavPoint>? data, string source)> FetchFundNavHistoryAsync(string code, int limit)
         {
             try
             {
@@ -6357,7 +6387,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                                 else if (jsBody[i] == ']') { depth--; if (depth == 0) { end = i + 1; break; } }
                             }
                             using var doc = JsonDocument.Parse(jsBody[start..end]);
-                            var result = new List<object>();
+                            var result = new List<NavPoint>();
                             foreach (var item in doc.RootElement.EnumerateArray())
                             {
                                 if (!item.TryGetProperty("x", out var xProp) || !item.TryGetProperty("y", out var yProp)) continue;
@@ -6365,7 +6395,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                                 double nav = yProp.GetDouble();
                                 string date = DateTimeOffset.FromUnixTimeMilliseconds(ts).ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd");
                                 double rate = item.TryGetProperty("equityReturn", out var rProp) && rProp.ValueKind == JsonValueKind.Number ? rProp.GetDouble() : 0;
-                                result.Add(new { date, nav = nav.ToString("F4"), rate = rate.ToString("F2") });
+                                result.Add(new NavPoint { Date = date, Nav = Math.Round(nav, 4), Rate = Math.Round(rate, 2) });
                             }
                             if (result.Count > limit) result = result.Skip(result.Count - limit).ToList();
                             if (result.Count > 0) return (result, "pingzhongdata");
@@ -6383,19 +6413,32 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 var archives = await _context.DailyArchives
                     .AsNoTracking()
                     .Where(a => a.FundCode == code)
-                    .OrderByDescending(a => a.RecordDate)
-                    .Take(limit)
-                    .Select(a => new { date = a.RecordDate.ToString("yyyy-MM-dd"), nav = "0", rate = Math.Round(a.DailyRate, 2).ToString("F2") })
+                    .OrderBy(a => a.RecordDate)
+                    .Select(a => new { a.RecordDate, a.DailyRate })
                     .ToListAsync();
                 if (archives.Count > 0)
                 {
-                    archives.Reverse();
-                    return (archives.Cast<object>().ToList(), "daily-archives");
+                    var deduped = archives
+                        .GroupBy(a => a.RecordDate)
+                        .Select(g => new NavPoint
+                        {
+                            Date = g.Key.ToString("yyyy-MM-dd"),
+                            Nav = null,
+                            Rate = Math.Round(g.Last().DailyRate, 2)
+                        })
+                        .OrderBy(p => p.Date)
+                        .TakeLast(limit)
+                        .ToList();
+                    if (deduped.Count > 0)
+                    {
+                        Console.WriteLine($"[nav-history] {code} DailyArchives fallback: {deduped.Count} rows (deduped from {archives.Count})");
+                        return (deduped, "daily-archives");
+                    }
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[nav-history] daily-archives fallback failed for {code}: {ex.Message}");
+                Console.WriteLine($"[nav-history] DailyArchives fallback failed for {code}: {ex.Message}");
             }
 
             return (null, "none");

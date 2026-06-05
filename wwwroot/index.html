@@ -5833,7 +5833,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     } catch (e) { showToast(e.message || '股票 OCR 确认失败', 'error'); }
                 };
 
-                const historyModal = reactive({ show: false, isLoading: false, name: '', data: [] });
+                const historyModal = reactive({ show: false, isLoading: false, name: '', data: [], navAvailable: true, sourceNote: '' });
                 const archiveModal = reactive({ show: false, isLoading: false, targetName: '', data: [] });
                 const ocrModal = reactive({
                     show: false,
@@ -6162,9 +6162,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         if (!res.ok) throw new Error(await res.text());
                         const raw = await res.json();
                         const rows = Array.isArray(raw) ? raw : (Array.isArray(raw?.points) ? raw.points : []);
-                        const mapped = rows.map(item => ({ date: String(item.date || ''), rate: Number(item.rate || 0) }));
+                        const mapped = rows.map(item => ({ date: String(item.date || item.Date || ''), rate: Number(item.rate ?? item.Rate ?? 0), nav: item.nav ?? item.Nav ?? null }));
                         if (mapped.length > 0) {
                             historyModal.data = mapped.slice(-250).reverse();
+                            historyModal.navAvailable = raw?.navAvailable !== false;
+                            historyModal.sourceNote = raw?.navAvailable === false ? '仅有收益率归档' : '';
                             writeJsonCache(cacheKey, mapped);
                         } else if (!cached) {
                             historyModal.data = [];
