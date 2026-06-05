@@ -6161,13 +6161,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const res = await fetch(`${API_BASE}/api/fund/nav-history?code=${code}&period=1y`);
                         if (!res.ok) throw new Error(await res.text());
                         const raw = await res.json();
-                        const rows = Array.isArray(raw) ? raw : [];
+                        const rows = Array.isArray(raw) ? raw : (Array.isArray(raw?.points) ? raw.points : []);
                         const mapped = rows.map(item => ({ date: String(item.date || ''), rate: Number(item.rate || 0) }));
                         if (mapped.length > 0) {
                             historyModal.data = mapped.slice(-250).reverse();
                             writeJsonCache(cacheKey, mapped);
                         } else if (!cached) {
                             historyModal.data = [];
+                            if (raw && typeof raw === 'object' && raw.message) showToast(raw.message, 'warning');
                         }
                     } catch (e) {
                         if (!cached) showToast("走势数据暂不可用", "warning");
