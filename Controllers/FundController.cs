@@ -1171,6 +1171,7 @@ namespace 小白养基.Controllers
             MyFundConfig? existing,
             string settleDate)
         {
+            // 保留已有 pending 状态（非差额推断）
             double existingPending = existing == null ? 0 : GetActivePendingBuyAmount(existing, settleDate);
             if (existingPending > 0 && holdAmount >= existingPending)
             {
@@ -1183,72 +1184,63 @@ namespace 小白养基.Controllers
                     existing?.PendingConfirmDate ?? EstimatePendingConfirmDate(fundName));
             }
 
+            // 核心规则：只凭 OCR 文字证据判断 pending，禁止差额推断
             bool localStrong = HasStrongPendingBuyEvidence(localContext);
-            bool fullStrong = HasStrongPendingBuyEvidence(fullText);
-            bool zeroProfitShape = IsZeroProfitOcrShape(yesterdayIncome, holdingIncome, holdingRate);
-            bool dashYieldSignal = HasYieldDashSignal(localContext);
-            var localPendingAmounts = ExtractPendingBuyAmounts(localContext);
-            var fullPendingAmounts = ExtractPendingBuyAmounts(fullText);
-            double localPendingAmount = PickMatchingPendingAmount(localPendingAmounts, holdAmount) ?? localPendingAmounts.FirstOrDefault();
-            double fullPendingAmount = fullPendingAmounts.FirstOrDefault();
-            bool fullAmountMatchesThisItem = PickExactPendingAmount(fullPendingAmounts, holdAmount).HasValue;
             bool fundScopedFullSignal = HasFundScopedPendingEvidence(fullText, fundCode, fundName);
             string? confirmDate = TryExtractPendingConfirmDate(localContext)
                 ?? TryExtractPendingConfirmDate(fullText)
                 ?? EstimatePendingConfirmDate(fundName);
 
+            // 路径1：本卡片区域有强文字证据（交易进行中/待确认/预计可查看收益/买入XX元）
             if (localStrong)
             {
-                double pendingAmount = localPendingAmount > 0 ? localPendingAmount : holdAmount;
+                var localPendingAmounts = ExtractPendingBuyAmounts(localContext);
+                double pendingAmount = PickMatchingPendingAmount(localPendingAmounts, holdAmount) ?? localPendingAmounts.FirstOrDefault();
+                if (pendingAmount <= 0) pendingAmount = holdAmount;
                 return new OcrPendingBuyAssessment(
                     true,
                     false,
                     Math.Min(Math.Round(pendingAmount, 2), Math.Round(holdAmount, 2)),
-                    localPendingAmount > 0 ? "OCR识别到交易进行中的买入金额" : "OCR识别到交易进行中/待确认/预计可查看收益",
-                    "ocr_pending_signal",
+                    pendingAmount > 0 && pendingAmount < holdAmount ? "OCR识别到交易进行中的买入金额" : "OCR识别到交易进行中/待确认/预计可查看收益",
+                    "explicit_row_text",
                     confirmDate);
             }
 
-            if (existing != null)
+            // 路径2：全文中有该基金名称/代码附近的强文字证据
+            if (fundScopedFullSignal)
             {
-                double delta = Math.Round(holdAmount - existing.HoldAmount, 2);
-                double? deltaMatchedPendingAmount = PickExactPendingAmount(fullPendingAmounts, delta);
-                double pendingAmount = deltaMatchedPendingAmount ?? delta;
-                if (delta > 1 && (deltaMatchedPendingAmount.HasValue || fundScopedFullSignal || dashYieldSignal || zeroProfitShape))
+                var fullPendingAmounts = ExtractPendingBuyAmounts(fullText);
+                double? exactMatch = PickExactPendingAmount(fullPendingAmounts, holdAmount);
+                double pendingAmount = exactMatch ?? fullPendingAmounts.FirstOrDefault();
+                if (pendingAmount <= 0) pendingAmount = holdAmount;
+                return new OcrPendingBuyAssessment(
+                    true,
+                    false,
+                    Math.Min(Math.Round(pendingAmount, 2), Math.Round(holdAmount, 2)),
+                    "OCR全文识别到该基金的交易进行中/预计可查看收益",
+                    "explicit_row_text",
+                    confirmDate);
+            }
+
+            // 路径3：全文有"买入待确认 XX 元"且金额精确匹配当前持仓
+            var fullPendingAmountsForMatch = ExtractPendingBuyAmounts(fullText);
+            bool fullStrong = HasStrongPendingBuyEvidence(fullText);
+            if (fullStrong && fullPendingAmountsForMatch.Count > 0)
+            {
+                double? exactMatch = PickExactPendingAmount(fullPendingAmountsForMatch, holdAmount);
+                if (exactMatch.HasValue)
                 {
                     return new OcrPendingBuyAssessment(
                         true,
-                        !deltaMatchedPendingAmount.HasValue && !fundScopedFullSignal,
-                        Math.Min(Math.Round(Math.Max(1, pendingAmount), 2), Math.Round(holdAmount, 2)),
-                        deltaMatchedPendingAmount.HasValue || fundScopedFullSignal ? "OCR识别到待确认交易，按新增差额保护" : "持仓金额突增且收益缺失，疑似买入待确认",
-                        deltaMatchedPendingAmount.HasValue || fundScopedFullSignal ? "ocr_pending_signal" : "ocr_suspicious_pending_buy",
+                        false,
+                        Math.Round(exactMatch.Value, 2),
+                        "OCR全文买入金额精确匹配当前持仓",
+                        "explicit_top_total",
                         confirmDate);
                 }
             }
 
-            if (fullStrong && (fullAmountMatchesThisItem || fundScopedFullSignal || (zeroProfitShape && fullPendingAmounts.Count == 0)))
-            {
-                double pendingAmount = fullAmountMatchesThisItem ? PickExactPendingAmount(fullPendingAmounts, holdAmount)!.Value : holdAmount;
-                return new OcrPendingBuyAssessment(
-                    true,
-                    false,
-                    Math.Min(Math.Round(pendingAmount, 2), Math.Round(holdAmount, 2)),
-                    fullPendingAmount > 0 ? "OCR全文识别到交易进行中的买入金额" : "OCR全文识别到交易进行中/预计可查看收益",
-                    "ocr_pending_signal",
-                    confirmDate);
-            }
-
-            if (existing == null && zeroProfitShape && (dashYieldSignal || holdShares <= 0))
-            {
-                return new OcrPendingBuyAssessment(
-                    true,
-                    true,
-                    Math.Round(holdAmount, 2),
-                    dashYieldSignal ? "昨日收益为空/--且持有收益接近0，疑似买入待确认" : "新基金无确认份额且收益接近0，疑似买入待确认",
-                    "ocr_suspicious_pending_buy",
-                    confirmDate);
-            }
-
+            // 无文字证据 → 不标记 pending
             return new OcrPendingBuyAssessment(false, false, 0, string.Empty, string.Empty, null);
         }
 
@@ -1673,9 +1665,7 @@ namespace 小白养基.Controllers
                 exist.HoldShares = Math.Round(item.HoldShares, 6);
             }
 
-            double pendingAmount = item.PendingBuyAmount > 0
-                ? item.PendingBuyAmount
-                : (item.IsPendingBuy ? Math.Max(0, Math.Round(item.HoldAmount - oldHoldAmount, 2)) : 0);
+            double pendingAmount = item.PendingBuyAmount > 0 ? item.PendingBuyAmount : 0;
             if (pendingAmount > 0)
             {
                 MarkPendingBuy(exist, pendingAmount, todayDash, string.IsNullOrWhiteSpace(item.PendingSource) ? "ocr" : item.PendingSource, item.PendingConfirmDate);

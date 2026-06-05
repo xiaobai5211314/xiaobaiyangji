@@ -5015,7 +5015,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 </div>
                                 <div v-if="item.pendingReason"
                                      style="margin-top:6px;color:var(--text-muted);font-size:12px;line-height:1.6;">
-                                    判断原因：{{ item.pendingReason }}
+                                    判断来源：{{ item.pendingSource || 'none' }} · {{ item.pendingReason }}
                                 </div>
                             </div>
 
