@@ -6325,37 +6325,40 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
         private async Task<(List<object>? data, string source)> FetchFundNavHistoryAsync(HttpClient http, string code, int limit)
         {
-            var secids = new[] { $"0.{code}", $"1.{code}" };
-            foreach (var secid in secids)
+            try
             {
-                try
+                string url = $"https://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize={limit}";
+                var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.TryAddWithoutValidation("Referer", "https://fundf10.eastmoney.com/");
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                var response = await http.SendAsync(request, cts.Token);
+                if (!response.IsSuccessStatusCode) return (null, "http-error");
+                string body = await response.Content.ReadAsStringAsync();
+
+                using var doc = JsonDocument.Parse(body);
+                if (!doc.RootElement.TryGetProperty("Data", out var data) || data.ValueKind == JsonValueKind.Null)
+                    return (null, "no-data");
+                if (!data.TryGetProperty("LSJZList", out var list) || list.ValueKind != JsonValueKind.Array)
+                    return (null, "no-list");
+
+                var result = new List<object>();
+                foreach (var item in list.EnumerateArray())
                 {
-                    string url = $"https://push2his.eastmoney.com/api/qt/fund/kline/get?secid={Uri.EscapeDataString(secid)}&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1,f2,f3&fields2=f51,f52,f53&klt=101&fqt=1&end=20500101&lmt={limit}";
-                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                    string response = await http.GetStringAsync(url, cts.Token);
-                    using var doc = JsonDocument.Parse(response);
-
-                    if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null)
-                        continue;
-                    if (!data.TryGetProperty("klines", out var klines) || klines.ValueKind != JsonValueKind.Array)
-                        continue;
-
-                    var result = new List<object>();
-                    foreach (var kline in klines.EnumerateArray())
-                    {
-                        string? raw = kline.GetString();
-                        if (string.IsNullOrWhiteSpace(raw)) continue;
-                        var parts = raw.Split(',');
-                        if (parts.Length < 3) continue;
-                        result.Add(new { date = parts[0], nav = parts[2], rate = parts.Length > 8 ? parts[8] : "0" });
-                    }
-
-                    if (result.Count > 0) return (result, "eastmoney-kline");
+                    string date = item.TryGetProperty("FSRQ", out var d) ? d.GetString() ?? "" : "";
+                    string nav = item.TryGetProperty("DWJZ", out var n) ? n.GetString() ?? "0" : "0";
+                    string rate = item.TryGetProperty("JZZZL", out var r) ? r.GetString() ?? "0" : "0";
+                    if (!string.IsNullOrEmpty(date))
+                        result.Add(new { date, nav, rate });
                 }
-                catch { continue; }
-            }
 
-            return (null, "none");
+                result.Reverse();
+                return result.Count > 0 ? (result, "eastmoney-lsjz") : (null, "empty");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[nav-history] lsjz fetch failed for {code}: {ex.Message}");
+                return (null, "error");
+            }
         }
         public async Task<IActionResult> GetPortfolioExposure([FromQuery] string username)
         {
