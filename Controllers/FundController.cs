@@ -129,13 +129,72 @@ namespace 小白养基.Controllers
         private static string ChinaDateDash(DateTime? localTime = null)
             => (localTime ?? ChinaNow()).ToString("yyyy-MM-dd");
 
+        private static bool IsPendingStatusActive(string? status)
+        {
+            if (string.IsNullOrWhiteSpace(status)) return false;
+            return !status.Equals("confirmed", StringComparison.OrdinalIgnoreCase)
+                && !status.Equals("settled", StringComparison.OrdinalIgnoreCase)
+                && !status.Equals("cancelled", StringComparison.OrdinalIgnoreCase)
+                && !status.Equals("canceled", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsPendingDateEffective(string? pendingDate, string settleDate)
+        {
+            if (string.IsNullOrWhiteSpace(pendingDate)) return true;
+            return string.CompareOrdinal(pendingDate, settleDate) <= 0;
+        }
+
+        private static double GetActivePendingBuyAmount(MyFundConfig fund, string settleDate)
+        {
+            double explicitPending = fund.PendingBuyAmount > 0
+                && IsPendingStatusActive(fund.PendingTradeStatus)
+                && IsPendingDateEffective(fund.PendingTradeDate, settleDate)
+                ? fund.PendingBuyAmount
+                : 0;
+            double legacyTodayAdd = fund.LastTradeDate == settleDate && fund.LastAddAmount > 0
+                ? fund.LastAddAmount
+                : 0;
+            return Math.Round(Math.Max(explicitPending, legacyTodayAdd), 2);
+        }
+
+        private static void MarkPendingBuy(MyFundConfig fund, double amount, string tradeDate, string source, string? confirmDate = null)
+        {
+            if (amount <= 0) return;
+            fund.PendingBuyAmount = Math.Round(amount, 2);
+            fund.PendingSellAmount = 0;
+            fund.PendingTradeDate = tradeDate;
+            fund.PendingTradeTime = ChinaNow().ToString("HH:mm:ss");
+            fund.PendingTradeStatus = "pending_buy";
+            fund.PendingConfirmDate = string.IsNullOrWhiteSpace(confirmDate) ? fund.PendingConfirmDate : confirmDate;
+            fund.PendingSource = source;
+            fund.LastTradeDate = tradeDate;
+            fund.LastAddAmount = Math.Round(amount, 2);
+        }
+
+        private static void ClearPendingBuy(MyFundConfig fund)
+        {
+            if (fund.PendingBuyAmount <= 0 && fund.LastAddAmount <= 0) return;
+            fund.PendingBuyAmount = 0;
+            if (fund.LastAddAmount > 0)
+            {
+                fund.LastAddAmount = 0;
+                fund.LastTradeDate = null;
+            }
+            if (string.Equals(fund.PendingTradeStatus, "pending_buy", StringComparison.OrdinalIgnoreCase))
+            {
+                fund.PendingTradeStatus = "confirmed";
+            }
+        }
+
         // 同一天买入/卖出是“在途交易”，不能直接参与当日收益率分母。
         // LastAddAmount > 0：当天加仓，收益基数要剥离这笔未确认资金。
         // LastAddAmount < 0：当天减仓，收益基数要把卖出份额当天仍应承担的涨跌补回。
         private static double GetEffectiveBaseAmount(MyFundConfig fund, string settleDate)
         {
             double baseAmount = fund.HoldAmount;
-            if (fund.LastTradeDate == settleDate)
+            double pendingBuy = GetActivePendingBuyAmount(fund, settleDate);
+            baseAmount -= pendingBuy;
+            if (fund.LastTradeDate == settleDate && fund.LastAddAmount < 0)
             {
                 baseAmount -= fund.LastAddAmount;
             }
@@ -144,7 +203,12 @@ namespace 小白养基.Controllers
 
         private static double GetPendingTradeAmount(MyFundConfig fund, string settleDate)
         {
-            return fund.LastTradeDate == settleDate ? fund.LastAddAmount : 0;
+            double pending = GetActivePendingBuyAmount(fund, settleDate);
+            if (fund.LastTradeDate == settleDate && fund.LastAddAmount < 0)
+            {
+                pending += fund.LastAddAmount;
+            }
+            return Math.Round(pending, 2);
         }
 
         private static double GetEffectiveShares(MyFundConfig fund, string settleDate)
@@ -421,7 +485,9 @@ namespace 小白养基.Controllers
 
             foreach (var fund in funds)
             {
-                if (fund.HoldShares <= 0)
+                double pendingBuyAmount = GetActivePendingBuyAmount(fund, dateDash);
+                bool pendingBuy = pendingBuyAmount > 0;
+                if (fund.HoldShares <= 0 && !pendingBuy)
                 {
                     double soldProfit = fund.PlatformCumulativeProfit > 0 ? fund.PlatformCumulativeProfit : fund.RealizedProfit;
                     double soldCost = PortfolioSettlementService.GetSoldCost(fund);
@@ -443,7 +509,8 @@ namespace 小白养基.Controllers
                 }
                 latestRecordDict.TryGetValue(fund.FundCode, out var record);
 
-                double cost = fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount;
+                double confirmedHoldAmount = Math.Max(0, Math.Round(fund.HoldAmount - pendingBuyAmount, 2));
+                double cost = Math.Max(0, Math.Round((fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount) - pendingBuyAmount, 2));
                 double baseAmount = GetDailyBaseAmount(fund, dateDash);
                 double dailyRate = fund.LastSettledDate == dateDash ? fund.LastSettledRate : GetRecordRateForToday(record);
                 double dailyProfit = fund.LastSettledDate == dateDash
@@ -451,8 +518,8 @@ namespace 小白养基.Controllers
                     : Math.Round(baseAmount * (dailyRate / 100.0), 2);
 
                 double currentAssets = fund.LastSettledDate == dateDash
-                    ? fund.HoldAmount
-                    : Math.Round(fund.HoldAmount + dailyProfit, 2);
+                    ? confirmedHoldAmount
+                    : Math.Round(confirmedHoldAmount + dailyProfit, 2);
 
                 double totalProfit = currentAssets - cost + fund.RealizedProfit;
                 double totalRate = cost > 0 ? totalProfit / cost * 100.0 : 0;
@@ -640,6 +707,10 @@ namespace 小白养基.Controllers
             public double HoldShares { get; set; }
             public string CalcMethod { get; set; } = string.Empty;
             public string Warning { get; set; } = string.Empty;
+            public bool IsPendingBuy { get; set; }
+            public double PendingBuyAmount { get; set; }
+            public string PendingReason { get; set; } = string.Empty;
+            public string? PendingConfirmDate { get; set; }
         }
 
         public sealed class OcrImportPreviewResponse
@@ -944,6 +1015,8 @@ namespace 小白养基.Controllers
                 diagnostics.Add($"[OCR匹配] {namePart} → {best.fund.Name}({best.fund.Code}) 分={best.score:F1} 金额={holdAmount}");
 
                 string calcMethod = "识别提取";
+                int pendingCardStart = FindCardStartIndex(texts, i);
+                string pendingContext = string.Join(" ", texts.Skip(pendingCardStart).Take(Math.Min(14, texts.Count - pendingCardStart)));
 
                 // OCR 截图里的持仓金额是平台当前完整持仓金额，份额校准必须使用完整金额。
                 // 如果扣掉最近加仓金额，确认导入后 HoldAmount 会是新值，但 HoldShares 仍是旧份额，
@@ -979,6 +1052,37 @@ namespace 小白养基.Controllers
                     holdShares = Math.Round(holdShares, 6);
                 }
 
+                userFundDict.TryGetValue(best.fund.Code, out var existingForPending);
+                double pendingTextAmount = TryExtractPendingBuyAmount(pendingContext);
+                bool pendingEvidence = HasPendingBuyEvidence(pendingContext);
+                double pendingBuyAmount = 0;
+                string pendingReason = string.Empty;
+
+                if (pendingTextAmount > 0)
+                {
+                    pendingBuyAmount = pendingTextAmount;
+                    pendingReason = "OCR识别到交易进行中的买入金额";
+                }
+                else if (existingForPending != null)
+                {
+                    double delta = Math.Round(holdAmount - existingForPending.HoldAmount, 2);
+                    if (delta > 1 && (pendingEvidence || existingForPending.LastTradeDate == settleDate || existingForPending.PendingBuyAmount > 0))
+                    {
+                        pendingBuyAmount = delta;
+                        pendingReason = pendingEvidence ? "OCR识别到待确认交易，按持仓差额保护" : "同日持仓突增，按差额保护";
+                    }
+                }
+                else if (pendingEvidence || (holdShares <= 0 && Math.Abs(yesterdayIncome) < 0.01 && Math.Abs(holdingIncome) < 0.01 && Math.Abs(holdingRate) < 0.01))
+                {
+                    pendingBuyAmount = holdAmount;
+                    pendingReason = pendingEvidence ? "OCR识别到交易进行中" : "新基金无份额且收益为0，按买入待确认保护";
+                }
+                if (pendingBuyAmount > 0)
+                {
+                    holdShares = existingForPending?.HoldShares > 0 ? existingForPending.HoldShares : 0;
+                    calcMethod = existingForPending?.HoldShares > 0 ? $"{calcMethod}；保留确认份额" : "买入待确认，份额未确认";
+                }
+
                 items.Add(new OcrImportPreviewItem
                 {
                     OcrName = string.IsNullOrWhiteSpace(potentialFragment)
@@ -996,7 +1100,11 @@ namespace 小白养基.Controllers
                     HoldingRate = Math.Round(holdingRate, 2),
                     HoldShares = Math.Round(holdShares, 6),
                     CalcMethod = calcMethod,
-                    Warning = holdShares > 0 ? string.Empty : "未能推算份额"
+                    Warning = pendingBuyAmount > 0 ? "买入待确认，不参与今日收益" : (holdShares > 0 ? string.Empty : "未能推算份额"),
+                    IsPendingBuy = pendingBuyAmount > 0,
+                    PendingBuyAmount = Math.Round(pendingBuyAmount, 2),
+                    PendingReason = pendingReason,
+                    PendingConfirmDate = TryExtractPendingConfirmDate(pendingContext)
                 });
             }
 
@@ -1058,6 +1166,42 @@ namespace 小白养基.Controllers
                 if (m.Success) return m.Groups[1].Value;
             }
             return null;
+        }
+
+        private static bool HasPendingBuyEvidence(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            return text.Contains("交易进行中", StringComparison.OrdinalIgnoreCase)
+                || Regex.IsMatch(text, @"预计.*可查看收益", RegexOptions.IgnoreCase)
+                || Regex.IsMatch(text, @"买入[/／]\s*\d", RegexOptions.IgnoreCase)
+                || Regex.IsMatch(text, @"(^|\s)--($|\s)");
+        }
+
+        private static double TryExtractPendingBuyAmount(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return 0;
+            var match = Regex.Match(text, @"买入[/／]?\s*([0-9][0-9,]*\.\d{2})\s*元?", RegexOptions.IgnoreCase);
+            if (!match.Success) return 0;
+            return double.TryParse(match.Groups[1].Value.Replace(",", ""), out var amount) ? Math.Round(amount, 2) : 0;
+        }
+
+        private static string? TryExtractPendingConfirmDate(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return null;
+            var match = Regex.Match(text, @"预计\s*(\d{1,2})[./月-](\d{1,2})\s*日?.*可查看收益");
+            if (!match.Success) return null;
+            var now = ChinaNow();
+            if (!int.TryParse(match.Groups[1].Value, out var month) || !int.TryParse(match.Groups[2].Value, out var day)) return null;
+            try
+            {
+                var date = new DateTime(now.Year, month, day);
+                if (date.Date < now.Date.AddDays(-7)) date = date.AddYears(1);
+                return date.ToString("yyyy-MM-dd");
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private static bool IsNoiseLine(string text)
@@ -1276,8 +1420,14 @@ namespace 小白养基.Controllers
                         HoldAmount = Math.Round(item.HoldAmount, 2),
                         CostAmount = item.CostAmount > 0 ? Math.Round(item.CostAmount, 2) : Math.Round(item.HoldAmount, 2),
                         HoldShares = Math.Round(item.HoldShares, 6),
-                        LastTradeDate = null,
-                        LastAddAmount = 0,
+                        LastTradeDate = item.IsPendingBuy ? ChinaDateDash() : null,
+                        LastAddAmount = item.IsPendingBuy ? Math.Round(item.PendingBuyAmount > 0 ? item.PendingBuyAmount : item.HoldAmount, 2) : 0,
+                        PendingBuyAmount = item.IsPendingBuy ? Math.Round(item.PendingBuyAmount > 0 ? item.PendingBuyAmount : item.HoldAmount, 2) : 0,
+                        PendingTradeDate = item.IsPendingBuy ? ChinaDateDash() : null,
+                        PendingTradeTime = item.IsPendingBuy ? ChinaNow().ToString("HH:mm:ss") : null,
+                        PendingTradeStatus = item.IsPendingBuy ? "pending_buy" : null,
+                        PendingConfirmDate = item.PendingConfirmDate,
+                        PendingSource = item.IsPendingBuy ? "ocr_import" : null,
                         LastSettledDate = null,
                         LastSettledProfit = 0,
                         LastSettledRate = 0
@@ -1298,6 +1448,8 @@ namespace 小白养基.Controllers
             Console.WriteLine(
                 $"[OCR校准前] code={exist.FundCode}, oldHoldAmount={exist.HoldAmount:F2}, oldLastTradeDate={exist.LastTradeDate ?? "null"}, oldLastAddAmount={exist.LastAddAmount:F2}");
 
+            string todayDash = ChinaDateDash();
+            double oldHoldAmount = exist.HoldAmount;
             if (item.HoldAmount > 0)
             {
                 exist.HoldAmount = Math.Round(item.HoldAmount, 2);
@@ -1309,11 +1461,20 @@ namespace 小白养基.Controllers
                 exist.HoldShares = Math.Round(item.HoldShares, 6);
             }
 
-            exist.LastTradeDate = null;
-            exist.LastAddAmount = 0;
-            exist.LastSettledDate = null;
-            exist.LastSettledProfit = 0;
-            exist.LastSettledRate = 0;
+            double pendingAmount = item.PendingBuyAmount > 0
+                ? item.PendingBuyAmount
+                : (item.IsPendingBuy ? Math.Max(0, Math.Round(item.HoldAmount - oldHoldAmount, 2)) : 0);
+            if (pendingAmount > 0)
+            {
+                MarkPendingBuy(exist, pendingAmount, todayDash, "ocr_import", item.PendingConfirmDate);
+            }
+            else if (item.HoldShares > 0)
+            {
+                ClearPendingBuy(exist);
+                exist.LastSettledDate = null;
+                exist.LastSettledProfit = 0;
+                exist.LastSettledRate = 0;
+            }
 
             Console.WriteLine(
                 $"[OCR校准后] code={exist.FundCode}, newHoldAmount={exist.HoldAmount:F2}, newLastTradeDate={exist.LastTradeDate ?? "null"}, newLastAddAmount={exist.LastAddAmount:F2}");
@@ -1408,10 +1569,35 @@ namespace 小白养基.Controllers
                     string name = root.GetProperty("name").GetString() ?? "未知";
 
                     var exist = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && f.FundCode == code);
-                    if (exist != null) exist.HoldAmount = amount;
-                    else _context.MyFunds.Add(new MyFundConfig { Username = username, FundCode = code, FundName = name, HoldAmount = amount });
+                    var todayDash = ChinaDateDash();
+                    if (exist != null)
+                    {
+                        double oldAmount = exist.HoldAmount;
+                        double pendingAmount = amount > oldAmount ? Math.Round(amount - oldAmount, 2) : amount;
+                        exist.HoldAmount = Math.Round(amount, 2);
+                        if (amount > oldAmount)
+                        {
+                            exist.CostAmount = Math.Round(Math.Max(exist.CostAmount, oldAmount) + pendingAmount, 2);
+                            MarkPendingBuy(exist, pendingAmount, todayDash, "manual_add");
+                        }
+                    }
+                    else
+                    {
+                        var newFund = new MyFundConfig
+                        {
+                            Username = username,
+                            FundCode = code,
+                            FundName = name,
+                            HoldAmount = Math.Round(amount, 2),
+                            CostAmount = Math.Round(amount, 2),
+                            HoldShares = 0
+                        };
+                        MarkPendingBuy(newFund, amount, todayDash, "manual_add");
+                        _context.MyFunds.Add(newFund);
+                    }
 
                     await _context.SaveChangesAsync();
+                    ClearTodayCache(username);
                     return Ok(new { success = true, name = name });
                 }
                 return BadRequest("找不到该基金");
@@ -2471,6 +2657,9 @@ namespace 小白养基.Controllers
                 foreach (var config in myFunds)
                 {
                     bool settled = config.LastSettledDate == todayDash;
+                    double pendingBuyAmount = GetActivePendingBuyAmount(config, todayDash);
+                    double confirmedHoldAmount = Math.Max(0, Math.Round(config.HoldAmount - pendingBuyAmount, 2));
+                    double confirmedCost = Math.Max(0, Math.Round((config.CostAmount > 0 ? config.CostAmount : config.HoldAmount) - pendingBuyAmount, 2));
                     double baseAmt = GetDailyBaseAmount(config, todayDash);
                     if (baseAmt <= 0) continue;
 
@@ -2486,8 +2675,8 @@ namespace 小白养基.Controllers
                     double profitVal = settled ? config.LastSettledProfit : Math.Round(baseAmt * rateSim / 100.0, 2);
                     sProfit += profitVal;
                     sBase += baseAmt;
-                    sAssets += settled ? config.HoldAmount : (config.HoldAmount + profitVal);
-                    sCost += config.CostAmount > 0 ? config.CostAmount : config.HoldAmount;
+                    sAssets += settled ? confirmedHoldAmount : (confirmedHoldAmount + profitVal);
+                    sCost += confirmedCost;
                     sRealized += config.RealizedProfit;
                 }
 
@@ -4205,11 +4394,16 @@ namespace 小白养基.Controllers
                     double? actualRate = isSettled ? config.LastSettledRate : null;
                     double? actualExactProfit = isSettled ? config.LastSettledProfit : null;
 
+                    double pendingBuyAmount = GetActivePendingBuyAmount(config, todayDash);
+                    bool pendingBuy = pendingBuyAmount > 0;
+                    double rawHoldAmount = Math.Max(0, config.HoldAmount);
+                    double confirmedHoldAmount = Math.Max(0, Math.Round(rawHoldAmount - pendingBuyAmount, 2));
                     double todayRateForSimulation = isSettled ? config.LastSettledRate : (dataPoints.Count > 0 ? Convert.ToDouble(dataPoints.Last()[1]) : 0);
                     double todayBaseAmount = GetDailyBaseAmount(config, todayDash);
                     double todayProfitPreview = isSettled ? config.LastSettledProfit : Math.Round(todayBaseAmount * todayRateForSimulation / 100.0, 2);
-                    double currentAssetsPreview = isSettled ? config.HoldAmount : Math.Round(config.HoldAmount + todayProfitPreview, 2);
-                    double costBasis = config.CostAmount > 0 ? config.CostAmount : config.HoldAmount;
+                    double currentAssetsPreview = Math.Round(todayBaseAmount + todayProfitPreview, 2);
+                    double rawCostBasis = config.CostAmount > 0 ? config.CostAmount : rawHoldAmount;
+                    double costBasis = Math.Max(0, Math.Round(rawCostBasis - pendingBuyAmount, 2));
                     bool pendingRedeem = PortfolioSettlementService.IsPendingRedeem(config);
                     double soldCost = PortfolioSettlementService.GetSoldCost(config);
                     // For sold-out pending funds, use soldCost as display cost
@@ -4217,7 +4411,7 @@ namespace 小白养基.Controllers
                         costBasis = soldCost;
 
                     // 累计收益显示优先级：平台累计收益 > 已确认落袋 > 待确认
-                    bool isSoldOut = config.HoldShares <= 0;
+                    bool isSoldOut = config.HoldShares <= 0 && !pendingBuy;
                     double displayedProfit;
                     string displayedProfitSource;
                     if (isSoldOut && config.PlatformCumulativeProfit > 0)
@@ -4246,16 +4440,28 @@ namespace 小白养基.Controllers
                     string reliabilityLevel = isSettled ? "真实净值确认" : reliabilityScore >= 80 ? "估值较稳" : reliabilityScore >= 60 ? "估值需观察" : "估值偏弱";
 
                     // FundController.cs 中 GetTodayData 方法内部
-                    bool isInactiveHolding = config.HoldShares <= 0;
-                    double displayAmount = isInactiveHolding ? 0 : config.HoldAmount;
+                    bool isInactiveHolding = config.HoldShares <= 0 && !pendingBuy;
+                    double displayAmount = isInactiveHolding ? 0 : confirmedHoldAmount;
 
                     return new
                     {
                         code = config.FundCode,
                         name = config.FundName,
                         amount = displayAmount,
+                        rawHoldAmount = isInactiveHolding ? 0 : rawHoldAmount,
+                        confirmedAmount = displayAmount,
+                        pendingBuy = pendingBuy,
+                        pendingBuyAmount = pendingBuy ? pendingBuyAmount : 0,
+                        pendingTradeDate = config.PendingTradeDate,
+                        pendingTradeTime = config.PendingTradeTime,
+                        pendingTradeStatus = config.PendingTradeStatus,
+                        pendingConfirmDate = config.PendingConfirmDate,
+                        pendingSource = config.PendingSource,
+                        pendingNote = pendingBuy ? "买入待确认，不参与今日收益" : string.Empty,
                         shares = config.HoldShares,
-                        cost = isInactiveHolding ? (soldCost > 0 ? soldCost : (double?)null) : (config.CostAmount > 0 ? config.CostAmount : (double?)null),
+                        cost = isInactiveHolding ? (soldCost > 0 ? soldCost : (double?)null) : (costBasis > 0 ? costBasis : (double?)null),
+                        rawCostAmount = isInactiveHolding ? (double?)null : (rawCostBasis > 0 ? rawCostBasis : (double?)null),
+                        confirmedCost = isInactiveHolding ? (double?)null : costBasis,
                         realizedProfit = config.RealizedProfit,
                         platformCumulativeProfit = config.PlatformCumulativeProfit,
                         displayedProfit = displayedProfit,
@@ -6129,8 +6335,11 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                     {
                         totalRealized += fund.RealizedProfit;
                         if (fund.HoldShares <= 0) continue;
-                        totalAssets += fund.HoldAmount;
-                        totalCost += (fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount);
+                        double pendingBuyAmount = GetActivePendingBuyAmount(fund, todayStrDash);
+                        double confirmedHoldAmount = Math.Max(0, Math.Round(fund.HoldAmount - pendingBuyAmount, 2));
+                        double confirmedCost = Math.Max(0, Math.Round((fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount) - pendingBuyAmount, 2));
+                        totalAssets += confirmedHoldAmount;
+                        totalCost += confirmedCost;
 
                         var todayRecord = await _context.FundRecords
                             .Where(r => r.FundCode == fund.FundCode && r.FetchTime >= today)
@@ -6183,10 +6392,10 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                         }
 
                         // 🚀 算历史总收益 (包含单只基金的落袋利润)
-                        double cost = fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount;
+                        double cost = confirmedCost;
                         double currentAssets = fund.LastSettledDate == todayStrDash
-                            ? fund.HoldAmount
-                            : fund.HoldAmount + dailyProfit;
+                            ? confirmedHoldAmount
+                            : confirmedHoldAmount + dailyProfit;
                         double totalProfit = currentAssets - cost + fund.RealizedProfit;
                         double totalRate = cost > 0 ? (totalProfit / cost * 100.0) : 0;
                         totalCurrentAssets += currentAssets;

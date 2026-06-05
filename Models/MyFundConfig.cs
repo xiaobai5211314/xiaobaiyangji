@@ -30,6 +30,19 @@ namespace 小白养基.Models
         public string? LastTradeDate { get; set; } // 注意有个问号，允许为空
         public double LastAddAmount { get; set; } = 0;
 
+        // 买入/卖出待确认：蚂蚁显示“交易进行中/未确认份额”时，金额可以展示，但不能参与今日收益。
+        public double PendingBuyAmount { get; set; } = 0;
+        public double PendingSellAmount { get; set; } = 0;
+        [MaxLength(20)]
+        public string? PendingTradeDate { get; set; }
+        [MaxLength(20)]
+        public string? PendingTradeTime { get; set; }
+        [MaxLength(40)]
+        public string? PendingTradeStatus { get; set; }
+        [MaxLength(20)]
+        public string? PendingConfirmDate { get; set; }
+        [MaxLength(80)]
+        public string? PendingSource { get; set; }
 
     }
 }

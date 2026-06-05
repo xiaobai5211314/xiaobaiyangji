@@ -5,8 +5,20 @@ export interface FundTodayItem {
   code: string;
   name: string;
   amount: number;
+  rawHoldAmount?: number;
+  confirmedAmount?: number;
+  pendingBuy?: boolean;
+  pendingBuyAmount?: number;
+  pendingTradeDate?: string;
+  pendingTradeTime?: string;
+  pendingTradeStatus?: string;
+  pendingConfirmDate?: string;
+  pendingSource?: string;
+  pendingNote?: string;
   shares?: number;
   cost?: number | null;
+  rawCostAmount?: number | null;
+  confirmedCost?: number | null;
   realizedProfit?: number;
   existingReturnRate?: number;
   breakEvenRate?: number;
@@ -25,6 +37,7 @@ export interface FundTodayItem {
   lastSettledDate?: string;
   lastSettledProfit?: number;
   lastSettledRate?: number;
+  todayBaseAmount?: number;
   calibrationOffset?: number;
   calibrationSamples?: number;
   calibrationLastError?: number;

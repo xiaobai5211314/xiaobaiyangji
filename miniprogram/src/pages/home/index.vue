@@ -175,6 +175,13 @@
         <text>{{ fund.calibrationNote || '滚动误差校准' }}</text>
       </view>
 
+      <view v-if="fund.pendingBuyValue || fund.pendingBuyAmountValue > 0" class="pending-trade-strip">
+        <text>买入待确认</text>
+        <text>
+          {{ privacyMode === 0 && fund.pendingBuyAmountValue > 0 ? displayMoney(fund.pendingBuyAmountValue, 0, false) + ' · ' : '' }}不参与今日收益
+        </text>
+      </view>
+
       <view class="trend-panel">
         <view class="trend-head">
           <text>今日估值走势</text>
@@ -2269,6 +2276,28 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 .calibration-strip text:last-child {
   max-width: 360rpx;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pending-trade-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-top: 18rpx;
+  padding: 16rpx 18rpx;
+  border-radius: 20rpx;
+  border: 1rpx solid rgba(251, 191, 36, 0.28);
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+  font-size: 22rpx;
+}
+
+.pending-trade-strip text:last-child {
+  max-width: 420rpx;
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;

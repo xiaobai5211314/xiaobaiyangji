@@ -14,6 +14,9 @@ export interface FundView extends FundTodayItem {
   currentRateValue: number;
   todayProfitValue: number;
   todayAmountValue: number;
+  confirmedAmountValue: number;
+  pendingBuyAmountValue: number;
+  pendingBuyValue: boolean;
   estimatedProfitValue: number;
   existingReturnRateValue: number;
   breakEvenRateValue: number;
@@ -236,38 +239,37 @@ export function buildPortfolioMetrics(rawFunds: FundTodayItem[], now = new Date(
 
   const funds = rawFunds.map((fund, index) => {
     const rateState = deriveRateState(fund, now, slash, dash);
-    const isUnconfirmed = Boolean(fund.lastTradeDate && String(fund.lastTradeDate) >= dash);
-    const todayAddAmount = isUnconfirmed ? numberOrZero(fund.lastAddAmount) : 0;
+    const pendingBuyAmount = Math.max(0, numberOrZero(fund.pendingBuyAmount));
+    const pendingBuyValue = Boolean(fund.pendingBuy) || pendingBuyAmount > 0;
     const isAlreadySettled = fund.lastSettledDate === dash;
-    const currentAmount = numberOrZero(fund.amount);
+    const currentAmount = Math.max(0, finiteNumber(fund.confirmedAmount) ?? numberOrZero(fund.amount));
+    const apiBaseAmount = finiteNumber(fund.todayBaseAmount);
+    const todayBaseAmount = apiBaseAmount !== null ? Math.max(0, apiBaseAmount) : currentAmount;
     let todayProfitValue = 0;
-    let todayAmountValue = currentAmount;
+    let todayAmountValue = todayBaseAmount;
     let currentRateValue = rateState.rate;
 
     if (isAlreadySettled) {
       todayProfitValue = numberOrZero(fund.lastSettledProfit);
-      todayAmountValue = currentAmount;
+      todayAmountValue = todayBaseAmount;
       currentRateValue = numberOrZero(fund.lastSettledRate) || currentRateValue;
     } else if (rateState.isSettled && fund.actualExactProfit !== null && fund.actualExactProfit !== undefined) {
       todayProfitValue = numberOrZero(fund.actualExactProfit);
-      todayAmountValue = currentAmount + todayProfitValue;
+      todayAmountValue = todayBaseAmount + todayProfitValue;
     } else {
-      const baseAmount = currentAmount - todayAddAmount;
-      todayProfitValue = baseAmount * (currentRateValue / 100);
-      todayAmountValue = currentAmount + todayProfitValue;
+      todayProfitValue = todayBaseAmount * (currentRateValue / 100);
+      todayAmountValue = todayBaseAmount + todayProfitValue;
     }
 
     const realizedProfitValue = numberOrZero(fund.realizedProfit);
-    const costValue = finiteNumber(fund.cost);
+    const costValue = finiteNumber(fund.confirmedCost) ?? finiteNumber(fund.cost);
     const validCost = costValue !== null && costValue > 0 ? costValue : null;
     const floatProfit = validCost ? todayAmountValue - validCost : 0;
     const estimatedProfitValue = floatProfit + realizedProfitValue;
     const breakEvenRateValue =
       validCost && validCost > todayAmountValue && todayAmountValue > 0 ? ((validCost / todayAmountValue - 1) * 100) : 0;
     const existingReturnRateValue = validCost ? (estimatedProfitValue / validCost) * 100 : 0;
-    const rateBaseForToday = isAlreadySettled
-      ? currentAmount - todayProfitValue - todayAddAmount
-      : currentAmount - todayAddAmount;
+    const rateBaseForToday = todayBaseAmount;
 
     totalPrincipal += currentAmount;
     totalPrincipalForRate += rateBaseForToday;
@@ -280,6 +282,13 @@ export function buildPortfolioMetrics(rawFunds: FundTodayItem[], now = new Date(
       currentRate: round(currentRateValue),
       currentRateValue: round(currentRateValue),
       rawCurrentRate: finiteNumber(fund.rawCurrentRate) ?? round(currentRateValue),
+      amount: round(currentAmount),
+      confirmedAmount: round(currentAmount),
+      pendingBuy: pendingBuyValue,
+      pendingBuyAmount: round(pendingBuyAmount),
+      confirmedAmountValue: round(currentAmount),
+      pendingBuyAmountValue: round(pendingBuyAmount),
+      pendingBuyValue,
       todayProfit: round(todayProfitValue),
       todayProfitValue: round(todayProfitValue),
       todayAmount: round(todayAmountValue),
