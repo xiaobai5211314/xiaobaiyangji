@@ -714,6 +714,9 @@ namespace 小白养基.Controllers
             public string? PendingConfirmDate { get; set; }
             public string PendingSource { get; set; } = string.Empty;
             public string PendingEvidence { get; set; } = string.Empty;
+            public string PendingDecisionReason { get; set; } = string.Empty;
+            public double RawTodayProfit { get; set; }
+            public double RawPendingAmount { get; set; }
             public double ConfirmedAmount { get; set; }
             public double TodayBaseAmount { get; set; }
             public bool ParticipatesToday { get; set; } = true;
@@ -1211,6 +1214,9 @@ namespace 小白养基.Controllers
                     PendingConfirmDate = pendingConfirmDate,
                     PendingSource = pendingBuyAmount > 0 ? pendingSource : (clearedOldPending ? "cleared_old" : ""),
                     PendingEvidence = pendingEvidence,
+                    PendingDecisionReason = pendingReason,
+                    RawTodayProfit = Math.Round(yesterdayIncome, 2),
+                    RawPendingAmount = Math.Round(pendingBuyAmount, 2),
                     ConfirmedAmount = confirmedAmount,
                     TodayBaseAmount = notUpdatedNoPending ? 0 : confirmedAmount,
                     ParticipatesToday = pendingBuyAmount <= 0 && !notUpdatedNoPending,
@@ -1269,9 +1275,16 @@ namespace 小白养基.Controllers
             MyFundConfig? existing,
             string settleDate)
         {
-            // 保留已有 pending 状态（非差额推断）
+            // 强制规则：如果 OCR 上下文有"待确认金额 0.00"或"待确认金额0"，直接返回无 pending
+            if (HasZeroPendingAmountEvidence(localContext) || HasZeroPendingAmountEvidence(fullText))
+            {
+                return new OcrPendingBuyAssessment(false, false, 0, "OCR识别到待确认金额为0，无买入待确认", "explicit_zero_pending", null);
+            }
+
+            // 保留已有 pending 状态（仅当本次 OCR 无"待确认金额"字段时）
             double existingPending = existing == null ? 0 : GetActivePendingBuyAmount(existing, settleDate);
-            if (existingPending > 0 && holdAmount >= existingPending)
+            if (existingPending > 0 && holdAmount >= existingPending
+                && !HasPendingAmountField(localContext) && !HasPendingAmountField(fullText))
             {
                 return new OcrPendingBuyAssessment(
                     true,
@@ -1378,12 +1391,27 @@ namespace 小白养基.Controllers
         private static bool HasPendingEvidenceInContext(string context)
         {
             if (string.IsNullOrWhiteSpace(context)) return false;
+            // 排除"待确认金额 0.00"（明确无 pending）
+            if (HasZeroPendingAmountEvidence(context)) return false;
             return context.Contains("交易进行中", StringComparison.OrdinalIgnoreCase)
                 || context.Contains("买入待确认", StringComparison.OrdinalIgnoreCase)
                 || context.Contains("确认中", StringComparison.OrdinalIgnoreCase)
                 || context.Contains("待确认", StringComparison.OrdinalIgnoreCase)
                 || Regex.IsMatch(context, @"预计.{0,24}(可|可以)?查看收益", RegexOptions.IgnoreCase)
                 || context.Contains("买入金额待确认", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool HasZeroPendingAmountEvidence(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            return Regex.IsMatch(text, @"待确认金额\s*[:：]?\s*0+\.?0*")
+                || Regex.IsMatch(text, @"买入待确认\s*[:：]?\s*0+\.?0*\s*元");
+        }
+
+        private static bool HasPendingAmountField(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            return Regex.IsMatch(text, @"待确认金额|买入待确认\s*[:：]?\s*\d");
         }
 
         private static List<string> CollectNameCandidateLines(List<string> texts, int amountIndex)
@@ -1419,6 +1447,8 @@ namespace 小白养基.Controllers
         private static bool HasStrongPendingBuyEvidence(string text)
         {
             if (string.IsNullOrWhiteSpace(text)) return false;
+            // 排除"待确认金额 0.00"
+            if (HasZeroPendingAmountEvidence(text)) return false;
             return text.Contains("交易进行中", StringComparison.OrdinalIgnoreCase)
                 || text.Contains("确认中", StringComparison.OrdinalIgnoreCase)
                 || text.Contains("待确认", StringComparison.OrdinalIgnoreCase)

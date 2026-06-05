@@ -5024,6 +5024,16 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                     来源：{{ item.pendingSource || 'none' }} · {{ item.pendingReason }}
                                     <span v-if="item.pendingEvidence" style="margin-left:4px;color:#93c5fd;">[{{ item.pendingEvidence }}]</span>
                                 </div>
+                                <div v-if="item.pendingDecisionReason"
+                                     style="margin-top:4px;color:var(--text-muted);font-size:11px;">
+                                    决策：{{ item.pendingDecisionReason }}
+                                </div>
+                                <div style="margin-top:4px;color:var(--text-muted);font-size:11px;display:flex;gap:12px;flex-wrap:wrap;">
+                                    <span>rawTodayProfit={{ item.rawTodayProfit ?? '--' }}</span>
+                                    <span>rawPending={{ item.rawPendingAmount ?? '--' }}</span>
+                                    <span>confirmed={{ item.confirmedAmount ?? '--' }}</span>
+                                    <span>base={{ item.todayBaseAmount ?? '--' }}</span>
+                                </div>
                                 <div v-if="item.profitUpdateState && item.profitUpdateState !== 'UNKNOWN'"
                                      style="margin-top:4px;color:var(--text-muted);font-size:11px;">
                                     收益状态：{{ item.profitUpdateState === 'UPDATED' ? '已更新' : '未更新' }}
