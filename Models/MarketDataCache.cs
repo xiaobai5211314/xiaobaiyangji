@@ -18,6 +18,8 @@ namespace 小白养基.Models
 
         public DateTime ExpiresAt { get; set; } = DateTime.UtcNow;
 
+        public DateTime StaleUntil { get; set; } = DateTime.UtcNow.AddDays(7);
+
         [MaxLength(100)]
         public string Source { get; set; } = string.Empty;
 

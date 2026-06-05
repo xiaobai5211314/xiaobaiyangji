@@ -74,10 +74,10 @@ namespace 小白养基.Services
         {
             try
             {
-                var cutoff = DateTime.UtcNow - maxStaleAge;
+                var now = DateTime.UtcNow;
                 var row = await _db.MarketDataCaches
                     .AsNoTracking()
-                    .FirstOrDefaultAsync(x => x.CacheKey == key && x.UpdatedAt > cutoff);
+                    .FirstOrDefaultAsync(x => x.CacheKey == key && (x.StaleUntil > now || x.UpdatedAt > now - maxStaleAge));
 
                 if (row != null)
                 {
@@ -113,6 +113,7 @@ namespace 小白养基.Services
                     existing.PayloadJson = json;
                     existing.UpdatedAt = now;
                     existing.ExpiresAt = now + freshTtl;
+                    existing.StaleUntil = now + staleTtl;
                     existing.Source = source;
                     existing.IsStale = false;
                     existing.LastError = null;
@@ -126,6 +127,7 @@ namespace 小白养基.Services
                         PayloadJson = json,
                         UpdatedAt = now,
                         ExpiresAt = now + freshTtl,
+                        StaleUntil = now + staleTtl,
                         Source = source,
                         HitCount = 0,
                         IsStale = false

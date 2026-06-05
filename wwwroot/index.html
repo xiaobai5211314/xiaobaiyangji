@@ -5151,10 +5151,21 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 };
                 window.hasAutoSavedToday = false;
 
-                const showToast = (msg, type = 'info') => {
-                    const id = toastId++; toasts.value.push({ id, msg, type });
-                    setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id); }, 3000);
-                };
+                const showToast = (() => {
+                    const recentToasts = new Map();
+                    const DEDUP_MS = 60000;
+                    return (msg, type = 'info') => {
+                        const now = Date.now();
+                        if (type === 'error' || type === 'warning') {
+                            const last = recentToasts.get(msg);
+                            if (last && now - last < DEDUP_MS) return;
+                            recentToasts.set(msg, now);
+                            for (const [k, t] of recentToasts) { if (now - t > DEDUP_MS * 2) recentToasts.delete(k); }
+                        }
+                        const id = toastId++; toasts.value.push({ id, msg, type });
+                        setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id); }, 3000);
+                    };
+                })();
                 const isLoggedIn = ref(localStorage.getItem('fund_username') ? true : false);
                 const currentUser = ref(localStorage.getItem('fund_username') || '');
                 const userDisplayName = ref(localStorage.getItem('fund_display_name') || '');
@@ -5907,7 +5918,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     archiveModal.show = true; archiveModal.isLoading = true; archiveModal.targetName = targetName; archiveModal.data = [];
                     try {
                         // 只取目标基金/总持仓的档案，避免每次点击都把所有历史记录拖回前端。
-                        const url = `${API_BASE}/api/fund/get-archives?username=${encodeURIComponent(currentUser.value)}&fundCode=${encodeURIComponent(targetCode)}&limit=120&_t=${Date.now()}`;
+                        const url = `${API_BASE}/api/fund/get-archives?username=${encodeURIComponent(currentUser.value)}&fundCode=${encodeURIComponent(targetCode)}&limit=120`;
                         const res = await fetch(url, { cache: 'no-store' });
                         if (res.ok) {
                             archiveModal.data = await res.json();
@@ -6103,19 +6114,25 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     });
 
                 const fetchGlobalIndices = async (force = false) => {
-                    showGlobalIndices.value = true; isIndicesLoading.value = true;
+                    showGlobalIndices.value = true; isIndicesLoading.value = !globalIndices.value.length;
+                    if (!force && globalIndices.value.length === 0) {
+                        const cached = readJsonCache('global_indices_cache_v1', 60 * 60 * 1000);
+                        if (Array.isArray(cached) && cached.length > 0) { globalIndices.value = cached; isIndicesLoading.value = false; }
+                    }
                     try {
-                        const res = await apiFetch(`/api/fund/global-indices${force === true ? '?force=true' : ''}`, { cache: 'no-store' });
+                        const res = await apiFetch(`/api/fund/global-indices${force === true ? '?force=true' : ''}`, { cache: force ? 'no-store' : 'default' });
                         if (!res.ok) throw new Error(await res.text());
                         const data = await res.json();
                         if (Array.isArray(data)) {
                             globalIndices.value = data;
+                            writeJsonCache('global_indices_cache_v1', data);
                             const srcInfo = data.filter(x => x.source && x.source !== 'fresh').map(x => `${x.name}:${x.source}`);
                             const validCount = data.filter(x => x.latest && x.latest > 0).length;
                             console.log(`[global-indices] source=${srcInfo.length > 0 ? srcInfo.join(', ') : 'fresh'} validCount=${validCount}/7`);
                             data.forEach(x => { if (x.klines) console.log(`[global-indices] code=${x.code} klinesCount=${x.klines.length} yearRate=${x.yearRate ?? 'null'}`); });
                         } else if (data && Array.isArray(data.indices)) {
                             globalIndices.value = data.indices;
+                            writeJsonCache('global_indices_cache_v1', data.indices);
                             const validCount = data.indices.filter(x => x.latest && x.latest > 0).length;
                             console.log(`[global-indices] source=debug validCount=${validCount}/${data.totalCount || 7}`);
                             data.indices.forEach(x => { if (x.klines) console.log(`[global-indices] code=${x.code} klinesCount=${x.klines.length} yearRate=${x.yearRate ?? 'null'}`); });
@@ -6131,14 +6148,30 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     historyModal.show = true; historyModal.name = item.name; historyModal.isLoading = false; historyModal.data = sortIndexHistoryRowsDesc(rows);
                 };
 
-                const fetchHistory = (code, name) => {
-                    if (!/^\d{6}$/.test(code)) return showToast("🚨 非法代码！", "error");
+                const fetchHistory = async (code, name) => {
+                    if (!/^\d{6}$/.test(code)) return showToast("非法代码", "error");
                     historyModal.show = true; historyModal.isLoading = true; historyModal.name = name; historyModal.data = [];
-                    const scriptId = `jsonp_${code}`; let oldScript = document.getElementById(scriptId); if (oldScript) oldScript.remove();
-                    const script = document.createElement('script'); script.id = scriptId; script.src = `https://fund.eastmoney.com/pingzhongdata/${code}.js?v=${new Date().getTime()}`;
-                    script.onload = () => { if (typeof Data_netWorthTrend !== 'undefined') { let trend = Data_netWorthTrend.slice(-250).reverse(); historyModal.data = trend.map(item => { let d = new Date(item.x); return { date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`, rate: item.equityReturn || 0 }; }); } historyModal.isLoading = false; };
-                    script.onerror = () => { showToast("📡 抓取失败", "error"); historyModal.isLoading = false; };
-                    document.body.appendChild(script);
+                    const cacheKey = `nav_history_${code}_v1`;
+                    const cached = readJsonCache(cacheKey, 30 * 60 * 1000);
+                    if (cached && Array.isArray(cached) && cached.length > 0) {
+                        historyModal.data = cached.slice(-250).reverse();
+                        historyModal.isLoading = false;
+                    }
+                    try {
+                        const res = await fetch(`${API_BASE}/api/fund/nav-history?code=${code}&period=1y`);
+                        if (!res.ok) throw new Error(await res.text());
+                        const raw = await res.json();
+                        const rows = Array.isArray(raw) ? raw : [];
+                        const mapped = rows.map(item => ({ date: String(item.date || ''), rate: Number(item.rate || 0) }));
+                        if (mapped.length > 0) {
+                            historyModal.data = mapped.slice(-250).reverse();
+                            writeJsonCache(cacheKey, mapped);
+                        } else if (!cached) {
+                            historyModal.data = [];
+                        }
+                    } catch (e) {
+                        if (!cached) showToast("走势数据暂不可用", "warning");
+                    } finally { historyModal.isLoading = false; }
                 };
 
                 const fetchSectorDetails = async (sector) => {
@@ -6480,8 +6513,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     isSectorLoading.value = force || sectorTopList.value.length === 0;
                     expandedSectors.value = new Set();
                     try {
-                        const res = await fetch(`${API_BASE}/api/fund/sectors?force=${force ? 'true' : 'false'}&_t=${Date.now()}`, {
-                            cache: 'no-store'
+                        const res = await fetch(`${API_BASE}/api/fund/sectors?force=${force ? 'true' : 'false'}`, {
+                            cache: force ? 'no-store' : 'default'
                         });
                         if (!res.ok) throw new Error(await res.text());
                         const data = await res.json();
@@ -6529,7 +6562,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     }
                     isCapitalLoading.value = !hasCapitalFlowData();
                     try {
-                        const res = await fetch(`${API_BASE}/api/fund/capital-flow?limit=40${force ? '&force=true' : ''}&_t=${Date.now()}`, { cache: 'no-store' });
+                        const res = await fetch(`${API_BASE}/api/fund/capital-flow?limit=40${force ? '&force=true' : ''}`, { cache: force ? 'no-store' : 'default' });
                         if (!res.ok) throw new Error(await res.text());
                         const data = await res.json();
                         applyCapitalPayload(data);
@@ -6674,7 +6707,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     performanceLoading.value = true;
                     performanceMessage.value = '';
                     try {
-                        const url = `/api/fund/performance-curve?username=${encodeURIComponent(currentUser.value)}&period=${encodeURIComponent(performancePeriod.value)}&index=${encodeURIComponent(performanceIndex.value)}&_t=${Date.now()}`;
+                        const url = `/api/fund/performance-curve?username=${encodeURIComponent(currentUser.value)}&period=${encodeURIComponent(performancePeriod.value)}&index=${encodeURIComponent(performanceIndex.value)}`;
                         const res = await apiFetch(url, { cache: 'no-store' });
                         if (!res.ok) throw new Error(await res.text());
                         const data = await res.json();
@@ -6849,7 +6882,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     if (analysisRecords.value.length > 0 && !force) return;
                     analysisLoading.value = true;
                     try {
-                        const url = `${API_BASE}/api/fund/get-archives?username=${encodeURIComponent(currentUser.value)}&limit=500&_t=${Date.now()}`;
+                        const url = `${API_BASE}/api/fund/get-archives?username=${encodeURIComponent(currentUser.value)}&limit=500`;
                         const res = await fetch(url, { cache: 'no-store' });
                         if (!res.ok) throw new Error(await res.text());
                         analysisRecords.value = await res.json();
@@ -6888,6 +6921,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     const force = !!options.force;
                     const silent = !!options.silent;
                     isFetchingData = true;
+                    const dashCacheKey = `dashboard_cache_${currentUser.value}_v1`;
+                    if (!force && fundsList.value.length === 0) {
+                        const cached = readJsonCache(dashCacheKey, 3600000);
+                        if (Array.isArray(cached) && cached.length > 0) {
+                            fundsList.value = cached;
+                            isLoading.value = false;
+                        }
+                    }
                     if (!silent && fundsList.value.length === 0) isLoading.value = true;
                     try {
                         const forceParam = force ? '&force=true' : '';
@@ -6989,6 +7030,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         });
 
                         fundsList.value = apiData;
+                        writeJsonCache(dashCacheKey, apiData);
                         const tRealized = fundsList.value.reduce((sum, f) => sum + (f.realizedProfit || 0), 0);
                         totalPrincipal.value = tPrincipal;
                         if (apiSummary) {
