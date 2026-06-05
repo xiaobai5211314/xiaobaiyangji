@@ -4963,6 +4963,27 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                     </div>
 
                                     <div style="background:rgba(255,255,255,.05);border-radius:10px;padding:8px;">
+                                        <div style="font-size:11px;color:var(--text-muted);">确认持仓金额</div>
+                                        <div style="font-size:15px;font-weight:900;color:var(--text-main);">
+                                            {{ Number(item.confirmedAmount ?? item.holdAmount ?? 0).toFixed(2) }}
+                                        </div>
+                                    </div>
+
+                                    <div style="background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.22);border-radius:10px;padding:8px;">
+                                        <div style="font-size:11px;color:var(--text-muted);">买入待确认金额</div>
+                                        <div style="font-size:15px;font-weight:900;color:#fbbf24;">
+                                            {{ Number(item.pendingBuyAmount || 0).toFixed(2) }}
+                                        </div>
+                                    </div>
+
+                                    <div style="background:rgba(255,255,255,.05);border-radius:10px;padding:8px;">
+                                        <div style="font-size:11px;color:var(--text-muted);">是否参与今日收益</div>
+                                        <div :style="{fontSize:'15px',fontWeight:'900',color:item.participatesToday === false ? '#fbbf24' : '#34d399'}">
+                                            {{ item.participatesToday === false ? '否' : '是' }}
+                                        </div>
+                                    </div>
+
+                                    <div style="background:rgba(255,255,255,.05);border-radius:10px;padding:8px;">
                                         <div style="font-size:11px;color:var(--text-muted);">金额来源</div>
                                         <div style="font-size:12px;font-weight:700;color:var(--text-muted);">
                                             {{ item.costSource || 'OCR识别' }}
@@ -4991,6 +5012,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 <div v-if="item.warning"
                                      style="margin-top:8px;color:#f59e0b;font-size:12px;">
                                     ⚠️ {{ item.warning }}
+                                </div>
+                                <div v-if="item.pendingReason"
+                                     style="margin-top:6px;color:var(--text-muted);font-size:12px;line-height:1.6;">
+                                    判断原因：{{ item.pendingReason }}
                                 </div>
                             </div>
 

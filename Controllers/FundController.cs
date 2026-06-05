@@ -708,9 +708,14 @@ namespace 小白养基.Controllers
             public string CalcMethod { get; set; } = string.Empty;
             public string Warning { get; set; } = string.Empty;
             public bool IsPendingBuy { get; set; }
+            public bool IsSuspiciousPendingBuy { get; set; }
             public double PendingBuyAmount { get; set; }
             public string PendingReason { get; set; } = string.Empty;
             public string? PendingConfirmDate { get; set; }
+            public string PendingSource { get; set; } = string.Empty;
+            public double ConfirmedAmount { get; set; }
+            public double TodayBaseAmount { get; set; }
+            public bool ParticipatesToday { get; set; } = true;
         }
 
         public sealed class OcrImportPreviewResponse
@@ -726,6 +731,14 @@ namespace 小白养基.Controllers
             public string Username { get; set; } = string.Empty;
             public List<OcrImportPreviewItem> Items { get; set; } = new();
         }
+
+        private sealed record OcrPendingBuyAssessment(
+            bool IsPendingBuy,
+            bool IsSuspicious,
+            double PendingBuyAmount,
+            string Reason,
+            string Source,
+            string? ConfirmDate);
 
         [HttpPost("import-ocr")]
         public Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFormFile imageFile)
@@ -850,6 +863,7 @@ namespace 小白养基.Controllers
                 .Select(x => x["words"]?.ToString().Trim() ?? string.Empty)
                 .Where(x => !string.IsNullOrWhiteSpace(x))
                 .ToList() ?? new List<string>();
+            string fullOcrText = string.Join(" ", texts);
 
             if (texts.Count == 0)
             {
@@ -1015,8 +1029,7 @@ namespace 小白养基.Controllers
                 diagnostics.Add($"[OCR匹配] {namePart} → {best.fund.Name}({best.fund.Code}) 分={best.score:F1} 金额={holdAmount}");
 
                 string calcMethod = "识别提取";
-                int pendingCardStart = FindCardStartIndex(texts, i);
-                string pendingContext = string.Join(" ", texts.Skip(pendingCardStart).Take(Math.Min(14, texts.Count - pendingCardStart)));
+                string pendingContext = BuildOcrPendingContext(texts, i);
 
                 // OCR 截图里的持仓金额是平台当前完整持仓金额，份额校准必须使用完整金额。
                 // 如果扣掉最近加仓金额，确认导入后 HoldAmount 会是新值，但 HoldShares 仍是旧份额，
@@ -1053,35 +1066,28 @@ namespace 小白养基.Controllers
                 }
 
                 userFundDict.TryGetValue(best.fund.Code, out var existingForPending);
-                double pendingTextAmount = TryExtractPendingBuyAmount(pendingContext);
-                bool pendingEvidence = HasPendingBuyEvidence(pendingContext);
-                double pendingBuyAmount = 0;
-                string pendingReason = string.Empty;
-
-                if (pendingTextAmount > 0)
-                {
-                    pendingBuyAmount = pendingTextAmount;
-                    pendingReason = "OCR识别到交易进行中的买入金额";
-                }
-                else if (existingForPending != null)
-                {
-                    double delta = Math.Round(holdAmount - existingForPending.HoldAmount, 2);
-                    if (delta > 1 && (pendingEvidence || existingForPending.LastTradeDate == settleDate || existingForPending.PendingBuyAmount > 0))
-                    {
-                        pendingBuyAmount = delta;
-                        pendingReason = pendingEvidence ? "OCR识别到待确认交易，按持仓差额保护" : "同日持仓突增，按差额保护";
-                    }
-                }
-                else if (pendingEvidence || (holdShares <= 0 && Math.Abs(yesterdayIncome) < 0.01 && Math.Abs(holdingIncome) < 0.01 && Math.Abs(holdingRate) < 0.01))
-                {
-                    pendingBuyAmount = holdAmount;
-                    pendingReason = pendingEvidence ? "OCR识别到交易进行中" : "新基金无份额且收益为0，按买入待确认保护";
-                }
+                var pendingAssessment = AssessOcrPendingBuy(
+                    pendingContext,
+                    fullOcrText,
+                    best.fund.Code,
+                    best.fund.Name,
+                    holdAmount,
+                    holdingIncome,
+                    yesterdayIncome,
+                    holdingRate,
+                    holdShares,
+                    existingForPending,
+                    settleDate);
+                double pendingBuyAmount = pendingAssessment.PendingBuyAmount;
+                string pendingReason = pendingAssessment.Reason;
                 if (pendingBuyAmount > 0)
                 {
                     holdShares = existingForPending?.HoldShares > 0 ? existingForPending.HoldShares : 0;
-                    calcMethod = existingForPending?.HoldShares > 0 ? $"{calcMethod}；保留确认份额" : "买入待确认，份额未确认";
+                    calcMethod = existingForPending?.HoldShares > 0
+                        ? $"{calcMethod}；保留确认份额"
+                        : (pendingAssessment.IsSuspicious ? "疑似买入待确认，份额未确认" : "买入待确认，份额未确认");
                 }
+                double confirmedAmount = Math.Max(0, Math.Round(holdAmount - pendingBuyAmount, 2));
 
                 items.Add(new OcrImportPreviewItem
                 {
@@ -1100,11 +1106,18 @@ namespace 小白养基.Controllers
                     HoldingRate = Math.Round(holdingRate, 2),
                     HoldShares = Math.Round(holdShares, 6),
                     CalcMethod = calcMethod,
-                    Warning = pendingBuyAmount > 0 ? "买入待确认，不参与今日收益" : (holdShares > 0 ? string.Empty : "未能推算份额"),
+                    Warning = pendingBuyAmount > 0
+                        ? (pendingAssessment.IsSuspicious ? "疑似买入待确认，请核对；不参与今日收益" : "买入待确认，不参与今日收益")
+                        : (holdShares > 0 ? string.Empty : "未能推算份额"),
                     IsPendingBuy = pendingBuyAmount > 0,
+                    IsSuspiciousPendingBuy = pendingAssessment.IsSuspicious,
                     PendingBuyAmount = Math.Round(pendingBuyAmount, 2),
                     PendingReason = pendingReason,
-                    PendingConfirmDate = TryExtractPendingConfirmDate(pendingContext)
+                    PendingConfirmDate = pendingAssessment.ConfirmDate,
+                    PendingSource = pendingAssessment.Source,
+                    ConfirmedAmount = confirmedAmount,
+                    TodayBaseAmount = confirmedAmount,
+                    ParticipatesToday = pendingBuyAmount <= 0
                 });
             }
 
@@ -1138,6 +1151,107 @@ namespace 小白养基.Controllers
             return 0;
         }
 
+        private static string BuildOcrPendingContext(List<string> texts, int amountIndex)
+        {
+            int start = Math.Max(0, FindCardStartIndex(texts, amountIndex) - 4);
+            int end = Math.Min(texts.Count, amountIndex + 32);
+            return string.Join(" ", texts.Skip(start).Take(end - start));
+        }
+
+        private static OcrPendingBuyAssessment AssessOcrPendingBuy(
+            string localContext,
+            string fullText,
+            string fundCode,
+            string fundName,
+            double holdAmount,
+            double holdingIncome,
+            double yesterdayIncome,
+            double holdingRate,
+            double holdShares,
+            MyFundConfig? existing,
+            string settleDate)
+        {
+            double existingPending = existing == null ? 0 : GetActivePendingBuyAmount(existing, settleDate);
+            if (existingPending > 0 && holdAmount >= existingPending)
+            {
+                return new OcrPendingBuyAssessment(
+                    true,
+                    false,
+                    existingPending,
+                    "保留已有买入待确认状态",
+                    "ocr_existing_pending",
+                    existing?.PendingConfirmDate ?? EstimatePendingConfirmDate(fundName));
+            }
+
+            bool localStrong = HasStrongPendingBuyEvidence(localContext);
+            bool fullStrong = HasStrongPendingBuyEvidence(fullText);
+            bool zeroProfitShape = IsZeroProfitOcrShape(yesterdayIncome, holdingIncome, holdingRate);
+            bool dashYieldSignal = HasYieldDashSignal(localContext);
+            var localPendingAmounts = ExtractPendingBuyAmounts(localContext);
+            var fullPendingAmounts = ExtractPendingBuyAmounts(fullText);
+            double localPendingAmount = PickMatchingPendingAmount(localPendingAmounts, holdAmount) ?? localPendingAmounts.FirstOrDefault();
+            double fullPendingAmount = fullPendingAmounts.FirstOrDefault();
+            bool fullAmountMatchesThisItem = PickExactPendingAmount(fullPendingAmounts, holdAmount).HasValue;
+            bool fundScopedFullSignal = HasFundScopedPendingEvidence(fullText, fundCode, fundName);
+            string? confirmDate = TryExtractPendingConfirmDate(localContext)
+                ?? TryExtractPendingConfirmDate(fullText)
+                ?? EstimatePendingConfirmDate(fundName);
+
+            if (localStrong)
+            {
+                double pendingAmount = localPendingAmount > 0 ? localPendingAmount : holdAmount;
+                return new OcrPendingBuyAssessment(
+                    true,
+                    false,
+                    Math.Min(Math.Round(pendingAmount, 2), Math.Round(holdAmount, 2)),
+                    localPendingAmount > 0 ? "OCR识别到交易进行中的买入金额" : "OCR识别到交易进行中/待确认/预计可查看收益",
+                    "ocr_pending_signal",
+                    confirmDate);
+            }
+
+            if (existing != null)
+            {
+                double delta = Math.Round(holdAmount - existing.HoldAmount, 2);
+                double? deltaMatchedPendingAmount = PickExactPendingAmount(fullPendingAmounts, delta);
+                double pendingAmount = deltaMatchedPendingAmount ?? delta;
+                if (delta > 1 && (deltaMatchedPendingAmount.HasValue || fundScopedFullSignal || dashYieldSignal || zeroProfitShape))
+                {
+                    return new OcrPendingBuyAssessment(
+                        true,
+                        !deltaMatchedPendingAmount.HasValue && !fundScopedFullSignal,
+                        Math.Min(Math.Round(Math.Max(1, pendingAmount), 2), Math.Round(holdAmount, 2)),
+                        deltaMatchedPendingAmount.HasValue || fundScopedFullSignal ? "OCR识别到待确认交易，按新增差额保护" : "持仓金额突增且收益缺失，疑似买入待确认",
+                        deltaMatchedPendingAmount.HasValue || fundScopedFullSignal ? "ocr_pending_signal" : "ocr_suspicious_pending_buy",
+                        confirmDate);
+                }
+            }
+
+            if (fullStrong && (fullAmountMatchesThisItem || fundScopedFullSignal || (zeroProfitShape && fullPendingAmounts.Count == 0)))
+            {
+                double pendingAmount = fullAmountMatchesThisItem ? PickExactPendingAmount(fullPendingAmounts, holdAmount)!.Value : holdAmount;
+                return new OcrPendingBuyAssessment(
+                    true,
+                    false,
+                    Math.Min(Math.Round(pendingAmount, 2), Math.Round(holdAmount, 2)),
+                    fullPendingAmount > 0 ? "OCR全文识别到交易进行中的买入金额" : "OCR全文识别到交易进行中/预计可查看收益",
+                    "ocr_pending_signal",
+                    confirmDate);
+            }
+
+            if (existing == null && zeroProfitShape && (dashYieldSignal || holdShares <= 0))
+            {
+                return new OcrPendingBuyAssessment(
+                    true,
+                    true,
+                    Math.Round(holdAmount, 2),
+                    dashYieldSignal ? "昨日收益为空/--且持有收益接近0，疑似买入待确认" : "新基金无确认份额且收益接近0，疑似买入待确认",
+                    "ocr_suspicious_pending_buy",
+                    confirmDate);
+            }
+
+            return new OcrPendingBuyAssessment(false, false, 0, string.Empty, string.Empty, null);
+        }
+
         private static List<string> CollectNameCandidateLines(List<string> texts, int amountIndex)
         {
             var result = new List<string>();
@@ -1168,27 +1282,117 @@ namespace 小白养基.Controllers
             return null;
         }
 
-        private static bool HasPendingBuyEvidence(string text)
+        private static bool HasStrongPendingBuyEvidence(string text)
         {
             if (string.IsNullOrWhiteSpace(text)) return false;
             return text.Contains("交易进行中", StringComparison.OrdinalIgnoreCase)
-                || Regex.IsMatch(text, @"预计.*可查看收益", RegexOptions.IgnoreCase)
-                || Regex.IsMatch(text, @"买入[/／]\s*\d", RegexOptions.IgnoreCase)
-                || Regex.IsMatch(text, @"(^|\s)--($|\s)");
+                || text.Contains("确认中", StringComparison.OrdinalIgnoreCase)
+                || text.Contains("待确认", StringComparison.OrdinalIgnoreCase)
+                || Regex.IsMatch(text, @"预计.{0,24}(可|可以)?查看收益", RegexOptions.IgnoreCase)
+                || Regex.IsMatch(text, @"(?:买入|加仓)[/／\s:：|]*[0-9][0-9,]*(?:\.\d{1,2})?\s*元?", RegexOptions.IgnoreCase);
         }
 
-        private static double TryExtractPendingBuyAmount(string text)
+        private static bool HasYieldDashSignal(string text)
         {
-            if (string.IsNullOrWhiteSpace(text)) return 0;
-            var match = Regex.Match(text, @"买入[/／]?\s*([0-9][0-9,]*\.\d{2})\s*元?", RegexOptions.IgnoreCase);
-            if (!match.Success) return 0;
-            return double.TryParse(match.Groups[1].Value.Replace(",", ""), out var amount) ? Math.Round(amount, 2) : 0;
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            return Regex.IsMatch(text, @"(--|——|–|—)")
+                || Regex.IsMatch(text, @"昨日收益.{0,8}(--|——|–|—)", RegexOptions.IgnoreCase);
+        }
+
+        private static bool IsZeroProfitOcrShape(double yesterdayIncome, double holdingIncome, double holdingRate)
+            => Math.Abs(yesterdayIncome) < 0.01 && Math.Abs(holdingIncome) < 0.01 && Math.Abs(holdingRate) < 0.01;
+
+        private static List<double> ExtractPendingBuyAmounts(string text)
+        {
+            var amounts = new List<double>();
+            if (string.IsNullOrWhiteSpace(text)) return amounts;
+            foreach (Match match in Regex.Matches(text, @"(?:买入|加仓)[/／\s:：|]*([0-9][0-9,]*(?:\.\d{1,2})?)\s*元?", RegexOptions.IgnoreCase))
+            {
+                if (double.TryParse(match.Groups[1].Value.Replace(",", ""), out var amount) && amount > 0)
+                {
+                    double rounded = Math.Round(amount, 2);
+                    if (!amounts.Any(x => Math.Abs(x - rounded) < 0.01)) amounts.Add(rounded);
+                }
+            }
+            return amounts;
+        }
+
+        private static double? PickMatchingPendingAmount(IEnumerable<double> amounts, double holdAmount)
+        {
+            foreach (var amount in amounts)
+            {
+                if (amount <= 0 || amount > holdAmount + 1) continue;
+                double tolerance = Math.Max(1, holdAmount * 0.005);
+                if (Math.Abs(amount - holdAmount) <= tolerance || amount < holdAmount)
+                {
+                    return Math.Round(amount, 2);
+                }
+            }
+            return null;
+        }
+
+        private static double? PickExactPendingAmount(IEnumerable<double> amounts, double expectedAmount)
+        {
+            if (expectedAmount <= 0) return null;
+            double tolerance = Math.Max(1, expectedAmount * 0.01);
+            foreach (var amount in amounts)
+            {
+                if (amount > 0 && Math.Abs(amount - expectedAmount) <= tolerance)
+                {
+                    return Math.Round(amount, 2);
+                }
+            }
+            return null;
+        }
+
+        private static bool HasFundScopedPendingEvidence(string fullText, string fundCode, string fundName)
+        {
+            if (string.IsNullOrWhiteSpace(fullText)) return false;
+            var anchors = new List<string>();
+            if (!string.IsNullOrWhiteSpace(fundCode)) anchors.Add(fundCode);
+            foreach (var token in BuildFundNameTokens(fundName).Take(3))
+            {
+                if (token.Length >= 2) anchors.Add(token);
+            }
+            foreach (var anchor in anchors.Distinct())
+            {
+                int index = fullText.IndexOf(anchor, StringComparison.OrdinalIgnoreCase);
+                while (index >= 0)
+                {
+                    int start = Math.Max(0, index - 80);
+                    int length = Math.Min(fullText.Length - start, anchor.Length + 180);
+                    string window = fullText.Substring(start, length);
+                    if (HasStrongPendingBuyEvidence(window)) return true;
+                    int nextStart = index + anchor.Length;
+                    index = nextStart < fullText.Length
+                        ? fullText.IndexOf(anchor, nextStart, StringComparison.OrdinalIgnoreCase)
+                        : -1;
+                }
+            }
+            return false;
+        }
+
+        private static IEnumerable<string> BuildFundNameTokens(string fundName)
+        {
+            if (string.IsNullOrWhiteSpace(fundName)) yield break;
+            string normalized = Regex.Replace(fundName, @"[\s（）()A-Za-z]+", "");
+            string withoutGenericWords = Regex.Replace(
+                normalized,
+                @"(ETF|联接|混合|指数|发起式|QDII|LOF|增强|债券|股票|基金|行业|主题|精选)",
+                "|",
+                RegexOptions.IgnoreCase);
+            foreach (var token in withoutGenericWords.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var t = token.Trim();
+                if (t.Length >= 2) yield return t;
+            }
+            if (normalized.Length >= 4) yield return normalized[..Math.Min(6, normalized.Length)];
         }
 
         private static string? TryExtractPendingConfirmDate(string text)
         {
             if (string.IsNullOrWhiteSpace(text)) return null;
-            var match = Regex.Match(text, @"预计\s*(\d{1,2})[./月-](\d{1,2})\s*日?.*可查看收益");
+            var match = Regex.Match(text, @"预计\s*(\d{1,2})[./月-]?\s*(\d{1,2})\s*日?.{0,24}(可|可以)?查看收益");
             if (!match.Success) return null;
             var now = ChinaNow();
             if (!int.TryParse(match.Groups[1].Value, out var month) || !int.TryParse(match.Groups[2].Value, out var day)) return null;
@@ -1202,6 +1406,14 @@ namespace 小白养基.Controllers
             {
                 return null;
             }
+        }
+
+        private static string EstimatePendingConfirmDate(string fundName)
+        {
+            var today = ChinaNow().Date;
+            bool overseas = !string.IsNullOrWhiteSpace(fundName)
+                && Regex.IsMatch(fundName, @"QDII|恒生|港股|海外|全球|美元|纳斯达克|标普|日经", RegexOptions.IgnoreCase);
+            return today.AddDays(overseas ? 3 : 1).ToString("yyyy-MM-dd");
         }
 
         private static bool IsNoiseLine(string text)
@@ -1419,7 +1631,7 @@ namespace 小白养基.Controllers
                         FundName = item.Name,
                         HoldAmount = Math.Round(item.HoldAmount, 2),
                         CostAmount = item.CostAmount > 0 ? Math.Round(item.CostAmount, 2) : Math.Round(item.HoldAmount, 2),
-                        HoldShares = Math.Round(item.HoldShares, 6),
+                        HoldShares = item.IsPendingBuy && item.PendingBuyAmount >= item.HoldAmount - 0.01 ? 0 : Math.Round(item.HoldShares, 6),
                         LastTradeDate = item.IsPendingBuy ? ChinaDateDash() : null,
                         LastAddAmount = item.IsPendingBuy ? Math.Round(item.PendingBuyAmount > 0 ? item.PendingBuyAmount : item.HoldAmount, 2) : 0,
                         PendingBuyAmount = item.IsPendingBuy ? Math.Round(item.PendingBuyAmount > 0 ? item.PendingBuyAmount : item.HoldAmount, 2) : 0,
@@ -1427,7 +1639,7 @@ namespace 小白养基.Controllers
                         PendingTradeTime = item.IsPendingBuy ? ChinaNow().ToString("HH:mm:ss") : null,
                         PendingTradeStatus = item.IsPendingBuy ? "pending_buy" : null,
                         PendingConfirmDate = item.PendingConfirmDate,
-                        PendingSource = item.IsPendingBuy ? "ocr_import" : null,
+                        PendingSource = item.IsPendingBuy ? (string.IsNullOrWhiteSpace(item.PendingSource) ? "ocr" : item.PendingSource) : null,
                         LastSettledDate = null,
                         LastSettledProfit = 0,
                         LastSettledRate = 0
@@ -1466,9 +1678,9 @@ namespace 小白养基.Controllers
                 : (item.IsPendingBuy ? Math.Max(0, Math.Round(item.HoldAmount - oldHoldAmount, 2)) : 0);
             if (pendingAmount > 0)
             {
-                MarkPendingBuy(exist, pendingAmount, todayDash, "ocr_import", item.PendingConfirmDate);
+                MarkPendingBuy(exist, pendingAmount, todayDash, string.IsNullOrWhiteSpace(item.PendingSource) ? "ocr" : item.PendingSource, item.PendingConfirmDate);
             }
-            else if (item.HoldShares > 0)
+            else if (item.HoldShares > 0 && GetActivePendingBuyAmount(exist, todayDash) <= 0)
             {
                 ClearPendingBuy(exist);
                 exist.LastSettledDate = null;

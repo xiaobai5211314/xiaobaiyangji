@@ -283,6 +283,18 @@
                 <text>{{ ocrNumber(item, 'holdAmount', 'HoldAmount') }}</text>
               </view>
               <view>
+                <text>确认持仓金额</text>
+                <text>{{ ocrNumber(item, 'confirmedAmount', 'ConfirmedAmount') }}</text>
+              </view>
+              <view>
+                <text>买入待确认</text>
+                <text>{{ ocrNumber(item, 'pendingBuyAmount', 'PendingBuyAmount') }}</text>
+              </view>
+              <view>
+                <text>参与今日收益</text>
+                <text>{{ ocrParticipatesTodayText(item) }}</text>
+              </view>
+              <view>
                 <text>持仓本金</text>
                 <text>{{ ocrNumber(item, 'costAmount', 'CostAmount') }}</text>
               </view>
@@ -304,6 +316,7 @@
               </view>
             </view>
             <text v-if="ocrText(item, 'warning', 'Warning')" class="ocr-warning">{{ ocrText(item, 'warning', 'Warning') }}</text>
+            <text v-if="ocrText(item, 'pendingReason', 'PendingReason')" class="ocr-reason">判断原因：{{ ocrText(item, 'pendingReason', 'PendingReason') }}</text>
           </view>
           <view v-if="ocrDiagnostics.length" class="diagnostics">
             <text v-for="(line, index) in ocrDiagnostics" :key="`diag-${index}`">{{ line }}</text>
@@ -1755,6 +1768,11 @@ function ocrNumber(item: OcrImportPreviewItem, camelKey: string, pascalKey: stri
   return moneyDash(ocrPick(item, camelKey, pascalKey), false);
 }
 
+function ocrParticipatesTodayText(item: OcrImportPreviewItem) {
+  const value = ocrPick(item, 'participatesToday', 'ParticipatesToday');
+  return value === false ? '否' : '是';
+}
+
 function ocrItemKey(item: OcrImportPreviewItem, index: number) {
   return `${ocrText(item, 'code', 'Code') || ocrText(item, 'name', 'Name') || 'ocr'}-${index}`;
 }
@@ -2768,6 +2786,13 @@ function getErrorMessage(error: unknown, fallback: string) {
   display: block;
   margin-top: 14rpx;
   color: #fbbf24;
+  font-size: 22rpx;
+}
+
+.ocr-reason {
+  display: block;
+  margin-top: 8rpx;
+  color: var(--text-muted);
   font-size: 22rpx;
 }
 

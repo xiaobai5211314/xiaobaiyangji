@@ -88,6 +88,15 @@ export interface OcrImportPreviewItem {
   holdShares?: number;
   calcMethod?: string;
   warning?: string;
+  isPendingBuy?: boolean;
+  isSuspiciousPendingBuy?: boolean;
+  pendingBuyAmount?: number;
+  pendingReason?: string;
+  pendingConfirmDate?: string;
+  pendingSource?: string;
+  confirmedAmount?: number;
+  todayBaseAmount?: number;
+  participatesToday?: boolean;
   [key: string]: unknown;
 }
 
