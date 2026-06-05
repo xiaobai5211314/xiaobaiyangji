@@ -920,6 +920,9 @@ namespace 小白养基.Controllers
                 double holdShares = 0;
                 string potentialFragment = string.Empty;
                 var signedNumbers = new List<double>();
+                bool hasDashProfit = false;
+                double listPageHoldProfit = double.NaN;
+                double listPageHoldProfitRate = double.NaN;
 
                 for (int j = 1; j <= 6 && i + j < texts.Count; j++)
                 {
@@ -930,9 +933,16 @@ namespace 小白养基.Controllers
                         break;
                     }
 
+                    if (Regex.IsMatch(nextLine, @"^[\-—–]{2,}$"))
+                    {
+                        hasDashProfit = true;
+                    }
+
                     foreach (Match m in Regex.Matches(nextLine, @"([-+]?\d+[\.,]\d{2})\s*%"))
                     {
-                        holdingRate = double.Parse(m.Groups[1].Value.Replace(",", "."));
+                        double parsedRate = double.Parse(m.Groups[1].Value.Replace(",", "."));
+                        holdingRate = parsedRate;
+                        if (double.IsNaN(listPageHoldProfitRate)) listPageHoldProfitRate = parsedRate;
                     }
 
                     foreach (Match m in Regex.Matches(nextLine, @"([-+]?\d[\d,]*\.\d{2})(?!\s*%)"))
@@ -949,6 +959,11 @@ namespace 小白养基.Controllers
                         }
                         else if (val != 0)
                         {
+                            if (double.IsNaN(listPageHoldProfit) && Math.Abs(val - holdAmount) > 10)
+                            {
+                                listPageHoldProfit = val;
+                            }
+
                             if (!signedNumbers.Contains(val))
                             {
                                 signedNumbers.Add(val);
@@ -983,6 +998,13 @@ namespace 小白养基.Controllers
                 }
 
                 SelectIncomeCandidates(holdAmount, holdingRate, signedNumbers, out holdingIncome, out yesterdayIncome);
+
+                // 列表页 pending 优先判定：
+                // 昨日收益为"--" + 持有收益为0 + 持有收益率为0% → 买入待确认
+                bool listPagePending = hasDashProfit
+                    && (double.IsNaN(listPageHoldProfit) || Math.Abs(listPageHoldProfit) < 0.01)
+                    && (double.IsNaN(listPageHoldProfitRate) || Math.Abs(listPageHoldProfitRate) < 0.01)
+                    && signedNumbers.Count == 0;
 
                 // 代码优先匹配
                 var best = (fund: (FundInfoCache?)null, score: 0d);
@@ -1066,26 +1088,48 @@ namespace 小白养基.Controllers
                 }
 
                 userFundDict.TryGetValue(best.fund.Code, out var existingForPending);
-                var pendingAssessment = AssessOcrPendingBuy(
-                    pendingContext,
-                    fullOcrText,
-                    best.fund.Code,
-                    best.fund.Name,
-                    holdAmount,
-                    holdingIncome,
-                    yesterdayIncome,
-                    holdingRate,
-                    holdShares,
-                    existingForPending,
-                    settleDate);
-                double pendingBuyAmount = pendingAssessment.PendingBuyAmount;
-                string pendingReason = pendingAssessment.Reason;
+
+                double pendingBuyAmount;
+                string pendingReason;
+                string pendingSource;
+                string? pendingConfirmDate;
+                bool isSuspicious = false;
+
+                if (listPagePending)
+                {
+                    // 列表页模式：昨日收益为"--" + 持有收益为0 → 买入待确认
+                    pendingBuyAmount = holdAmount;
+                    pendingReason = "列表页昨日收益为--，持有收益为0，判定买入待确认";
+                    pendingSource = "explicit_row_text";
+                    pendingConfirmDate = EstimatePendingConfirmDate(best.fund.Name);
+                }
+                else
+                {
+                    var pendingAssessment = AssessOcrPendingBuy(
+                        pendingContext,
+                        fullOcrText,
+                        best.fund.Code,
+                        best.fund.Name,
+                        holdAmount,
+                        holdingIncome,
+                        yesterdayIncome,
+                        holdingRate,
+                        holdShares,
+                        existingForPending,
+                        settleDate);
+                    pendingBuyAmount = pendingAssessment.PendingBuyAmount;
+                    pendingReason = pendingAssessment.Reason;
+                    pendingSource = pendingAssessment.Source;
+                    pendingConfirmDate = pendingAssessment.ConfirmDate;
+                    isSuspicious = pendingAssessment.IsSuspicious;
+                }
+
                 if (pendingBuyAmount > 0)
                 {
                     holdShares = existingForPending?.HoldShares > 0 ? existingForPending.HoldShares : 0;
                     calcMethod = existingForPending?.HoldShares > 0
                         ? $"{calcMethod}；保留确认份额"
-                        : (pendingAssessment.IsSuspicious ? "疑似买入待确认，份额未确认" : "买入待确认，份额未确认");
+                        : (isSuspicious ? "疑似买入待确认，份额未确认" : "买入待确认，份额未确认");
                 }
                 double confirmedAmount = Math.Max(0, Math.Round(holdAmount - pendingBuyAmount, 2));
 
@@ -1095,7 +1139,7 @@ namespace 小白养基.Controllers
                 string warning;
                 if (pendingBuyAmount > 0)
                 {
-                    warning = pendingAssessment.IsSuspicious ? "疑似买入待确认，请核对；不参与今日收益" : "买入待确认，不参与今日收益";
+                    warning = isSuspicious ? "疑似买入待确认，请核对；不参与今日收益" : "买入待确认，不参与今日收益";
                 }
                 else if (clearedOldPending)
                 {
@@ -1125,13 +1169,13 @@ namespace 小白养基.Controllers
                     CalcMethod = calcMethod,
                     Warning = warning,
                     IsPendingBuy = pendingBuyAmount > 0,
-                    IsSuspiciousPendingBuy = pendingAssessment.IsSuspicious,
+                    IsSuspiciousPendingBuy = isSuspicious,
                     PendingBuyAmount = Math.Round(pendingBuyAmount, 2),
                     PendingReason = clearedOldPending
-                        ? $"本次OCR无pending证据，清除旧遗留({pendingAssessment.Source ?? pendingAssessment.Reason ?? "无"})"
+                        ? $"本次OCR无pending证据，清除旧遗留({pendingSource ?? pendingReason ?? "无"})"
                         : pendingReason,
-                    PendingConfirmDate = pendingAssessment.ConfirmDate,
-                    PendingSource = pendingBuyAmount > 0 ? pendingAssessment.Source : (clearedOldPending ? "cleared_old" : ""),
+                    PendingConfirmDate = pendingConfirmDate,
+                    PendingSource = pendingBuyAmount > 0 ? pendingSource : (clearedOldPending ? "cleared_old" : ""),
                     ConfirmedAmount = confirmedAmount,
                     TodayBaseAmount = confirmedAmount,
                     ParticipatesToday = pendingBuyAmount <= 0
