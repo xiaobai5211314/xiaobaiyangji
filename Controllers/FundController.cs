@@ -5287,12 +5287,14 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
             if (!force && _cache.TryGetValue<CapitalFlowPayloadDto>(freshKey, out var fresh) && fresh != null)
             {
+                Response.Headers["X-App-Cache"] = "memory-fresh";
                 return Ok(debug ? AttachCapitalFlowDebug(fresh, new[] { new ExternalDataAttemptDto { Source = "capital-flow-cache", CacheHit = true, CacheSource = "memory-fresh", ParsedRowsCount = fresh.Rows.Count } }) : fresh);
             }
 
             if (!force && _cache.TryGetValue<CapitalFlowPayloadDto>(staleKey, out var stale) && stale != null)
             {
                 _ = Task.Run(() => RefreshCapitalFlowCacheQuietlyAsync(limit));
+                Response.Headers["X-App-Cache"] = "memory-stale";
                 return Ok(CloneCapitalFlowPayload(stale, true, true, "主力资金流使用缓存数据", "cache", debug
                     ? new[] { new ExternalDataAttemptDto { Source = "capital-flow-cache", CacheHit = true, CacheSource = "memory-stale", ParsedRowsCount = stale.Rows.Count } }
                     : null));
@@ -5303,11 +5305,13 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 var fallbackWhileBusy = await TryGetCapitalFlowFallbackAsync(limit);
                 if (fallbackWhileBusy != null)
                 {
+                    Response.Headers["X-App-Cache"] = "fallback-busy";
                     return Ok(CloneCapitalFlowPayload(fallbackWhileBusy, true, true, "主力资金流使用缓存数据", "cache", debug
                         ? new[] { new ExternalDataAttemptDto { Source = "capital-flow-cache", CacheHit = true, CacheSource = "fallback-while-refresh", ParsedRowsCount = fallbackWhileBusy.Rows.Count } }
                         : null));
                 }
 
+                Response.Headers["X-App-Cache"] = "empty-busy";
                 return Ok(CreateUnavailableCapitalFlowPayload(debug
                     ? new[] { new ExternalDataAttemptDto { Source = "capital-flow-lock", Error = "refresh in progress" } }
                     : null));
@@ -5317,11 +5321,13 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             {
                 if (!force && _cache.TryGetValue<CapitalFlowPayloadDto>(freshKey, out fresh) && fresh != null)
                 {
+                    Response.Headers["X-App-Cache"] = "memory-fresh-after-lock";
                     return Ok(debug ? AttachCapitalFlowDebug(fresh, new[] { new ExternalDataAttemptDto { Source = "capital-flow-cache", CacheHit = true, CacheSource = "memory-fresh-after-lock", ParsedRowsCount = fresh.Rows.Count } }) : fresh);
                 }
 
                 if (!force && _cache.TryGetValue<CapitalFlowPayloadDto>(staleKey, out stale) && stale != null)
                 {
+                    Response.Headers["X-App-Cache"] = "memory-stale-after-lock";
                     return Ok(CloneCapitalFlowPayload(stale, true, true, "主力资金流使用缓存数据", "cache", debug
                         ? new[] { new ExternalDataAttemptDto { Source = "capital-flow-cache", CacheHit = true, CacheSource = "memory-stale-after-lock", ParsedRowsCount = stale.Rows.Count } }
                         : null));
@@ -5329,6 +5335,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
                 var payload = await BuildCapitalFlowPayloadAsync(limit, debug);
                 await SetCapitalFlowCacheAsync(limit, payload);
+                Response.Headers["X-App-Cache"] = "build";
                 return Ok(payload);
             }
             catch (Exception ex)
@@ -5341,6 +5348,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 var fallback = await TryGetCapitalFlowFallbackAsync(limit);
                 if (fallback != null)
                 {
+                    Response.Headers["X-App-Cache"] = "error-stale";
                     var fallbackAttempts = failureAttempts
                         .Concat(new[] { new ExternalDataAttemptDto { Source = "capital-flow-cache", CacheHit = true, CacheSource = "fallback-after-error", Error = ex.Message, ParsedRowsCount = fallback.Rows.Count } });
                     return Ok(CloneCapitalFlowPayload(fallback, true, true, "主力资金流使用缓存数据", "cache", debug
@@ -5348,6 +5356,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                         : null));
                 }
 
+                Response.Headers["X-App-Cache"] = "empty";
                 return Ok(CreateUnavailableCapitalFlowPayload(debug
                     ? failureAttempts
                     : null));
@@ -6282,7 +6291,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
             string dbKey = $"fund_nav_history_{code}_{period}_v1";
             var (dbData, dbSource) = await _marketCache.TryGetAsync<List<object>>(dbKey);
-            if (dbData != null && dbSource != null)
+            if (dbData != null && dbSource != null && dbData.Count > 0)
             {
                 Response.Headers["X-App-Cache"] = dbSource;
                 return Ok(dbData);
@@ -6300,10 +6309,12 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 {
                     var freshTtl = GetExternalDataFreshTtl();
                     await _marketCache.SetAsync(dbKey, navData, freshTtl, TimeSpan.FromDays(30), fetchSource);
+                    Response.Headers["X-App-Cache"] = "build";
                     return Ok(navData);
                 }
 
-                return Ok(new List<object>());
+                Response.Headers["X-App-Cache"] = "empty";
+                return Ok(new { available = false, points = Array.Empty<object>(), message = "基金历史净值暂无缓存，外部源不可达" });
             }
             catch (Exception ex)
             {
@@ -6311,14 +6322,15 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 try
                 {
                     var (stale, _) = await _marketCache.TryGetStaleAsync<List<object>>(dbKey, TimeSpan.FromDays(30));
-                    if (stale != null)
+                    if (stale != null && stale.Count > 0)
                     {
                         Response.Headers["X-App-Cache"] = "db-stale";
                         return Ok(stale);
                     }
                 }
                 catch { }
-                return Ok(new List<object>());
+                Response.Headers["X-App-Cache"] = "empty";
+                return Ok(new { available = false, points = Array.Empty<object>(), message = "基金历史净值暂无缓存，外部源不可达" });
             }
         }
 
