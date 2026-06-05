@@ -272,6 +272,11 @@
           <view v-if="ocrItems.length === 0" class="empty-card inner-empty">
             <text>暂无识别结果</text>
           </view>
+          <view v-if="ocrProfitUpdateState && ocrProfitUpdateState !== 'UNKNOWN'" class="ocr-update-state">
+            <text :class="['update-badge', ocrProfitUpdateState === 'UPDATED' ? 'updated' : 'not-updated']">
+              {{ ocrProfitUpdateState === 'UPDATED' ? '收益已更新' : '收益未更新' }}
+            </text>
+          </view>
           <view v-for="(item, index) in ocrItems" :key="ocrItemKey(item, index)" class="ocr-row">
             <view class="ocr-row-head">
               <text class="ocr-name">{{ ocrText(item, 'name', 'Name') || ocrText(item, 'ocrName', 'OcrName') || '待匹配基金' }}</text>
@@ -316,7 +321,13 @@
               </view>
             </view>
             <text v-if="ocrText(item, 'warning', 'Warning')" class="ocr-warning">{{ ocrText(item, 'warning', 'Warning') }}</text>
-            <text v-if="ocrText(item, 'pendingReason', 'PendingReason')" class="ocr-reason">判断原因：{{ ocrText(item, 'pendingReason', 'PendingReason') }}</text>
+            <text v-if="ocrText(item, 'pendingReason', 'PendingReason')" class="ocr-reason">
+              来源：{{ ocrText(item, 'pendingSource', 'PendingSource') || 'none' }} · {{ ocrText(item, 'pendingReason', 'PendingReason') }}
+              <text v-if="ocrText(item, 'pendingEvidence', 'PendingEvidence')" style="color:#93c5fd;"> [{{ ocrText(item, 'pendingEvidence', 'PendingEvidence') }}]</text>
+            </text>
+            <text v-if="ocrText(item, 'profitUpdateState', 'ProfitUpdateState') && ocrText(item, 'profitUpdateState', 'ProfitUpdateState') !== 'UNKNOWN'" class="ocr-reason" style="font-size:20rpx;">
+              收益状态：{{ ocrText(item, 'profitUpdateState', 'ProfitUpdateState') === 'UPDATED' ? '已更新' : '未更新' }}
+            </text>
           </view>
           <view v-if="ocrDiagnostics.length" class="diagnostics">
             <text v-for="(line, index) in ocrDiagnostics" :key="`diag-${index}`">{{ line }}</text>
@@ -695,6 +706,7 @@ const ocrBusy = ref(false);
 const ocrConfirming = ref(false);
 const ocrPreviewVisible = ref(false);
 const ocrItems = ref<OcrImportPreviewItem[]>([]);
+const ocrProfitUpdateState = ref('');
 const ocrDiagnostics = ref<string[]>([]);
 const privacyMode = ref<PrivacyMode>(normalizePrivacyMode(getStorage(PRIVACY_KEY, 2)));
 const stockLoading = ref(false);
@@ -1677,6 +1689,7 @@ async function startFundOcr() {
 
     ocrItems.value = Array.isArray(result.items) ? result.items : [];
     ocrDiagnostics.value = Array.isArray(result.diagnostics) ? result.diagnostics : [];
+    ocrProfitUpdateState.value = String(result.profitUpdateState || '');
     ocrPreviewVisible.value = true;
     uni.showToast({ title: `识别到 ${ocrItems.value.length} 条基金`, icon: 'none' });
   } catch (error) {
@@ -2794,6 +2807,28 @@ function getErrorMessage(error: unknown, fallback: string) {
   margin-top: 8rpx;
   color: var(--text-muted);
   font-size: 22rpx;
+}
+
+.ocr-update-state {
+  text-align: center;
+  margin-bottom: 16rpx;
+}
+
+.update-badge {
+  font-size: 22rpx;
+  padding: 4rpx 16rpx;
+  border-radius: 8rpx;
+  font-weight: 600;
+}
+
+.update-badge.updated {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+.update-badge.not-updated {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
 }
 
 .inner-empty {
