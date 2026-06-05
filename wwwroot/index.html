@@ -4924,6 +4924,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <template v-if="ocrModal.data && ocrModal.data.success">
                             <div style="font-size:16px;font-weight:900;color:#34d399;margin-bottom:12px;">
                                 ✅ 成功识别 {{ ocrModal.data.count || 0 }} 只基金
+                                <span v-if="ocrModal.data.profitUpdateState && ocrModal.data.profitUpdateState !== 'UNKNOWN'"
+                                      :style="{marginLeft:'8px',fontSize:'12px',padding:'2px 8px',borderRadius:'6px',fontWeight:'600',
+                                               background: ocrModal.data.profitUpdateState === 'UPDATED' ? 'rgba(16,185,129,.15)' : 'rgba(245,158,11,.15)',
+                                               color: ocrModal.data.profitUpdateState === 'UPDATED' ? '#10b981' : '#f59e0b'}">
+                                    {{ ocrModal.data.profitUpdateState === 'UPDATED' ? '收益已更新' : '收益未更新' }}
+                                </span>
                             </div>
                             <div style="background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.24);border-radius:12px;padding:10px;margin-bottom:12px;">
                                 <div style="font-size:12px;color:var(--text-muted);">OCR 识别合计金额</div>
@@ -5015,7 +5021,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 </div>
                                 <div v-if="item.pendingReason"
                                      style="margin-top:6px;color:var(--text-muted);font-size:12px;line-height:1.6;">
-                                    判断来源：{{ item.pendingSource || 'none' }} · {{ item.pendingReason }}
+                                    来源：{{ item.pendingSource || 'none' }} · {{ item.pendingReason }}
+                                    <span v-if="item.pendingEvidence" style="margin-left:4px;color:#93c5fd;">[{{ item.pendingEvidence }}]</span>
+                                </div>
+                                <div v-if="item.profitUpdateState && item.profitUpdateState !== 'UNKNOWN'"
+                                     style="margin-top:4px;color:var(--text-muted);font-size:11px;">
+                                    收益状态：{{ item.profitUpdateState === 'UPDATED' ? '已更新' : '未更新' }}
                                 </div>
                             </div>
 
