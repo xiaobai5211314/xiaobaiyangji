@@ -6326,10 +6326,11 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
         {
             try
             {
-                var http = _httpClientFactory.CreateClient("FundGz");
+                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+                http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
                 string url = $"https://fund.eastmoney.com/pingzhongdata/{code}.js";
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-                string jsBody = await http.GetStringAsync(url, cts.Token);
+                string jsBody = await http.GetStringAsync(url);
+                Console.WriteLine($"[nav-history] {code} jsLen={jsBody?.Length ?? 0}");
                 if (string.IsNullOrWhiteSpace(jsBody) || !jsBody.Contains("Data_netWorthTrend"))
                     return (null, "no-data");
 
