@@ -6290,13 +6290,12 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
             try
             {
-                var http = _httpClientFactory.CreateClient("EastMoneyQuote");
                 int limit = period switch
                 {
                     "1m" => 30, "3m" => 90, "6m" => 180, "1y" => 365, "3y" => 365 * 3, "5y" => 365 * 5, _ => 365
                 };
 
-                var (navData, fetchSource) = await FetchFundNavHistoryAsync(http, code, limit);
+                var (navData, fetchSource) = await FetchFundNavHistoryAsync(code, limit);
                 if (navData != null && navData.Count > 0)
                 {
                     var freshTtl = GetExternalDataFreshTtl();
@@ -6323,10 +6322,11 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             }
         }
 
-        private async Task<(List<object>? data, string source)> FetchFundNavHistoryAsync(HttpClient http, string code, int limit)
+        private async Task<(List<object>? data, string source)> FetchFundNavHistoryAsync(string code, int limit)
         {
             try
             {
+                var http = _httpClientFactory.CreateClient("FundGz");
                 string url = $"https://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize={limit}";
                 var request = new HttpRequestMessage(HttpMethod.Get, url);
                 request.Headers.TryAddWithoutValidation("Referer", "https://fundf10.eastmoney.com/");
