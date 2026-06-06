@@ -6,6 +6,7 @@ using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Processing;
 using StackExchange.Redis;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -66,9 +67,18 @@ namespace 小白养基.Controllers
             public string? Error { get; init; }
             public int RawRowsCount { get; init; }
             public int ParsedRowsCount { get; init; }
+            public int FilteredRowsCount { get; init; }
+            public int RejectedRowsCount { get; init; }
             public bool CacheHit { get; init; }
             public string? CacheSource { get; init; }
             public long TimeMs { get; init; }
+        }
+
+        private sealed class CapitalFlowRejectedRowDto
+        {
+            public string Code { get; init; } = string.Empty;
+            public string Name { get; init; } = string.Empty;
+            public string Reason { get; init; } = string.Empty;
         }
 
         public class FundInfoCache
@@ -83,6 +93,7 @@ namespace 小白养基.Controllers
         private static readonly SemaphoreSlim _sectorsRefreshLock = new(1, 1);
         private static readonly SemaphoreSlim _capitalFlowRefreshLock = new(1, 1);
         private const string CapitalFlowLatestCacheKey = "capital_flow_latest";
+        private const string CapitalFlowStaleCacheKey = "capital_flow_latest_stale";
         private static readonly TimeSpan _staleExternalDataTtl = TimeSpan.FromHours(6);
         private static readonly TimeSpan _marketRealtimeFreshTtl = TimeSpan.FromSeconds(60);
         private static readonly TimeSpan _historicalKlineFreshTtl = TimeSpan.FromDays(7);
@@ -7303,92 +7314,123 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             return Math.Round(value, 0).ToString("0");
         }
 
-        private static readonly string[] CapitalFlowExcludedNameKeywords =
+        private static readonly string[] CapitalFlowConceptBlacklist =
         {
-            "概念",
-            "新高",
-            "近期新高",
-            "百日新高",
-            "融资",
-            "融券",
-            "沪股通",
-            "深股通",
-            "昨日涨停",
-            "昨日连板",
-            "预盈预增",
-            "预亏预减",
-            "ST",
-            "次新",
-            "高送转",
-            "机构重仓",
-            "MSCI",
-            "富时罗素",
-            "小米",
-            "华为",
-            "苹果",
-            "中特估",
-            "机器人概念",
-            "CPO概念",
-            "5G概念",
-            "锂矿概念",
-            "光纤概念",
-            "周期股",
-            "最近多板",
-            "今日涨停",
-            "昨日触板",
-            "连板",
-            "破净",
-            "龙虎榜",
-            "重仓",
-            "社保",
-            "QFII",
-            "养老金",
-            "证金",
-            "中字头",
-            "国企改革",
-            "央企改革",
-            "一带一路",
-            "参股",
-            "股权",
-            "转债",
-            "互联金融",
-            "数字货币",
-            "区块链",
-            "元宇宙",
-            "虚拟现实",
-            "增强现实",
-            "数据要素",
-            "数据确权",
-            "东数西算",
-            "算力",
-            "ChatGPT",
-            "AIGC",
-            "Sora",
-            "人工智能",
-            "低空经济",
-            "飞行汽车",
-            "商业航天",
-            "卫星导航",
-            "军民融合",
-            "人形机器人",
-            "工业母机",
-            "减肥药",
-            "预制菜",
-            "网红",
-            "直播",
-            "短剧",
-            "鸿蒙",
-            "华为昇腾",
-            "小米汽车",
-            "特斯拉",
-            "汽车芯片"
+            "概念", "题材", "热点", "主题", "风格", "事件",
+            "AI应用", "CPO", "可控核聚变", "固态电池", "黄金股", "机器人概念",
+            "低空经济", "飞行汽车", "算力", "ChatGPT", "AIGC", "Sora", "元宇宙",
+            "数字货币", "区块链", "华为", "小米汽车", "特斯拉", "鸿蒙",
+            "昨日涨停", "今日涨停", "昨日连板", "昨日触板", "连板", "龙虎榜",
+            "融资融券", "融资", "融券", "沪股通", "深股通", "机构重仓", "QFII",
+            "社保", "养老金", "证金", "中字头", "国企改革", "央企改革", "一带一路",
+            "预盈预增", "预亏预减", "新高", "近期新高", "百日新高", "次新", "破净",
+            "ST", "高送转", "MSCI", "富时罗素", "中特估", "5G概念", "锂矿概念",
+            "光纤概念", "周期股", "最近多板", "重仓", "参股", "股权", "转债",
+            "互联金融", "虚拟现实", "增强现实", "数据要素", "数据确权", "东数西算",
+            "人工智能", "商业航天", "卫星导航", "军民融合", "人形机器人", "工业母机",
+            "减肥药", "预制菜", "网红", "直播", "短剧", "华为昇腾", "汽车芯片"
         };
 
-        private static bool IsIndustryCapitalFlowRow(CapitalFlowRowDto row)
+        private static readonly HashSet<string> CapitalFlowIndustryWhitelist = new(StringComparer.OrdinalIgnoreCase)
         {
-            if (string.IsNullOrWhiteSpace(row.Name)) return false;
-            return !CapitalFlowExcludedNameKeywords.Any(keyword =>
-                row.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+            "半导体", "光伏设备", "消费电子", "通信设备", "软件开发", "互联网服务", "电子元件",
+            "电池", "汽车整车", "汽车零部件", "白酒", "食品饮料", "医疗服务", "医疗器械",
+            "生物制品", "化学制药", "中药", "银行", "证券", "保险", "房地产开发", "房地产服务",
+            "煤炭", "石油", "钢铁", "有色金属", "贵金属", "化学原料", "化学制品", "工程建设",
+            "工程机械", "电网设备", "电力", "光伏", "风电", "军工", "船舶", "航天航空",
+            "农牧饲渔", "家电", "商业百货", "旅游酒店", "传媒", "游戏", "教育", "物流",
+            "航运港口", "铁路公路",
+            // 东方财富行业板块常用显示名，仍然是行业而非概念。
+            "酿酒行业", "医疗行业", "医药商业", "采掘行业", "石油行业", "化肥行业", "农药兽药",
+            "装修建材", "水泥建材", "玻璃玻纤", "塑料制品", "橡胶制品", "造纸印刷", "纺织服装",
+            "家用轻工", "通用设备", "专用设备", "电机", "电源设备", "仪器仪表", "电子化学品",
+            "光学光电子", "计算机设备", "通信服务", "文化传媒", "航空机场", "贸易行业", "环保行业",
+            "燃气", "公用事业", "珠宝首饰", "工程咨询服务", "多元金融", "能源金属", "小金属",
+            "航天航空", "船舶制造", "铁路公路"
+        };
+
+        private static string NormalizeCapitalFlowName(string? value, bool removeNoiseWords = true)
+        {
+            var text = (value ?? string.Empty).Normalize(NormalizationForm.FormKC);
+            text = Regex.Replace(text, @"\s+", string.Empty);
+            if (removeNoiseWords)
+            {
+                text = text
+                    .Replace("板块", string.Empty, StringComparison.OrdinalIgnoreCase)
+                    .Replace("指数", string.Empty, StringComparison.OrdinalIgnoreCase);
+            }
+            return text.Trim();
+        }
+
+        private static bool IsIndustryCapitalFlowRow(CapitalFlowRowDto row)
+            => IsIndustryCapitalFlowRow(row, out _);
+
+        private static bool IsIndustryCapitalFlowRow(CapitalFlowRowDto row, out string reason)
+        {
+            reason = string.Empty;
+            if (string.IsNullOrWhiteSpace(row.Name))
+            {
+                reason = "empty-name";
+                return false;
+            }
+
+            var compactName = NormalizeCapitalFlowName(row.Name, removeNoiseWords: false);
+            var normalizedName = NormalizeCapitalFlowName(row.Name);
+
+            foreach (var keyword in CapitalFlowConceptBlacklist)
+            {
+                var normalizedKeyword = NormalizeCapitalFlowName(keyword, removeNoiseWords: false);
+                if (compactName.Contains(normalizedKeyword, StringComparison.OrdinalIgnoreCase) ||
+                    normalizedName.Contains(normalizedKeyword, StringComparison.OrdinalIgnoreCase))
+                {
+                    reason = $"concept-blacklist:{keyword}";
+                    return false;
+                }
+            }
+
+            if (CapitalFlowIndustryWhitelist.Contains(normalizedName))
+            {
+                return true;
+            }
+
+            if (normalizedName.EndsWith("行业", StringComparison.OrdinalIgnoreCase))
+            {
+                var withoutIndustrySuffix = normalizedName[..^2];
+                if (CapitalFlowIndustryWhitelist.Contains(withoutIndustrySuffix))
+                {
+                    return true;
+                }
+            }
+
+            reason = $"not-in-industry-whitelist:{normalizedName}";
+            return false;
+        }
+
+        private static List<CapitalFlowRowDto> FilterIndustryCapitalFlowRows(
+            IEnumerable<CapitalFlowRowDto> rows,
+            ICollection<CapitalFlowRejectedRowDto>? rejectedRows = null)
+        {
+            var result = new List<CapitalFlowRowDto>();
+            foreach (var row in rows)
+            {
+                if (IsIndustryCapitalFlowRow(row, out var reason))
+                {
+                    result.Add(row);
+                    continue;
+                }
+
+                if (rejectedRows != null && rejectedRows.Count < 80)
+                {
+                    rejectedRows.Add(new CapitalFlowRejectedRowDto
+                    {
+                        Code = row.Code,
+                        Name = row.Name,
+                        Reason = reason
+                    });
+                }
+            }
+
+            return result;
         }
 
         private sealed class CapitalFlowSourceException : HttpRequestException
@@ -7402,6 +7444,12 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             public IReadOnlyList<ExternalDataAttemptDto> Attempts { get; }
         }
 
+        private sealed class CapitalFlowCacheResult
+        {
+            public CapitalFlowPayloadDto Payload { get; init; } = new();
+            public string Source { get; init; } = string.Empty;
+        }
+
         [HttpGet("capital-flow")]
         public async Task<IActionResult> GetCapitalFlow(
             [FromQuery] bool force = false,
@@ -7409,32 +7457,34 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             [FromQuery] bool debug = false)
         {
             limit = Math.Clamp(limit, 10, 80);
-            string freshKey = $"CapitalFlowV4_{limit}";
-            string staleKey = $"CapitalFlowV4_{limit}_Stale";
 
-            if (!force && _cache.TryGetValue<CapitalFlowPayloadDto>(freshKey, out var fresh) && fresh != null)
+            if (!force)
             {
-                Response.Headers["X-App-Cache"] = "memory-fresh";
-                return Ok(debug ? AttachCapitalFlowDebug(fresh, new[] { new ExternalDataAttemptDto { Source = "capital-flow-cache", CacheHit = true, CacheSource = "memory-fresh", ParsedRowsCount = fresh.Rows.Count } }) : fresh);
-            }
+                var cached = await TryGetCapitalFlowCacheAsync(limit, includeMemoryFresh: true);
+                if (cached != null)
+                {
+                    var isFresh = cached.Source.Contains("fresh", StringComparison.OrdinalIgnoreCase) && !cached.Payload.IsStale;
+                    if (!isFresh)
+                    {
+                        _ = Task.Run(() => RefreshCapitalFlowCacheQuietlyAsync(limit));
+                    }
 
-            if (!force && _cache.TryGetValue<CapitalFlowPayloadDto>(staleKey, out var stale) && stale != null)
-            {
-                _ = Task.Run(() => RefreshCapitalFlowCacheQuietlyAsync(limit));
-                Response.Headers["X-App-Cache"] = "memory-stale";
-                return Ok(CloneCapitalFlowPayload(stale, true, true, "主力资金流使用缓存数据", "cache", debug
-                    ? new[] { new ExternalDataAttemptDto { Source = "capital-flow-cache", CacheHit = true, CacheSource = "memory-stale", ParsedRowsCount = stale.Rows.Count } }
-                    : null));
+                    Response.Headers["X-App-Cache"] = cached.Source;
+                    var payload = isFresh
+                        ? CloneCapitalFlowPayload(cached.Payload, false, false, cached.Payload.Message, cached.Payload.Source, debug ? CreateCapitalFlowCacheAttempts(cached.Source, cached.Payload) : null)
+                        : CloneCapitalFlowPayload(cached.Payload, true, true, "主力资金流使用缓存数据", cached.Source.Contains("redis") || cached.Source.Contains("db") ? cached.Source : "cache", debug ? CreateCapitalFlowCacheAttempts(cached.Source, cached.Payload) : null);
+                    return Ok(payload);
+                }
             }
 
             if (!await _capitalFlowRefreshLock.WaitAsync(0))
             {
-                var fallbackWhileBusy = await TryGetCapitalFlowFallbackAsync(limit);
+                var fallbackWhileBusy = await TryGetCapitalFlowCacheAsync(limit, includeMemoryFresh: true);
                 if (fallbackWhileBusy != null)
                 {
-                    Response.Headers["X-App-Cache"] = "fallback-busy";
-                    return Ok(CloneCapitalFlowPayload(fallbackWhileBusy, true, true, "主力资金流使用缓存数据", "cache", debug
-                        ? new[] { new ExternalDataAttemptDto { Source = "capital-flow-cache", CacheHit = true, CacheSource = "fallback-while-refresh", ParsedRowsCount = fallbackWhileBusy.Rows.Count } }
+                    Response.Headers["X-App-Cache"] = fallbackWhileBusy.Source;
+                    return Ok(CloneCapitalFlowPayload(fallbackWhileBusy.Payload, true, true, "主力资金流使用缓存数据", fallbackWhileBusy.Source, debug
+                        ? CreateCapitalFlowCacheAttempts(fallbackWhileBusy.Source, fallbackWhileBusy.Payload)
                         : null));
                 }
 
@@ -7446,18 +7496,26 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
             try
             {
-                if (!force && _cache.TryGetValue<CapitalFlowPayloadDto>(freshKey, out fresh) && fresh != null)
+                if (!force)
                 {
-                    Response.Headers["X-App-Cache"] = "memory-fresh-after-lock";
-                    return Ok(debug ? AttachCapitalFlowDebug(fresh, new[] { new ExternalDataAttemptDto { Source = "capital-flow-cache", CacheHit = true, CacheSource = "memory-fresh-after-lock", ParsedRowsCount = fresh.Rows.Count } }) : fresh);
-                }
+                    var cachedAfterLock = await TryGetCapitalFlowCacheAsync(limit, includeMemoryFresh: true);
+                    if (cachedAfterLock != null)
+                    {
+                        var isFresh = cachedAfterLock.Source.Contains("fresh", StringComparison.OrdinalIgnoreCase) && !cachedAfterLock.Payload.IsStale;
+                        if (!isFresh)
+                        {
+                            _ = Task.Run(() => RefreshCapitalFlowCacheQuietlyAsync(limit));
+                        }
 
-                if (!force && _cache.TryGetValue<CapitalFlowPayloadDto>(staleKey, out stale) && stale != null)
-                {
-                    Response.Headers["X-App-Cache"] = "memory-stale-after-lock";
-                    return Ok(CloneCapitalFlowPayload(stale, true, true, "主力资金流使用缓存数据", "cache", debug
-                        ? new[] { new ExternalDataAttemptDto { Source = "capital-flow-cache", CacheHit = true, CacheSource = "memory-stale-after-lock", ParsedRowsCount = stale.Rows.Count } }
-                        : null));
+                        Response.Headers["X-App-Cache"] = cachedAfterLock.Source + "-after-lock";
+                        return Ok(CloneCapitalFlowPayload(
+                            cachedAfterLock.Payload,
+                            !isFresh,
+                            !isFresh,
+                            isFresh ? cachedAfterLock.Payload.Message : "主力资金流使用缓存数据",
+                            isFresh ? cachedAfterLock.Payload.Source : cachedAfterLock.Source,
+                            debug ? CreateCapitalFlowCacheAttempts(cachedAfterLock.Source + "-after-lock", cachedAfterLock.Payload) : null));
+                    }
                 }
 
                 var payload = await BuildCapitalFlowPayloadAsync(limit, debug);
@@ -7472,13 +7530,13 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                     ? sourceException.Attempts.ToList()
                     : new List<ExternalDataAttemptDto> { new() { Source = "capital-flow", Error = ex.Message } };
 
-                var fallback = await TryGetCapitalFlowFallbackAsync(limit);
+                var fallback = await TryGetCapitalFlowCacheAsync(limit, includeMemoryFresh: true);
                 if (fallback != null)
                 {
-                    Response.Headers["X-App-Cache"] = "error-stale";
+                    Response.Headers["X-App-Cache"] = fallback.Source;
                     var fallbackAttempts = failureAttempts
-                        .Concat(new[] { new ExternalDataAttemptDto { Source = "capital-flow-cache", CacheHit = true, CacheSource = "fallback-after-error", Error = ex.Message, ParsedRowsCount = fallback.Rows.Count } });
-                    return Ok(CloneCapitalFlowPayload(fallback, true, true, "主力资金流使用缓存数据", "cache", debug
+                        .Concat(CreateCapitalFlowCacheAttempts(fallback.Source, fallback.Payload, ex.Message));
+                    return Ok(CloneCapitalFlowPayload(fallback.Payload, true, true, "主力资金流使用缓存数据", fallback.Source, debug
                         ? fallbackAttempts
                         : null));
                 }
@@ -7515,15 +7573,20 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
         private async Task SetCapitalFlowCacheAsync(int limit, CapitalFlowPayloadDto payload)
         {
-            var cachePayload = CloneCapitalFlowPayload(payload, payload.IsFallback, payload.IsStale, payload.Message, payload.Source);
+            var cachePayload = NormalizeCapitalFlowPayloadForLimit(
+                CloneCapitalFlowPayload(payload, payload.IsFallback, payload.IsStale, payload.Message, payload.Source),
+                Math.Max(limit, 40));
             _cache.Set($"CapitalFlowV4_{limit}", cachePayload, _capitalFlowFreshTtl);
             _cache.Set($"CapitalFlowV4_{limit}_Stale", cachePayload, _capitalFlowStaleTtl);
+            _cache.Set(CapitalFlowLatestCacheKey, cachePayload, _capitalFlowFreshTtl);
+            _cache.Set(CapitalFlowStaleCacheKey, cachePayload, _capitalFlowStaleTtl);
 
             try
             {
                 var db = _redis.GetDatabase();
                 var json = JsonSerializer.Serialize(cachePayload, GlobalIndicesJsonOptions);
                 await db.StringSetAsync(CapitalFlowLatestCacheKey, json, _capitalFlowStaleTtl);
+                await db.StringSetAsync(CapitalFlowStaleCacheKey, json, _capitalFlowStaleTtl);
             }
             catch (Exception ex)
             {
@@ -7532,54 +7595,151 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
             try
             {
+                await _marketCache.SetAsync(CapitalFlowLatestCacheKey, cachePayload, _capitalFlowFreshTtl, TimeSpan.FromDays(7), "build");
                 await _marketCache.SetAsync($"capital_flow_sector_v2_{limit}", cachePayload, _capitalFlowFreshTtl, TimeSpan.FromDays(7), "build");
             }
             catch { }
         }
 
-        private async Task<CapitalFlowPayloadDto?> TryGetCapitalFlowFallbackAsync(int limit)
+        private async Task<CapitalFlowCacheResult?> TryGetCapitalFlowCacheAsync(int limit, bool includeMemoryFresh)
         {
-            if (_cache.TryGetValue<CapitalFlowPayloadDto>($"CapitalFlowV4_{limit}_Stale", out var stale) && stale != null)
+            if (includeMemoryFresh &&
+                _cache.TryGetValue<CapitalFlowPayloadDto>($"CapitalFlowV4_{limit}", out var fresh) &&
+                TryNormalizeCapitalFlowPayload(fresh, limit, out var normalizedFresh))
             {
-                return stale;
+                return new CapitalFlowCacheResult { Payload = normalizedFresh, Source = "memory-fresh" };
             }
 
-            if (_cache.TryGetValue<CapitalFlowPayloadDto>(CapitalFlowLatestCacheKey, out var latest) && latest != null)
+            if (_cache.TryGetValue<CapitalFlowPayloadDto>($"CapitalFlowV4_{limit}_Stale", out var stale) &&
+                TryNormalizeCapitalFlowPayload(stale, limit, out var normalizedStale))
             {
-                return latest;
+                return new CapitalFlowCacheResult { Payload = normalizedStale, Source = "memory-stale" };
             }
+
+            if (_cache.TryGetValue<CapitalFlowPayloadDto>(CapitalFlowStaleCacheKey, out var latestMemory) &&
+                TryNormalizeCapitalFlowPayload(latestMemory, limit, out var normalizedLatestMemory))
+            {
+                return new CapitalFlowCacheResult { Payload = normalizedLatestMemory, Source = "memory-stale-latest" };
+            }
+
+            var redisLatest = await TryGetCapitalFlowRedisAsync(CapitalFlowLatestCacheKey, limit);
+            if (redisLatest != null) return new CapitalFlowCacheResult { Payload = redisLatest, Source = "redis-stale" };
+
+            var redisStale = await TryGetCapitalFlowRedisAsync(CapitalFlowStaleCacheKey, limit);
+            if (redisStale != null) return new CapitalFlowCacheResult { Payload = redisStale, Source = "redis-stale" };
 
             try
             {
+                var cacheKeys = new[]
+                {
+                    CapitalFlowLatestCacheKey,
+                    $"capital_flow_sector_v2_{limit}",
+                    "capital_flow_sector_v2_40",
+                    "capital_flow_sector_v2_80"
+                }.Distinct().ToList();
+
+                foreach (var key in cacheKeys)
+                {
+                    var (dbStale, _) = await _marketCache.TryGetStaleAsync<CapitalFlowPayloadDto>(key, TimeSpan.FromDays(7));
+                    if (TryNormalizeCapitalFlowPayload(dbStale, limit, out var normalizedDb))
+                    {
+                        _cache.Set($"CapitalFlowV4_{limit}_Stale", normalizedDb, _capitalFlowStaleTtl);
+                        _cache.Set(CapitalFlowStaleCacheKey, normalizedDb, _capitalFlowStaleTtl);
+                        return new CapitalFlowCacheResult { Payload = normalizedDb, Source = "db-stale" };
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[capital-flow] db cache read failed: {ex.Message}");
+            }
+
+            return null;
+        }
+
+        private async Task<CapitalFlowPayloadDto?> TryGetCapitalFlowRedisAsync(string key, int limit)
+        {
+            try
+            {
                 var db = _redis.GetDatabase();
-                var cached = await db.StringGetAsync(CapitalFlowLatestCacheKey);
+                var cached = await db.StringGetAsync(key);
                 if (!cached.HasValue) return null;
                 var payload = JsonSerializer.Deserialize<CapitalFlowPayloadDto>(cached.ToString(), GlobalIndicesJsonOptions);
-                if (payload == null) return null;
-                payload.Rows ??= new List<CapitalFlowRowDto>();
-                payload.Inflow ??= new List<CapitalFlowRowDto>();
-                payload.Outflow ??= new List<CapitalFlowRowDto>();
-                if (payload.Rows.Count == 0 && payload.Inflow.Count == 0 && payload.Outflow.Count == 0) return null;
-                _cache.Set(CapitalFlowLatestCacheKey, payload, _capitalFlowStaleTtl);
-                return payload;
+                if (!TryNormalizeCapitalFlowPayload(payload, limit, out var normalized)) return null;
+                _cache.Set(CapitalFlowStaleCacheKey, normalized, _capitalFlowStaleTtl);
+                return normalized;
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[capital-flow] redis cache read failed: {ex.Message}");
+                return null;
             }
+        }
 
-            try
+        private static bool TryNormalizeCapitalFlowPayload(CapitalFlowPayloadDto? payload, int limit, out CapitalFlowPayloadDto normalized)
+        {
+            normalized = new CapitalFlowPayloadDto();
+            if (payload == null) return false;
+            normalized = NormalizeCapitalFlowPayloadForLimit(payload, limit);
+            return normalized.Rows.Count > 0 || normalized.Inflow.Count > 0 || normalized.Outflow.Count > 0;
+        }
+
+        private static CapitalFlowPayloadDto NormalizeCapitalFlowPayloadForLimit(CapitalFlowPayloadDto payload, int limit)
+        {
+            limit = Math.Clamp(limit, 10, 80);
+            var baseRows = FilterIndustryCapitalFlowRows(payload.Rows ?? new List<CapitalFlowRowDto>());
+            var inflowSource = (payload.Inflow != null && payload.Inflow.Count > 0)
+                ? payload.Inflow
+                : baseRows;
+            var outflowSource = (payload.Outflow != null && payload.Outflow.Count > 0)
+                ? payload.Outflow
+                : baseRows;
+            var inflow = FilterIndustryCapitalFlowRows(inflowSource)
+                .Where(x => x.MainNet > 0)
+                .OrderByDescending(x => x.MainNet)
+                .Take(limit)
+                .ToList();
+            var outflow = FilterIndustryCapitalFlowRows(outflowSource)
+                .Where(x => x.MainNet < 0)
+                .OrderBy(x => x.MainNet)
+                .Take(limit)
+                .ToList();
+            var rows = baseRows
+                .Concat(inflow)
+                .Concat(outflow)
+                .GroupBy(x => string.IsNullOrWhiteSpace(x.Code) ? NormalizeCapitalFlowName(x.Name) : x.Code)
+                .Select(g => g.OrderByDescending(x => Math.Abs(x.MainNet)).First())
+                .OrderByDescending(x => x.MainNet)
+                .Take(limit * 2)
+                .ToList();
+
+            return new CapitalFlowPayloadDto
             {
-                var (dbStale, _) = await _marketCache.TryGetStaleAsync<CapitalFlowPayloadDto>($"capital_flow_sector_v2_{limit}", TimeSpan.FromDays(7));
-                if (dbStale != null && (dbStale.Rows?.Count > 0 || dbStale.Inflow?.Count > 0))
-                {
-                    _cache.Set($"CapitalFlowV4_{limit}_Stale", dbStale, _capitalFlowStaleTtl);
-                    return dbStale;
-                }
-            }
-            catch { }
+                Source = payload.Source,
+                UpdatedAt = payload.UpdatedAt,
+                IsFallback = payload.IsFallback,
+                IsStale = payload.IsStale,
+                Message = payload.Message,
+                Rows = rows,
+                Inflow = inflow,
+                Outflow = outflow
+            };
+        }
 
-            return null;
+        private static IEnumerable<ExternalDataAttemptDto> CreateCapitalFlowCacheAttempts(string source, CapitalFlowPayloadDto payload, string? error = null)
+        {
+            return new[]
+            {
+                new ExternalDataAttemptDto
+                {
+                    Source = "capital-flow-cache",
+                    CacheHit = true,
+                    CacheSource = source,
+                    Error = error,
+                    ParsedRowsCount = payload.Rows?.Count ?? 0,
+                    FilteredRowsCount = (payload.Inflow?.Count ?? 0) + (payload.Outflow?.Count ?? 0)
+                }
+            };
         }
 
         private static CapitalFlowPayloadDto AttachCapitalFlowDebug(CapitalFlowPayloadDto payload, IEnumerable<ExternalDataAttemptDto> attempts)
@@ -7587,10 +7747,15 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             return CloneCapitalFlowPayload(payload, payload.IsFallback, payload.IsStale, payload.Message, payload.Source, attempts);
         }
 
-        private static object BuildCapitalFlowDebug(IEnumerable<ExternalDataAttemptDto> attempts, bool cacheHit, string? cacheSource = null)
+        private static object BuildCapitalFlowDebug(
+            IEnumerable<ExternalDataAttemptDto> attempts,
+            bool cacheHit,
+            string? cacheSource = null,
+            IEnumerable<CapitalFlowRejectedRowDto>? rejectedRows = null)
         {
             var list = attempts.ToList();
-            var selected = list.LastOrDefault(x => x.ParsedRowsCount > 0)
+            var selected = list.LastOrDefault(x => x.FilteredRowsCount > 0 || x.RejectedRowsCount > 0)
+                ?? list.LastOrDefault(x => x.ParsedRowsCount > 0)
                 ?? list.LastOrDefault(x => !string.IsNullOrWhiteSpace(x.Error))
                 ?? list.LastOrDefault();
             return new
@@ -7599,9 +7764,12 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 statusCode = selected?.StatusCode ?? 0,
                 url = selected?.Url,
                 parsedRowsCount = selected?.ParsedRowsCount ?? 0,
+                filteredRowsCount = selected?.FilteredRowsCount ?? 0,
+                rejectedRowsCount = selected?.RejectedRowsCount ?? 0,
                 cacheHit,
                 cacheSource,
                 error = selected?.Error,
+                rejectedRows = rejectedRows?.Take(20).ToList() ?? new List<CapitalFlowRejectedRowDto>(),
                 attempts = list
             };
         }
@@ -7647,6 +7815,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
         private async Task<CapitalFlowPayloadDto> BuildCapitalFlowPayloadAsync(int limit, bool debug)
         {
             var attempts = new List<ExternalDataAttemptDto>();
+            var rejectedRows = new List<CapitalFlowRejectedRowDto>();
             var sources = new[]
             {
                 new { Name = "东方财富行业板块主力资金", Key = "industry", Fs = "m:90+t:2" }
@@ -7661,14 +7830,25 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                     var outflowTask = FetchCapitalFlowRowsAsync(http, source.Key, source.Fs, 0, limit, attempts);
                     await Task.WhenAll(inflowTask, outflowTask);
 
-                    var inflow = inflowTask.Result
-                        .Where(IsIndustryCapitalFlowRow)
+                    var rawInflow = inflowTask.Result;
+                    var rawOutflow = outflowTask.Result;
+                    var filteredInflow = FilterIndustryCapitalFlowRows(rawInflow, rejectedRows);
+                    var filteredOutflow = FilterIndustryCapitalFlowRows(rawOutflow, rejectedRows);
+                    attempts.Add(new ExternalDataAttemptDto
+                    {
+                        Source = $"capital-flow-{source.Key}-filter",
+                        RawRowsCount = rawInflow.Count + rawOutflow.Count,
+                        ParsedRowsCount = rawInflow.Count + rawOutflow.Count,
+                        FilteredRowsCount = filteredInflow.Count + filteredOutflow.Count,
+                        RejectedRowsCount = rejectedRows.Count
+                    });
+
+                    var inflow = filteredInflow
                         .OrderByDescending(x => x.MainNet)
                         .Take(limit)
                         .ToList();
 
-                    var outflow = outflowTask.Result
-                        .Where(IsIndustryCapitalFlowRow)
+                    var outflow = filteredOutflow
                         .OrderBy(x => x.MainNet)
                         .Take(limit)
                         .ToList();
@@ -7695,7 +7875,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                         Rows = rows,
                         Inflow = inflow,
                         Outflow = outflow,
-                        Debug = debug ? BuildCapitalFlowDebug(attempts, false) : null
+                        Debug = debug ? BuildCapitalFlowDebug(attempts, false, rejectedRows: rejectedRows) : null
                     };
                 }
                 catch (Exception ex)

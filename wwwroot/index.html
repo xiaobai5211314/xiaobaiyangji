@@ -4473,7 +4473,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <button class="btn" @click="fetchCapitalFlow(true)">🔄</button>
                     </div>
                     <div v-if="isCapitalLoading" class="news-empty">📡 正在同步主力资金...</div>
-                    <div v-else-if="capitalFlowInRows.length === 0 && capitalFlowOutRows.length === 0" class="news-empty">{{ capitalFlowError || '主力资金流暂不可用：实时源失败且暂无缓存' }}</div>
+                    <div v-else-if="capitalFlowInRows.length === 0 && capitalFlowOutRows.length === 0" class="news-empty">暂无行业资金流数据</div>
                     <div v-else class="capital-two-col">
                         <div v-if="capitalFlowError" class="performance-status" style="grid-column:1 / -1;">{{ capitalFlowError }}</div>
                         <div class="capital-box">
@@ -6662,29 +6662,42 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 };
 
                 let capitalCacheTime = 0;
+                const capitalIndustryWhitelist = [
+                    '半导体','光伏设备','消费电子','通信设备','软件开发','互联网服务','电子元件','电池','汽车整车','汽车零部件','白酒','食品饮料','医疗服务','医疗器械','生物制品','化学制药','中药','银行','证券','保险','房地产开发','房地产服务','煤炭','石油','钢铁','有色金属','贵金属','化学原料','化学制品','工程建设','工程机械','电网设备','电力','光伏','风电','军工','船舶','航天航空','农牧饲渔','家电','商业百货','旅游酒店','传媒','游戏','教育','物流','航运港口','铁路公路',
+                    '酿酒行业','医疗行业','医药商业','采掘行业','石油行业','化肥行业','农药兽药','装修建材','水泥建材','玻璃玻纤','塑料制品','橡胶制品','造纸印刷','纺织服装','家用轻工','通用设备','专用设备','电机','电源设备','仪器仪表','电子化学品','光学光电子','计算机设备','通信服务','文化传媒','航空机场','贸易行业','环保行业','燃气','公用事业','珠宝首饰','工程咨询服务','多元金融','能源金属','小金属','船舶制造'
+                ];
+                const capitalConceptBlacklist = ['概念','题材','热点','主题','风格','事件','AI应用','CPO','可控核聚变','固态电池','黄金股','机器人概念','低空经济','飞行汽车','算力','ChatGPT','AIGC','Sora','元宇宙','数字货币','区块链','华为','小米汽车','特斯拉','鸿蒙','昨日涨停','今日涨停','昨日连板','昨日触板','连板','龙虎榜','融资融券','融资','融券','沪股通','深股通','机构重仓','QFII','社保','养老金','证金','中字头','国企改革','央企改革','一带一路','预盈预增','预亏预减','新高','近期新高','百日新高','次新','破净','ST','高送转','MSCI','富时罗素','中特估','5G概念','锂矿概念','光纤概念','周期股','最近多板','重仓','参股','股权','转债','互联金融','虚拟现实','增强现实','数据要素','数据确权','东数西算','人工智能','商业航天','卫星导航','军民融合','人形机器人','工业母机','减肥药','预制菜','网红','直播','短剧','华为昇腾','汽车芯片'];
+                const normalizeCapitalName = (name = '', removeNoise = true) => {
+                    let text = String(name || '').normalize('NFKC').replace(/\s+/g, '');
+                    if (removeNoise) text = text.replace(/板块|指数/g, '');
+                    return text.trim();
+                };
                 const isBoardFlowName = (name = '') => {
-                    const text = String(name || '').trim();
-                    if (!text) return false;
-                    const blocked = ['融资融券', '富时罗素', '标准普尔', 'MSCI', '沪股通', '深股通', '大盘股', 'HS300', '基金重仓', '昨日涨停', '昨日连板', '昨日触板', '昨日高振幅', '昨日首板', '昨日连板', '证金持股', '养老金', '中字头', '上证', '深证', '北证', '年报预增', '央国企改革', '机构重仓', '东方财富', '龙虎榜', '融资客', '参股', '破净', '高股息', '预增', '高送转', 'ST板块', '含可转债', '同花顺', '中证500', '深成500'];
-                    if (blocked.some(k => text.includes(k))) return false;
-                    if (/^(90\.|BK|[0-9A-Za-z_.-]+$)/.test(text)) return false;
-                    return true;
+                    const compact = normalizeCapitalName(name, false);
+                    if (!compact) return false;
+                    if (capitalConceptBlacklist.some(k => compact.includes(normalizeCapitalName(k, false)))) return false;
+                    const text = normalizeCapitalName(name, true);
+                    if (capitalIndustryWhitelist.includes(text)) return true;
+                    if (text.endsWith('行业') && capitalIndustryWhitelist.includes(text.slice(0, -2))) return true;
+                    return false;
                 };
                 const normalizeCapitalRows = (rows = []) => (Array.isArray(rows) ? rows : []).filter(x => isBoardFlowName(x?.name));
                 const hasCapitalFlowData = () => capitalFlowInRows.value.length > 0 || capitalFlowOutRows.value.length > 0;
                 const applyCapitalPayload = (data) => {
                     const rows = normalizeCapitalRows(data.rows || []);
-                    const inRows = normalizeCapitalRows(data.inflow || rows).filter(x => (x.mainNet || 0) > 0).sort((a, b) => (b.mainNet || 0) - (a.mainNet || 0));
-                    const outRows = normalizeCapitalRows(data.outflow || rows).filter(x => (x.mainNet || 0) < 0).sort((a, b) => (a.mainNet || 0) - (b.mainNet || 0));
+                    const inSource = Array.isArray(data.inflow) && data.inflow.length > 0 ? data.inflow : rows;
+                    const outSource = Array.isArray(data.outflow) && data.outflow.length > 0 ? data.outflow : rows;
+                    const inRows = normalizeCapitalRows(inSource).filter(x => (x.mainNet || 0) > 0).sort((a, b) => (b.mainNet || 0) - (a.mainNet || 0));
+                    const outRows = normalizeCapitalRows(outSource).filter(x => (x.mainNet || 0) < 0).sort((a, b) => (a.mainNet || 0) - (b.mainNet || 0));
                     capitalFlowRows.value = rows.length > 0 ? rows : [...inRows, ...outRows];
                     capitalFlowInRows.value = inRows;
                     capitalFlowOutRows.value = outRows;
                     capitalFlowSource.value = data.source || '东方财富板块资金流向';
                     capitalFlowUpdatedAt.value = data.updatedAt || '';
                     const msg = String(data.message || '');
-                    capitalFlowError.value = data.isFallback
-                        ? '使用缓存数据'
-                        : (!hasCapitalFlowData() ? (msg || '主力资金流暂不可用：实时源失败且暂无缓存') : msg);
+                    capitalFlowError.value = (data.isFallback || data.isStale)
+                        ? '使用缓存数据，后台刷新中'
+                        : (!hasCapitalFlowData() ? '' : msg);
                     capitalCacheTime = Date.now();
                 };
                 const fetchCapitalFlow = async (force = false) => {
@@ -6699,12 +6712,20 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const res = await fetch(`${API_BASE}/api/fund/capital-flow?limit=40${force ? '&force=true' : ''}`, { cache: force ? 'no-store' : 'default' });
                         if (!res.ok) throw new Error(await res.text());
                         const data = await res.json();
+                        const incomingRows = normalizeCapitalRows(data.rows || []);
+                        const incomingInRows = normalizeCapitalRows(Array.isArray(data.inflow) && data.inflow.length > 0 ? data.inflow : incomingRows);
+                        const incomingOutRows = normalizeCapitalRows(Array.isArray(data.outflow) && data.outflow.length > 0 ? data.outflow : incomingRows);
+                        if (hasCapitalFlowData() && incomingRows.length === 0 && incomingInRows.length === 0 && incomingOutRows.length === 0) {
+                            capitalFlowError.value = data?.message || '暂无行业资金流数据，已保留旧列表';
+                            return;
+                        }
                         applyCapitalPayload(data);
                         writeJsonCache('capital_flow_cache_v1', data);
                     } catch (e) {
-                        if (!hasCapitalFlowData()) {
-                            capitalFlowError.value = '主力资金流暂不可用：实时源失败且暂无缓存';
-                        }
+                        capitalFlowError.value = hasCapitalFlowData()
+                            ? '刷新失败，已保留旧列表'
+                            : '暂无行业资金流数据';
+                        if (force) showToast('主力资金流刷新失败，已保留旧数据', 'error');
                     } finally {
                         isCapitalLoading.value = false;
                     }
