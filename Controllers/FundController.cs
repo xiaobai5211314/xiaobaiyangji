@@ -488,13 +488,31 @@ namespace 小白养基.Controllers
         {
             if (string.IsNullOrWhiteSpace(fundCode) || antAmount <= 0) return 0;
 
+            // 尝试当天净值
             var snapshot = await FetchOfficialNavSnapshotAsync(client, fundCode, settleDate);
-
             if (snapshot?.TodayNav is > 0)
             {
                 return Math.Round(antAmount / snapshot.TodayNav.Value, 6);
             }
 
+            // QDII / LOF 当天净值可能缺失，尝试最近 5 天
+            for (int d = 1; d <= 5; d++)
+            {
+                try
+                {
+                    var dt = DateTime.Parse(settleDate).AddDays(-d);
+                    var fallbackDate = dt.ToString("yyyy-MM-dd");
+                    var fb = await FetchOfficialNavSnapshotAsync(client, fundCode, fallbackDate);
+                    if (fb?.TodayNav is > 0)
+                    {
+                        Console.WriteLine($"[份额校准] code={fundCode} 当天净值缺失，使用 {fallbackDate} 净值={fb.TodayNav}");
+                        return Math.Round(antAmount / fb.TodayNav.Value, 6);
+                    }
+                }
+                catch { /* 日期解析失败则跳过 */ }
+            }
+
+            Console.WriteLine($"[份额校准] code={fundCode} 无法获取有效净值，shares=0");
             return 0;
         }
         private static bool ApplyOneDaySettlement(
@@ -1041,7 +1059,10 @@ namespace 小白养基.Controllers
 
         private static bool IsPercentText(string text)
         {
-            return Regex.IsMatch(text.Trim(), @"^[+-]?\d+\.?\d*%$");
+            // Normalize unicode minus signs before checking
+            var t = text.Trim()
+                .Replace("−", "-").Replace("–", "-").Replace("—", "-").Replace("－", "-").Replace("﹣", "-");
+            return Regex.IsMatch(t, @"^[+\-−]?\d+\.?\d*%$");
         }
 
         private static bool IsDashOrEmpty(string text)
@@ -1052,16 +1073,31 @@ namespace 小白养基.Controllers
 
         private static double? ParseSignedNumber(string text)
         {
-            var t = text.Trim().Replace(",", "");
+            var t = NormalizeNumberText(text);
             if (double.TryParse(t, System.Globalization.NumberStyles.Any,
                 System.Globalization.CultureInfo.InvariantCulture, out var v))
                 return Math.Round(v, 2);
             return null;
         }
 
+        /// <summary>
+        /// Normalize unicode minus signs and common OCR artifacts to plain ASCII.
+        /// </summary>
+        private static string NormalizeNumberText(string text)
+        {
+            return text.Trim()
+                .Replace("−", "-")   // − minus sign
+                .Replace("–", "-")   // – en dash
+                .Replace("—", "-")   // — em dash
+                .Replace("－", "-")   // － fullwidth minus
+                .Replace("﹣", "-")   // ﹣ small minus
+                .Replace(",", "")
+                .Replace("+", "");
+        }
+
         private static bool IsNumericBox(string text)
         {
-            var w = text.Trim().Replace(",", "").Replace("%", "").Replace("+", "");
+            var w = NormalizeNumberText(text).Replace("%", "");
             return double.TryParse(w, System.Globalization.NumberStyles.Any,
                 System.Globalization.CultureInfo.InvariantCulture, out _);
         }
@@ -1274,14 +1310,16 @@ namespace 小白养基.Controllers
                 => b.CenterX >= nameAmountBoundary && b.CenterX < amountProfitBoundary;
             static bool IsProfitCol(OcrBox b, int amountProfitBoundary) => b.CenterX >= amountProfitBoundary;
 
-            // 在名称列是否有实质性中文文本（>= 2个汉字）
+            // 在名称列是否有实质性文本（>= 2 个汉字，或 1 个汉字+括号后缀，如"接(QDII)C"）
             static bool HasNameColumnText(OcrRow row, int boundary)
             {
                 var nameBoxes = row.Boxes.Where(b => IsNameCol(b, boundary)).ToList();
                 if (nameBoxes.Count == 0) return false;
                 var nameText = string.Join("", nameBoxes.Select(b => b.Words));
                 int cnCount = Regex.Matches(nameText, @"[一-鿿]").Count;
-                return cnCount >= 2;
+                bool hasParen = nameText.Contains('(') || nameText.Contains('（');
+                // 主行需要 >= 2 个汉字；续行允许 1 个汉字 + 括号后缀
+                return cnCount >= 2 || (cnCount >= 1 && hasParen);
             }
 
             // 检查名称列文本是否为纯噪声标签
@@ -1532,19 +1570,47 @@ namespace 小白养基.Controllers
                 }
 
                 // ── 匹配基金 ──
+                diagnostics.Add($"[匹配开始] OCR名称='{fundName}' fundCode={fundCode ?? "无"}");
+
                 var best = (fund: (FundInfoCache?)null, score: 0d);
+
+                // 第一优先：从名称中提取 code，精确匹配
                 if (fundCode != null)
                 {
-                    var codeMatch = robustFundPool.FirstOrDefault(f => f.Code == fundCode);
-                    if (codeMatch != null) best = (codeMatch, 100.0);
+                    // 用户持仓优先
+                    if (userFundDict.TryGetValue(fundCode, out var ufByCode))
+                    {
+                        best = (new FundInfoCache { Code = ufByCode.FundCode, Name = ufByCode.FundName, NormalizedName = NormalizeFundName(ufByCode.FundName) }, 100.0);
+                        diagnostics.Add($"[匹配] code={fundCode} 命中用户持仓 {ufByCode.FundName}");
+                    }
+                    else
+                    {
+                        var codeMatch = robustFundPool.FirstOrDefault(f => f.Code == fundCode);
+                        if (codeMatch != null) { best = (codeMatch, 100.0); diagnostics.Add($"[匹配] code={fundCode} 精确命中全量池"); }
+                    }
                 }
+
+                // 第二优先：带后缀惩罚的模糊匹配（用户持仓优先）
                 if (best.fund == null)
                 {
-                    best = MatchOcrFund(fundName, "", robustFundPool, corrections);
+                    best = MatchOcrFund(fundName, "", robustFundPool, corrections, userFundDict);
                 }
+
+                // 输出 Top5 候选用于调试
+                if (best.fund != null)
+                {
+                    var ocrTokens = ExtractChineseTokens(fundName);
+                    var top5 = robustFundPool
+                        .Where(f => !string.IsNullOrWhiteSpace(f.NormalizedName))
+                        .Select(f => (f, score: FuzzyScoreFundName(NormalizeFundName(fundName), f.NormalizedName, ocrTokens)))
+                        .OrderByDescending(x => x.score)
+                        .Take(5)
+                        .ToList();
+                    diagnostics.Add($"[Top5候选] {string.Join(" | ", top5.Select(x => $"{x.f.Name}({x.f.Code})={x.score:F0}分"))}");
+                }
+
                 if (best.fund == null || best.score <= 60)
                 {
-                    // 输出详细丢弃原因
                     string rejectReason = best.fund == null
                         ? $"未找到匹配基金 (名称='{fundName}')"
                         : $"匹配分数过低: {best.fund.Name}({best.fund.Code}) 分={best.score:F1} < 60";
@@ -1553,7 +1619,7 @@ namespace 小白养基.Controllers
                     continue;
                 }
 
-                diagnostics.Add($"[坐标匹配] {fundName} → {best.fund.Name}({best.fund.Code}) 分={best.score:F1} 金额={holdAmount} 昨日={yesterdayIncome} 持有={holdingIncome} 持有率={holdingRate}% 待确认={pendingAmountFromOcr}");
+                diagnostics.Add($"[坐标匹配] {fundName} → {best.fund.Name}({best.fund.Code}) 分={best.score:F1}");
 
                 // 份额校准
                 double holdShares = 0;
@@ -1563,6 +1629,11 @@ namespace 小白养基.Controllers
                 {
                     holdShares = navCalibratedShares;
                     calcMethod = "坐标识别+净值校准";
+                    diagnostics.Add($"[份额] code={best.fund.Code} amount={holdAmount} shares={holdShares:F6} method={calcMethod}");
+                }
+                else
+                {
+                    diagnostics.Add($"[份额] code={best.fund.Code} amount={holdAmount} shares=0 净值校准失败（尝试了settleDate及前5天）");
                 }
 
                 userFundDict.TryGetValue(best.fund.Code, out var existingForPending);
@@ -2152,11 +2223,11 @@ namespace 小白养基.Controllers
             holdingIncome = selectedHoldingIncome;
             yesterdayIncome = selectedYesterdayIncome;
         }
-        private (FundInfoCache? fund, double score) MatchOcrFund(string namePart, string potentialFragment, List<FundInfoCache> fundPool, List<OcrCorrection> corrections)
+        private (FundInfoCache? fund, double score) MatchOcrFund(string namePart, string potentialFragment,
+            List<FundInfoCache> fundPool, List<OcrCorrection> corrections,
+            Dictionary<string, MyFundConfig>? userFunds = null)
         {
             string[] testNames = string.IsNullOrWhiteSpace(potentialFragment) ? new[] { namePart } : new[] { namePart, namePart + potentialFragment };
-            FundInfoCache? finalBestMatch = null;
-            double finalBestScore = 0;
 
             foreach (var testName in testNames)
             {
@@ -2166,50 +2237,114 @@ namespace 小白养基.Controllers
                 // \u5b66\u4e60\u8fc7\u7684\u4fee\u6b63\u4f18\u5148
                 var learned = corrections.FirstOrDefault(x => string.Equals(NormalizeFundName(x.OcrName), normalizedOcr, StringComparison.OrdinalIgnoreCase));
                 if (learned != null)
-                {
                     return (new FundInfoCache { Code = learned.FundCode, Name = learned.FundName, NormalizedName = NormalizeFundName(learned.FundName) }, 99.5);
+
+                // \u2605 \u7cbe\u786e code \u5339\u914d\uff08\u5148\u4ece\u7528\u6237\u6301\u4ed3\u4e2d\u627e\uff0c\u518d\u4ece\u5168\u91cf\u6c60\uff09
+                var codeMatch = ExtractCodeFromName(testName);
+                if (codeMatch != null)
+                {
+                    // \u7528\u6237\u6301\u4ed3\u4f18\u5148
+                    if (userFunds != null && userFunds.TryGetValue(codeMatch, out var uf))
+                        return (new FundInfoCache { Code = uf.FundCode, Name = uf.FundName, NormalizedName = NormalizeFundName(uf.FundName) }, 100.0);
+                    var exactCode = fundPool.FirstOrDefault(f => f.Code == codeMatch);
+                    if (exactCode != null) return (exactCode, 100.0);
                 }
 
-                string pureChinese = Regex.Replace(testName, @"[^\u4e00-\u9fa5]", "");
-                if (pureChinese.Length < 2) continue;
+                // \u5f52\u4e00\u5316\u7cbe\u786e\u5339\u914d
+                if (_exactMatchDict != null && _exactMatchDict.TryGetValue(normalizedOcr, out var exactFund))
+                    return (exactFund, 100.0);
 
-                var ocrTokens = ExtractChineseTokens(testName);
-
-                FundInfoCache? bestMatch = null;
-                double bestScore = 0;
-
-                // \u7cbe\u786e\u5339\u914d\uff08\u89c4\u8303\u5316\u540e\uff09
-                if (_exactMatchDict != null && (_exactMatchDict.TryGetValue(normalizedOcr, out var exactFund) || _exactMatchDict.TryGetValue(testName, out exactFund)))
+                // \u2605 \u7528\u6237\u6301\u4ed3\u4f18\u5148\u6a21\u7cca\u5339\u914d\uff08\u5e26\u540e\u7f00\u60e9\u7f5a\uff09
+                if (userFunds != null && userFunds.Count > 0)
                 {
-                    bestMatch = exactFund;
-                    bestScore = 100.0;
-                }
-                else
-                {
-                    // \u6269\u5927\u5019\u9009\u8303\u56f4\uff1a\u4e0d\u518d\u8981\u6c42 pureChinese \u524d\u7f00\u5339\u914d
-                    var candidates = fundPool.Where(f =>
-                        !string.IsNullOrWhiteSpace(f.NormalizedName) &&
-                        HasCommonSubstring(normalizedOcr, f.NormalizedName, 3));
-
-                    foreach (var f in candidates)
+                    var userPool = userFunds.Values.Select(uf => new FundInfoCache
                     {
-                        double score = FuzzyScoreFundName(normalizedOcr, f.NormalizedName, ocrTokens);
-                        if (score > bestScore)
-                        {
-                            bestScore = score;
-                            bestMatch = f;
-                        }
-                    }
+                        Code = uf.FundCode, Name = uf.FundName,
+                        NormalizedName = NormalizeFundName(uf.FundName)
+                    }).ToList();
+                    var userBest = SuffixAwareBestMatch(normalizedOcr, testName, userPool, ExtractChineseTokens(testName));
+                    if (userBest.fund != null && userBest.score >= 70)
+                        return userBest;
                 }
 
-                if (bestScore > finalBestScore)
+                // \u5168\u91cf\u6c60\u6a21\u7cca\u5339\u914d\uff08\u5e26\u540e\u7f00\u60e9\u7f5a\uff09
+                var allBest = SuffixAwareBestMatch(normalizedOcr, testName, fundPool, ExtractChineseTokens(testName));
+                if (allBest.fund != null && allBest.score > 60)
+                    return allBest;
+            }
+
+            return (null, 0);
+        }
+
+        /// <summary>
+        /// \u4ece\u57fa\u91d1\u540d\u4e2d\u63d0\u53d6 6 \u4f4d\u6570\u5b57 code\uff08\u5982\u679c\u6709\uff09\u3002
+        /// </summary>
+        private static string? ExtractCodeFromName(string name)
+        {
+            var m = Regex.Match(name, @"(\d{6})");
+            return m.Success ? m.Groups[1].Value : null;
+        }
+
+        /// <summary>
+        /// \u5e26\u540e\u7f00\u611f\u77e5\u7684\u57fa\u91d1\u5339\u914d\uff1a\u5728\u5019\u9009\u6c60\u4e2d\u627e\u6700\u4f73\u5339\u914d\uff0c\u5bf9 A/C/D/QDII/LOF/\u8054\u63a5 \u4e0d\u5339\u914d\u7684\u60c5\u51b5\u964d\u6743\u3002
+        /// </summary>
+        private (FundInfoCache? fund, double score) SuffixAwareBestMatch(
+            string normalizedOcr, string rawOcrName, List<FundInfoCache> pool, List<string> ocrTokens)
+        {
+            // \u63d0\u53d6 OCR \u540e\u7f00\u7279\u5f81
+            bool ocrHasQDII = rawOcrName.Contains("QDII", StringComparison.OrdinalIgnoreCase);
+            bool ocrHasLOF  = rawOcrName.Contains("LOF", StringComparison.OrdinalIgnoreCase);
+            bool ocrHasETFLink = rawOcrName.Contains("\u8054\u63a5", StringComparison.OrdinalIgnoreCase) || rawOcrName.Contains("\u8054\u7ed3", StringComparison.OrdinalIgnoreCase);
+            bool ocrHasInitiated = rawOcrName.Contains("\u53d1\u8d77\u5f0f", StringComparison.OrdinalIgnoreCase);
+            string ocrSuffixClass = ExtractFundClass(rawOcrName);  // A / C / D
+
+            FundInfoCache? best = null;
+            double bestScore = 0;
+
+            foreach (var f in pool)
+            {
+                if (string.IsNullOrWhiteSpace(f.NormalizedName)) continue;
+
+                double baseScore = FuzzyScoreFundName(normalizedOcr, f.NormalizedName, ocrTokens);
+                if (baseScore < 50) continue;
+
+                // \u2605 \u540e\u7f00\u964d\u6743
+                double penalty = 0;
+                string fundRawName = f.Name ?? "";
+                string fundSuffixClass = ExtractFundClass(fundRawName);
+
+                // A/C/D \u7c7b\u522b\u4e0d\u5339\u914d \u2192 \u4e25\u91cd\u964d\u6743
+                if (!string.IsNullOrEmpty(ocrSuffixClass) && !string.IsNullOrEmpty(fundSuffixClass)
+                    && ocrSuffixClass != fundSuffixClass)
                 {
-                    finalBestScore = bestScore;
-                    finalBestMatch = bestMatch;
+                    penalty += 50;
+                }
+
+                // QDII \u4e0d\u5339\u914d \u2192 \u964d\u6743
+                if (ocrHasQDII && !fundRawName.Contains("QDII", StringComparison.OrdinalIgnoreCase))
+                    penalty += 30;
+
+                // LOF \u4e0d\u5339\u914d \u2192 \u964d\u6743
+                if (ocrHasLOF && !fundRawName.Contains("LOF", StringComparison.OrdinalIgnoreCase))
+                    penalty += 30;
+
+                // \u8054\u63a5 \u4e0d\u5339\u914d \u2192 \u964d\u6743
+                if (ocrHasETFLink && !fundRawName.Contains("\u8054\u63a5") && !fundRawName.Contains("\u8054\u7ed3"))
+                    penalty += 20;
+
+                // \u53d1\u8d77\u5f0f \u4e0d\u5339\u914d \u2192 \u964d\u6743
+                if (ocrHasInitiated && !fundRawName.Contains("\u53d1\u8d77\u5f0f"))
+                    penalty += 10;
+
+                double finalScore = Math.Max(0, baseScore - penalty);
+                if (finalScore > bestScore)
+                {
+                    bestScore = finalScore;
+                    best = f;
                 }
             }
 
-            return (finalBestMatch, finalBestScore);
+            return (best, bestScore);
         }
 
         /// <summary>
@@ -2433,10 +2568,17 @@ namespace 小白养基.Controllers
             }
         }
 
-        private string ExtractFundClass(string name)
+        private static string ExtractFundClass(string name)
         {
-            if (Regex.IsMatch(name, @"C类?$|\(C\)$|（C）$", RegexOptions.IgnoreCase)) return "C";
-            if (Regex.IsMatch(name, @"A类?$|\(A\)$|（A）$", RegexOptions.IgnoreCase)) return "A";
+            if (string.IsNullOrEmpty(name)) return "";
+            // 匹配 "(LOF)A", "(QDII)D" 等括号后类别
+            var m = Regex.Match(name, @"[)\)】]\s*([ABCD])\b");
+            if (m.Success) return m.Groups[1].Value;
+            // 匹配 "混合C", "指数D" 等末尾类别
+            if (Regex.IsMatch(name, @"C类?$", RegexOptions.IgnoreCase)) return "C";
+            if (Regex.IsMatch(name, @"D类?$", RegexOptions.IgnoreCase)) return "D";
+            if (Regex.IsMatch(name, @"A类?$", RegexOptions.IgnoreCase)) return "A";
+            if (Regex.IsMatch(name, @"B类?$", RegexOptions.IgnoreCase)) return "B";
             if (name.Contains("QDII", StringComparison.OrdinalIgnoreCase)) return "QDII";
             return "";
         }
