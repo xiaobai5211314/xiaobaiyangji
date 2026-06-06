@@ -24,11 +24,18 @@ namespace 小白养基.Services
             return string.CompareOrdinal(pendingDate, settleDate) <= 0;
         }
 
+        private static bool IsPendingConfirmAfter(string? confirmDate, string settleDate)
+        {
+            return !string.IsNullOrWhiteSpace(confirmDate)
+                && string.CompareOrdinal(confirmDate, settleDate) > 0;
+        }
+
         public static double GetActivePendingBuyAmount(MyFundConfig fund, string settleDate)
         {
             double explicitPending = fund.PendingBuyAmount > 0
                 && IsPendingStatusActive(fund.PendingTradeStatus)
-                && IsPendingDateEffective(fund.PendingTradeDate, settleDate)
+                && (IsPendingDateEffective(fund.PendingTradeDate, settleDate)
+                    || IsPendingConfirmAfter(fund.PendingConfirmDate, settleDate))
                 ? fund.PendingBuyAmount
                 : 0;
             double legacyTodayAdd = fund.LastTradeDate == settleDate && fund.LastAddAmount > 0

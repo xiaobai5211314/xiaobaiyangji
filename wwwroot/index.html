@@ -7129,13 +7129,18 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             fund.pendingBuy = hasPendingBuy;
                             fund.pendingBuyAmount = pendingBuyAmount;
                             let isAlreadySettled = (fund.lastSettledDate === todayDash);
-                            let currentAmount = Number(fund.amount) || 0;
+                            let currentAmount = Number(fund.rawHoldAmount ?? fund.amount) || 0;
+                            const apiConfirmedAmount = Number(fund.confirmedAmount);
+                            const confirmedAmount = Number.isFinite(apiConfirmedAmount) ? Math.max(0, apiConfirmedAmount) : Math.max(0, currentAmount - pendingBuyAmount);
+                            fund.amount = currentAmount;
+                            fund.confirmedAmount = confirmedAmount;
                             const apiBaseAmount = Number(fund.todayBaseAmount);
-                            const todayBaseAmount = Number.isFinite(apiBaseAmount) ? Math.max(0, apiBaseAmount) : currentAmount;
+                            const todayBaseAmount = Number.isFinite(apiBaseAmount) ? Math.max(0, apiBaseAmount) : confirmedAmount;
                             let todayProfitVal = 0;
                             // 优先用后端 marketValue（当前确认市值），不用 todayBaseAmount（收益率分母）
                             const apiMarketValue = Number(fund.marketValue);
                             let currentRealTimeAmount = Number.isFinite(apiMarketValue) && apiMarketValue > 0 ? apiMarketValue : todayBaseAmount;
+                            const apiTodayProfit = Number(fund.todayProfit ?? fund.todayProfitPreview);
 
                             if (isAlreadySettled) {
                                 todayProfitVal = Number(fund.lastSettledProfit) || 0;
@@ -7146,6 +7151,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 todayProfitVal = Number(fund.actualExactProfit) || 0;
                                 fund.todayProfit = todayProfitVal.toFixed(2);
                                 currentRealTimeAmount = Number.isFinite(apiMarketValue) && apiMarketValue > 0 ? apiMarketValue : (todayBaseAmount + todayProfitVal);
+                            } else if (Number.isFinite(apiTodayProfit)) {
+                                todayProfitVal = apiTodayProfit;
+                                fund.todayProfit = todayProfitVal.toFixed(2);
+                                currentRealTimeAmount = Number.isFinite(apiMarketValue) && apiMarketValue > 0 ? apiMarketValue : (todayBaseAmount + todayProfitVal);
+                                if (fund.profitSource === 'ocr_yesterday') {
+                                    fund.currentRate = todayBaseAmount > 0 ? Number((todayProfitVal / todayBaseAmount * 100).toFixed(2)) : 0;
+                                }
                             } else {
                                 todayProfitVal = todayBaseAmount * ((Number(fund.currentRate) || 0) / 100);
                                 fund.todayProfit = todayProfitVal.toFixed(2);
@@ -7161,14 +7173,19 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             fund.pendingRedeem = !!fund.pendingRedeem;
                             fund.soldCost = Number(fund.soldCost) || 0;
                             fund.inactiveHolding = !!fund.inactiveHolding;
+                            const apiHoldingIncome = Number(fund.holdingIncome ?? fund.estimatedProfit);
                             const floatProfit = (fund.cost && fund.cost > 0 && fund.shares > 0) ? (currentRealTimeAmount - fund.cost) : 0;
-                            const allProfit = fund.shares > 0 ? (floatProfit + fund.displayedProfit) : fund.displayedProfit;
+                            const computedAllProfit = fund.shares > 0 ? (floatProfit + fund.displayedProfit) : fund.displayedProfit;
+                            const allProfit = Number.isFinite(apiHoldingIncome) ? apiHoldingIncome : computedAllProfit;
                             fund.estimatedProfit = allProfit.toFixed(2);
                             const safeBreakEvenRate = !fund.inactiveHolding && fund.cost && currentRealTimeAmount > 0 && fund.cost > currentRealTimeAmount
                                 ? ((fund.cost / currentRealTimeAmount) - 1) * 100
                                 : 0;
                             fund.breakEvenRate = Number.isFinite(safeBreakEvenRate) ? safeBreakEvenRate.toFixed(2) : "--";
-                            fund.existingReturnRate = (fund.cost && fund.cost > 0) ? ((allProfit / fund.cost) * 100).toFixed(2) : "0.00";
+                            const apiExistingReturnRate = Number(fund.existingReturnRate ?? fund.holdingRate);
+                            fund.existingReturnRate = Number.isFinite(apiExistingReturnRate)
+                                ? apiExistingReturnRate.toFixed(2)
+                                : ((fund.cost && fund.cost > 0) ? ((allProfit / fund.cost) * 100).toFixed(2) : "0.00");
 
                             const rateBaseForToday = todayBaseAmount;
                             if (!fund.inactiveHolding) {
@@ -7181,6 +7198,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const tRealized = fundsList.value.reduce((sum, f) => sum + (f.realizedProfit || 0), 0);
                         totalPrincipal.value = tPrincipal;
                         if (apiSummary) {
+                            if (Number.isFinite(Number(apiSummary.totalDisplayAmount))) {
+                                totalPrincipal.value = Number(apiSummary.totalDisplayAmount);
+                            }
                             totalTodayProfit.value = apiSummary.totalTodayProfit;
                             totalTodayRate.value = apiSummary.totalTodayRate;
                             totalProfit.value = apiSummary.totalProfit;

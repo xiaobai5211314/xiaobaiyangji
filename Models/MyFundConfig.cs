@@ -48,5 +48,11 @@ namespace 小白养基.Models
         public double OcrYesterdayIncome { get; set; } = 0;
         [MaxLength(20)]
         public string? OcrYesterdayDate { get; set; }
+
+        // OCR 识别的平台持有收益/收益率。pending 买入会污染成本反推，必须优先保留平台原值。
+        public double OcrHoldingIncome { get; set; } = 0;
+        public double OcrHoldingRate { get; set; } = 0;
+        [MaxLength(20)]
+        public string? OcrSnapshotDate { get; set; }
     }
 }

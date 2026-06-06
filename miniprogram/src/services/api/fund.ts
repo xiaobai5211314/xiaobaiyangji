@@ -20,6 +20,9 @@ export interface FundTodayItem {
   rawCostAmount?: number | null;
   confirmedCost?: number | null;
   realizedProfit?: number;
+  holdingIncome?: number;
+  holdingRate?: number;
+  holdingSource?: string;
   existingReturnRate?: number;
   breakEvenRate?: number;
   reliabilityScore?: number;
@@ -40,6 +43,7 @@ export interface FundTodayItem {
   todayBaseAmount?: number;
   todayProfitPreview?: number;
   todayRateForSimulation?: number;
+  profitSource?: string;
   marketOpen?: boolean;
   marketStatus?: string;
   marketLabel?: string;
