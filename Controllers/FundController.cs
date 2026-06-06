@@ -1372,17 +1372,25 @@ namespace 小白养基.Controllers
                     for (int ni = ri + 1; ni < rows.Count; ni++)
                     {
                         var next = rows[ni];
-                        // 噪声行中断
+                        int nextYGap = Math.Abs(next.Top - row.Bottom);
+
+                        // 噪声行：有中文但都是噪声标签 → 中断
                         if (HasNameColumnText(next, nameAmountBoundary) && IsNameColumnNoise(next, nameAmountBoundary))
                             break;
-                        // 无中文内容中断
-                        if (!HasNameColumnText(next, nameAmountBoundary)) break;
-                        // 新主行（金额列有数值）中断
-                        int nextAmountNum = next.Boxes.Count(b => IsAmountCol(b, nameAmountBoundary, amountProfitBoundary) && IsNumericBox(b.Words));
-                        if (nextAmountNum >= 1 && next.Boxes.Any(b => IsAmountCol(b, nameAmountBoundary, amountProfitBoundary) && !IsPercentText(b.Words.Trim()) && ParseSignedNumber(b.Words.Trim().Replace(",","").Replace("+","")) is > 100))
-                            break; // 金额列有大数值 → 新主行
 
-                        // ★ continuation 判断：不再用 nextRightNum >= 2 就 break
+                        // Y 距离过大 → 不再是同一基金的两行 → 中断
+                        if (nextYGap > 70) break;
+
+                        // 新主行检测：金额列有大金额(>1000) → 新基金开始，中断
+                        int nextAmountNum = next.Boxes.Count(b => IsAmountCol(b, nameAmountBoundary, amountProfitBoundary) && IsNumericBox(b.Words));
+                        bool hasLargeAmount = next.Boxes.Any(b =>
+                            IsAmountCol(b, nameAmountBoundary, amountProfitBoundary)
+                            && !IsPercentText(b.Words.Trim())
+                            && ParseSignedNumber(b.Words.Trim().Replace(",", "").Replace("+", "")) is > 1000);
+                        if (hasLargeAmount && HasNameColumnText(next, nameAmountBoundary))
+                            break; // 有名称 + 有大金额 → 新主行
+
+                        // ★ continuation 判断：允许纯数字行（名称列无中文也行）
                         if (LooksLikeContinuation(next, row, nameAmountBoundary, amountProfitBoundary))
                         {
                             cardLines.Add((row, next));
@@ -1390,6 +1398,25 @@ namespace 小白养基.Controllers
                             ri = ni;
                             break;
                         }
+
+                        // 纯数字行但不符合 continuation（无百分比等）→ 也尝试作为续行
+                        // 条件：Y 距离近 + 无名称列中文 + 金额列或收益列有数值
+                        if (!HasNameColumnText(next, nameAmountBoundary))
+                        {
+                            int nextProfitNum = next.Boxes.Count(b => IsProfitCol(b, amountProfitBoundary) && IsNumericBox(b.Words));
+                            if (nextAmountNum + nextProfitNum >= 1)
+                            {
+                                cardLines.Add((row, next));
+                                paired = true;
+                                ri = ni;
+                                break;
+                            }
+                            // 纯噪声/空白行 → 继续扫描下一行（不中断）
+                            continue;
+                        }
+
+                        // 有名称列中文但不是噪声，也不是 continuation → 可能是新主行，中断
+                        break;
                     }
                     if (!paired)
                     {
