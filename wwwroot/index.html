@@ -608,6 +608,18 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             border: 1px solid rgba(245, 158, 11, 0.22);
         }
 
+        .badge-holiday {
+            background: rgba(148, 163, 184, 0.14);
+            color: #cbd5e1;
+            border: 1px solid rgba(148, 163, 184, 0.28);
+        }
+
+        .badge-pending {
+            background: rgba(251, 191, 36, 0.12);
+            color: #fbbf24;
+            border: 1px solid rgba(251, 191, 36, 0.28);
+        }
+
         .radar-badge {
             background: rgba(255, 77, 79, 0.15);
             color: #ff4d4f;
@@ -4350,8 +4362,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                         <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 6px; margin-top: 5px;">
                             <span style="display: flex; align-items: center; gap: 5px;">
-                                <span :class="['fund-badge', fund.isSettled ? 'badge-actual' : 'badge-estimate']">
-                                    {{ fund.isSettled ? '✅ 净值确认' : '⏱️ 盘中侦测' }}
+                                <span :class="['fund-badge', getFundStatusBadgeClass(fund)]">
+                                    {{ getFundStatusBadgeText(fund) }}
                                 </span>
 
                                 <span v-if="fund.isHoliday" style="color:var(--text-muted); font-weight: bold; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-size: 11px;">☕ 休市</span>
@@ -5038,6 +5050,18 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                      style="margin-top:4px;color:var(--text-muted);font-size:11px;">
                                     收益状态：{{ item.profitUpdateState === 'UPDATED' ? '已更新' : '未更新' }}
                                 </div>
+                                <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+                                    <button class="btn"
+                                            style="font-size:12px;padding:6px 10px;border-radius:10px;"
+                                            @click="setOcrPendingMode(item, false)">
+                                        设为已确认持仓
+                                    </button>
+                                    <button class="btn"
+                                            style="font-size:12px;padding:6px 10px;border-radius:10px;border-color:rgba(251,191,36,.45);color:#fbbf24;"
+                                            @click="setOcrPendingMode(item, true)">
+                                        手动标记买入待确认
+                                    </button>
+                                </div>
                             </div>
 
                             <button v-if="ocrModal.data.diagnostics && ocrModal.data.diagnostics.length"
@@ -5228,6 +5252,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const totalRate = ref(0);
                 const totalTodayProfit = ref(0);
                 const totalTodayRate = ref(0);
+                const dashboardSummaryMeta = ref({ effectiveDate: todayDashStr, naturalDate: todayDashStr, marketOpen: true, marketStatus: 'open', summarySource: '' });
                 const loginForm = reactive({ username: '', password: '' });
                 const profileForm = reactive({ displayName: '', saving: false });
                 const fundForm = reactive({ code: '', amount: '' });
@@ -6127,7 +6152,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const saveDailyArchive = async (silent = false) => {
                     if (!silent && !confirm("💾 确定要将大屏当前的数据作为【今日最终收益】永久封存吗？")) return;
                     let d = new Date();
-                    let localDateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+                    let localDateStr = dashboardSummaryMeta.value?.effectiveDate || (d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
                     const safeNumber = (val) => Number((parseFloat(val) || 0).toFixed(2));
                     const totalAssetsNow = fundsList.value.reduce((sum, f) => sum + safeNumber(f.todayAmount || f.amount), 0);
                     const payload = {
@@ -6158,6 +6183,19 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     const n = Number(value);
                     if (!Number.isFinite(n)) return '--';
                     return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
+                };
+
+                const getFundStatusBadgeText = (fund) => {
+                    if (fund?.marketOpen === false) return '☕ 休市';
+                    if (fund?.pendingBuy || Number(fund?.pendingBuyAmount || 0) > 0) return '⏳ 买入待确认';
+                    if (fund?.isSettled) return '✅ 净值确认';
+                    return '⏱️ 盘中侦测';
+                };
+
+                const getFundStatusBadgeClass = (fund) => {
+                    if (fund?.marketOpen === false) return 'badge-holiday';
+                    if (fund?.pendingBuy || Number(fund?.pendingBuyAmount || 0) > 0) return 'badge-pending';
+                    return fund?.isSettled ? 'badge-actual' : 'badge-estimate';
                 };
 
                 const sortIndexHistoryRowsDesc = (rows = []) => (Array.isArray(rows) ? rows : [])
@@ -6488,6 +6526,41 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             event.target.value = '';
                         }
                     });
+                };
+
+                const setOcrPendingMode = (item, pending) => {
+                    const holdAmount = Math.max(0, Number(item.holdAmount || 0));
+                    if (!pending) {
+                        item.isPendingBuy = false;
+                        item.isSuspiciousPendingBuy = false;
+                        item.pendingBuyAmount = 0;
+                        item.rawPendingAmount = 0;
+                        item.confirmedAmount = holdAmount;
+                        item.todayBaseAmount = holdAmount;
+                        item.participatesToday = true;
+                        item.pendingSource = 'none';
+                        item.pendingReason = '用户手动设为已确认持仓';
+                        item.pendingDecisionReason = item.pendingReason;
+                        item.warning = '';
+                        return;
+                    }
+
+                    const defaultAmount = Number(item.pendingBuyAmount || item.rawPendingAmount || item.holdAmount || 0);
+                    const text = prompt('请输入买入待确认金额', Number(defaultAmount || 0).toFixed(2));
+                    if (text === null) return;
+                    const pendingAmount = Math.max(0, Math.min(holdAmount, Number(String(text).replace(/,/g, '')) || 0));
+                    if (pendingAmount <= 0) return showToast('待确认金额必须大于 0', 'error');
+                    item.isPendingBuy = true;
+                    item.isSuspiciousPendingBuy = false;
+                    item.pendingBuyAmount = Number(pendingAmount.toFixed(2));
+                    item.rawPendingAmount = item.pendingBuyAmount;
+                    item.confirmedAmount = Number(Math.max(0, holdAmount - pendingAmount).toFixed(2));
+                    item.todayBaseAmount = item.confirmedAmount;
+                    item.participatesToday = false;
+                    item.pendingSource = 'manual';
+                    item.pendingReason = '用户手动标记买入待确认';
+                    item.pendingDecisionReason = item.pendingReason;
+                    item.warning = '买入待确认，不参与今日收益';
                 };
 
                 const confirmOcrImport = async () => {
@@ -6999,13 +7072,25 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         let tPrincipal = 0; let tPrincipalForRate = 0; let tCost = 0; let tToday = 0; let d = new Date();
                         let todaySlash = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
                         let todayDash = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                        if (apiSummary?.effectiveDate) {
+                            todayDash = apiSummary.effectiveDate;
+                            todaySlash = String(apiSummary.effectiveDate).split('-').join('/');
+                        }
+                        dashboardSummaryMeta.value = {
+                            effectiveDate: apiSummary?.effectiveDate || todayDash,
+                            naturalDate: apiSummary?.naturalDate || apiSummary?.date || todayDash,
+                            marketOpen: apiSummary?.marketOpen !== false,
+                            marketStatus: apiSummary?.marketStatus || '',
+                            summarySource: apiSummary?.summarySource || ''
+                        };
                         let currentMinutes = d.getHours() * 60 + d.getMinutes(); let isWeekend = (d.getDay() === 0 || d.getDay() === 6);
                         await loadCalibrationProfiles();
                         const intradayCalibrationPayload = [];
                         const settledCalibrationPayload = [];
 
                         apiData.forEach(fund => {
-                            if (fund.isSettled) { fund.currentRate = fund.actualRate; fund.isHoliday = false; if (fund.data.length > 0 && String(fund.data[fund.data.length - 1][0]).includes("15:00:00")) { fund.data[fund.data.length - 1][1] = fund.actualRate; } else { fund.data.push([`${todaySlash} 15:00:00`, fund.actualRate]); } } else if (isWeekend || currentMinutes < 565) { fund.currentRate = 0; fund.isHoliday = true; } else if (fund.data && fund.data.length > 0) { let lastDataTime = String(fund.data[fund.data.length - 1][0]); let hasTodayDate = lastDataTime.includes(todaySlash) || lastDataTime.includes(todayDash); let isPast935 = (d.getHours() > 9) || (d.getHours() === 9 && d.getMinutes() >= 35); if (hasTodayDate && !(isPast935 && fund.data.length <= 2)) { fund.currentRate = fund.data[fund.data.length - 1][1]; fund.isHoliday = false; } else { fund.currentRate = 0; fund.isHoliday = true; } } else { fund.currentRate = 0; fund.isHoliday = true; }
+                            const backendMarketClosed = fund.marketOpen === false;
+                            if (fund.isSettled) { fund.currentRate = fund.actualRate; fund.isHoliday = backendMarketClosed; if (fund.data.length > 0 && String(fund.data[fund.data.length - 1][0]).includes("15:00:00")) { fund.data[fund.data.length - 1][1] = fund.actualRate; } else { fund.data.push([`${todaySlash} 15:00:00`, fund.actualRate]); } } else if (backendMarketClosed || isWeekend || currentMinutes < 565) { fund.currentRate = Number(fund.todayRateForSimulation || 0); fund.isHoliday = true; } else if (fund.data && fund.data.length > 0) { let lastDataTime = String(fund.data[fund.data.length - 1][0]); let hasTodayDate = lastDataTime.includes(todaySlash) || lastDataTime.includes(todayDash); let isPast935 = (d.getHours() > 9) || (d.getHours() === 9 && d.getMinutes() >= 35); if (hasTodayDate && !(isPast935 && fund.data.length <= 2)) { fund.currentRate = fund.data[fund.data.length - 1][1]; fund.isHoliday = false; } else { fund.currentRate = 0; fund.isHoliday = true; } } else { fund.currentRate = 0; fund.isHoliday = true; }
 
                             const rawCurrentRate = Number(fund.currentRate || 0);
                             if (fund.isSettled) {
@@ -7282,11 +7367,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     toasts, isLoggedIn, currentUser, userDisplayName, fundsList, chartRef, performanceChartRef, loginForm, profileForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, refreshSectorPage, activePage, switchPage, showProfileModal, userAvatar, smartOcrBusy, smartOcrText,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
                     performanceCurve, performancePeriod, performanceIndex, performanceLoading, performancePeriods, performanceIndices, selectedPerformanceIndexName, performanceIsToday, showPerformanceAmount, canShowPerformanceAmount, togglePerformanceAmount, performanceMessage, performanceVerdict, performanceExcessClass, fetchPerformanceCurve, renderPerformanceChart, switchPerformancePeriod, formatPerformancePercent, formatPerformanceMoney,
-                    handleLogin, handleRegister, handleLogout, saveUserProfile, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, confirmOcrImport, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
+                    handleLogin, handleRegister, handleLogout, saveUserProfile, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, setOcrPendingMode, confirmOcrImport, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
                     sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, capitalFlowError, isCapitalLoading, fetchCapitalFlow,
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, isDetailsLoading, expandedSectors, toggleSector,
-                    fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices, formatIndexPoint, formatIndexRate,
+                    fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices, formatIndexPoint, formatIndexRate, getFundStatusBadgeText, getFundStatusBadgeClass,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
                     analysisMonth, selectedAnalysisDate, analysisViewMode, analysisDetailMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, analysisProfitTop, analysisLossTop, analysisMonthTotal, fetchAnalysis, refreshAnalysisPage, goAnalysisToday, todayDashStr,
                     assetMode, setAssetMode, stockHoldings, stockWatchList, stockSearchKeyword, stockSearchResults, stockOcrLoading, stockOcrPreview, selectedStock, stockKlinePeriod, stockKlinePeriods, stockChartRef, stockChartStatus, triggerStockOcr, handleStockOcrUpload, confirmStockOcr, loadStockDashboard, searchStocks, addStockWatch, openStockHoldingEditor, deleteStockHolding, deleteStockWatch, openStockDetail, switchStockKline, recalculateStockOcrItem, formatOcrNumber, signedOcrNumber, profitColor, dailyBattleReport, confidenceRows, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, formatFinitePercent, calibrationRows,

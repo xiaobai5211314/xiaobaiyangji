@@ -122,9 +122,13 @@ function deriveRateState(fund: FundTodayItem, now: Date, slashDate: string, dash
   if (fund.isSettled) {
     return {
       rate: numberOrZero(fund.actualRate ?? fund.lastSettledRate ?? fund.currentRate),
-      isHoliday: false,
+      isHoliday: fund.marketOpen === false,
       isSettled: true
     };
+  }
+
+  if (fund.marketOpen === false) {
+    return { rate: numberOrZero(fund.todayRateForSimulation ?? fund.currentRate), isHoliday: true, isSettled: false };
   }
 
   if (isWeekend || currentMinutes < 565) {
@@ -231,17 +235,19 @@ function buildDailyReport(funds: FundView[], totalTodayProfit: number, exposure:
 }
 
 export function buildPortfolioMetrics(rawFunds: FundTodayItem[], now = new Date()): PortfolioMetrics {
-  const { slash, dash } = todayParts(now);
+  const { dash } = todayParts(now);
   let totalPrincipal = 0;
   let totalPrincipalForRate = 0;
   let totalCost = 0;
   let totalTodayProfit = 0;
 
   const funds = rawFunds.map((fund, index) => {
-    const rateState = deriveRateState(fund, now, slash, dash);
+    const fundDash = fund.effectiveDate || dash;
+    const fundSlash = fundDash.split('-').join('/');
+    const rateState = deriveRateState(fund, now, fundSlash, fundDash);
     const pendingBuyAmount = Math.max(0, numberOrZero(fund.pendingBuyAmount));
     const pendingBuyValue = Boolean(fund.pendingBuy) || pendingBuyAmount > 0;
-    const isAlreadySettled = fund.lastSettledDate === dash;
+    const isAlreadySettled = fund.lastSettledDate === fundDash;
     const currentAmount = Math.max(0, finiteNumber(fund.confirmedAmount) ?? numberOrZero(fund.amount));
     const apiBaseAmount = finiteNumber(fund.todayBaseAmount);
     const todayBaseAmount = apiBaseAmount !== null ? Math.max(0, apiBaseAmount) : currentAmount;
@@ -305,7 +311,7 @@ export function buildPortfolioMetrics(rawFunds: FundTodayItem[], now = new Date(
       isHoliday: rateState.isHoliday,
       isHolidayValue: rateState.isHoliday,
       isSettledValue: rateState.isSettled || isAlreadySettled,
-      statusLabel: rateState.isHoliday ? '休市' : rateState.isSettled || isAlreadySettled ? '净值参考' : '盘中参考',
+      statusLabel: fund.marketOpen === false ? '休市' : pendingBuyValue ? '买入待确认' : rateState.isSettled || isAlreadySettled ? '净值参考' : '盘中参考',
       trendLabel: rateState.isHoliday ? '休市沿用' : rateState.isSettled || isAlreadySettled ? '真' : '估',
       confidenceView: { score: 0, level: '', reason: '', tone: 'medium' }
     };

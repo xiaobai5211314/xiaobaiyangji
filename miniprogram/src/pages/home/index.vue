@@ -328,6 +328,10 @@
             <text v-if="ocrText(item, 'profitUpdateState', 'ProfitUpdateState') && ocrText(item, 'profitUpdateState', 'ProfitUpdateState') !== 'UNKNOWN'" class="ocr-reason" style="font-size:20rpx;">
               收益状态：{{ ocrText(item, 'profitUpdateState', 'ProfitUpdateState') === 'UPDATED' ? '已更新' : '未更新' }}
             </text>
+            <view class="ocr-switch-actions">
+              <button size="mini" class="ocr-switch-button" @tap="setOcrPendingMode(item, false)">设为已确认</button>
+              <button size="mini" class="ocr-switch-button pending" @tap="setOcrPendingMode(item, true)">标记待确认</button>
+            </view>
           </view>
           <view v-if="ocrDiagnostics.length" class="diagnostics">
             <text v-for="(line, index) in ocrDiagnostics" :key="`diag-${index}`">{{ line }}</text>
@@ -1786,6 +1790,32 @@ function ocrParticipatesTodayText(item: OcrImportPreviewItem) {
   return value === false ? '否' : '是';
 }
 
+function setOcrPendingMode(item: OcrImportPreviewItem, pending: boolean) {
+  const holdAmount = Math.max(0, Number(ocrPick(item, 'holdAmount', 'HoldAmount') || 0));
+  if (!pending) {
+    item.isPendingBuy = false;
+    item.isSuspiciousPendingBuy = false;
+    item.pendingBuyAmount = 0;
+    item.pendingSource = 'none';
+    item.pendingReason = '用户手动设为已确认持仓';
+    item.confirmedAmount = holdAmount;
+    item.todayBaseAmount = holdAmount;
+    item.participatesToday = true;
+    item.warning = '';
+    return;
+  }
+
+  item.isPendingBuy = true;
+  item.isSuspiciousPendingBuy = false;
+  item.pendingBuyAmount = holdAmount;
+  item.pendingSource = 'manual';
+  item.pendingReason = '用户手动标记买入待确认';
+  item.confirmedAmount = 0;
+  item.todayBaseAmount = 0;
+  item.participatesToday = false;
+  item.warning = '买入待确认，不参与今日收益';
+}
+
 function ocrItemKey(item: OcrImportPreviewItem, index: number) {
   return `${ocrText(item, 'code', 'Code') || ocrText(item, 'name', 'Name') || 'ocr'}-${index}`;
 }
@@ -2807,6 +2837,28 @@ function getErrorMessage(error: unknown, fallback: string) {
   margin-top: 8rpx;
   color: var(--text-muted);
   font-size: 22rpx;
+}
+
+.ocr-switch-actions {
+  display: flex;
+  gap: 12rpx;
+  margin-top: 12rpx;
+}
+
+.ocr-switch-button {
+  margin: 0;
+  padding: 0 18rpx;
+  height: 52rpx;
+  line-height: 52rpx;
+  border-radius: 999rpx;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 22rpx;
+}
+
+.ocr-switch-button.pending {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
 }
 
 .ocr-update-state {

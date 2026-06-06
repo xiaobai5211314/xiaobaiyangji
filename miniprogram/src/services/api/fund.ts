@@ -38,6 +38,12 @@ export interface FundTodayItem {
   lastSettledProfit?: number;
   lastSettledRate?: number;
   todayBaseAmount?: number;
+  todayProfitPreview?: number;
+  todayRateForSimulation?: number;
+  marketOpen?: boolean;
+  marketStatus?: string;
+  marketLabel?: string;
+  effectiveDate?: string;
   calibrationOffset?: number;
   calibrationSamples?: number;
   calibrationLastError?: number;

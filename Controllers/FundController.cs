@@ -129,26 +129,113 @@ namespace 小白养基.Controllers
         private static string ChinaDateDash(DateTime? localTime = null)
             => (localTime ?? ChinaNow()).ToString("yyyy-MM-dd");
 
+        private sealed record EffectiveFundDateInfo(
+            DateTime NaturalDate,
+            string NaturalDateText,
+            DateTime EffectiveDate,
+            string EffectiveDateText,
+            DateTime EffectiveDateStart,
+            DateTime EffectiveDateEndExclusive,
+            string DateMode,
+            bool MarketOpen,
+            string MarketStatus,
+            string MarketLabel);
+
+        private static readonly IReadOnlySet<string> AShareClosedDates = new HashSet<string>(StringComparer.Ordinal)
+        {
+            // 可维护的特殊休市日期入口；当前先用周末规则兜底。
+        };
+
+        private static readonly IReadOnlySet<string> HkShareClosedDates = new HashSet<string>(StringComparer.Ordinal)
+        {
+        };
+
+        private static readonly IReadOnlySet<string> UsShareClosedDates = new HashSet<string>(StringComparer.Ordinal)
+        {
+        };
+
         /// <summary>
         /// 基金有效日期：0:00~9:25 返回上一交易日，9:25 以后返回当天，周末返回上周五。
         /// </summary>
         private static string GetEffectiveFundDate(DateTime? localTime = null)
+            => GetEffectiveFundDateInfo(localTime).EffectiveDateText;
+
+        private static EffectiveFundDateInfo GetEffectiveFundDateInfo(DateTime? localTime = null, string market = "cn")
         {
             var now = localTime ?? ChinaNow();
-            // 周末 → 上周五
-            if (now.DayOfWeek == DayOfWeek.Saturday)
-                return now.AddDays(-1).ToString("yyyy-MM-dd");
-            if (now.DayOfWeek == DayOfWeek.Sunday)
-                return now.AddDays(-2).ToString("yyyy-MM-dd");
-            // 交易日 0:00~9:25 → 上一交易日
-            if (now.TimeOfDay < new TimeSpan(9, 25, 0))
+            var naturalDate = now.Date;
+            var closedDates = market switch
             {
-                var prev = now.AddDays(-1);
-                if (prev.DayOfWeek == DayOfWeek.Sunday) prev = prev.AddDays(-2);
-                else if (prev.DayOfWeek == DayOfWeek.Saturday) prev = prev.AddDays(-1);
-                return prev.ToString("yyyy-MM-dd");
+                "hk" => HkShareClosedDates,
+                "us" => UsShareClosedDates,
+                _ => AShareClosedDates
+            };
+
+            bool isWeekend = naturalDate.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+            bool isHoliday = closedDates.Contains(naturalDate.ToString("yyyy-MM-dd"));
+            bool marketOpen = false;
+            string marketStatus;
+            DateTime effectiveDate;
+
+            if (isWeekend)
+            {
+                marketStatus = "weekend";
+                effectiveDate = GetPreviousTradingDate(naturalDate.AddDays(-1), closedDates);
             }
-            return now.ToString("yyyy-MM-dd");
+            else if (isHoliday)
+            {
+                marketStatus = "holiday";
+                effectiveDate = GetPreviousTradingDate(naturalDate.AddDays(-1), closedDates);
+            }
+            else if (now.TimeOfDay < new TimeSpan(9, 25, 0))
+            {
+                marketStatus = "preopen";
+                effectiveDate = GetPreviousTradingDate(naturalDate.AddDays(-1), closedDates);
+            }
+            else if (now.TimeOfDay < new TimeSpan(15, 0, 0))
+            {
+                marketStatus = "open";
+                marketOpen = true;
+                effectiveDate = naturalDate;
+            }
+            else
+            {
+                marketStatus = "afterclose";
+                effectiveDate = naturalDate;
+            }
+
+            string dateMode = effectiveDate.Date == naturalDate ? "today" : "latest_trading_day";
+            string marketLabel = marketOpen ? "盘中" : "休市";
+            return new EffectiveFundDateInfo(
+                naturalDate,
+                naturalDate.ToString("yyyy-MM-dd"),
+                effectiveDate.Date,
+                effectiveDate.ToString("yyyy-MM-dd"),
+                effectiveDate.Date,
+                effectiveDate.Date.AddDays(1),
+                dateMode,
+                marketOpen,
+                marketStatus,
+                marketLabel);
+        }
+
+        private static DateTime GetPreviousTradingDate(DateTime date, IReadOnlySet<string> closedDates)
+        {
+            var cursor = date.Date;
+            while (cursor.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday ||
+                   closedDates.Contains(cursor.ToString("yyyy-MM-dd")))
+            {
+                cursor = cursor.AddDays(-1);
+            }
+            return cursor;
+        }
+
+        private static string DetectFundMarket(string fundCode, string fundName)
+        {
+            string text = $"{fundCode} {fundName}";
+            if (Regex.IsMatch(text, @"恒生|港股|香港", RegexOptions.IgnoreCase)) return "hk";
+            if (Regex.IsMatch(text, @"QDII|海外|全球|美元|纳斯达克|标普|日经", RegexOptions.IgnoreCase)) return "us";
+            return "cn";
         }
 
         private static bool IsPendingStatusActive(string? status)
@@ -1146,7 +1233,7 @@ namespace 小白养基.Controllers
                     // 收益未更新时，"--"不作为pending证据
                     pendingBuyAmount = 0;
                     pendingReason = "收益未更新，暂不判断是否参与今日收益";
-                    pendingSource = "";
+                    pendingSource = "none";
                     pendingConfirmDate = null;
                 }
                 else if (hasDashProfit && profitUpdateState != "NOT_UPDATED" && !hasPendingEvidence)
@@ -1154,7 +1241,7 @@ namespace 小白养基.Controllers
                     // 有"--"但无pending文字证据 → suspicious
                     pendingBuyAmount = 0;
                     pendingReason = "昨日收益为--但无pending文字证据，标记可疑";
-                    pendingSource = "suspicious";
+                    pendingSource = "none";
                     pendingConfirmDate = null;
                     isSuspicious = true;
                 }
@@ -1235,7 +1322,7 @@ namespace 小白养基.Controllers
                         ? $"本次OCR无pending证据，清除旧遗留({pendingSource ?? pendingReason ?? "无"})"
                         : pendingReason,
                     PendingConfirmDate = pendingConfirmDate,
-                    PendingSource = pendingBuyAmount > 0 ? pendingSource : (clearedOldPending ? "cleared_old" : ""),
+                    PendingSource = pendingBuyAmount > 0 ? pendingSource : "none",
                     PendingEvidence = pendingEvidence,
                     PendingDecisionReason = pendingReason,
                     RawTodayProfit = Math.Round(yesterdayIncome, 2),
@@ -1301,7 +1388,7 @@ namespace 小白养基.Controllers
             // 强制规则：如果 OCR 上下文有"待确认金额 0.00"或"待确认金额0"，直接返回无 pending
             if (HasZeroPendingAmountEvidence(localContext) || HasZeroPendingAmountEvidence(fullText))
             {
-                return new OcrPendingBuyAssessment(false, false, 0, "OCR识别到待确认金额为0，无买入待确认", "explicit_zero_pending", null);
+                return new OcrPendingBuyAssessment(false, false, 0, "OCR识别到待确认金额为0，无买入待确认", "none", null);
             }
 
             // 保留已有 pending 状态：仅限 manual_add 来源，且本次 OCR 无明确 pending 字段
@@ -1317,7 +1404,7 @@ namespace 小白养基.Controllers
                     false,
                     existingPending,
                     "保留手工标记的买入待确认",
-                    "manual_add",
+                    "manual",
                     existing?.PendingConfirmDate ?? EstimatePendingConfirmDate(fundName));
             }
 
@@ -1383,8 +1470,27 @@ namespace 小白养基.Controllers
                 }
             }
 
+            if (existing == null &&
+                fullStrong &&
+                fullPendingAmountsForMatch.Count > 0 &&
+                IsZeroProfitOcrShape(yesterdayIncome, holdingIncome, holdingRate) &&
+                IsRoundPendingBuyAmount(holdAmount))
+            {
+                double? exactMatch = PickExactPendingAmount(fullPendingAmountsForMatch, holdAmount);
+                if (exactMatch.HasValue)
+                {
+                    return new OcrPendingBuyAssessment(
+                        true,
+                        false,
+                        Math.Round(exactMatch.Value, 2),
+                        "新基金整额买入且全文存在买入待确认金额",
+                        "heuristic_new_fund",
+                        confirmDate);
+                }
+            }
+
             // 无文字证据 → 不标记 pending
-            return new OcrPendingBuyAssessment(false, false, 0, string.Empty, string.Empty, null);
+            return new OcrPendingBuyAssessment(false, false, 0, "无待确认证据，按已确认持仓处理", "none", null);
         }
 
         private static string DetectProfitUpdateState(string fullOcrText, List<string> texts)
@@ -1498,11 +1604,19 @@ namespace 小白养基.Controllers
         private static bool IsZeroProfitOcrShape(double yesterdayIncome, double holdingIncome, double holdingRate)
             => Math.Abs(yesterdayIncome) < 0.01 && Math.Abs(holdingIncome) < 0.01 && Math.Abs(holdingRate) < 0.01;
 
+        private static bool IsRoundPendingBuyAmount(double amount)
+        {
+            if (amount <= 0) return false;
+            var rounded = Math.Round(amount, 2);
+            if (Math.Abs(rounded - 1000) < 0.01 || Math.Abs(rounded - 5000) < 0.01 || Math.Abs(rounded - 10000) < 0.01) return true;
+            return rounded >= 1000 && Math.Abs(rounded % 1000) < 0.01;
+        }
+
         private static List<double> ExtractPendingBuyAmounts(string text)
         {
             var amounts = new List<double>();
             if (string.IsNullOrWhiteSpace(text)) return amounts;
-            foreach (Match match in Regex.Matches(text, @"(?:买入|加仓)[/／\s:：|]*([0-9][0-9,]*(?:\.\d{1,2})?)\s*元?", RegexOptions.IgnoreCase))
+            foreach (Match match in Regex.Matches(text, @"(?:买入待确认|待确认买入|买入|加仓)[/／\s:：|]*([0-9][0-9,]*(?:\.\d{1,2})?)\s*元?", RegexOptions.IgnoreCase))
             {
                 if (double.TryParse(match.Groups[1].Value.Replace(",", ""), out var amount) && amount > 0)
                 {
@@ -2545,8 +2659,9 @@ namespace 小白养基.Controllers
             bool debug)
         {
             var localTime = ChinaNow();
-            var today = localTime.Date;
-            var todayDash = localTime.ToString("yyyy-MM-dd");
+            var dateInfo = GetEffectiveFundDateInfo(localTime);
+            var today = dateInfo.EffectiveDateStart;
+            var todayDash = dateInfo.EffectiveDateText;
 
             var myFunds = await _context.MyFunds
                 .AsNoTracking()
@@ -2581,6 +2696,55 @@ namespace 小白养基.Controllers
                 });
             }
 
+            var effectiveArchiveTotal = await _context.DailyArchives
+                .AsNoTracking()
+                .Where(a => a.Username == username
+                            && a.FundCode == "TOTAL"
+                            && a.RecordDate >= dateInfo.EffectiveDateStart
+                            && a.RecordDate < dateInfo.EffectiveDateEndExclusive)
+                .OrderByDescending(a => a.Id)
+                .FirstOrDefaultAsync();
+
+            if (!dateInfo.MarketOpen && effectiveArchiveTotal != null)
+            {
+                var archivePoint = new PerformanceCurvePoint(
+                    $"{todayDash} 15:00",
+                    todayDash,
+                    Math.Round(effectiveArchiveTotal.DailyRate, 2),
+                    Math.Round(effectiveArchiveTotal.DailyProfit, 2),
+                    null,
+                    Math.Round(effectiveArchiveTotal.Assets, 2),
+                    Math.Round(effectiveArchiveTotal.DailyProfit, 2),
+                    Math.Round(effectiveArchiveTotal.TotalRate, 2));
+                return Ok(new
+                {
+                    period = "today",
+                    index = normalizedIndex,
+                    indexName = indexDefinition.Name,
+                    selectedIndex = normalizedIndex,
+                    resolvedIndexCode = ResolveIndexCode(indexDefinition),
+                    resolvedSecId = indexDefinition.Secid,
+                    hasMyData = true,
+                    indexAvailable = false,
+                    indexSource = "none",
+                    indexRawRowsCount = 0,
+                    indexParsedRowsCount = 0,
+                    pointsWithIndexRate = 0,
+                    indexMessage = "休市，指数盘中数据暂不可用",
+                    attempts = Array.Empty<ExternalDataAttemptDto>(),
+                    myTotalRate = Math.Round(effectiveArchiveTotal.DailyRate, 2),
+                    indexTotalRate = 0d,
+                    excessRate = 0d,
+                    myTotalProfit = Math.Round(effectiveArchiveTotal.DailyProfit, 2),
+                    marketOpen = dateInfo.MarketOpen,
+                    marketStatus = dateInfo.MarketStatus,
+                    effectiveDate = todayDash,
+                    summarySource = "daily_archive_total",
+                    message = "休市，使用最近交易日收益档案",
+                    points = new[] { archivePoint }
+                });
+            }
+
             var recentStart = today.AddDays(-10);
             var recentRecords = await _context.FundRecords
                 .AsNoTracking()
@@ -2589,11 +2753,11 @@ namespace 小白养基.Controllers
                 .ToListAsync();
 
             var todayRecords = recentRecords
-                .Where(r => r.FetchTime >= today)
+                .Where(r => r.FetchTime >= dateInfo.EffectiveDateStart && r.FetchTime < dateInfo.EffectiveDateEndExclusive)
                 .ToList();
 
             var lastRecordDict = recentRecords
-                .Where(r => r.FetchTime < today)
+                .Where(r => r.FetchTime < dateInfo.EffectiveDateStart)
                 .GroupBy(r => r.FundCode)
                 .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).First());
 
@@ -4714,7 +4878,9 @@ namespace 小白养基.Controllers
 
             try
             {
-                string cacheKey = $"Tactical_TodayData_{username}_{GetEffectiveFundDate()}";
+                var localTime = ChinaNow();
+                var dateInfo = GetEffectiveFundDateInfo(localTime);
+                string cacheKey = $"Tactical_TodayData_{username}_{dateInfo.EffectiveDateText}_{dateInfo.MarketStatus}";
                 if (force)
                 {
                     _cache.Remove(cacheKey);
@@ -4733,12 +4899,11 @@ namespace 小白养基.Controllers
 
                 if (!myFundCodes.Any()) return Ok(new List<object>());
 
-                var localTime = ChinaNow();
-                var today = localTime.Date;
-                string todayStr = localTime.ToString("yyyy'/'MM'/'dd");
-                string naturalDate = localTime.ToString("yyyy-MM-dd");
-                string todayDash = GetEffectiveFundDate(localTime);
-                string dateMode = todayDash == naturalDate ? "today" : "latest_trading_day";
+                var today = dateInfo.EffectiveDateStart;
+                string todayStr = today.ToString("yyyy'/'MM'/'dd");
+                string naturalDate = dateInfo.NaturalDateText;
+                string todayDash = dateInfo.EffectiveDateText;
+                string dateMode = dateInfo.DateMode;
 
                 // 只取最近 10 天的必要数据，避免首屏把历史全表拖回内存。
                 var recentStart = today.AddDays(-10);
@@ -4749,11 +4914,11 @@ namespace 小白养基.Controllers
                     .ToListAsync();
 
                 var todayRecords = recentRecords
-                    .Where(r => r.FetchTime >= today)
+                    .Where(r => r.FetchTime >= dateInfo.EffectiveDateStart && r.FetchTime < dateInfo.EffectiveDateEndExclusive)
                     .ToList();
 
                 var lastRecordDict = recentRecords
-                    .Where(r => r.FetchTime < today)
+                    .Where(r => r.FetchTime < dateInfo.EffectiveDateStart)
                     .GroupBy(r => r.FundCode)
                     .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).First());
 
@@ -4761,6 +4926,15 @@ namespace 小白养基.Controllers
                     .Where(r => r.ActualRate != 0)
                     .GroupBy(r => r.FundCode)
                     .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).Take(3).ToList());
+
+                var effectiveArchiveTotal = await _context.DailyArchives
+                    .AsNoTracking()
+                    .Where(a => a.Username == username
+                                && a.FundCode == "TOTAL"
+                                && a.RecordDate >= dateInfo.EffectiveDateStart
+                                && a.RecordDate < dateInfo.EffectiveDateEndExclusive)
+                    .OrderByDescending(a => a.Id)
+                    .FirstOrDefaultAsync();
 
 
                 // ⚡ 首屏性能优化：today 接口不再发起任何外部净值 HTTP 请求。
@@ -4770,6 +4944,7 @@ namespace 小白养基.Controllers
 
                 var result = myFunds.Select(config =>
                 {
+                    var fundDateInfo = GetEffectiveFundDateInfo(localTime, DetectFundMarket(config.FundCode, config.FundName));
                     var fundRecords = todayRecords.Where(r => r.FundCode == config.FundCode).ToList();
                     lastRecordDict.TryGetValue(config.FundCode, out var lastRecord);
 
@@ -4905,7 +5080,30 @@ namespace 小白养基.Controllers
                         actualRate = actualRate,
                         actualExactProfit = actualExactProfit,
                         todayBaseAmount = todayBaseAmount,
-                        todayRateForSimulation = todayRateForSimulation
+                        todayRateForSimulation = todayRateForSimulation,
+                        todayProfitPreview = todayProfitPreview,
+                        marketOpen = fundDateInfo.MarketOpen,
+                        marketStatus = fundDateInfo.MarketStatus,
+                        marketLabel = fundDateInfo.MarketLabel,
+                        effectiveDate = fundDateInfo.EffectiveDateText,
+                        debug = new
+                        {
+                            code = config.FundCode,
+                            name = config.FundName,
+                            rawHoldAmount,
+                            confirmedAmount = displayAmount,
+                            pendingBuyAmount = pendingBuy ? pendingBuyAmount : 0,
+                            pendingTradeStatus = config.PendingTradeStatus,
+                            pendingTradeDate = config.PendingTradeDate,
+                            lastTradeDate = config.LastTradeDate,
+                            lastAddAmount = config.LastAddAmount,
+                            lastSettledDate = config.LastSettledDate,
+                            lastSettledProfit = config.LastSettledProfit,
+                            lastSettledRate = config.LastSettledRate,
+                            todayBaseAmount,
+                            todayRateForSimulation,
+                            todayProfitPreview
+                        }
                     };
 
                 });
@@ -4933,22 +5131,48 @@ namespace 小白养基.Controllers
                     summaryCost += fund.cost ?? 0;
                     summaryRealized += fund.realizedProfit;
                 }
+                var useArchiveTotal = !dateInfo.MarketOpen && effectiveArchiveTotal != null;
+                double summaryTodayProfit = summaryProfit;
+                double summaryTodayBase = summaryBase;
+                double summaryTodayRate = summaryBase > 0 ? Math.Round(summaryProfit / summaryBase * 100, 2) : 0;
+                double summaryTotalAssets = summaryAssets;
+                double summaryTotalProfit = summaryAssets - summaryCost + summaryRealized;
+                double summaryTotalRate = summaryCost > 0 ? Math.Round((summaryAssets - summaryCost + summaryRealized) / summaryCost * 100, 2) : 0;
+                string summarySource = "current_holdings_effective_date";
+
+                if (useArchiveTotal)
+                {
+                    summaryTodayProfit = effectiveArchiveTotal!.DailyProfit;
+                    summaryTodayRate = effectiveArchiveTotal.DailyRate;
+                    summaryTodayBase = Math.Abs(effectiveArchiveTotal.DailyRate) > 0.000001
+                        ? effectiveArchiveTotal.DailyProfit / (effectiveArchiveTotal.DailyRate / 100.0)
+                        : summaryBase;
+                    summaryTotalAssets = effectiveArchiveTotal.Assets;
+                    summaryTotalProfit = effectiveArchiveTotal.TotalProfit;
+                    summaryTotalRate = effectiveArchiveTotal.TotalRate;
+                    summarySource = "daily_archive_total";
+                }
+
                 var summary = new
                 {
-                    totalTodayProfit = Math.Round(summaryProfit, 2),
-                    totalTodayBaseAmount = Math.Round(summaryBase, 2),
-                    totalTodayRate = summaryBase > 0 ? Math.Round(summaryProfit / summaryBase * 100, 2) : 0,
-                    totalAssets = Math.Round(summaryAssets, 2),
-                    totalProfit = Math.Round(summaryAssets - summaryCost + summaryRealized, 2),
-                    totalRate = summaryCost > 0 ? Math.Round((summaryAssets - summaryCost + summaryRealized) / summaryCost * 100, 2) : 0,
+                    totalTodayProfit = Math.Round(summaryTodayProfit, 2),
+                    totalTodayBaseAmount = Math.Round(Math.Abs(summaryTodayBase), 2),
+                    totalTodayRate = Math.Round(summaryTodayRate, 2),
+                    totalAssets = Math.Round(summaryTotalAssets, 2),
+                    totalProfit = Math.Round(summaryTotalProfit, 2),
+                    totalRate = Math.Round(summaryTotalRate, 2),
                     date = naturalDate,
                     effectiveDate = todayDash,
-                    dateMode
+                    naturalDate,
+                    dateMode,
+                    marketOpen = dateInfo.MarketOpen,
+                    marketStatus = dateInfo.MarketStatus,
+                    summarySource
                 };
 
                 // 真实净值一出现，后端立即修正”今日总持仓 + 单只基金”档案。
                 // 这样不再依赖前端 save-archive，也能覆盖旧版本写坏的 TOTAL 记录。
-                if (myFunds.Any(f => f.LastSettledDate == todayDash))
+                if (dateInfo.DateMode == "today" && myFunds.Any(f => f.LastSettledDate == todayDash))
                 {
                     await UpsertTodayArchivesFromCurrentHoldingsAsync(username, today, myFunds, todayRecords);
                     await _context.SaveChangesAsync();
@@ -6660,7 +6884,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
 
         [HttpPost("save-archive")]
-        public async Task<IActionResult> SaveArchive([FromBody] ArchiveRequest req)
+        public async Task<IActionResult> SaveArchive([FromBody] ArchiveRequestDto req)
         {
             if (req == null) return BadRequest(new { success = false, message = "请求体为空" });
             if (string.IsNullOrWhiteSpace(req.Username)) return BadRequest(new { success = false, message = "缺少用户名" });
@@ -6675,21 +6899,49 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
                 if (req.Total != null)
                 {
-                    req.Total.FundCode = "TOTAL";
-                    req.Total.FundName = string.IsNullOrWhiteSpace(req.Total.FundName) ? "总持仓" : req.Total.FundName;
-                    incoming.Add(req.Total);
+                    incoming.Add(new DailyArchive
+                    {
+                        Username = req.Username,
+                        FundCode = "TOTAL",
+                        FundName = string.IsNullOrWhiteSpace(req.Total.FundName) ? "总持仓" : req.Total.FundName!,
+                        RecordDate = date,
+                        Assets = req.Total.Assets,
+                        DailyProfit = req.Total.DailyProfit,
+                        DailyRate = req.Total.DailyRate,
+                        TotalProfit = req.Total.TotalProfit,
+                        TotalRate = req.Total.TotalRate
+                    });
                 }
 
+                var skippedMissingCode = 0;
                 if (req.Funds != null)
                 {
                     foreach (var f in req.Funds)
                     {
-                        if (string.IsNullOrWhiteSpace(f.FundCode)) continue;
-                        incoming.Add(f);
+                        if (string.IsNullOrWhiteSpace(f.FundCode))
+                        {
+                            skippedMissingCode++;
+                            continue;
+                        }
+                        incoming.Add(new DailyArchive
+                        {
+                            Username = req.Username,
+                            FundCode = f.FundCode.Trim(),
+                            FundName = string.IsNullOrWhiteSpace(f.FundName) ? f.FundCode.Trim() : f.FundName!,
+                            RecordDate = date,
+                            Assets = f.Assets,
+                            DailyProfit = f.DailyProfit,
+                            DailyRate = f.DailyRate,
+                            TotalProfit = f.TotalProfit,
+                            TotalRate = f.TotalRate
+                        });
                     }
                 }
 
-                if (incoming.Count == 0) return BadRequest("封存数据为空");
+                if (incoming.Count == 0)
+                {
+                    return BadRequest(new { success = false, message = "封存数据为空，且没有可保存的基金代码" });
+                }
 
                 // 核心修复：不要因为 TOTAL 已存在就直接 return。
                 // 旧逻辑会导致“总持仓有今日记录，但单只基金今日记录缺失”，也会保留已写坏的 TOTAL 金额。
@@ -6697,7 +6949,16 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 await _context.SaveChangesAsync();
                 ClearTodayCache(req.Username);
 
-                return Ok($"✅ 已写入/修正 {incoming.Count} 条收益档案");
+                return Ok(new
+                {
+                    success = true,
+                    saved = incoming.Count,
+                    date = date.ToString("yyyy-MM-dd"),
+                    skippedMissingCode,
+                    message = skippedMissingCode > 0
+                        ? $"已保存 {incoming.Count} 条，跳过 {skippedMissingCode} 条缺少基金代码的数据"
+                        : $"已保存 {incoming.Count} 条收益档案"
+                });
             }
             catch (Exception ex)
             {
