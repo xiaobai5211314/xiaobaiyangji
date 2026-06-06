@@ -948,6 +948,117 @@ namespace 小白养基.Controllers
             string Source,
             string? ConfirmDate);
 
+        private sealed class OcrBox
+        {
+            public string Words { get; set; } = "";
+            public int Left { get; set; }
+            public int Top { get; set; }
+            public int Width { get; set; }
+            public int Height { get; set; }
+            public int CenterX => Left + Width / 2;
+            public int CenterY => Top + Height / 2;
+        }
+
+        private sealed class OcrRow
+        {
+            public int Top { get; set; }
+            public int Bottom { get; set; }
+            public List<OcrBox> Boxes { get; set; } = new();
+            public string FullText => string.Join(" ", Boxes.OrderBy(b => b.Left).Select(b => b.Words));
+        }
+
+        private static List<OcrBox> ParseOcrBoxes(JArray wordsResult)
+        {
+            var boxes = new List<OcrBox>();
+            if (wordsResult == null) return boxes;
+            foreach (var item in wordsResult)
+            {
+                var words = item["words"]?.ToString()?.Trim() ?? "";
+                if (string.IsNullOrWhiteSpace(words)) continue;
+                var loc = item["location"];
+                if (loc == null) continue;
+                boxes.Add(new OcrBox
+                {
+                    Words = words,
+                    Left = loc["left"]?.Value<int>() ?? 0,
+                    Top = loc["top"]?.Value<int>() ?? 0,
+                    Width = loc["width"]?.Value<int>() ?? 0,
+                    Height = loc["height"]?.Value<int>() ?? 0
+                });
+            }
+            return boxes;
+        }
+
+        private static List<OcrRow> ClusterBoxesIntoRows(List<OcrBox> boxes, int rowThreshold = 12)
+        {
+            if (boxes.Count == 0) return new List<OcrRow>();
+            var sorted = boxes.OrderBy(b => b.Top).ToList();
+            var rows = new List<OcrRow>();
+            var current = new OcrRow { Top = sorted[0].Top, Bottom = sorted[0].Top + sorted[0].Height };
+            current.Boxes.Add(sorted[0]);
+
+            for (int i = 1; i < sorted.Count; i++)
+            {
+                var box = sorted[i];
+                if (box.CenterY <= current.Bottom + rowThreshold)
+                {
+                    current.Boxes.Add(box);
+                    current.Bottom = Math.Max(current.Bottom, box.Top + box.Height);
+                }
+                else
+                {
+                    rows.Add(current);
+                    current = new OcrRow { Top = box.Top, Bottom = box.Top + box.Height };
+                    current.Boxes.Add(box);
+                }
+            }
+            rows.Add(current);
+            return rows;
+        }
+
+        private static double? ParseChineseMoney(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return null;
+            text = text.Trim();
+            // 处理 "61.51亿", "-148.7亿" 等
+            var yMatch = Regex.Match(text, @"^([+-]?\d[\d,]*\.?\d*)\s*亿$");
+            if (yMatch.Success && double.TryParse(yMatch.Groups[1].Value.Replace(",", ""), out var yi))
+                return Math.Round(yi * 1e8, 2);
+            var wanMatch = Regex.Match(text, @"^([+-]?\d[\d,]*\.?\d*)\s*万$");
+            if (wanMatch.Success && double.TryParse(wanMatch.Groups[1].Value.Replace(",", ""), out var wan))
+                return Math.Round(wan * 1e4, 2);
+            // 普通数字
+            var numMatch = Regex.Match(text, @"^[+-]?\d[\d,]*\.?\d*$");
+            if (numMatch.Success && double.TryParse(text.Replace(",", ""), out var num))
+                return Math.Round(num, 2);
+            return null;
+        }
+
+        private static bool IsAmountLine(string text)
+        {
+            return Regex.IsMatch(text.Trim(), @"^\d[\d,]*\.\d{2}$");
+        }
+
+        private static bool IsPercentText(string text)
+        {
+            return Regex.IsMatch(text.Trim(), @"^[+-]?\d+\.?\d*%$");
+        }
+
+        private static bool IsDashOrEmpty(string text)
+        {
+            var t = text.Trim();
+            return string.IsNullOrEmpty(t) || Regex.IsMatch(t, @"^[-—–]{1,3}$") || t == "--";
+        }
+
+        private static double? ParseSignedNumber(string text)
+        {
+            var t = text.Trim().Replace(",", "");
+            if (double.TryParse(t, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out var v))
+                return Math.Round(v, 2);
+            return null;
+        }
+
         [HttpPost("import-ocr")]
         public Task<IActionResult> ImportOcrFunds([FromQuery] string username, IFormFile imageFile)
             => ImportOcrPreview(username, imageFile);
@@ -1058,342 +1169,305 @@ namespace 小白养基.Controllers
             diagnostics.Add($"图片压缩耗时: {watch.ElapsedMilliseconds} ms");
             watch.Restart();
 
-            var ocrTask = Task.Run(() => _ocrService.AccurateBasic(finalProcessedBytes));
-            if (await Task.WhenAny(ocrTask, Task.Delay(15000)) != ocrTask)
+            // 优先使用带坐标的 OCR，失败则 fallback 到基础版
+            JObject result;
+            try
             {
-                throw new TimeoutException("OCR 识别超时");
+                var locTask = _ocrService.AccurateWithLocationAsync(finalProcessedBytes);
+                if (await Task.WhenAny(locTask, Task.Delay(20000)) != locTask)
+                    throw new TimeoutException("AccurateWithLocationAsync 超时");
+                result = await locTask;
+                diagnostics.Add($"OCR(含坐标) 耗时: {watch.ElapsedMilliseconds} ms");
             }
+            catch (Exception ex)
+            {
+                diagnostics.Add($"[fallback] AccurateWithLocationAsync 失败: {ex.Message}，回退到 AccurateBasic");
+                var basicTask = Task.Run(() => _ocrService.AccurateBasic(finalProcessedBytes));
+                if (await Task.WhenAny(basicTask, Task.Delay(15000)) != basicTask)
+                    throw new TimeoutException("OCR 识别超时");
+                result = await basicTask;
+                diagnostics.Add($"OCR(基础) 耗时: {watch.ElapsedMilliseconds} ms");
+            }
+            watch.Restart();
 
-            var result = await ocrTask;
-            diagnostics.Add($"OCR 耗时: {watch.ElapsedMilliseconds} ms");
-
-            var texts = (result["words_result"] as JArray)?
-                .Select(x => x["words"]?.ToString().Trim() ?? string.Empty)
-                .Where(x => !string.IsNullOrWhiteSpace(x))
-                .ToList() ?? new List<string>();
+            var wordsResult = result["words_result"] as JArray;
+            var boxes = ParseOcrBoxes(wordsResult);
+            var texts = boxes.Select(b => b.Words).ToList();
             string fullOcrText = string.Join(" ", texts);
             string profitUpdateState = DetectProfitUpdateState(fullOcrText, texts);
             diagnostics.Add($"[收益更新状态] {profitUpdateState}");
+            diagnostics.Add($"[坐标解析] 识别 {boxes.Count} 个文字框");
 
             if (texts.Count == 0)
             {
                 throw new InvalidOperationException("OCR 未能识别出任何文字");
             }
 
-            var items = new List<OcrImportPreviewItem>();
-            const string amountPattern = @"^\d[\d,]*\.\d{2}$";
-
-            // 诊断：输出所有 OCR 识别行
-            for (int di = 0; di < texts.Count; di++)
+            // 诊断：输出所有 OCR 行（带坐标）
+            for (int di = 0; di < Math.Min(texts.Count, 80); di++)
             {
                 diagnostics.Add($"[OCR行#{di}] {texts[di]}");
             }
 
+            // 按坐标聚类成视觉行
+            var rows = ClusterBoxesIntoRows(boxes);
+            diagnostics.Add($"[坐标聚类] {rows.Count} 个视觉行");
+
+            // 诊断：输出聚类后的行
+            for (int ri = 0; ri < rows.Count; ri++)
+            {
+                var r = rows[ri];
+                var boxInfo = string.Join(" | ", r.Boxes.OrderBy(b => b.Left).Select(b => $"{b.Words}({b.Left},{b.Top})"));
+                diagnostics.Add($"[视觉行#{ri}] Y={r.Top}-{r.Bottom}: {boxInfo}");
+            }
+
+            var items = new List<OcrImportPreviewItem>();
             var navClient = _httpClientFactory.CreateClient("EastMoney");
             string settleDate = ChinaDateDash();
 
-            for (int i = 1; i < texts.Count; i++)
+            // 按坐标解析基金卡片
+            // 策略：找到包含金额的行，向上找基金名称，向右/下找收益字段
+            for (int ri = 0; ri < rows.Count; ri++)
             {
-                string currentLine = texts[i].Trim();
-                if (!Regex.IsMatch(currentLine, amountPattern)) continue;
+                var row = rows[ri];
+                // 找金额框（6位数字.2位小数）
+                var amountBox = row.Boxes.FirstOrDefault(b => IsAmountLine(b.Words));
+                if (amountBox == null) continue;
 
-                // 收集金额行前1~3行候选名称行
-                var nameCandidates = CollectNameCandidateLines(texts, i);
-                if (nameCandidates.Count == 0) continue;
+                double holdAmount = double.Parse(amountBox.Words.Replace(",", ""));
+                if (holdAmount <= 0) continue;
 
-                // 尝试多行拼接：从下往上拼（最靠近金额行的在前）
-                string namePart = nameCandidates[0];  // 默认取最近一行
-                if (nameCandidates.Count >= 2)
+                // 向上找基金名称（最近的包含中文的行）
+                string fundName = "";
+                string? fundCode = null;
+                for (int ci = ri - 1; ci >= Math.Max(0, ri - 4); ci--)
                 {
-                    // 尝试拼接2行（去掉截断省略号后拼接）
-                    string line1 = Regex.Replace(nameCandidates[0], @"…$", "").Replace("...", "");
-                    string line2 = Regex.Replace(nameCandidates[1], @"…$", "").Replace("...", "");
-                    string combined2 = line2 + line1;
-                    if (combined2.Length >= 4) namePart = combined2;
-                }
-                if (nameCandidates.Count >= 3)
-                {
-                    string line1 = Regex.Replace(nameCandidates[0], @"…$", "").Replace("...", "");
-                    string line2 = Regex.Replace(nameCandidates[1], @"…$", "").Replace("...", "");
-                    string line3 = Regex.Replace(nameCandidates[2], @"…$", "").Replace("...", "");
-                    string combined3 = line3 + line2 + line1;
-                    if (combined3.Length >= 6) namePart = combined3;
-                }
-
-                // 代码优先匹配
-                string? fundCode = TryExtractFundCode(texts, i);
-
-                double holdAmount = double.Parse(currentLine.Replace(",", ""));
-                double holdingIncome = 0;
-                double yesterdayIncome = 0;
-                double holdingRate = 0;
-                double holdShares = 0;
-                string potentialFragment = string.Empty;
-                var signedNumbers = new List<double>();
-                bool hasDashProfit = false;
-                double listPageHoldProfit = double.NaN;
-                double listPageHoldProfitRate = double.NaN;
-
-                for (int j = 1; j <= 6 && i + j < texts.Count; j++)
-                {
-                    string nextLine = texts[i + j].Trim();
-
-                    if (Regex.IsMatch(nextLine, @"[\u4e00-\u9fa5]{4,}") && !IsNoiseLine(nextLine))
+                    var candidate = rows[ci];
+                    var nameText = candidate.FullText;
+                    // 检查是否包含基金代码
+                    var codeMatch = Regex.Match(nameText, @"\b(\d{6})\b");
+                    if (codeMatch.Success && fundCode == null) fundCode = codeMatch.Groups[1].Value;
+                    // 包含足够中文字符 → 基金名称
+                    if (Regex.IsMatch(nameText, @"[一-龥]{3,}") && !IsNoiseLine(nameText))
                     {
+                        fundName = nameText;
                         break;
                     }
+                }
 
-                    if (Regex.IsMatch(nextLine, @"^[\-—–]{2,}$"))
+                if (string.IsNullOrWhiteSpace(fundName)) continue;
+
+                // 收集金额行附近的数字字段
+                double yesterdayIncome = 0;
+                double holdingIncome = 0;
+                double holdingRate = 0;
+                double pendingAmountFromOcr = 0;
+                bool hasDashProfit = false;
+
+                // 扫描金额行下方的 1~6 行，按列位置分类
+                for (int fi = ri + 1; fi < Math.Min(rows.Count, ri + 7); fi++)
+                {
+                    var fRow = rows[fi];
+                    var fText = fRow.FullText;
+
+                    // 遇到新的基金名称行则停止
+                    if (Regex.IsMatch(fText, @"[一-龥]{4,}") && !IsNoiseLine(fText)) break;
+
+                    foreach (var box in fRow.Boxes.OrderBy(b => b.Left))
                     {
-                        hasDashProfit = true;
-                    }
+                        var w = box.Words.Trim();
 
-                    foreach (Match m in Regex.Matches(nextLine, @"([-+]?\d+[\.,]\d{2})\s*%"))
-                    {
-                        double parsedRate = double.Parse(m.Groups[1].Value.Replace(",", "."));
-                        holdingRate = parsedRate;
-                        if (double.IsNaN(listPageHoldProfitRate)) listPageHoldProfitRate = parsedRate;
-                    }
-
-                    foreach (Match m in Regex.Matches(nextLine, @"([-+]?\d[\d,]*\.\d{2})(?!\s*%)"))
-                    {
-                        string valStr = m.Groups[1].Value.Replace(",", "");
-                        double val = double.Parse(valStr);
-
-                        if (valStr.StartsWith("+") || valStr.StartsWith("-"))
+                        // 检测 "--" 横线
+                        if (IsDashOrEmpty(w))
                         {
-                            if (!signedNumbers.Contains(val))
-                            {
-                                signedNumbers.Add(val);
-                            }
+                            hasDashProfit = true;
+                            continue;
                         }
-                        else if (val != 0)
+
+                        // 百分比 → holdingRate
+                        if (IsPercentText(w))
                         {
-                            if (double.IsNaN(listPageHoldProfit) && Math.Abs(val - holdAmount) > 10)
-                            {
-                                listPageHoldProfit = val;
-                            }
-
-                            if (!signedNumbers.Contains(val))
-                            {
-                                signedNumbers.Add(val);
-                            }
-
-                            if (!signedNumbers.Contains(-val))
-                            {
-                                signedNumbers.Add(-val);
-                            }
+                            var rateVal = ParseSignedNumber(w.Replace("%", ""));
+                            if (rateVal.HasValue) holdingRate = rateVal.Value;
+                            continue;
                         }
-                    }
 
-                    if (holdShares == 0 && Regex.IsMatch(nextLine, amountPattern))
-                    {
-                        string contextText = string.Join("", texts.Skip(Math.Max(0, i - 2)).Take(j + 3));
+                        // 数字 → 按列位置和上下文分类
+                        var numVal = ParseSignedNumber(w);
+                        if (!numVal.HasValue) continue;
 
-                        if (contextText.Contains("份额"))
+                        // 检查左侧文字标签
+                        string leftLabel = "";
+                        if (box.Left > 20)
                         {
-                            double candidate = double.Parse(nextLine.Replace(",", ""));
-                            if (Math.Abs(candidate - holdAmount) > 10)
-                            {
-                                holdShares = candidate;
-                            }
+                            // 在同一视觉行左侧是否有标签
+                            var leftBoxes = fRow.Boxes.Where(b => b.Left < box.Left - 5).OrderBy(b => b.Left).ToList();
+                            leftLabel = string.Join("", leftBoxes.Select(b => b.Words));
                         }
-                    }
-                    else if (string.IsNullOrEmpty(potentialFragment) &&
-                             !Regex.IsMatch(nextLine, @"^[-\d\.,%+]+$") &&
-                             !IsNoiseLine(nextLine))
-                    {
-                        potentialFragment = nextLine;
+
+                        // 检查上方行是否有标签
+                        string aboveLabel = "";
+                        if (fi > ri + 1)
+                        {
+                            var aboveRow = rows[fi - 1];
+                            var aboveBoxes = aboveRow.Boxes.Where(b => Math.Abs(b.CenterX - box.CenterX) < 80).ToList();
+                            aboveLabel = string.Join("", aboveBoxes.Select(b => b.Words));
+                        }
+
+                        string labelContext = leftLabel + aboveLabel;
+
+                        // 待确认金额
+                        if (labelContext.Contains("待确认") || labelContext.Contains("确认金额"))
+                        {
+                            pendingAmountFromOcr = Math.Abs(numVal.Value);
+                            continue;
+                        }
+
+                        // 持有收益/持有收益率
+                        if (labelContext.Contains("持有收益") || labelContext.Contains("累计收益"))
+                        {
+                            if (labelContext.Contains("率") || IsPercentText(w))
+                                holdingRate = numVal.Value;
+                            else
+                                holdingIncome = numVal.Value;
+                            continue;
+                        }
+
+                        // 今日收益 / 昨日收益
+                        if (labelContext.Contains("今日收益") || labelContext.Contains("昨日收益"))
+                        {
+                            yesterdayIncome = numVal.Value;
+                            continue;
+                        }
+
+                        // 无标签数字：按位置推断（第一个数字可能是昨日收益，第二个可能是持有收益）
+                        if (yesterdayIncome == 0 && Math.Abs(numVal.Value) < holdAmount * 0.5)
+                        {
+                            yesterdayIncome = numVal.Value;
+                        }
+                        else if (holdingIncome == 0 && Math.Abs(numVal.Value) < holdAmount)
+                        {
+                            holdingIncome = numVal.Value;
+                        }
                     }
                 }
 
-                SelectIncomeCandidates(holdAmount, holdingRate, signedNumbers, out holdingIncome, out yesterdayIncome);
+                // 向上扫描金额行上方 1~2 行，找待确认金额标签
+                for (int bi = ri - 1; bi >= Math.Max(0, ri - 3); bi--)
+                {
+                    var bRow = rows[bi];
+                    foreach (var box in bRow.Boxes)
+                    {
+                        if (box.Words.Contains("待确认") && pendingAmountFromOcr <= 0)
+                        {
+                            // 找同行右侧的数字
+                            var rightNums = bRow.Boxes
+                                .Where(b => b.Left > box.Left + box.Width && ParseSignedNumber(b.Words).HasValue)
+                                .OrderBy(b => b.Left)
+                                .ToList();
+                            if (rightNums.Count > 0)
+                            {
+                                var val = ParseSignedNumber(rightNums[0].Words);
+                                if (val.HasValue && val.Value > 0) pendingAmountFromOcr = val.Value;
+                            }
+                        }
+                    }
+                }
 
-                // 列表页 pending 判定（需同时满足多项条件）：
-                // 1. 昨日收益为"--"
-                // 2. 持有收益为0、持有收益率为0%
-                // 3. 收益更新状态不是 NOT_UPDATED
-                // 4. 有 pendingEvidence（交易进行中/待确认/预计可查看收益等文字）
-                string pendingContext = BuildOcrPendingContext(texts, i);
-                bool hasPendingEvidence = HasPendingEvidenceInContext(pendingContext);
-                bool listPagePending = hasDashProfit
-                    && (double.IsNaN(listPageHoldProfit) || Math.Abs(listPageHoldProfit) < 0.01)
-                    && (double.IsNaN(listPageHoldProfitRate) || Math.Abs(listPageHoldProfitRate) < 0.01)
-                    && signedNumbers.Count == 0
-                    && profitUpdateState != "NOT_UPDATED"
-                    && hasPendingEvidence;
-
-                // 代码优先匹配
+                // 匹配基金
                 var best = (fund: (FundInfoCache?)null, score: 0d);
                 if (fundCode != null)
                 {
                     var codeMatch = robustFundPool.FirstOrDefault(f => f.Code == fundCode);
                     if (codeMatch != null) best = (codeMatch, 100.0);
                 }
-
-                // 名称匹配（拼接后的名称 + potentialFragment）
                 if (best.fund == null)
                 {
-                    best = MatchOcrFund(namePart, potentialFragment, robustFundPool, corrections);
+                    best = MatchOcrFund(fundName, "", robustFundPool, corrections);
                 }
+                if (best.fund == null || best.score <= 65) continue;
 
-                // 如果拼接名称匹配分低，尝试每行单独匹配
-                if (best.score <= 65 && nameCandidates.Count >= 2)
-                {
-                    foreach (var candidate in nameCandidates)
-                    {
-                        var altBest = MatchOcrFund(candidate, potentialFragment, robustFundPool, corrections);
-                        if (altBest.score > best.score) best = altBest;
-                    }
-                }
+                diagnostics.Add($"[坐标匹配] {fundName} → {best.fund.Name}({best.fund.Code}) 分={best.score:F1} 金额={holdAmount} 昨日={yesterdayIncome} 持有={holdingIncome} 持有率={holdingRate}% 待确认={pendingAmountFromOcr}");
 
-                if (best.fund == null || best.score <= 65 || holdAmount <= 0)
-                {
-                    int cardStart = FindCardStartIndex(texts, i);
-                    diagnostics.Add($"[OCR卡片] 金额行#{i} cardStart={cardStart} 候选行: [{string.Join(" | ", nameCandidates)}] 拼接: {namePart}");
-                    // 找最接近的3个候选基金
-                    var top3 = FindTopNCandidates(namePart, potentialFragment, robustFundPool, 3);
-                    if (top3.Count > 0)
-                    {
-                        diagnostics.Add($"  最接近: {string.Join("; ", top3.Select(t => $"{t.fund.Name}({t.fund.Code}) 分={t.score:F1}"))}");
-                    }
-                    else
-                    {
-                        diagnostics.Add($"  未找到任何候选基金");
-                    }
-                    diagnostics.Add($"未确认: {namePart}，匹配分 {best.score:F1}，金额 {holdAmount}");
-                    continue;
-                }
-
-                diagnostics.Add($"[OCR匹配] {namePart} → {best.fund.Name}({best.fund.Code}) 分={best.score:F1} 金额={holdAmount}");
-
-                string calcMethod = "识别提取";
-
-                // OCR 截图里的持仓金额是平台当前完整持仓金额，份额校准必须使用完整金额。
-                // 如果扣掉最近加仓金额，确认导入后 HoldAmount 会是新值，但 HoldShares 仍是旧份额，
-                // 下一次真实净值清算会用“旧份额 × 单位净值”把加仓金额冲掉。
-                double effectiveAmountForShares = holdAmount;
-
-                double navCalibratedShares = await CalibrateSharesByOfficialNavAsync(
-                    navClient,
-                    best.fund.Code,
-                    effectiveAmountForShares,
-                    settleDate);
-
+                // 份额校准
+                double holdShares = 0;
+                string calcMethod = "坐标识别提取";
+                double navCalibratedShares = await CalibrateSharesByOfficialNavAsync(navClient, best.fund.Code, holdAmount, settleDate);
                 if (navCalibratedShares > 0)
                 {
                     holdShares = navCalibratedShares;
-                    calcMethod = "蚂蚁金额/官方净值校准";
-                }
-                else if (holdShares == 0)
-                {
-                    double calcShares = await DeduceSharesFromHistoryAsync(
-                        best.fund.Code,
-                        effectiveAmountForShares,
-                        yesterdayIncome);
-
-                    if (calcShares > 0)
-                    {
-                        holdShares = Math.Round(calcShares, 6);
-                        calcMethod = "历史净值推演";
-                    }
-                }
-                else
-                {
-                    holdShares = Math.Round(holdShares, 6);
+                    calcMethod = "坐标识别+净值校准";
                 }
 
                 userFundDict.TryGetValue(best.fund.Code, out var existingForPending);
 
-                double pendingBuyAmount;
-                string pendingReason;
-                string pendingSource;
-                string? pendingConfirmDate;
+                // pending 判定：只凭文字证据
+                double pendingBuyAmount = 0;
+                string pendingReason = "";
+                string pendingSource = "";
+                string? pendingConfirmDate = null;
                 bool isSuspicious = false;
-                string pendingEvidence = hasPendingEvidence ? "交易进行中/待确认/预计可查看收益" : "";
+                string pendingEvidence = "";
 
-                if (listPagePending)
+                if (pendingAmountFromOcr > 0)
                 {
-                    // 列表页模式：有pendingEvidence + 昨日收益为"--" + 持有收益为0 → 买入待确认
-                    pendingBuyAmount = holdAmount;
-                    pendingReason = "列表页有pending文字证据且昨日收益为--，判定买入待确认";
+                    pendingBuyAmount = pendingAmountFromOcr;
+                    pendingReason = "OCR坐标识别到待确认金额";
                     pendingSource = "explicit_row_text";
+                    pendingEvidence = "待确认金额";
                     pendingConfirmDate = EstimatePendingConfirmDate(best.fund.Name);
                 }
-                else if (hasDashProfit && profitUpdateState == "NOT_UPDATED")
-                {
-                    // 收益未更新时，"--"不作为pending证据
-                    pendingBuyAmount = 0;
-                    pendingReason = "收益未更新，暂不判断是否参与今日收益";
-                    pendingSource = "none";
-                    pendingConfirmDate = null;
-                }
-                else if (hasDashProfit && profitUpdateState != "NOT_UPDATED" && !hasPendingEvidence)
-                {
-                    // 有"--"但无pending文字证据 → suspicious
-                    pendingBuyAmount = 0;
-                    pendingReason = "昨日收益为--但无pending文字证据，标记可疑";
-                    pendingSource = "none";
-                    pendingConfirmDate = null;
-                    isSuspicious = true;
-                }
                 else
                 {
-                    var pendingAssessment = AssessOcrPendingBuy(
-                        pendingContext,
-                        fullOcrText,
-                        best.fund.Code,
-                        best.fund.Name,
-                        holdAmount,
-                        holdingIncome,
-                        yesterdayIncome,
-                        holdingRate,
-                        holdShares,
-                        existingForPending,
-                        settleDate);
-                    pendingBuyAmount = pendingAssessment.PendingBuyAmount;
-                    pendingReason = pendingAssessment.Reason;
-                    pendingSource = pendingAssessment.Source;
-                    pendingConfirmDate = pendingAssessment.ConfirmDate;
-                    isSuspicious = pendingAssessment.IsSuspicious;
+                    // 检查文字上下文是否有 pending 证据
+                    string cardContext = string.Join(" ", rows.Skip(Math.Max(0, ri - 3)).Take(10).Select(r => r.FullText));
+                    bool hasPendingEvidence = HasPendingEvidenceInContext(cardContext);
+                    bool hasZeroPending = HasZeroPendingAmountEvidence(cardContext);
+
+                    if (hasZeroPending)
+                    {
+                        pendingBuyAmount = 0;
+                        pendingReason = "OCR识别到待确认金额为0";
+                        pendingSource = "explicit_zero_pending";
+                    }
+                    else if (hasPendingEvidence && hasDashProfit && Math.Abs(holdingIncome) < 0.01 && Math.Abs(holdingRate) < 0.01)
+                    {
+                        pendingBuyAmount = holdAmount;
+                        pendingReason = "坐标识别: 有pending文字+昨日收益为--+持有收益为0";
+                        pendingSource = "explicit_row_text";
+                        pendingEvidence = "交易进行中/待确认/预计可查看收益";
+                        pendingConfirmDate = EstimatePendingConfirmDate(best.fund.Name);
+                    }
+                    else
+                    {
+                        // 无 pending 证据 → 清除旧 pending
+                        var oldPending = existingForPending == null ? 0 : GetActivePendingBuyAmount(existingForPending, settleDate);
+                        if (oldPending > 0)
+                        {
+                            diagnostics.Add($"[清除旧pending] {best.fund.Code} 旧={oldPending:F2}");
+                        }
+                        pendingBuyAmount = 0;
+                    }
                 }
 
-                if (pendingBuyAmount > 0)
-                {
-                    holdShares = existingForPending?.HoldShares > 0 ? existingForPending.HoldShares : 0;
-                    calcMethod = existingForPending?.HoldShares > 0
-                        ? $"{calcMethod}；保留确认份额"
-                        : (isSuspicious ? "疑似买入待确认，份额未确认" : "买入待确认，份额未确认");
-                }
                 double confirmedAmount = Math.Max(0, Math.Round(holdAmount - pendingBuyAmount, 2));
+                double todayBaseAmount = confirmedAmount;
 
-                // 检测旧 pending 是否会被清除
-                double oldPending = existingForPending == null ? 0 : GetActivePendingBuyAmount(existingForPending, settleDate);
-                bool clearedOldPending = pendingBuyAmount <= 0 && oldPending > 0;
-                bool notUpdatedNoPending = hasDashProfit && profitUpdateState == "NOT_UPDATED" && pendingBuyAmount <= 0;
+                // 检测旧 pending 清除
+                var existingPendingCheck = existingForPending == null ? 0 : GetActivePendingBuyAmount(existingForPending, settleDate);
+                bool clearedOldPending = pendingBuyAmount <= 0 && existingPendingCheck > 0;
+
                 string warning;
                 if (pendingBuyAmount > 0)
-                {
-                    warning = isSuspicious ? "疑似买入待确认，请核对；不参与今日收益" : "买入待确认，不参与今日收益";
-                }
-                else if (notUpdatedNoPending)
-                {
-                    warning = "收益未更新，暂不判断是否参与今日收益";
-                }
+                    warning = "买入待确认，不参与今日收益";
                 else if (clearedOldPending)
-                {
-                    warning = $"本次OCR无pending证据，清除旧遗留pending {oldPending:F2}元";
-                }
+                    warning = $"本次OCR无pending证据，清除旧遗留pending {existingPendingCheck:F2}元";
                 else
-                {
-                    warning = holdShares > 0 ? string.Empty : "未能推算份额";
-                }
+                    warning = holdShares > 0 ? "" : "未能推算份额";
 
                 items.Add(new OcrImportPreviewItem
                 {
-                    OcrName = string.IsNullOrWhiteSpace(potentialFragment)
-                        ? namePart
-                        : namePart + potentialFragment,
+                    OcrName = fundName,
                     Code = best.fund.Code,
                     Name = best.fund.Name,
                     MatchScore = Math.Round(best.score, 2),
@@ -1414,17 +1488,18 @@ namespace 小白养基.Controllers
                         ? $"本次OCR无pending证据，清除旧遗留({pendingSource ?? pendingReason ?? "无"})"
                         : pendingReason,
                     PendingConfirmDate = pendingConfirmDate,
-                    PendingSource = pendingBuyAmount > 0 ? pendingSource : "none",
+                    PendingSource = pendingBuyAmount > 0 ? pendingSource : (clearedOldPending ? "cleared_old" : ""),
                     PendingEvidence = pendingEvidence,
                     PendingDecisionReason = pendingReason,
                     RawTodayProfit = Math.Round(yesterdayIncome, 2),
                     RawPendingAmount = Math.Round(pendingBuyAmount, 2),
                     ConfirmedAmount = confirmedAmount,
-                    TodayBaseAmount = notUpdatedNoPending ? 0 : confirmedAmount,
-                    ParticipatesToday = pendingBuyAmount <= 0 && !notUpdatedNoPending,
+                    TodayBaseAmount = todayBaseAmount,
+                    ParticipatesToday = pendingBuyAmount <= 0,
                     ProfitUpdateState = profitUpdateState
                 });
             }
+
 
             return new OcrImportPreviewResponse
             {
