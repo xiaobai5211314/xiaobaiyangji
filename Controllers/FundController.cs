@@ -2498,14 +2498,15 @@ namespace 小白养基.Controllers
                 }
                 else
                 {
+                    bool newFundFullPending = item.IsPendingBuy && item.PendingBuyAmount >= item.HoldAmount - 0.01;
                     var newFund = new MyFundConfig
                     {
                         Username = username,
                         FundCode = item.Code,
                         FundName = item.Name,
                         HoldAmount = Math.Round(item.HoldAmount, 2),
-                        CostAmount = item.CostAmount > 0 ? Math.Round(item.CostAmount, 2) : Math.Round(item.HoldAmount, 2),
-                        HoldShares = item.IsPendingBuy && item.PendingBuyAmount >= item.HoldAmount - 0.01 ? 0 : Math.Round(item.HoldShares, 6),
+                        CostAmount = newFundFullPending ? 0 : (item.CostAmount > 0 ? Math.Round(item.CostAmount, 2) : Math.Round(item.HoldAmount, 2)),
+                        HoldShares = newFundFullPending ? 0 : Math.Round(item.HoldShares, 6),
                         LastTradeDate = item.IsPendingBuy ? ChinaDateDash() : null,
                         LastAddAmount = item.IsPendingBuy ? Math.Round(item.PendingBuyAmount > 0 ? item.PendingBuyAmount : item.HoldAmount, 2) : 0,
                         PendingBuyAmount = item.IsPendingBuy ? Math.Round(item.PendingBuyAmount > 0 ? item.PendingBuyAmount : item.HoldAmount, 2) : 0,
@@ -2532,25 +2533,51 @@ namespace 小白养基.Controllers
         private static void ApplyOcrRowToExistingFund(MyFundConfig exist, OcrImportPreviewItem item)
         {
             Console.WriteLine(
-                $"[OCR校准前] code={exist.FundCode}, oldHoldAmount={exist.HoldAmount:F2}, oldLastTradeDate={exist.LastTradeDate ?? "null"}, oldLastAddAmount={exist.LastAddAmount:F2}");
+                $"[OCR校准前] code={exist.FundCode}, oldHoldAmount={exist.HoldAmount:F2}, oldShares={exist.HoldShares:F4}, oldCost={exist.CostAmount:F2}, oldPending={exist.PendingBuyAmount:F2}");
 
             string todayDash = ChinaDateDash();
-            double oldHoldAmount = exist.HoldAmount;
+            double pendingAmount = item.IsPendingBuy ? item.PendingBuyAmount : 0;
+            double confirmedAmount = item.ConfirmedAmount > 0
+                ? item.ConfirmedAmount
+                : Math.Max(0, item.HoldAmount - pendingAmount);
+            bool isFullPending = pendingAmount > 0 && pendingAmount >= item.HoldAmount - 0.01;
+
+            // HoldAmount 保留平台总资产（对齐蚂蚁），不做缩减
             if (item.HoldAmount > 0)
-            {
                 exist.HoldAmount = Math.Round(item.HoldAmount, 2);
-            }
 
-            if (item.CostAmount > 0) exist.CostAmount = Math.Round(item.CostAmount, 2);
-            if (item.HoldShares > 0)
+            if (isFullPending)
             {
-                exist.HoldShares = Math.Round(item.HoldShares, 6);
+                // 全额待确认：shares/cost 归零，不参与任何收益或市值计算
+                exist.HoldShares = 0;
+                exist.CostAmount = 0;
+                Console.WriteLine($"[OCR全额待确认] code={exist.FundCode}, pending={pendingAmount:F2}, shares→0, cost→0");
+            }
+            else if (pendingAmount > 0)
+            {
+                // 部分待确认：按已确认比例缩放 shares/cost
+                double confirmedRatio = item.HoldAmount > 0 ? confirmedAmount / item.HoldAmount : 1.0;
+                exist.HoldShares = item.HoldShares > 0
+                    ? Math.Round(item.HoldShares * confirmedRatio, 6)
+                    : 0;
+                exist.CostAmount = item.CostAmount > 0
+                    ? Math.Round(item.CostAmount * confirmedRatio, 2)
+                    : Math.Round(confirmedAmount, 2);
+                Console.WriteLine($"[OCR部分待确认] code={exist.FundCode}, pending={pendingAmount:F2}, confirmed={confirmedAmount:F2}, ratio={confirmedRatio:F4}, shares={exist.HoldShares:F4}");
+            }
+            else
+            {
+                // 无待确认：正常更新
+                if (item.CostAmount > 0) exist.CostAmount = Math.Round(item.CostAmount, 2);
+                if (item.HoldShares > 0) exist.HoldShares = Math.Round(item.HoldShares, 6);
             }
 
-            double pendingAmount = item.PendingBuyAmount > 0 ? item.PendingBuyAmount : 0;
+            // 设置/清除 pending 状态
             if (pendingAmount > 0)
             {
-                MarkPendingBuy(exist, pendingAmount, todayDash, string.IsNullOrWhiteSpace(item.PendingSource) ? "ocr" : item.PendingSource, item.PendingConfirmDate);
+                MarkPendingBuy(exist, pendingAmount, todayDash,
+                    string.IsNullOrWhiteSpace(item.PendingSource) ? "ocr" : item.PendingSource,
+                    item.PendingConfirmDate);
             }
             else
             {
@@ -2566,7 +2593,7 @@ namespace 小白养基.Controllers
             }
 
             Console.WriteLine(
-                $"[OCR校准后] code={exist.FundCode}, newHoldAmount={exist.HoldAmount:F2}, newLastTradeDate={exist.LastTradeDate ?? "null"}, newLastAddAmount={exist.LastAddAmount:F2}");
+                $"[OCR校准后] code={exist.FundCode}, HoldAmount={exist.HoldAmount:F2}, Shares={exist.HoldShares:F4}, Cost={exist.CostAmount:F2}, Pending={exist.PendingBuyAmount:F2}, Status={exist.PendingTradeStatus ?? "null"}");
         }
 
         private async Task UpsertOcrCorrectionAsync(string username, OcrImportPreviewItem item)
