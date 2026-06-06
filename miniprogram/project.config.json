@@ -14,15 +14,24 @@
     "useCompilerPlugins": false,
     "minifyWXML": true,
     "ignoreDevUnusedFiles": true,
-    "ignoreUploadUnusedFiles": true
+    "ignoreUploadUnusedFiles": true,
+    "compileWorklet": false,
+    "uploadWithSourceMap": true,
+    "packNpmManually": false,
+    "minifyWXSS": true,
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "condition": false,
+    "swc": false,
+    "disableSWC": true
   },
   "compileType": "miniprogram",
   "simulatorPluginLibVersion": {},
   "packOptions": {
     "ignore": [
       {
-        "type": "file",
-        "value": "project.private.config.json"
+        "value": "project.private.config.json",
+        "type": "file"
       }
     ],
     "include": []
