@@ -5143,12 +5143,17 @@ namespace 小白养基.Controllers
                     // FundController.cs 中 GetTodayData 方法内部
                     bool isInactiveHolding = config.HoldShares <= 0 && !pendingBuy;
                     double displayAmount = isInactiveHolding ? 0 : confirmedHoldAmount;
+                    // marketValue = 当前确认市值（显示用），todayBaseAmount = 收益率分母
+                    double marketValue = isInactiveHolding ? 0 : Math.Round(currentAssetsPreview, 2);
+                    double todayProfit = Math.Round(todayProfitPreview, 2);
+                    string profitSource = isSettled ? "nav_settlement" : (dataPoints.Count > 0 ? "estimate" : "none");
 
                     return new
                     {
                         code = config.FundCode,
                         name = config.FundName,
                         amount = displayAmount,
+                        marketValue,
                         rawHoldAmount = isInactiveHolding ? 0 : rawHoldAmount,
                         confirmedAmount = displayAmount,
                         pendingBuy = pendingBuy,
@@ -5195,6 +5200,9 @@ namespace 小白养基.Controllers
                         todayBaseAmount = todayBaseAmount,
                         todayRateForSimulation = todayRateForSimulation,
                         todayProfitPreview = todayProfitPreview,
+                        todayProfit = todayProfit,
+                        todayRate = todayRateForSimulation,
+                        profitSource = profitSource,
                         marketOpen = fundDateInfo.MarketOpen,
                         marketStatus = fundDateInfo.MarketStatus,
                         marketLabel = fundDateInfo.MarketLabel,
@@ -5238,15 +5246,11 @@ namespace 小白养基.Controllers
                         summaryRealized += fund.displayedProfit;
                         continue;
                     }
-                    double amt = fund.amount;
-                    bool settled = fund.isSettled;
-                    double profitVal = settled
-                        ? fund.lastSettledProfit
-                        : Math.Round(fund.todayBaseAmount * fund.todayRateForSimulation / 100.0, 2);
+                    double profitVal = fund.todayProfit;
                     double baseVal = fund.todayBaseAmount;
                     summaryProfit += profitVal;
                     summaryBase += baseVal;
-                    summaryAssets += settled ? amt : (amt + profitVal);
+                    summaryAssets += fund.marketValue;
                     summaryCost += fund.cost ?? 0;
                     summaryRealized += fund.realizedProfit;
                 }

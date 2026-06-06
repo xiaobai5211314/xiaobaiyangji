@@ -7133,21 +7133,23 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             const apiBaseAmount = Number(fund.todayBaseAmount);
                             const todayBaseAmount = Number.isFinite(apiBaseAmount) ? Math.max(0, apiBaseAmount) : currentAmount;
                             let todayProfitVal = 0;
-                            let currentRealTimeAmount = todayBaseAmount;
+                            // 优先用后端 marketValue（当前确认市值），不用 todayBaseAmount（收益率分母）
+                            const apiMarketValue = Number(fund.marketValue);
+                            let currentRealTimeAmount = Number.isFinite(apiMarketValue) && apiMarketValue > 0 ? apiMarketValue : todayBaseAmount;
 
                             if (isAlreadySettled) {
                                 todayProfitVal = Number(fund.lastSettledProfit) || 0;
                                 fund.todayProfit = todayProfitVal.toFixed(2);
-                                currentRealTimeAmount = todayBaseAmount;
+                                // settled 时 currentRealTimeAmount 已由 marketValue 正确设置
                                 fund.currentRate = Number(fund.lastSettledRate) || fund.currentRate || 0;
                             } else if (fund.isSettled && fund.actualExactProfit != null) {
                                 todayProfitVal = Number(fund.actualExactProfit) || 0;
                                 fund.todayProfit = todayProfitVal.toFixed(2);
-                                currentRealTimeAmount = todayBaseAmount + todayProfitVal;
+                                currentRealTimeAmount = Number.isFinite(apiMarketValue) && apiMarketValue > 0 ? apiMarketValue : (todayBaseAmount + todayProfitVal);
                             } else {
                                 todayProfitVal = todayBaseAmount * ((Number(fund.currentRate) || 0) / 100);
                                 fund.todayProfit = todayProfitVal.toFixed(2);
-                                currentRealTimeAmount = todayBaseAmount + todayProfitVal;
+                                currentRealTimeAmount = Number.isFinite(apiMarketValue) && apiMarketValue > 0 ? apiMarketValue : (todayBaseAmount + todayProfitVal);
                             }
 
                             fund.todayAmount = currentRealTimeAmount.toFixed(2);
