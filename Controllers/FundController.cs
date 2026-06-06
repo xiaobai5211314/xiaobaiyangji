@@ -1222,159 +1222,209 @@ namespace 小白养基.Controllers
             }
 
             var items = new List<OcrImportPreviewItem>();
+            var rejectedCandidates = new List<string>(); // 记录被丢弃的候选
             var navClient = _httpClientFactory.CreateClient("EastMoney");
             string settleDate = ChinaDateDash();
 
-            // 按坐标解析基金卡片
-            // 策略：找到包含金额的行，向上找基金名称，向右/下找收益字段
+            // ── 三列坐标解析（蚂蚁列表页布局） ──
+            // 左列: x < 210 → 基金名称
+            // 中列: 210 < x < 340 → 金额 / 昨日收益
+            // 右列: x > 340 → 持有收益 / 持有收益率
+            const int COL_LEFT_MAX = 210;
+            const int COL_MID_MAX = 340;
+
+            // 1. 对每行做分类：名称行 vs 数据行
+            bool IsDataRow(OcrRow r)
+            {
+                int numCount = r.Boxes.Count(b =>
+                {
+                    var w = b.Words.Trim().Replace(",", "").Replace("%", "").Replace("+", "");
+                    return double.TryParse(w, System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out _);
+                });
+                return numCount >= 2;
+            }
+
+            bool IsNameRow(OcrRow r)
+            {
+                string t = r.FullText;
+                if (IsNoiseLine(t)) return false;
+                // 包含 3+ 个中文字符
+                if (Regex.IsMatch(t, @"[一-龥]{3,}")) return true;
+                // 包含基金代码
+                if (Regex.IsMatch(t, @"\b\d{6}\b")) return true;
+                return false;
+            }
+
+            // 2. 从上到下扫描，把连续的名称行分组为基金卡片
+            var fundCards = new List<(List<OcrRow> nameRows, OcrRow dataRow)>();
+            List<OcrRow> pendingNameRows = new List<OcrRow>();
+
             for (int ri = 0; ri < rows.Count; ri++)
             {
                 var row = rows[ri];
-                // 找金额框（6位数字.2位小数）
-                var amountBox = row.Boxes.FirstOrDefault(b => IsAmountLine(b.Words));
-                if (amountBox == null) continue;
-
-                double holdAmount = double.Parse(amountBox.Words.Replace(",", ""));
-                if (holdAmount <= 0) continue;
-
-                // 向上找基金名称（最近的包含中文的行）
-                string fundName = "";
-                string? fundCode = null;
-                for (int ci = ri - 1; ci >= Math.Max(0, ri - 4); ci--)
+                if (IsNameRow(row))
                 {
-                    var candidate = rows[ci];
-                    var nameText = candidate.FullText;
-                    // 检查是否包含基金代码
-                    var codeMatch = Regex.Match(nameText, @"\b(\d{6})\b");
-                    if (codeMatch.Success && fundCode == null) fundCode = codeMatch.Groups[1].Value;
-                    // 包含足够中文字符 → 基金名称
-                    if (Regex.IsMatch(nameText, @"[一-龥]{3,}") && !IsNoiseLine(nameText))
+                    pendingNameRows.Add(row);
+                }
+                else if (IsDataRow(row))
+                {
+                    if (pendingNameRows.Count > 0)
                     {
-                        fundName = nameText;
-                        break;
+                        fundCards.Add((new List<OcrRow>(pendingNameRows), row));
+                        pendingNameRows.Clear();
+                    }
+                    else
+                    {
+                        // 数据行但无名称：尝试向上找最近的名称行
+                        diagnostics.Add($"[警告] 行#{ri} 是数据行但无名称行配对: {row.FullText}");
+                        rejectedCandidates.Add($"数据行无名称: {row.FullText}");
+                    }
+                }
+                else
+                {
+                    // 纯噪声行或短行：跳过，不中断名称累积
+                }
+            }
+
+            diagnostics.Add($"[坐标解析] 发现 {fundCards.Count} 个候选基金卡片");
+
+            // 3. 解析每个基金卡片
+            for (int ci = 0; ci < fundCards.Count; ci++)
+            {
+                var (nameRows, dataRow) = fundCards[ci];
+
+                // ── 合并基金名称 ──
+                // 取左列(x < COL_LEFT_MAX)的所有中文文本，按 Y 顺序拼接
+                var nameBoxes = nameRows
+                    .SelectMany(r => r.Boxes)
+                    .Where(b => b.CenterX < COL_LEFT_MAX)
+                    .OrderBy(b => b.Top)
+                    .ThenBy(b => b.Left)
+                    .ToList();
+                string fundName = string.Join("", nameBoxes.Select(b => b.Words)).Trim();
+
+                // 提取基金代码（如果有）
+                string? fundCode = null;
+                foreach (var nb in nameBoxes)
+                {
+                    var cm = Regex.Match(nb.Words, @"\b(\d{6})\b");
+                    if (cm.Success) { fundCode = cm.Groups[1].Value; break; }
+                }
+                // 也从名称行全文搜索
+                if (fundCode == null)
+                {
+                    foreach (var nr in nameRows)
+                    {
+                        var cm = Regex.Match(nr.FullText, @"\b(\d{6})\b");
+                        if (cm.Success) { fundCode = cm.Groups[1].Value; break; }
                     }
                 }
 
-                if (string.IsNullOrWhiteSpace(fundName)) continue;
+                if (string.IsNullOrWhiteSpace(fundName) || fundName.Length < 3)
+                {
+                    rejectedCandidates.Add($"卡片#{ci} 名称过短或为空: '{fundName}'");
+                    continue;
+                }
 
-                // 收集金额行附近的数字字段
+                // ── 解析数据行：按列分组 ──
+                var midBoxes = dataRow.Boxes
+                    .Where(b => b.CenterX >= COL_LEFT_MAX && b.CenterX < COL_MID_MAX)
+                    .OrderBy(b => b.Top)
+                    .ThenBy(b => b.Left)
+                    .ToList();
+                var rightBoxes = dataRow.Boxes
+                    .Where(b => b.CenterX >= COL_MID_MAX)
+                    .OrderBy(b => b.Top)
+                    .ThenBy(b => b.Left)
+                    .ToList();
+
+                // 中列：第一个数值 → amount，第二个 → yesterdayProfit
+                double holdAmount = 0;
                 double yesterdayIncome = 0;
+                foreach (var box in midBoxes)
+                {
+                    var w = box.Words.Trim().Replace(",", "").Replace("+", "");
+                    if (IsPercentText(box.Words.Trim())) continue;
+                    var numVal = ParseSignedNumber(w);
+                    if (!numVal.HasValue) continue;
+                    double absVal = Math.Abs(numVal.Value);
+                    if (holdAmount == 0 && absVal > 0)
+                    {
+                        holdAmount = absVal; // 金额取绝对值
+                    }
+                    else if (yesterdayIncome == 0 && numVal.Value != 0)
+                    {
+                        yesterdayIncome = numVal.Value; // 昨日收益保留符号
+                    }
+                }
+
+                // 右列：第一个数值 → holdingProfit，第二个 → holdingProfitRate
                 double holdingIncome = 0;
                 double holdingRate = 0;
+                foreach (var box in rightBoxes)
+                {
+                    var w = box.Words.Trim().Replace(",", "").Replace("+", "");
+                    if (IsPercentText(box.Words.Trim()))
+                    {
+                        var rateVal = ParseSignedNumber(w.Replace("%", ""));
+                        if (rateVal.HasValue && holdingRate == 0) holdingRate = rateVal.Value;
+                        continue;
+                    }
+                    var numVal = ParseSignedNumber(w);
+                    if (!numVal.HasValue) continue;
+                    if (holdingIncome == 0)
+                    {
+                        holdingIncome = numVal.Value;
+                    }
+                    else if (holdingRate == 0)
+                    {
+                        holdingRate = numVal.Value;
+                    }
+                }
+
+                // 如果右列只有一个数值且看起来像百分比（< 100），当作收益率
+                if (Math.Abs(holdingRate) < 0.01 && rightBoxes.Count == 1)
+                {
+                    var onlyBox = rightBoxes[0];
+                    if (IsPercentText(onlyBox.Words.Trim()))
+                    {
+                        var rateVal = ParseSignedNumber(onlyBox.Words.Trim().Replace("%", "").Replace(",", "").Replace("+", ""));
+                        if (rateVal.HasValue) holdingRate = rateVal.Value;
+                    }
+                }
+
+                if (holdAmount <= 0)
+                {
+                    rejectedCandidates.Add($"卡片#{ci} '{fundName}' 金额为0或未识别 (中列boxes={midBoxes.Count})");
+                    continue;
+                }
+
+                diagnostics.Add($"[卡片#{ci}] 名称='{fundName}' 代码={fundCode ?? "无"} 金额={holdAmount} 昨日={yesterdayIncome} 持有={holdingIncome} 持有率={holdingRate}%");
+
+                // ── pending 判定 ──
                 double pendingAmountFromOcr = 0;
-                bool hasDashProfit = false;
+                // 检查数据行及名称行是否有"待确认"文字证据
+                string cardContext = string.Join(" ", nameRows.Select(r => r.FullText)) + " " + dataRow.FullText;
+                bool hasPendingText = Regex.IsMatch(cardContext, @"买入待确认|交易进行中|待确认金额|预计.{0,24}(可|可以)?查看收益", RegexOptions.IgnoreCase);
+                bool hasZeroPending = HasZeroPendingAmountEvidence(cardContext);
 
-                // 扫描金额行下方的 1~6 行，按列位置分类
-                for (int fi = ri + 1; fi < Math.Min(rows.Count, ri + 7); fi++)
+                // 只在有明确"待确认金额 xxx"文字时才提取 pending 金额
+                if (hasPendingText && !hasZeroPending)
                 {
-                    var fRow = rows[fi];
-                    var fText = fRow.FullText;
-
-                    // 遇到新的基金名称行则停止
-                    if (Regex.IsMatch(fText, @"[一-龥]{4,}") && !IsNoiseLine(fText)) break;
-
-                    foreach (var box in fRow.Boxes.OrderBy(b => b.Left))
+                    var pendingMatch = Regex.Match(cardContext, @"待确认金额\s*[:：]?\s*([+-]?\d[\d,]*\.?\d*)");
+                    if (pendingMatch.Success && double.TryParse(pendingMatch.Groups[1].Value.Replace(",", ""), out var pVal) && pVal > 0)
                     {
-                        var w = box.Words.Trim();
-
-                        // 检测 "--" 横线
-                        if (IsDashOrEmpty(w))
-                        {
-                            hasDashProfit = true;
-                            continue;
-                        }
-
-                        // 百分比 → holdingRate
-                        if (IsPercentText(w))
-                        {
-                            var rateVal = ParseSignedNumber(w.Replace("%", ""));
-                            if (rateVal.HasValue) holdingRate = rateVal.Value;
-                            continue;
-                        }
-
-                        // 数字 → 按列位置和上下文分类
-                        var numVal = ParseSignedNumber(w);
-                        if (!numVal.HasValue) continue;
-
-                        // 检查左侧文字标签
-                        string leftLabel = "";
-                        if (box.Left > 20)
-                        {
-                            // 在同一视觉行左侧是否有标签
-                            var leftBoxes = fRow.Boxes.Where(b => b.Left < box.Left - 5).OrderBy(b => b.Left).ToList();
-                            leftLabel = string.Join("", leftBoxes.Select(b => b.Words));
-                        }
-
-                        // 检查上方行是否有标签
-                        string aboveLabel = "";
-                        if (fi > ri + 1)
-                        {
-                            var aboveRow = rows[fi - 1];
-                            var aboveBoxes = aboveRow.Boxes.Where(b => Math.Abs(b.CenterX - box.CenterX) < 80).ToList();
-                            aboveLabel = string.Join("", aboveBoxes.Select(b => b.Words));
-                        }
-
-                        string labelContext = leftLabel + aboveLabel;
-
-                        // 待确认金额
-                        if (labelContext.Contains("待确认") || labelContext.Contains("确认金额"))
-                        {
-                            pendingAmountFromOcr = Math.Abs(numVal.Value);
-                            continue;
-                        }
-
-                        // 持有收益/持有收益率
-                        if (labelContext.Contains("持有收益") || labelContext.Contains("累计收益"))
-                        {
-                            if (labelContext.Contains("率") || IsPercentText(w))
-                                holdingRate = numVal.Value;
-                            else
-                                holdingIncome = numVal.Value;
-                            continue;
-                        }
-
-                        // 今日收益 / 昨日收益
-                        if (labelContext.Contains("今日收益") || labelContext.Contains("昨日收益"))
-                        {
-                            yesterdayIncome = numVal.Value;
-                            continue;
-                        }
-
-                        // 无标签数字：按位置推断（第一个数字可能是昨日收益，第二个可能是持有收益）
-                        if (yesterdayIncome == 0 && Math.Abs(numVal.Value) < holdAmount * 0.5)
-                        {
-                            yesterdayIncome = numVal.Value;
-                        }
-                        else if (holdingIncome == 0 && Math.Abs(numVal.Value) < holdAmount)
-                        {
-                            holdingIncome = numVal.Value;
-                        }
+                        pendingAmountFromOcr = pVal;
+                    }
+                    else if (cardContext.Contains("交易进行中", StringComparison.OrdinalIgnoreCase)
+                          || cardContext.Contains("买入待确认", StringComparison.OrdinalIgnoreCase))
+                    {
+                        pendingAmountFromOcr = holdAmount; // 整额视为待确认
                     }
                 }
 
-                // 向上扫描金额行上方 1~2 行，找待确认金额标签
-                for (int bi = ri - 1; bi >= Math.Max(0, ri - 3); bi--)
-                {
-                    var bRow = rows[bi];
-                    foreach (var box in bRow.Boxes)
-                    {
-                        if (box.Words.Contains("待确认") && pendingAmountFromOcr <= 0)
-                        {
-                            // 找同行右侧的数字
-                            var rightNums = bRow.Boxes
-                                .Where(b => b.Left > box.Left + box.Width && ParseSignedNumber(b.Words).HasValue)
-                                .OrderBy(b => b.Left)
-                                .ToList();
-                            if (rightNums.Count > 0)
-                            {
-                                var val = ParseSignedNumber(rightNums[0].Words);
-                                if (val.HasValue && val.Value > 0) pendingAmountFromOcr = val.Value;
-                            }
-                        }
-                    }
-                }
-
-                // 匹配基金
+                // ── 匹配基金 ──
                 var best = (fund: (FundInfoCache?)null, score: 0d);
                 if (fundCode != null)
                 {
@@ -1385,7 +1435,16 @@ namespace 小白养基.Controllers
                 {
                     best = MatchOcrFund(fundName, "", robustFundPool, corrections);
                 }
-                if (best.fund == null || best.score <= 65) continue;
+                if (best.fund == null || best.score <= 60)
+                {
+                    // 输出详细丢弃原因
+                    string rejectReason = best.fund == null
+                        ? $"未找到匹配基金 (名称='{fundName}')"
+                        : $"匹配分数过低: {best.fund.Name}({best.fund.Code}) 分={best.score:F1} < 60";
+                    rejectedCandidates.Add($"卡片#{ci} '{fundName}': {rejectReason}");
+                    diagnostics.Add($"[丢弃] {rejectReason}");
+                    continue;
+                }
 
                 diagnostics.Add($"[坐标匹配] {fundName} → {best.fund.Name}({best.fund.Code}) 分={best.score:F1} 金额={holdAmount} 昨日={yesterdayIncome} 持有={holdingIncome} 持有率={holdingRate}% 待确认={pendingAmountFromOcr}");
 
@@ -1417,37 +1476,30 @@ namespace 小白养基.Controllers
                     pendingEvidence = "待确认金额";
                     pendingConfirmDate = EstimatePendingConfirmDate(best.fund.Name);
                 }
+                else if (hasZeroPending)
+                {
+                    pendingBuyAmount = 0;
+                    pendingReason = "OCR识别到待确认金额为0";
+                    pendingSource = "explicit_zero_pending";
+                }
+                else if (hasPendingText && Math.Abs(holdingIncome) < 0.01 && Math.Abs(holdingRate) < 0.01
+                         && Regex.IsMatch(cardContext, @"--|——|–|—"))
+                {
+                    pendingBuyAmount = holdAmount;
+                    pendingReason = "坐标识别: 有pending文字+持有收益为0";
+                    pendingSource = "explicit_row_text";
+                    pendingEvidence = "交易进行中/待确认";
+                    pendingConfirmDate = EstimatePendingConfirmDate(best.fund.Name);
+                }
                 else
                 {
-                    // 检查文字上下文是否有 pending 证据
-                    string cardContext = string.Join(" ", rows.Skip(Math.Max(0, ri - 3)).Take(10).Select(r => r.FullText));
-                    bool hasPendingEvidence = HasPendingEvidenceInContext(cardContext);
-                    bool hasZeroPending = HasZeroPendingAmountEvidence(cardContext);
-
-                    if (hasZeroPending)
+                    // 无 pending 证据 → 清除旧 pending
+                    var oldPending = existingForPending == null ? 0 : GetActivePendingBuyAmount(existingForPending, settleDate);
+                    if (oldPending > 0)
                     {
-                        pendingBuyAmount = 0;
-                        pendingReason = "OCR识别到待确认金额为0";
-                        pendingSource = "explicit_zero_pending";
+                        diagnostics.Add($"[清除旧pending] {best.fund.Code} 旧={oldPending:F2}");
                     }
-                    else if (hasPendingEvidence && hasDashProfit && Math.Abs(holdingIncome) < 0.01 && Math.Abs(holdingRate) < 0.01)
-                    {
-                        pendingBuyAmount = holdAmount;
-                        pendingReason = "坐标识别: 有pending文字+昨日收益为--+持有收益为0";
-                        pendingSource = "explicit_row_text";
-                        pendingEvidence = "交易进行中/待确认/预计可查看收益";
-                        pendingConfirmDate = EstimatePendingConfirmDate(best.fund.Name);
-                    }
-                    else
-                    {
-                        // 无 pending 证据 → 清除旧 pending
-                        var oldPending = existingForPending == null ? 0 : GetActivePendingBuyAmount(existingForPending, settleDate);
-                        if (oldPending > 0)
-                        {
-                            diagnostics.Add($"[清除旧pending] {best.fund.Code} 旧={oldPending:F2}");
-                        }
-                        pendingBuyAmount = 0;
-                    }
+                    pendingBuyAmount = 0;
                 }
 
                 double confirmedAmount = Math.Max(0, Math.Round(holdAmount - pendingBuyAmount, 2));
@@ -1498,6 +1550,20 @@ namespace 小白养基.Controllers
                     ParticipatesToday = pendingBuyAmount <= 0,
                     ProfitUpdateState = profitUpdateState
                 });
+            }
+
+            // 如果最终 0 只基金，输出每个候选的丢弃原因
+            if (items.Count == 0 && rejectedCandidates.Count > 0)
+            {
+                diagnostics.Add($"[结果] 成功识别 0 只基金，丢弃原因：");
+                foreach (var reason in rejectedCandidates)
+                {
+                    diagnostics.Add($"  - {reason}");
+                }
+            }
+            else if (items.Count == 0 && fundCards.Count == 0)
+            {
+                diagnostics.Add($"[结果] 成功识别 0 只基金，未发现任何候选基金卡片。请检查截图是否为蚂蚁持仓列表页。");
             }
 
 
@@ -1988,6 +2054,9 @@ namespace 小白养基.Controllers
             foreach (var testName in testNames)
             {
                 string normalizedOcr = NormalizeFundName(testName);
+                if (normalizedOcr.Length < 3) continue;
+
+                // \u5b66\u4e60\u8fc7\u7684\u4fee\u6b63\u4f18\u5148
                 var learned = corrections.FirstOrDefault(x => string.Equals(NormalizeFundName(x.OcrName), normalizedOcr, StringComparison.OrdinalIgnoreCase));
                 if (learned != null)
                 {
@@ -1997,12 +2066,12 @@ namespace 小白养基.Controllers
                 string pureChinese = Regex.Replace(testName, @"[^\u4e00-\u9fa5]", "");
                 if (pureChinese.Length < 2) continue;
 
-                // \u63d0\u53d6\u5173\u952e\u8bcd\u7528\u4e8e token \u5339\u914d
                 var ocrTokens = ExtractChineseTokens(testName);
 
                 FundInfoCache? bestMatch = null;
                 double bestScore = 0;
 
+                // \u7cbe\u786e\u5339\u914d\uff08\u89c4\u8303\u5316\u540e\uff09
                 if (_exactMatchDict != null && (_exactMatchDict.TryGetValue(normalizedOcr, out var exactFund) || _exactMatchDict.TryGetValue(testName, out exactFund)))
                 {
                     bestMatch = exactFund;
@@ -2010,25 +2079,17 @@ namespace 小白养基.Controllers
                 }
                 else
                 {
+                    // \u6269\u5927\u5019\u9009\u8303\u56f4\uff1a\u4e0d\u518d\u8981\u6c42 pureChinese \u524d\u7f00\u5339\u914d
                     var candidates = fundPool.Where(f =>
                         !string.IsNullOrWhiteSpace(f.NormalizedName) &&
-                        (f.NormalizedName.Contains(pureChinese) ||
-                         pureChinese.Contains(f.NormalizedName[..Math.Min(3, f.NormalizedName.Length)]) ||
-                         (pureChinese.Length >= 4 && f.NormalizedName.Contains(pureChinese[..Math.Min(4, pureChinese.Length)]))));
+                        HasCommonSubstring(normalizedOcr, f.NormalizedName, 3));
+
                     foreach (var f in candidates)
                     {
-                        double levScore = CalculateSimilarity(normalizedOcr, f.NormalizedName) * 100;
-                        // \u5173\u952e\u8bcd\u5339\u914d\u52a0\u5206\uff1aOCR \u5173\u952e\u8bcd\u5728\u57fa\u91d1\u540d\u4e2d\u547d\u4e2d\u8d8a\u591a\uff0c\u5206\u8d8a\u9ad8
-                        double tokenBonus = 0;
-                        if (ocrTokens.Count >= 2)
+                        double score = FuzzyScoreFundName(normalizedOcr, f.NormalizedName, ocrTokens);
+                        if (score > bestScore)
                         {
-                            int hits = ocrTokens.Count(t => f.NormalizedName.Contains(t));
-                            tokenBonus = (double)hits / ocrTokens.Count * 15;  // \u6700\u591a\u52a015\u5206
-                        }
-                        double currentScore = Math.Min(100, levScore + tokenBonus);
-                        if (currentScore > bestScore)
-                        {
-                            bestScore = currentScore;
+                            bestScore = score;
                             bestMatch = f;
                         }
                     }
@@ -2044,6 +2105,83 @@ namespace 小白养基.Controllers
             return (finalBestMatch, finalBestScore);
         }
 
+        /// <summary>
+        /// \u8ba1\u7b97 OCR \u540d\u79f0\u4e0e\u57fa\u91d1\u540d\u79f0\u7684\u6a21\u7cca\u5339\u914d\u5206\u6570\uff080-100\uff09
+        /// </summary>
+        private static double FuzzyScoreFundName(string normalizedOcr, string normalizedFund, List<string> ocrTokens)
+        {
+            // 1. \u5305\u542b\u5173\u7cfb\u52a0\u5206\uff08>= 0.85 \u6743\u91cd\uff09
+            if (normalizedFund.Contains(normalizedOcr) || normalizedOcr.Contains(normalizedFund))
+            {
+                double shorter = Math.Min(normalizedOcr.Length, normalizedFund.Length);
+                double longer = Math.Max(normalizedOcr.Length, normalizedFund.Length);
+                double containRatio = shorter / longer;
+                if (containRatio >= 0.85) return 95.0; // \u5f3a\u5305\u542b
+                return 80.0 + containRatio * 15; // \u90e8\u5206\u5305\u542b
+            }
+
+            // 2. \u6700\u957f\u516c\u5171\u5b50\u4e32\uff08>= 6 \u4e2d\u6587\u5b57\u7b26 = \u5f3a\u8bc1\u636e\uff09
+            int lcsLen = LongestCommonSubstringLength(normalizedOcr, normalizedFund);
+            double lcsScore = 0;
+            if (lcsLen >= 6)
+            {
+                double lcsRatio = (double)lcsLen / Math.Max(normalizedOcr.Length, normalizedFund.Length);
+                lcsScore = 60.0 + lcsRatio * 35; // 60-95
+            }
+
+            // 3. Levenshtein \u76f8\u4f3c\u5ea6
+            double levRatio = CalculateSimilarity(normalizedOcr, normalizedFund);
+            double levScore = levRatio * 100;
+
+            // 4. Token \u547d\u4e2d\u52a0\u5206
+            double tokenBonus = 0;
+            if (ocrTokens.Count >= 2)
+            {
+                int hits = ocrTokens.Count(t => normalizedFund.Contains(t));
+                tokenBonus = (double)hits / ocrTokens.Count * 15; // \u6700\u591a\u52a015\u5206
+            }
+
+            return Math.Min(100, Math.Max(lcsScore, levScore) + tokenBonus);
+        }
+
+        /// <summary>
+        /// \u68c0\u67e5\u4e24\u4e2a\u5b57\u7b26\u4e32\u662f\u5426\u6709\u957f\u5ea6 >= minLength \u7684\u516c\u5171\u5b50\u4e32
+        /// </summary>
+        private static bool HasCommonSubstring(string a, string b, int minLength)
+        {
+            if (a.Length < minLength || b.Length < minLength) return false;
+            // \u5feb\u901f\u68c0\u67e5\uff1a\u770b a \u7684\u6bcf\u4e2a minLength-gram \u662f\u5426\u5728 b \u4e2d
+            for (int i = 0; i <= a.Length - minLength; i++)
+            {
+                if (b.Contains(a.Substring(i, minLength))) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// \u8ba1\u7b97\u6700\u957f\u516c\u5171\u5b50\u4e32\u957f\u5ea6
+        /// </summary>
+        private static int LongestCommonSubstringLength(string a, string b)
+        {
+            if (a.Length == 0 || b.Length == 0) return 0;
+            int maxLen = 0;
+            var prev = new int[b.Length + 1];
+            for (int i = 0; i < a.Length; i++)
+            {
+                var curr = new int[b.Length + 1];
+                for (int j = 0; j < b.Length; j++)
+                {
+                    if (a[i] == b[j])
+                    {
+                        curr[j + 1] = prev[j] + 1;
+                        if (curr[j + 1] > maxLen) maxLen = curr[j + 1];
+                    }
+                }
+                prev = curr;
+            }
+            return maxLen;
+        }
+
         private static List<string> ExtractChineseTokens(string text)
         {
             // \u63d0\u53d6\u8fde\u7eed\u4e2d\u6587\u7247\u6bb5\u4f5c\u4e3a\u5173\u952e\u8bcd\uff082\u5b57\u4ee5\u4e0a\uff09
@@ -2057,8 +2195,7 @@ namespace 小白养基.Controllers
         {
             string testName = string.IsNullOrWhiteSpace(potentialFragment) ? namePart : namePart + potentialFragment;
             string normalizedOcr = NormalizeFundName(testName);
-            string pureChinese = Regex.Replace(testName, @"[^\u4e00-\u9fa5]", "");
-            if (pureChinese.Length < 2) return new();
+            if (normalizedOcr.Length < 3) return new();
 
             var ocrTokens = ExtractChineseTokens(testName);
             var scored = new List<(FundInfoCache fund, double score)>();
@@ -2066,19 +2203,10 @@ namespace 小白养基.Controllers
             foreach (var f in fundPool)
             {
                 if (string.IsNullOrWhiteSpace(f.NormalizedName)) continue;
-                if (!f.NormalizedName.Contains(pureChinese) &&
-                    !pureChinese.Contains(f.NormalizedName[..Math.Min(3, f.NormalizedName.Length)]) &&
-                    !(pureChinese.Length >= 4 && f.NormalizedName.Contains(pureChinese[..Math.Min(4, pureChinese.Length)])))
-                    continue;
+                if (!HasCommonSubstring(normalizedOcr, f.NormalizedName, 3)) continue;
 
-                double levScore = CalculateSimilarity(normalizedOcr, f.NormalizedName) * 100;
-                double tokenBonus = 0;
-                if (ocrTokens.Count >= 2)
-                {
-                    int hits = ocrTokens.Count(t => f.NormalizedName.Contains(t));
-                    tokenBonus = (double)hits / ocrTokens.Count * 15;
-                }
-                scored.Add((f, Math.Min(100, levScore + tokenBonus)));
+                double score = FuzzyScoreFundName(normalizedOcr, f.NormalizedName, ocrTokens);
+                scored.Add((f, score));
             }
 
             return scored.OrderByDescending(x => x.score).Take(n).ToList();
@@ -2209,12 +2337,23 @@ namespace 小白养基.Controllers
         private static string NormalizeFundName(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) return "";
-            var s = name.ToUpper()
-                       .Replace(" ", "").Replace("（", "(").Replace("）", ")")
-                       .Replace("(QDII)", "").Replace("QDII", "")
-                       .Replace("ETF联接", "ETF").Replace("证券投资基金", "")
-                       .Replace("发起式", "").Replace("主题", "").Replace("指数型", "")
-                       .Replace("混合", "").Replace("指数", "").Replace("C类", "C").Replace("A类", "A").Trim();
+            var s = name
+                .ToUpper()
+                .Replace(" ", "").Replace("\t", "").Replace("\r", "").Replace("\n", "")
+                .Replace("（", "(").Replace("）", ")").Replace("，", ",").Replace("。", ".")
+                .Replace("：", ":").Replace("；", ";").Replace("！", "!").Replace("？", "?")
+                // 全角数字/字母 → 半角
+                .Replace("Ａ", "A").Replace("Ｂ", "B").Replace("Ｃ", "C").Replace("Ｄ", "D")
+                // 去除常见噪声词
+                .Replace("(QDII)", "").Replace("QDII", "")
+                .Replace("ETF联接", "ETF").Replace("ETF联结", "ETF")
+                .Replace("证券投资基金", "").Replace("证券基金", "")
+                .Replace("发起式", "").Replace("主题", "").Replace("指数型", "")
+                .Replace("混合型", "").Replace("混合", "").Replace("指数", "")
+                .Replace("C类", "C").Replace("A类", "A").Replace("B类", "B")
+                .Replace("C份额", "C").Replace("A份额", "A").Replace("B份额", "B")
+                .Replace("基金", "").Replace("｜", "").Replace("|", "")
+                .Trim();
             // 处理 OCR 截断词：设→设备，材料设→材料设备，质量精→质量精选
             s = Regex.Replace(s, @"材料设$", "材料设备");
             s = Regex.Replace(s, @"质量精$", "质量精选");
@@ -2222,7 +2361,7 @@ namespace 小白养基.Controllers
             return s;
         }
 
-        private double CalculateSimilarity(string s, string t)
+        private static double CalculateSimilarity(string s, string t)
         {
             if (s == t) return 1.0;
             int n = s.Length, m = t.Length;
