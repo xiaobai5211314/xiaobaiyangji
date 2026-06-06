@@ -1145,6 +1145,257 @@ namespace 小白养基.Controllers
             }
         }
 
+        // ── 交易记录 OCR 导入 ──
+
+        public sealed class TransactionPreviewItem
+        {
+            public string FundCode { get; set; } = "";
+            public string FundName { get; set; } = "";
+            public string Direction { get; set; } = "Buy";
+            public double Amount { get; set; }
+            public string? TradeDate { get; set; }
+            public string? TradeTime { get; set; }
+            public string Status { get; set; } = "Pending";
+            public string? FirstProfitDate { get; set; }
+            public string RawText { get; set; } = "";
+            public string DecisionReason { get; set; } = "";
+        }
+
+        public sealed class TransactionPreviewResponse
+        {
+            public bool Success { get; set; }
+            public int Count { get; set; }
+            public List<TransactionPreviewItem> Items { get; set; } = new();
+            public List<string> Diagnostics { get; set; } = new();
+        }
+
+        public sealed class ConfirmTransactionsRequest
+        {
+            public string Username { get; set; } = "";
+            public List<TransactionPreviewItem> Items { get; set; } = new();
+        }
+
+        [HttpPost("import-transactions-preview")]
+        public async Task<IActionResult> ImportTransactionsPreview([FromQuery] string username, IFormFile imageFile)
+        {
+            if (string.IsNullOrWhiteSpace(username)) return Unauthorized("请提供用户名");
+            if (imageFile == null || imageFile.Length == 0) return BadRequest("请上传交易记录截图");
+
+            try
+            {
+                var preview = await BuildTransactionPreviewAsync(username, imageFile);
+                preview.Success = true;
+                preview.Count = preview.Items.Count;
+                return Ok(preview);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"交易记录 OCR 预览失败: {ex.Message}" });
+            }
+        }
+
+        [HttpPost("confirm-transactions-import")]
+        public async Task<IActionResult> ConfirmTransactionsImport([FromQuery] string username, [FromBody] ConfirmTransactionsRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(username)) return Unauthorized("请提供用户名");
+            if (request.Items == null || request.Items.Count == 0) return BadRequest("没有可确认的交易记录");
+
+            try
+            {
+                int saved = 0;
+                foreach (var item in request.Items)
+                {
+                    if (item.Amount <= 0) continue;
+                    if (string.IsNullOrWhiteSpace(item.FundCode) && string.IsNullOrWhiteSpace(item.FundName)) continue;
+
+                    // 尝试匹配基金代码
+                    string fundCode = item.FundCode;
+                    string fundName = item.FundName;
+                    if (string.IsNullOrWhiteSpace(fundCode) && !string.IsNullOrWhiteSpace(fundName))
+                    {
+                        var allFunds = await GetAllFundsAsync();
+                        var match = MatchOcrFund(fundName, "", allFunds?.ToList() ?? new(), new(), new());
+                        if (match.fund != null && match.score > 70)
+                        {
+                            fundCode = match.fund.Code;
+                            fundName = match.fund.Name;
+                        }
+                    }
+                    if (string.IsNullOrWhiteSpace(fundCode)) continue;
+
+                    _context.FundTradeOrders.Add(new Models.FundTradeOrder
+                    {
+                        Username = username,
+                        FundCode = fundCode,
+                        FundName = fundName,
+                        Direction = item.Direction,
+                        Amount = Math.Round(item.Amount, 2),
+                        TradeDate = item.TradeDate,
+                        TradeTime = item.TradeTime,
+                        CutoffDate = item.TradeDate, // 简化：默认同一天 15:00 截止
+                        Status = item.Status,
+                        FirstProfitDate = item.FirstProfitDate,
+                        Source = "ocr_transaction",
+                        RawText = item.RawText,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    });
+                    saved++;
+                }
+                await _context.SaveChangesAsync();
+                ClearTodayCache(username);
+                return Ok(new { success = true, saved, message = $"已导入 {saved} 笔交易记录。" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"交易记录导入失败: {ex.Message}" });
+            }
+        }
+
+        private async Task<TransactionPreviewResponse> BuildTransactionPreviewAsync(string username, IFormFile imageFile)
+        {
+            var diagnostics = new List<string>();
+            byte[] imageBytes;
+            using (var ms = new MemoryStream())
+            {
+                await imageFile.OpenReadStream().CopyToAsync(ms);
+                imageBytes = ms.ToArray();
+            }
+
+            // OCR 识别
+            JObject result;
+            try
+            {
+                var locTask = _ocrService.AccurateWithLocationAsync(imageBytes);
+                if (await Task.WhenAny(locTask, Task.Delay(20000)) != locTask)
+                    throw new TimeoutException("OCR 超时");
+                result = await locTask;
+            }
+            catch
+            {
+                var basicTask = Task.Run(() => _ocrService.AccurateBasic(imageBytes));
+                if (await Task.WhenAny(basicTask, Task.Delay(15000)) != basicTask)
+                    throw new TimeoutException("OCR 超时");
+                result = await basicTask;
+            }
+
+            var wordsResult = result["words_result"] as JArray;
+            var texts = wordsResult?.Select(w => w["words"]?.ToString() ?? "").ToList() ?? new();
+            diagnostics.Add($"[OCR] 识别 {texts.Count} 行文字");
+
+            for (int i = 0; i < Math.Min(texts.Count, 50); i++)
+                diagnostics.Add($"[行#{i}] {texts[i]}");
+
+            var items = new List<TransactionPreviewItem>();
+
+            // 解析交易记录行
+            // 模式: 买入 基金 | 基金名 金额元 日期 时间 状态
+            string fullText = string.Join("\n", texts);
+
+            // 匹配 "买入" 或 "卖出" 开头的交易行
+            var txPattern = Regex.Matches(fullText,
+                @"(买入|卖出)\s*(?:基金)?\s*[|｜]?\s*(.+?)\s+(\d[\d,]*\.?\d*)\s*元?\s*(\d{4}[-/]\d{2}[-/]\d{2})\s*(\d{2}:\d{2}:\d{2})?\s*(交易进行中|买入待确认|待确认|预计.{0,20}查看收益|交易关闭|已撤销|已确认|成功|已完成)?",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            foreach (Match m in txPattern)
+            {
+                string direction = m.Groups[1].Value == "买入" ? "Buy" : "Sell";
+                string fundName = m.Groups[2].Value.Trim().TrimEnd('｜', '|');
+                string amountStr = m.Groups[3].Value.Replace(",", "");
+                string tradeDate = m.Groups[4].Value.Replace("/", "-");
+                string tradeTime = m.Groups[5].Success ? m.Groups[5].Value : null;
+                string statusRaw = m.Groups[6].Success ? m.Groups[6].Value : "";
+
+                if (!double.TryParse(amountStr, out double amount) || amount <= 0) continue;
+
+                string status = "Pending";
+                string decisionReason = "";
+                if (Regex.IsMatch(statusRaw, @"交易关闭|已撤销|取消", RegexOptions.IgnoreCase))
+                {
+                    status = "Cancelled";
+                    decisionReason = "交易已关闭/已撤销，不计入待确认";
+                }
+                else if (Regex.IsMatch(statusRaw, @"已确认|成功|已完成", RegexOptions.IgnoreCase))
+                {
+                    status = "Confirmed";
+                    decisionReason = "交易已确认，不计入待确认";
+                }
+                else if (Regex.IsMatch(statusRaw, @"交易进行中|买入待确认|待确认|预计.*查看收益", RegexOptions.IgnoreCase))
+                {
+                    status = "Pending";
+                    string firstProfit = EstimateFirstProfitDate(fundName, tradeDate);
+                    decisionReason = $"交易进行中，预计{firstProfit}可查看收益";
+                }
+                else
+                {
+                    // 无明确状态文字 → 按日期判断
+                    string firstProfit = EstimateFirstProfitDate(fundName, tradeDate);
+                    if (string.CompareOrdinal(firstProfit, ChinaDateDash()) > 0)
+                    {
+                        status = "Pending";
+                        decisionReason = $"交易日{tradeDate}，预计{firstProfit}可查看收益";
+                    }
+                    else
+                    {
+                        status = "Confirmed";
+                        decisionReason = $"交易日{tradeDate}，已超过可查看收益日{firstProfit}";
+                    }
+                }
+
+                // 尝试匹配基金代码
+                string fundCode = "";
+                var allFunds = await GetAllFundsAsync();
+                var match = MatchOcrFund(fundName, "", allFunds?.ToList() ?? new(), new(), new());
+                if (match.fund != null && match.score > 70)
+                {
+                    fundCode = match.fund.Code;
+                    fundName = match.fund.Name;
+                }
+
+                string firstProfitDate = EstimateFirstProfitDate(fundName, tradeDate);
+
+                items.Add(new TransactionPreviewItem
+                {
+                    FundCode = fundCode,
+                    FundName = fundName,
+                    Direction = direction,
+                    Amount = amount,
+                    TradeDate = tradeDate,
+                    TradeTime = tradeTime,
+                    Status = status,
+                    FirstProfitDate = firstProfitDate,
+                    RawText = m.Value,
+                    DecisionReason = decisionReason
+                });
+                diagnostics.Add($"[交易] {direction} {fundName}({fundCode}) {amount}元 {tradeDate} {tradeTime} → {status}: {decisionReason}");
+            }
+
+            if (items.Count == 0)
+                diagnostics.Add("[结果] 未识别到任何交易记录行。请确认截图是支付宝交易记录/交易分析页面。");
+
+            return new TransactionPreviewResponse { Items = items, Diagnostics = diagnostics };
+        }
+
+        /// <summary>
+        /// 估算首次可查看收益日：T+1（A股）或 T+2（QDII/港股/海外）
+        /// </summary>
+        private static string EstimateFirstProfitDate(string fundName, string tradeDate)
+        {
+            if (!DateTime.TryParse(tradeDate, out var dt)) return tradeDate;
+            bool isQDII = fundName.Contains("QDII", StringComparison.OrdinalIgnoreCase)
+                       || fundName.Contains("港股", StringComparison.OrdinalIgnoreCase)
+                       || fundName.Contains("恒生", StringComparison.OrdinalIgnoreCase)
+                       || fundName.Contains("纳斯达克", StringComparison.OrdinalIgnoreCase)
+                       || fundName.Contains("标普", StringComparison.OrdinalIgnoreCase)
+                       || fundName.Contains("海外", StringComparison.OrdinalIgnoreCase);
+            int offset = isQDII ? 2 : 1;
+            var result = dt.AddDays(offset);
+            // 跳过周末
+            while (result.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+                result = result.AddDays(1);
+            return result.ToString("yyyy-MM-dd");
+        }
+
         private async Task<OcrImportPreviewResponse> BuildOcrImportPreviewAsync(string username, IFormFile imageFile)
         {
             var allFunds = await GetAllFundsAsync();
@@ -1646,7 +1897,7 @@ namespace 小白养基.Controllers
                     continue;
                 }
 
-                diagnostics.Add($"[坐标匹配] {fundName} → {best.fund.Name}({best.fund.Code}) 分={best.score:F1}");
+                diagnostics.Add($"[卡片#{ci} 匹配] 名称='{fundName}' → {best.fund.Name}({best.fund.Code}) 分={best.score:F1} amount={holdAmount} yesterdayIncome={yesterdayIncome} holdingIncome={holdingIncome} holdingRate={holdingRate}%");
 
                 // 份额校准
                 double holdShares = 0;
@@ -1676,7 +1927,7 @@ namespace 小白养基.Controllers
                 if (pendingAmountFromOcr > 0)
                 {
                     pendingBuyAmount = pendingAmountFromOcr;
-                    pendingReason = "OCR坐标识别到待确认金额";
+                    pendingReason = "OCR明确识别到待确认金额";
                     pendingSource = "explicit_row_text";
                     pendingEvidence = "待确认金额";
                     pendingConfirmDate = EstimatePendingConfirmDate(best.fund.Name);
@@ -1684,31 +1935,43 @@ namespace 小白养基.Controllers
                 else if (hasZeroPending)
                 {
                     pendingBuyAmount = 0;
-                    pendingReason = "OCR识别到待确认金额为0";
+                    pendingReason = "OCR明确识别到待确认金额为0";
                     pendingSource = "explicit_zero_pending";
-                }
-                else if (hasPendingText && Math.Abs(holdingIncome) < 0.01 && Math.Abs(holdingRate) < 0.01
-                         && Regex.IsMatch(cardContext, @"--|——|–|—"))
-                {
-                    pendingBuyAmount = holdAmount;
-                    pendingReason = "坐标识别: 有pending文字+持有收益为0";
-                    pendingSource = "explicit_row_text";
-                    pendingEvidence = "交易进行中/待确认";
-                    pendingConfirmDate = EstimatePendingConfirmDate(best.fund.Name);
                 }
                 else
                 {
-                    // 无 pending 证据 → 清除旧 pending
-                    var oldPending = existingForPending == null ? 0 : GetActivePendingBuyAmount(existingForPending, settleDate);
-                    if (oldPending > 0)
+                    // 无 OCR 文字证据 → 查询交易流水表
+                    var activeOrders = await _context.FundTradeOrders
+                        .AsNoTracking()
+                        .Where(o => o.Username == username && o.FundCode == best.fund.Code && o.Status == "Pending" && o.Direction == "Buy")
+                        .ToListAsync();
+                    double orderPending = activeOrders.Sum(o => o.Amount);
+
+                    if (orderPending > 0)
                     {
-                        diagnostics.Add($"[清除旧pending] {best.fund.Code} 旧={oldPending:F2}");
+                        pendingBuyAmount = orderPending;
+                        pendingReason = $"交易记录中有{activeOrders.Count}笔未确认买入(共{orderPending:F2}元)";
+                        pendingSource = "trade_order";
+                        var latestOrder = activeOrders.OrderByDescending(o => o.TradeDate).First();
+                        pendingConfirmDate = latestOrder.FirstProfitDate;
                     }
-                    pendingBuyAmount = 0;
+                    else
+                    {
+                        // 无 pending 证据 → 清除旧 pending
+                        var oldPending = existingForPending == null ? 0 : GetActivePendingBuyAmount(existingForPending, settleDate);
+                        if (oldPending > 0)
+                        {
+                            diagnostics.Add($"[清除旧pending] {best.fund.Code} 旧={oldPending:F2}，原因：无OCR文字证据且无未确认交易记录");
+                        }
+                        pendingBuyAmount = 0;
+                        pendingReason = "无OCR文字证据，且无未确认交易记录，按已确认持仓处理";
+                    }
                 }
 
                 double confirmedAmount = Math.Max(0, Math.Round(holdAmount - pendingBuyAmount, 2));
                 double todayBaseAmount = confirmedAmount;
+
+                diagnostics.Add($"[卡片#{ci} 决策] amount={holdAmount} confirmed={confirmedAmount} pending={pendingBuyAmount} pendingSource='{pendingSource}' pendingReason='{pendingReason}' participatesToday={pendingBuyAmount <= 0}");
 
                 // 检测旧 pending 清除
                 var existingPendingCheck = existingForPending == null ? 0 : GetActivePendingBuyAmount(existingForPending, settleDate);
@@ -2517,7 +2780,9 @@ namespace 小白养基.Controllers
                         PendingSource = item.IsPendingBuy ? (string.IsNullOrWhiteSpace(item.PendingSource) ? "ocr" : item.PendingSource) : null,
                         LastSettledDate = null,
                         LastSettledProfit = 0,
-                        LastSettledRate = 0
+                        LastSettledRate = 0,
+                        OcrYesterdayIncome = Math.Round(item.YesterdayIncome, 2),
+                        OcrYesterdayDate = ChinaDateDash()
                     };
                     _context.MyFunds.Add(newFund);
                     userFundDict[newFund.FundCode] = newFund;
@@ -2592,8 +2857,12 @@ namespace 小白养基.Controllers
                 exist.LastSettledRate = 0;
             }
 
+            // 保存 OCR 昨日收益（GetTodayData 优先使用）
+            exist.OcrYesterdayIncome = Math.Round(item.YesterdayIncome, 2);
+            exist.OcrYesterdayDate = todayDash;
+
             Console.WriteLine(
-                $"[OCR校准后] code={exist.FundCode}, HoldAmount={exist.HoldAmount:F2}, Shares={exist.HoldShares:F4}, Cost={exist.CostAmount:F2}, Pending={exist.PendingBuyAmount:F2}, Status={exist.PendingTradeStatus ?? "null"}");
+                $"[OCR校准后] code={exist.FundCode}, HoldAmount={exist.HoldAmount:F2}, Shares={exist.HoldShares:F4}, Cost={exist.CostAmount:F2}, Pending={exist.PendingBuyAmount:F2}, OcrYesterday={exist.OcrYesterdayIncome:F2}, Status={exist.PendingTradeStatus ?? "null"}");
         }
 
         private async Task UpsertOcrCorrectionAsync(string username, OcrImportPreviewItem item)
@@ -5618,7 +5887,11 @@ namespace 小白养基.Controllers
                     double confirmedHoldAmount = Math.Max(0, Math.Round(rawHoldAmount - pendingBuyAmount, 2));
                     double todayRateForSimulation = isSettled ? config.LastSettledRate : (dataPoints.Count > 0 ? Convert.ToDouble(dataPoints.Last()[1]) : 0);
                     double todayBaseAmount = GetDailyBaseAmount(config, todayDash, pendingBuyAmount);
-                    double todayProfitPreview = isSettled ? config.LastSettledProfit : Math.Round(todayBaseAmount * todayRateForSimulation / 100.0, 2);
+                    // 今日收益优先级：已清算真实净值 > OCR识别的昨日收益 > 估算
+                    bool hasOcrYesterday = config.OcrYesterdayDate == todayDash && Math.Abs(config.OcrYesterdayIncome) > 0.001;
+                    double todayProfitPreview = isSettled ? config.LastSettledProfit
+                        : hasOcrYesterday ? config.OcrYesterdayIncome
+                        : Math.Round(todayBaseAmount * todayRateForSimulation / 100.0, 2);
                     double currentAssetsPreview = Math.Round(todayBaseAmount + todayProfitPreview, 2);
                     double rawCostBasis = config.CostAmount > 0 ? config.CostAmount : rawHoldAmount;
                     double costBasis = Math.Max(0, Math.Round(rawCostBasis - pendingBuyAmount, 2));
@@ -5663,7 +5936,7 @@ namespace 小白养基.Controllers
                     // marketValue = 当前确认市值（显示用），todayBaseAmount = 收益率分母
                     double marketValue = isInactiveHolding ? 0 : Math.Round(currentAssetsPreview, 2);
                     double todayProfit = Math.Round(todayProfitPreview, 2);
-                    string profitSource = isSettled ? "nav_settlement" : (dataPoints.Count > 0 ? "estimate" : "none");
+                    string profitSource = isSettled ? "nav_settlement" : hasOcrYesterday ? "ocr_yesterday" : (dataPoints.Count > 0 ? "estimate" : "none");
 
                     return new
                     {
@@ -5720,6 +5993,8 @@ namespace 小白养基.Controllers
                         todayProfit = todayProfit,
                         todayRate = todayRateForSimulation,
                         profitSource = profitSource,
+                        ocrYesterdayIncome = hasOcrYesterday ? config.OcrYesterdayIncome : (double?)null,
+                        ocrYesterdayDate = hasOcrYesterday ? config.OcrYesterdayDate : null,
                         marketOpen = fundDateInfo.MarketOpen,
                         marketStatus = fundDateInfo.MarketStatus,
                         marketLabel = fundDateInfo.MarketLabel,
@@ -5746,7 +6021,10 @@ namespace 小白养基.Controllers
                             lastSettledRate = config.LastSettledRate,
                             todayBaseAmount,
                             todayRateForSimulation,
-                            todayProfitPreview
+                            todayProfitPreview,
+                            hasOcrYesterday,
+                            ocrYesterdayIncome = config.OcrYesterdayIncome,
+                            ocrYesterdayDate = config.OcrYesterdayDate
                         }
                     };
 

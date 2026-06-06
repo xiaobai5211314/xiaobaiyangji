@@ -44,5 +44,9 @@ namespace 小白养基.Models
         [MaxLength(80)]
         public string? PendingSource { get; set; }
 
+        // OCR 识别的昨日收益（优先于估算，用于 today 接口直接展示）
+        public double OcrYesterdayIncome { get; set; } = 0;
+        [MaxLength(20)]
+        public string? OcrYesterdayDate { get; set; }
     }
 }

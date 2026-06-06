@@ -20,6 +20,7 @@ namespace 小白养基.Models
         public DbSet<StockQuoteSnapshot> StockQuoteSnapshots { get; set; }
         public DbSet<StockKLineCache> StockKLineCaches { get; set; }
         public DbSet<MarketDataCache> MarketDataCaches { get; set; }
+        public DbSet<FundTradeOrder> FundTradeOrders { get; set; }
 
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
         {
@@ -192,6 +193,14 @@ namespace 小白养基.Models
             modelBuilder.Entity<MarketDataCache>()
                 .HasIndex(x => new { x.DataType, x.UpdatedAt })
                 .HasDatabaseName("IX_MarketDataCache_Type_Updated");
+
+            modelBuilder.Entity<FundTradeOrder>()
+                .HasIndex(x => new { x.Username, x.FundCode, x.Status })
+                .HasDatabaseName("IX_FundTradeOrder_User_Code_Status");
+
+            modelBuilder.Entity<FundTradeOrder>()
+                .HasIndex(x => new { x.Username, x.TradeDate })
+                .HasDatabaseName("IX_FundTradeOrder_User_Date");
         }
     }
 }
