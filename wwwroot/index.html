@@ -5107,6 +5107,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
     </script>
     <script>
+        const APP_BUILD_VERSION = '2026-06-06-ocr-pending-blue-screen-fix';
+        console.log('[小白养基] build:', APP_BUILD_VERSION);
         const { createApp, ref, reactive, onMounted, onUnmounted, nextTick, shallowRef, watch, computed } = Vue;
 
         createApp({
@@ -7071,6 +7073,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const apiSummary = rawData.summary || null;
                         lastDataFetchAt = Date.now();
                         let tPrincipal = 0; let tPrincipalForRate = 0; let tCost = 0; let tToday = 0; let d = new Date();
+                        const finiteNumber = (value, fallback = 0) => {
+                            const n = Number(value);
+                            return Number.isFinite(n) ? n : fallback;
+                        };
                         let todaySlash = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
                         let todayDash = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
                         if (apiSummary?.effectiveDate) {
@@ -7090,8 +7096,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const settledCalibrationPayload = [];
 
                         apiData.forEach(fund => {
+                            fund.data = Array.isArray(fund.data) ? fund.data : [];
                             const backendMarketClosed = fund.marketOpen === false;
-                            if (fund.isSettled) { fund.currentRate = fund.actualRate; fund.isHoliday = backendMarketClosed; if (fund.data.length > 0 && String(fund.data[fund.data.length - 1][0]).includes("15:00:00")) { fund.data[fund.data.length - 1][1] = fund.actualRate; } else { fund.data.push([`${todaySlash} 15:00:00`, fund.actualRate]); } } else if (backendMarketClosed || isWeekend || currentMinutes < 565) { fund.currentRate = Number(fund.todayRateForSimulation || 0); fund.isHoliday = true; } else if (fund.data && fund.data.length > 0) { let lastDataTime = String(fund.data[fund.data.length - 1][0]); let hasTodayDate = lastDataTime.includes(todaySlash) || lastDataTime.includes(todayDash); let isPast935 = (d.getHours() > 9) || (d.getHours() === 9 && d.getMinutes() >= 35); if (hasTodayDate && !(isPast935 && fund.data.length <= 2)) { fund.currentRate = fund.data[fund.data.length - 1][1]; fund.isHoliday = false; } else { fund.currentRate = 0; fund.isHoliday = true; } } else { fund.currentRate = 0; fund.isHoliday = true; }
+                            if (fund.isSettled) { fund.currentRate = finiteNumber(fund.actualRate); fund.isHoliday = backendMarketClosed; if (fund.data.length > 0 && String(fund.data[fund.data.length - 1][0]).includes("15:00:00")) { fund.data[fund.data.length - 1][1] = fund.currentRate; } else { fund.data.push([`${todaySlash} 15:00:00`, fund.currentRate]); } } else if (backendMarketClosed || isWeekend || currentMinutes < 565) { fund.currentRate = finiteNumber(fund.todayRateForSimulation); fund.isHoliday = true; } else if (fund.data.length > 0) { let lastDataTime = String(fund.data[fund.data.length - 1][0]); let hasTodayDate = lastDataTime.includes(todaySlash) || lastDataTime.includes(todayDash); let isPast935 = (d.getHours() > 9) || (d.getHours() === 9 && d.getMinutes() >= 35); if (hasTodayDate && !(isPast935 && fund.data.length <= 2)) { fund.currentRate = finiteNumber(fund.data[fund.data.length - 1][1]); fund.isHoliday = false; } else { fund.currentRate = 0; fund.isHoliday = true; } } else { fund.currentRate = 0; fund.isHoliday = true; }
 
                             const rawCurrentRate = Number(fund.currentRate || 0);
                             if (fund.isSettled) {
@@ -7201,10 +7208,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             if (Number.isFinite(Number(apiSummary.totalDisplayAmount))) {
                                 totalPrincipal.value = Number(apiSummary.totalDisplayAmount);
                             }
-                            totalTodayProfit.value = apiSummary.totalTodayProfit;
-                            totalTodayRate.value = apiSummary.totalTodayRate;
-                            totalProfit.value = apiSummary.totalProfit;
-                            totalRate.value = apiSummary.totalRate;
+                            totalTodayProfit.value = finiteNumber(apiSummary.totalTodayProfit);
+                            totalTodayRate.value = finiteNumber(apiSummary.totalTodayRate);
+                            totalProfit.value = finiteNumber(apiSummary.totalProfit);
+                            totalRate.value = finiteNumber(apiSummary.totalRate);
                         } else {
                             totalTodayProfit.value = tToday;
                             totalTodayRate.value = tPrincipalForRate > 0 ? (tToday / tPrincipalForRate * 100) : 0;

@@ -6277,6 +6277,9 @@ namespace 小白养基.Controllers
                     // marketValue = 当前确认市值（显示用），todayBaseAmount = 收益率分母
                     double marketValue = isInactiveHolding ? 0 : Math.Round(currentAssetsPreview, 2);
                     double todayProfit = Math.Round(todayProfitPreview, 2);
+                    double todayRateForDisplay = todayBaseAmount > 0
+                        ? Math.Round(todayProfit / todayBaseAmount * 100.0, 2)
+                        : 0;
                     string profitSource = isSettled ? "nav_settlement" : hasOcrYesterday ? "ocr_yesterday" : (dataPoints.Count > 0 ? "estimate" : "none");
 
                     return new
@@ -6335,7 +6338,7 @@ namespace 小白养基.Controllers
                         todayRateForSimulation = todayRateForSimulation,
                         todayProfitPreview = todayProfitPreview,
                         todayProfit = todayProfit,
-                        todayRate = todayRateForSimulation,
+                        todayRate = todayRateForDisplay,
                         profitSource = profitSource,
                         ocrYesterdayIncome = hasOcrYesterday ? config.OcrYesterdayIncome : (double?)null,
                         ocrYesterdayDate = hasOcrYesterday ? config.OcrYesterdayDate : null,
