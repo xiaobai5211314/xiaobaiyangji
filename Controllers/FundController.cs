@@ -266,6 +266,55 @@ namespace 小白养基.Controllers
             return Math.Round(Math.Max(explicitPending, legacyTodayAdd), 2);
         }
 
+        private static bool HasLegacyOcrPendingSignal(MyFundConfig fund, string settleDate)
+        {
+            if (fund.PendingBuyAmount > 0) return false;
+            if (!IsPendingDateEffective(fund.PendingTradeDate, settleDate)) return false;
+            if (string.IsNullOrWhiteSpace(fund.PendingSource)) return false;
+            if (!fund.PendingSource.Contains("pending", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!fund.PendingSource.Contains("ocr", StringComparison.OrdinalIgnoreCase)) return false;
+            if (string.IsNullOrWhiteSpace(fund.PendingConfirmDate)) return false;
+            return string.CompareOrdinal(fund.PendingConfirmDate, settleDate) > 0;
+        }
+
+        private static double NormalizePendingBuyCandidate(double amount)
+        {
+            if (amount <= 0) return 0;
+            double rounded = Math.Round(amount, 2);
+            if (rounded >= 1000)
+            {
+                double nearestThousand = Math.Round(rounded / 1000.0) * 1000.0;
+                double tolerance = Math.Max(120, nearestThousand * 0.08);
+                if (nearestThousand >= 1000 && Math.Abs(rounded - nearestThousand) <= tolerance)
+                {
+                    return Math.Round(nearestThousand, 2);
+                }
+            }
+            return rounded;
+        }
+
+        private static double ResolvePendingBuyAmount(MyFundConfig fund, string settleDate, double? previousConfirmedAssets = null)
+        {
+            double activePending = GetActivePendingBuyAmount(fund, settleDate);
+            if (activePending > 0) return activePending;
+            if (!HasLegacyOcrPendingSignal(fund, settleDate)) return 0;
+
+            if (previousConfirmedAssets.HasValue)
+            {
+                double diff = Math.Max(0, fund.HoldAmount - previousConfirmedAssets.Value);
+                double pending = NormalizePendingBuyCandidate(diff);
+                return Math.Round(Math.Min(fund.HoldAmount, pending), 2);
+            }
+
+            // 兼容删除后重新 OCR 的旧数据：无历史确认档案但整额买入形状明确时，全额视为待确认。
+            if (IsRoundPendingBuyAmount(fund.HoldAmount))
+            {
+                return Math.Round(fund.HoldAmount, 2);
+            }
+
+            return 0;
+        }
+
         private static void MarkPendingBuy(MyFundConfig fund, double amount, string tradeDate, string source, string? confirmDate = null)
         {
             if (amount <= 0) return;
@@ -298,10 +347,10 @@ namespace 小白养基.Controllers
         // 同一天买入/卖出是“在途交易”，不能直接参与当日收益率分母。
         // LastAddAmount > 0：当天加仓，收益基数要剥离这笔未确认资金。
         // LastAddAmount < 0：当天减仓，收益基数要把卖出份额当天仍应承担的涨跌补回。
-        private static double GetEffectiveBaseAmount(MyFundConfig fund, string settleDate)
+        private static double GetEffectiveBaseAmount(MyFundConfig fund, string settleDate, double? resolvedPendingBuyAmount = null)
         {
             double baseAmount = fund.HoldAmount;
-            double pendingBuy = GetActivePendingBuyAmount(fund, settleDate);
+            double pendingBuy = resolvedPendingBuyAmount ?? GetActivePendingBuyAmount(fund, settleDate);
             baseAmount -= pendingBuy;
             if (fund.LastTradeDate == settleDate && fund.LastAddAmount < 0)
             {
@@ -310,9 +359,9 @@ namespace 小白养基.Controllers
             return Math.Max(0, Math.Round(baseAmount, 4));
         }
 
-        private static double GetPendingTradeAmount(MyFundConfig fund, string settleDate)
+        private static double GetPendingTradeAmount(MyFundConfig fund, string settleDate, double? resolvedPendingBuyAmount = null)
         {
-            double pending = GetActivePendingBuyAmount(fund, settleDate);
+            double pending = resolvedPendingBuyAmount ?? GetActivePendingBuyAmount(fund, settleDate);
             if (fund.LastTradeDate == settleDate && fund.LastAddAmount < 0)
             {
                 pending += fund.LastAddAmount;
@@ -559,9 +608,9 @@ namespace 小白养基.Controllers
         }
 
 
-        private static double GetDailyBaseAmount(MyFundConfig fund, string settleDate)
+        private static double GetDailyBaseAmount(MyFundConfig fund, string settleDate, double? resolvedPendingBuyAmount = null)
         {
-            double pending = GetPendingTradeAmount(fund, settleDate);
+            double pending = GetPendingTradeAmount(fund, settleDate, resolvedPendingBuyAmount);
 
             // 已完成真实净值清算时，HoldAmount 已经包含当日收益。
             // 今日收益率分母必须回到清算前有效基数，否则总收益率会被“已结算后的市值”稀释。
@@ -570,7 +619,50 @@ namespace 小白养基.Controllers
                 return Math.Max(0, Math.Round(fund.HoldAmount - pending - fund.LastSettledProfit, 4));
             }
 
-            return GetEffectiveBaseAmount(fund, settleDate);
+            return GetEffectiveBaseAmount(fund, settleDate, resolvedPendingBuyAmount);
+        }
+
+        private static double? FindPreviousArchiveAssets(
+            MyFundConfig fund,
+            IReadOnlyDictionary<string, List<DailyArchive>> archiveHistory,
+            DateTime fallbackCutoff)
+        {
+            if (!archiveHistory.TryGetValue(fund.FundCode, out var rows) || rows.Count == 0) return null;
+            var cutoff = fallbackCutoff.Date;
+            if (!string.IsNullOrWhiteSpace(fund.PendingTradeDate) &&
+                DateTime.TryParse(fund.PendingTradeDate, out var pendingTradeDate))
+            {
+                cutoff = pendingTradeDate.Date;
+            }
+
+            return rows
+                .Where(a => a.RecordDate.Date < cutoff)
+                .OrderByDescending(a => a.RecordDate)
+                .ThenByDescending(a => a.Id)
+                .Select(a => (double?)a.Assets)
+                .FirstOrDefault();
+        }
+
+        private async Task<Dictionary<string, List<DailyArchive>>> LoadRecentFundArchiveHistoryAsync(
+            string username,
+            List<string> fundCodes,
+            DateTime effectiveStart,
+            DateTime effectiveEndExclusive)
+        {
+            if (fundCodes.Count == 0) return new Dictionary<string, List<DailyArchive>>();
+            var archiveHistoryStart = effectiveStart.AddDays(-90);
+            var rows = await _context.DailyArchives
+                .AsNoTracking()
+                .Where(a => a.Username == username
+                            && a.FundCode != "TOTAL"
+                            && fundCodes.Contains(a.FundCode)
+                            && a.RecordDate >= archiveHistoryStart
+                            && a.RecordDate < effectiveEndExclusive)
+                .ToListAsync();
+
+            return rows
+                .GroupBy(a => a.FundCode)
+                .ToDictionary(g => g.Key, g => g.ToList());
         }
 
         private static double GetRecordRateForToday(FundData? record)
@@ -2766,7 +2858,13 @@ namespace 小白养基.Controllers
                 .GroupBy(r => r.FundCode)
                 .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).Take(3).ToList());
 
-            var series = BuildTodayPerformanceSeries(myFunds, todayRecords, lastRecordDict, pastActualDict, today, todayDash);
+            var archiveHistoryDict = await LoadRecentFundArchiveHistoryAsync(
+                username,
+                fundCodes,
+                dateInfo.EffectiveDateStart,
+                dateInfo.EffectiveDateEndExclusive);
+
+            var series = BuildTodayPerformanceSeries(myFunds, todayRecords, lastRecordDict, pastActualDict, archiveHistoryDict, today, todayDash);
             var totalPrincipal = series.Sum(s => s.Amount);
             var timeline = series
                 .SelectMany(s => s.Points.Select(p => p.Time))
@@ -3232,10 +3330,11 @@ namespace 小白养基.Controllers
                 foreach (var config in myFunds)
                 {
                     bool settled = config.LastSettledDate == todayDash;
-                    double pendingBuyAmount = GetActivePendingBuyAmount(config, todayDash);
+                    double? previousArchiveAssets = FindPreviousArchiveAssets(config, archiveHistoryDict, dateInfo.EffectiveDateStart);
+                    double pendingBuyAmount = ResolvePendingBuyAmount(config, todayDash, previousArchiveAssets);
                     double confirmedHoldAmount = Math.Max(0, Math.Round(config.HoldAmount - pendingBuyAmount, 2));
                     double confirmedCost = Math.Max(0, Math.Round((config.CostAmount > 0 ? config.CostAmount : config.HoldAmount) - pendingBuyAmount, 2));
-                    double baseAmt = GetDailyBaseAmount(config, todayDash);
+                    double baseAmt = GetDailyBaseAmount(config, todayDash, pendingBuyAmount);
                     if (baseAmt <= 0) continue;
 
                     // 与 /api/fund/today 相同的 rate 来源
@@ -3310,13 +3409,16 @@ namespace 小白养基.Controllers
             List<FundData> todayRecords,
             Dictionary<string, FundData> lastRecordDict,
             Dictionary<string, List<FundData>> pastActualDict,
+            IReadOnlyDictionary<string, List<DailyArchive>> archiveHistory,
             DateTime today,
             string todayDash)
         {
             var result = new List<PerformanceFundIntradaySeries>();
             foreach (var config in myFunds)
             {
-                var amount = Math.Max(0d, GetDailyBaseAmount(config, todayDash));
+                double? previousArchiveAssets = FindPreviousArchiveAssets(config, archiveHistory, today);
+                double pendingBuyAmount = ResolvePendingBuyAmount(config, todayDash, previousArchiveAssets);
+                var amount = Math.Max(0d, GetDailyBaseAmount(config, todayDash, pendingBuyAmount));
                 if (amount <= 0)
                 {
                     continue;
@@ -4936,6 +5038,12 @@ namespace 小白养基.Controllers
                     .OrderByDescending(a => a.Id)
                     .FirstOrDefaultAsync();
 
+                var archiveHistoryDict = await LoadRecentFundArchiveHistoryAsync(
+                    username,
+                    myFundCodes,
+                    dateInfo.EffectiveDateStart,
+                    dateInfo.EffectiveDateEndExclusive);
+
 
                 // ⚡ 首屏性能优化：today 接口不再发起任何外部净值 HTTP 请求。
                 // 真实净值由 NavSettlementService 后台结算后写入 MyFunds.LastSettled* 字段。
@@ -4982,12 +5090,17 @@ namespace 小白养基.Controllers
                     double? actualRate = isSettled ? config.LastSettledRate : null;
                     double? actualExactProfit = isSettled ? config.LastSettledProfit : null;
 
-                    double pendingBuyAmount = GetActivePendingBuyAmount(config, todayDash);
+                    double activePendingBuyAmount = GetActivePendingBuyAmount(config, todayDash);
+                    double? previousArchiveAssets = FindPreviousArchiveAssets(config, archiveHistoryDict, dateInfo.EffectiveDateStart);
+                    double pendingBuyAmount = ResolvePendingBuyAmount(config, todayDash, previousArchiveAssets);
+                    bool legacyPendingFallback = activePendingBuyAmount <= 0 && pendingBuyAmount > 0;
+                    string? resolvedPendingStatus = legacyPendingFallback ? "pending_buy" : config.PendingTradeStatus;
+                    string? resolvedPendingSource = legacyPendingFallback ? "legacy_ocr_pending_fallback" : config.PendingSource;
                     bool pendingBuy = pendingBuyAmount > 0;
                     double rawHoldAmount = Math.Max(0, config.HoldAmount);
                     double confirmedHoldAmount = Math.Max(0, Math.Round(rawHoldAmount - pendingBuyAmount, 2));
                     double todayRateForSimulation = isSettled ? config.LastSettledRate : (dataPoints.Count > 0 ? Convert.ToDouble(dataPoints.Last()[1]) : 0);
-                    double todayBaseAmount = GetDailyBaseAmount(config, todayDash);
+                    double todayBaseAmount = GetDailyBaseAmount(config, todayDash, pendingBuyAmount);
                     double todayProfitPreview = isSettled ? config.LastSettledProfit : Math.Round(todayBaseAmount * todayRateForSimulation / 100.0, 2);
                     double currentAssetsPreview = Math.Round(todayBaseAmount + todayProfitPreview, 2);
                     double rawCostBasis = config.CostAmount > 0 ? config.CostAmount : rawHoldAmount;
@@ -5042,9 +5155,9 @@ namespace 小白养基.Controllers
                         pendingBuyAmount = pendingBuy ? pendingBuyAmount : 0,
                         pendingTradeDate = config.PendingTradeDate,
                         pendingTradeTime = config.PendingTradeTime,
-                        pendingTradeStatus = config.PendingTradeStatus,
+                        pendingTradeStatus = resolvedPendingStatus,
                         pendingConfirmDate = config.PendingConfirmDate,
-                        pendingSource = config.PendingSource,
+                        pendingSource = resolvedPendingSource,
                         pendingNote = pendingBuy ? "买入待确认，不参与今日收益" : string.Empty,
                         shares = config.HoldShares,
                         cost = isInactiveHolding ? (soldCost > 0 ? soldCost : (double?)null) : (costBasis > 0 ? costBasis : (double?)null),
@@ -5093,8 +5206,14 @@ namespace 小白养基.Controllers
                             rawHoldAmount,
                             confirmedAmount = displayAmount,
                             pendingBuyAmount = pendingBuy ? pendingBuyAmount : 0,
+                            activePendingBuyAmount,
+                            legacyPendingFallback,
+                            previousArchiveAssets,
                             pendingTradeStatus = config.PendingTradeStatus,
+                            resolvedPendingStatus,
                             pendingTradeDate = config.PendingTradeDate,
+                            pendingSource = config.PendingSource,
+                            resolvedPendingSource,
                             lastTradeDate = config.LastTradeDate,
                             lastAddAmount = config.LastAddAmount,
                             lastSettledDate = config.LastSettledDate,
