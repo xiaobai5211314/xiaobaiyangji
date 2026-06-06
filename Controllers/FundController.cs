@@ -1234,7 +1234,7 @@ namespace 小白养基.Controllers
             string settleDate = ChinaDateDash();
 
             // ── Two-Line Fund Card Parser（蚂蚁持仓截图两行式解析） ──
-            // Step 1: 动态检测表头行，获取三列 X 坐标
+            // Step 1: 动态检测表头行，获取三列中心 X 坐标
             static (int nameX, int amountX, int profitX, int headerIdx)? FindFundHeaderRow(List<OcrRow> allRows)
             {
                 for (int i = 0; i < allRows.Count; i++)
@@ -1249,110 +1249,134 @@ namespace 小白养基.Controllers
                 return null;
             }
 
-            // 在名称列（左列）是否有实质性中文文本（>= 2个汉字，过滤"定投"等短标签）
-            static bool HasNameColumnText(OcrRow row, int nameX)
-            {
-                var nameBoxes = row.Boxes.Where(b => b.CenterX < nameX).ToList();
-                if (nameBoxes.Count == 0) return false;
-                var nameText = string.Join("", nameBoxes.Select(b => b.Words));
-                int cnCount = Regex.Matches(nameText, @"[一-鿿]").Count;
-                return cnCount >= 2;
-            }
-
-            // 检查名称列文本是否为纯噪声标签（短标签 + 无实质基金名关键词）
-            static bool IsNameColumnNoise(OcrRow row, int nameX)
-            {
-                var nameBoxes = row.Boxes.Where(b => b.CenterX < nameX).ToList();
-                var nameText = string.Join("", nameBoxes.Select(b => b.Words)).Trim();
-                string[] nameNoise = { "进阶类", "主要包含", "股票", "混合", "指数", "金选",
-                    "指数基金", "市场解读", "更多产品", "基金市场", "机会", "自选", "持有",
-                    "金额排序", "全部", "偏股", "偏债", "黄金", "全球" };
-                // 如果名称列文本全部由噪声词组成（无剩余实质文字），则视为噪声
-                string cleaned = nameText;
-                foreach (var n in nameNoise) cleaned = cleaned.Replace(n, "");
-                return cleaned.Trim().Length < 2;
-            }
-
             var header = FindFundHeaderRow(rows);
             int headerIdx = -1;
             int nameX = 0, amountX = 0, profitX = 0;
             if (header.HasValue)
             {
                 (nameX, amountX, profitX, headerIdx) = header.Value;
-                diagnostics.Add($"[表头检测] 行#{headerIdx} nameX={nameX} amountX={amountX} profitX={profitX}");
             }
             else
             {
-                diagnostics.Add("[警告] 未检测到表头行（名称/金额/持有），尝试兜底列位置");
-                // 兜底：使用图片宽度的近似比例（蚂蚁默认布局）
+                diagnostics.Add("[警告] 未检测到表头行，使用兜底列位置");
                 nameX = 100; amountX = 430; profitX = 660;
-                diagnostics.Add($"[兜底列位置] nameX={nameX} amountX={amountX} profitX={profitX}");
             }
 
-            // 计算列间中点作为分类阈值（兜底方案用）
-            int midThreshold = (nameX + amountX) / 2 + (amountX - nameX) / 2; // 偏向 amountX
-            int rightThreshold = (amountX + profitX) / 2 + (profitX - amountX) / 2; // 偏向 profitX
+            // ★ 关键：表头中心点推导列边界（中点法）
+            int nameAmountBoundary = (nameX + amountX) / 2;
+            int amountProfitBoundary = (amountX + profitX) / 2;
+            diagnostics.Add($"[表头检测] nameX={nameX} amountX={amountX} profitX={profitX}");
+            diagnostics.Add($"[列边界] nameAmountBoundary={nameAmountBoundary} amountProfitBoundary={amountProfitBoundary}");
 
-            // Step 2: 扫描表头之后的行，分类为 card-line / name-continuation / noise
+            // 列分类函数：用推导边界，不用表头中心点
+            static bool IsNameCol(OcrBox b, int nameAmountBoundary) => b.CenterX < nameAmountBoundary;
+            static bool IsAmountCol(OcrBox b, int nameAmountBoundary, int amountProfitBoundary)
+                => b.CenterX >= nameAmountBoundary && b.CenterX < amountProfitBoundary;
+            static bool IsProfitCol(OcrBox b, int amountProfitBoundary) => b.CenterX >= amountProfitBoundary;
+
+            // 在名称列是否有实质性中文文本（>= 2个汉字）
+            static bool HasNameColumnText(OcrRow row, int boundary)
+            {
+                var nameBoxes = row.Boxes.Where(b => IsNameCol(b, boundary)).ToList();
+                if (nameBoxes.Count == 0) return false;
+                var nameText = string.Join("", nameBoxes.Select(b => b.Words));
+                int cnCount = Regex.Matches(nameText, @"[一-鿿]").Count;
+                return cnCount >= 2;
+            }
+
+            // 检查名称列文本是否为纯噪声标签
+            static bool IsNameColumnNoise(OcrRow row, int boundary)
+            {
+                var nameBoxes = row.Boxes.Where(b => IsNameCol(b, boundary)).ToList();
+                var nameText = string.Join("", nameBoxes.Select(b => b.Words)).Trim();
+                string[] nameNoise = { "进阶类", "主要包含", "股票", "混合", "指数", "金选",
+                    "指数基金", "市场解读", "更多产品", "基金市场", "机会", "自选", "持有",
+                    "金额排序", "全部", "偏股", "偏债", "黄金", "全球" };
+                string cleaned = nameText;
+                foreach (var n in nameNoise) cleaned = cleaned.Replace(n, "");
+                return cleaned.Trim().Length < 2;
+            }
+
+            // 判断一行是否为 continuation（续行）：收益列有百分比 + Y距离近 + 名称列非噪声
+            static bool LooksLikeContinuation(OcrRow next, OcrRow prev, int nameBoundary, int profitBoundary)
+            {
+                // 收益列有百分比 → 强 continuation 信号
+                bool hasPercent = next.Boxes.Any(b => IsProfitCol(b, profitBoundary) && IsPercentText(b.Words.Trim()));
+                // Y 距离不超过 60px → 同一只基金的两行
+                bool closeY = Math.Abs(next.Top - prev.Bottom) < 60;
+                // 名称列非噪声
+                bool notNoise = !IsNameColumnNoise(next, nameBoundary);
+                return hasPercent && closeY && notNoise;
+            }
+
+            // Step 2: 扫描表头之后的行，配对主行+续行
             var cardLines = new List<(OcrRow primaryRow, OcrRow? continuationRow)>();
 
             for (int ri = headerIdx + 1; ri < rows.Count; ri++)
             {
                 var row = rows[ri];
 
-                // 跳过纯噪声行（无中文内容）
-                if (!HasNameColumnText(row, nameX)) continue;
-                // 跳过噪声标签行（"进阶类"、"金选 指数基金"等）
-                if (IsNameColumnNoise(row, nameX)) continue;
+                // 跳过：无中文内容 / 纯噪声标签
+                if (!HasNameColumnText(row, nameAmountBoundary)) continue;
+                if (IsNameColumnNoise(row, nameAmountBoundary)) continue;
 
-                // 计算该行右列（金额/收益列）的数值数量
-                int rightNumCount = row.Boxes.Count(b => b.CenterX > nameX && IsNumericBox(b.Words));
+                // 计算该行三列的数值
+                int nameNum = row.Boxes.Count(b => IsNameCol(b, nameAmountBoundary) && IsNumericBox(b.Words));
+                int amountNum = row.Boxes.Count(b => IsAmountCol(b, nameAmountBoundary, amountProfitBoundary) && IsNumericBox(b.Words));
+                int profitNum = row.Boxes.Count(b => IsProfitCol(b, amountProfitBoundary) && IsNumericBox(b.Words));
+                int totalNumCount = nameNum + amountNum + profitNum;
 
-                if (rightNumCount >= 2)
+                // 主行判断：金额列或收益列有数值
+                if (amountNum + profitNum >= 2)
                 {
-                    // 主行：名称 + 金额/昨日收益 + 持有收益/率 → 等待配对
+                    // 尝试配对续行
                     bool paired = false;
                     for (int ni = ri + 1; ni < rows.Count; ni++)
                     {
                         var next = rows[ni];
-                        // 中断条件：遇到下一个主行、遇到实质性噪声、或遇到无名称内容的行
-                        if (HasNameColumnText(next, nameX) && IsNameColumnNoise(next, nameX))
-                            break; // 噪声行（"金选 指数基金"、"定投"、"市场解读"等）中断配对
-                        if (!HasNameColumnText(next, nameX)) break; // 无中文内容行中断
-                        int nextRightNum = next.Boxes.Count(b => b.CenterX > nameX && IsNumericBox(b.Words));
-                        if (nextRightNum >= 2) break; // 下一个是新主行，中断
+                        // 噪声行中断
+                        if (HasNameColumnText(next, nameAmountBoundary) && IsNameColumnNoise(next, nameAmountBoundary))
+                            break;
+                        // 无中文内容中断
+                        if (!HasNameColumnText(next, nameAmountBoundary)) break;
+                        // 新主行（金额列有数值）中断
+                        int nextAmountNum = next.Boxes.Count(b => IsAmountCol(b, nameAmountBoundary, amountProfitBoundary) && IsNumericBox(b.Words));
+                        if (nextAmountNum >= 1 && next.Boxes.Any(b => IsAmountCol(b, nameAmountBoundary, amountProfitBoundary) && !IsPercentText(b.Words.Trim()) && ParseSignedNumber(b.Words.Trim().Replace(",","").Replace("+","")) is > 100))
+                            break; // 金额列有大数值 → 新主行
 
-                        // name-continuation：名称列有中文 + 右列有数值 + 名称列无噪声
-                        if (nextRightNum >= 1 && !IsNameColumnNoise(next, nameX))
+                        // ★ continuation 判断：不再用 nextRightNum >= 2 就 break
+                        if (LooksLikeContinuation(next, row, nameAmountBoundary, amountProfitBoundary))
                         {
                             cardLines.Add((row, next));
                             paired = true;
-                            ri = ni; // 跳过 continuation 行
+                            ri = ni;
                             break;
                         }
                     }
                     if (!paired)
                     {
-                        // 单行卡片（无 continuation）
                         cardLines.Add((row, null));
                     }
                 }
-                // 其他行：跳过（无右列数值、或仅有1个数值且为噪声等）
             }
 
-            diagnostics.Add($"[TwoLineCard] 发现 {cardLines.Count} 个基金卡片（表头后扫描）");
+            diagnostics.Add($"[TwoLineCard] 发现 {cardLines.Count} 个基金卡片");
 
-            // 3. 解析每个基金卡片（TwoLineCard 结构）
+            // 3. 解析每个基金卡片
             for (int ci = 0; ci < cardLines.Count; ci++)
             {
                 var (primaryRow, continuationRow) = cardLines[ci];
 
-                // ── 合并基金名称（两行 name 列文本拼接） ──
+                diagnostics.Add($"[卡片#{ci} 主行] Y={primaryRow.Top}: {primaryRow.FullText}");
+                if (continuationRow != null)
+                    diagnostics.Add($"[卡片#{ci} 续行] Y={continuationRow.Top}: {continuationRow.FullText}");
+
+                // ── 合并基金名称 ──
                 var primaryNameBoxes = primaryRow.Boxes
-                    .Where(b => b.CenterX < nameX)
+                    .Where(b => IsNameCol(b, nameAmountBoundary))
                     .OrderBy(b => b.Top).ThenBy(b => b.Left).ToList();
                 string nameText1 = string.Join("", primaryNameBoxes.Select(b => b.Words)).Trim();
-                // 过滤噪声前缀（"进阶类"、"主要包含股票..."等）
+                // 过滤噪声前缀
                 foreach (var prefix in new[] { "进阶类", "主要包含股票、混合、指数", "主要包含股票混合指数" })
                     if (nameText1.StartsWith(prefix, StringComparison.Ordinal))
                         nameText1 = nameText1[prefix.Length..].TrimStart('｜', '|', '：', ':', ' ');
@@ -1361,7 +1385,7 @@ namespace 小白养基.Controllers
                 if (continuationRow != null)
                 {
                     var contNameBoxes = continuationRow.Boxes
-                        .Where(b => b.CenterX < nameX)
+                        .Where(b => IsNameCol(b, nameAmountBoundary))
                         .OrderBy(b => b.Top).ThenBy(b => b.Left).ToList();
                     string nameText2 = string.Join("", contNameBoxes.Select(b => b.Words)).Trim();
                     if (!string.IsNullOrEmpty(nameText2))
@@ -1387,21 +1411,24 @@ namespace 小白养基.Controllers
                     continue;
                 }
 
-                // ── 解析金额/收益（按动态列位置分配） ──
+                // ── 解析金额/收益（按推导列边界分配） ──
                 double holdAmount = 0, yesterdayIncome = 0, holdingIncome = 0, holdingRate = 0;
 
-                // 主行数值：中列 → amount；右列 → holdingIncome / holdingRate
-                var primaryMidNums = primaryRow.Boxes
-                    .Where(b => b.CenterX > nameX && b.CenterX <= amountX && IsNumericBox(b.Words))
+                // 主行：金额列数值 → amount；收益列数值 → holdingIncome / holdingRate
+                var primaryAmountNums = primaryRow.Boxes
+                    .Where(b => IsAmountCol(b, nameAmountBoundary, amountProfitBoundary) && IsNumericBox(b.Words))
                     .OrderBy(b => b.Left).ToList();
-                var primaryRightNums = primaryRow.Boxes
-                    .Where(b => b.CenterX > amountX && IsNumericBox(b.Words))
+                var primaryProfitNums = primaryRow.Boxes
+                    .Where(b => IsProfitCol(b, amountProfitBoundary) && IsNumericBox(b.Words))
                     .OrderBy(b => b.Left).ToList();
 
-                // 从主行中列提取 amount
-                foreach (var box in primaryMidNums)
+                diagnostics.Add($"[卡片#{ci} 字段] 名称列={string.Join(",", primaryNameBoxes.Select(b => b.Words))}  金额列={string.Join(",", primaryAmountNums.Select(b => b.Words))}  收益列={string.Join(",", primaryProfitNums.Select(b => b.Words))}");
+
+                // 金额列提取 amount
+                foreach (var box in primaryAmountNums)
                 {
                     var w = box.Words.Trim().Replace(",", "").Replace("+", "");
+                    if (IsPercentText(box.Words.Trim())) continue;
                     var numVal = ParseSignedNumber(w);
                     if (!numVal.HasValue) continue;
                     if (holdAmount == 0 && Math.Abs(numVal.Value) > 0)
@@ -1411,8 +1438,8 @@ namespace 小白养基.Controllers
                     }
                 }
 
-                // 从主行右列提取 holdingIncome 和 holdingRate
-                foreach (var box in primaryRightNums)
+                // 收益列提取 holdingIncome 和 holdingRate
+                foreach (var box in primaryProfitNums)
                 {
                     var w = box.Words.Trim().Replace(",", "").Replace("+", "");
                     if (IsPercentText(box.Words.Trim()))
@@ -1427,23 +1454,24 @@ namespace 小白养基.Controllers
                     else if (holdingRate == 0) holdingRate = numVal.Value;
                 }
 
-                // continuation 行数值：中列 → yesterdayIncome；右列百分比 → holdingRate（如有）
+                // continuation 行：金额列 → yesterdayIncome；收益列 → holdingRate（百分比优先）
                 if (continuationRow != null)
                 {
-                    var contMidNums = continuationRow.Boxes
-                        .Where(b => b.CenterX > nameX && b.CenterX <= amountX && IsNumericBox(b.Words))
+                    var contAmountNums = continuationRow.Boxes
+                        .Where(b => IsAmountCol(b, nameAmountBoundary, amountProfitBoundary) && IsNumericBox(b.Words))
                         .OrderBy(b => b.Left).ToList();
-                    var contRightNums = continuationRow.Boxes
-                        .Where(b => b.CenterX > amountX && IsNumericBox(b.Words))
+                    var contProfitNums = continuationRow.Boxes
+                        .Where(b => IsProfitCol(b, amountProfitBoundary) && IsNumericBox(b.Words))
                         .OrderBy(b => b.Left).ToList();
 
-                    foreach (var box in contMidNums)
+                    foreach (var box in contAmountNums)
                     {
                         var w = box.Words.Trim().Replace(",", "").Replace("+", "");
                         var numVal = ParseSignedNumber(w);
                         if (numVal.HasValue && yesterdayIncome == 0) yesterdayIncome = numVal.Value;
                     }
-                    foreach (var box in contRightNums)
+                    // 收益列：百分比 → holdingRate，其他 → yesterdayIncome（备用）
+                    foreach (var box in contProfitNums)
                     {
                         if (IsPercentText(box.Words.Trim()))
                         {
@@ -1459,11 +1487,11 @@ namespace 小白养基.Controllers
                 }
                 else
                 {
-                    // 单行卡片：中列第二个数值 → yesterdayIncome
-                    if (primaryMidNums.Count >= 2)
+                    // 单行卡片：金额列第二个数值 → yesterdayIncome
+                    if (primaryAmountNums.Count >= 2)
                     {
-                        var w = primaryMidNums[1].Words.Trim().Replace(",", "").Replace("+", "");
-                        if (!IsPercentText(primaryMidNums[1].Words.Trim()))
+                        var w = primaryAmountNums[1].Words.Trim().Replace(",", "").Replace("+", "");
+                        if (!IsPercentText(primaryAmountNums[1].Words.Trim()))
                         {
                             var numVal = ParseSignedNumber(w);
                             if (numVal.HasValue) yesterdayIncome = numVal.Value;
@@ -1471,16 +1499,17 @@ namespace 小白养基.Controllers
                     }
                 }
 
+                diagnostics.Add($"[卡片#{ci} 解析] amount={holdAmount} yesterdayIncome={yesterdayIncome} holdingIncome={holdingIncome} holdingRate={holdingRate}%");
+
                 if (holdAmount <= 0)
                 {
-                    var rightNumDesc = string.Join(", ", primaryRow.Boxes
-                        .Where(b => b.CenterX > nameX)
-                        .Select(b => $"{b.Words}({b.Left},{b.Top})"));
-                    rejectedCandidates.Add($"卡片#{ci} '{fundName}' 金额为0，右列boxes=[{rightNumDesc}]");
+                    var allNumDesc = string.Join(", ", primaryRow.Boxes
+                        .Where(b => IsAmountCol(b, nameAmountBoundary, amountProfitBoundary) || IsProfitCol(b, amountProfitBoundary))
+                        .Select(b => $"{b.Words}({b.Left},{b.Top})[金额列={IsAmountCol(b, nameAmountBoundary, amountProfitBoundary)}]"));
+                    rejectedCandidates.Add($"卡片#{ci} '{fundName}' 金额为0，数值boxes=[{allNumDesc}]");
+                    diagnostics.Add($"[丢弃] {rejectedCandidates.Last()}");
                     continue;
                 }
-
-                diagnostics.Add($"[卡片#{ci}] '{fundName}' code={fundCode ?? "无"} amount={holdAmount} yesterdayIncome={yesterdayIncome} holdingIncome={holdingIncome} holdingRate={holdingRate}%");
 
                 // ── pending 判定（仅检测明确"买入待确认"文字） ──
                 double pendingAmountFromOcr = 0;
