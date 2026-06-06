@@ -129,6 +129,28 @@ namespace 小白养基.Controllers
         private static string ChinaDateDash(DateTime? localTime = null)
             => (localTime ?? ChinaNow()).ToString("yyyy-MM-dd");
 
+        /// <summary>
+        /// 基金有效日期：0:00~9:25 返回上一交易日，9:25 以后返回当天，周末返回上周五。
+        /// </summary>
+        private static string GetEffectiveFundDate(DateTime? localTime = null)
+        {
+            var now = localTime ?? ChinaNow();
+            // 周末 → 上周五
+            if (now.DayOfWeek == DayOfWeek.Saturday)
+                return now.AddDays(-1).ToString("yyyy-MM-dd");
+            if (now.DayOfWeek == DayOfWeek.Sunday)
+                return now.AddDays(-2).ToString("yyyy-MM-dd");
+            // 交易日 0:00~9:25 → 上一交易日
+            if (now.TimeOfDay < new TimeSpan(9, 25, 0))
+            {
+                var prev = now.AddDays(-1);
+                if (prev.DayOfWeek == DayOfWeek.Sunday) prev = prev.AddDays(-2);
+                else if (prev.DayOfWeek == DayOfWeek.Saturday) prev = prev.AddDays(-1);
+                return prev.ToString("yyyy-MM-dd");
+            }
+            return now.ToString("yyyy-MM-dd");
+        }
+
         private static bool IsPendingStatusActive(string? status)
         {
             if (string.IsNullOrWhiteSpace(status)) return false;
@@ -393,6 +415,7 @@ namespace 小白养基.Controllers
             if (string.IsNullOrWhiteSpace(username)) return;
             _cache.Remove($"Tactical_TodayData_{username}");
             _cache.Remove($"Tactical_TodayData_{username}_{ChinaDateDash()}");
+            _cache.Remove($"Tactical_TodayData_{username}_{GetEffectiveFundDate()}");
         }
 
 
@@ -4691,7 +4714,7 @@ namespace 小白养基.Controllers
 
             try
             {
-                string cacheKey = $"Tactical_TodayData_{username}_{ChinaDateDash()}";
+                string cacheKey = $"Tactical_TodayData_{username}_{GetEffectiveFundDate()}";
                 if (force)
                 {
                     _cache.Remove(cacheKey);
@@ -4713,7 +4736,9 @@ namespace 小白养基.Controllers
                 var localTime = ChinaNow();
                 var today = localTime.Date;
                 string todayStr = localTime.ToString("yyyy'/'MM'/'dd");
-                string todayDash = localTime.ToString("yyyy-MM-dd");
+                string naturalDate = localTime.ToString("yyyy-MM-dd");
+                string todayDash = GetEffectiveFundDate(localTime);
+                string dateMode = todayDash == naturalDate ? "today" : "latest_trading_day";
 
                 // 只取最近 10 天的必要数据，避免首屏把历史全表拖回内存。
                 var recentStart = today.AddDays(-10);
@@ -4915,7 +4940,10 @@ namespace 小白养基.Controllers
                     totalTodayRate = summaryBase > 0 ? Math.Round(summaryProfit / summaryBase * 100, 2) : 0,
                     totalAssets = Math.Round(summaryAssets, 2),
                     totalProfit = Math.Round(summaryAssets - summaryCost + summaryRealized, 2),
-                    totalRate = summaryCost > 0 ? Math.Round((summaryAssets - summaryCost + summaryRealized) / summaryCost * 100, 2) : 0
+                    totalRate = summaryCost > 0 ? Math.Round((summaryAssets - summaryCost + summaryRealized) / summaryCost * 100, 2) : 0,
+                    date = naturalDate,
+                    effectiveDate = todayDash,
+                    dateMode
                 };
 
                 // 真实净值一出现，后端立即修正”今日总持仓 + 单只基金”档案。
@@ -4926,13 +4954,13 @@ namespace 小白养基.Controllers
                     await _context.SaveChangesAsync();
                 }
 
-                // ✅ 优化后（60秒缓存，减少数据库压力）
                 var cacheOptions = new MemoryCacheEntryOptions()
                     .SetAbsoluteExpiration(TimeSpan.FromSeconds(60))
-                    .SetSlidingExpiration(TimeSpan.FromSeconds(30));  // 滑动过期
-                _cache.Set(cacheKey, finalResult, cacheOptions);
+                    .SetSlidingExpiration(TimeSpan.FromSeconds(30));
+                var payload = new { funds = finalResult, summary };
+                _cache.Set(cacheKey, payload, cacheOptions);
 
-                return Ok(new { funds = finalResult, summary });
+                return Ok(payload);
             }
             catch (Exception ex)
             {
