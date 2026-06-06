@@ -1520,6 +1520,28 @@ namespace 小白养基.Controllers
             var navClient = _httpClientFactory.CreateClient("EastMoney");
             string settleDate = ChinaDateDash();
 
+            // ── 单基金详情页解析器（优先于 TwoLineCard） ──
+            bool isAssetDetailPage = fullOcrText.Contains("资产详情")
+                && Regex.IsMatch(fullOcrText, @"\b\d{6}\b")
+                && (fullOcrText.Contains("金额(元)") || fullOcrText.Contains("金额（元）"))
+                && (new[] { "昨日收益", "持有收益", "持有收益率" }.Count(k => fullOcrText.Contains(k)) >= 2);
+
+            if (isAssetDetailPage)
+            {
+                diagnostics.Add("[AssetDetail] 命中单基金详情页");
+                var detailResult = ParseAssetDetailPage(rows, boxes, robustFundPool, corrections, userFundDict, diagnostics);
+                if (detailResult != null)
+                {
+                    items.Add(detailResult);
+                    diagnostics.Add($"[AssetDetail] 成功识别 1 只基金: {detailResult.Name}({detailResult.Code}) amount={detailResult.HoldAmount} pending={detailResult.PendingBuyAmount} confirmed={detailResult.ConfirmedAmount} yesterdayIncome={detailResult.YesterdayIncome}");
+                    goto BuildResult;
+                }
+                else
+                {
+                    diagnostics.Add("[AssetDetail] 详情页解析失败，回退到 TwoLineCard 解析");
+                }
+            }
+
             // ── Two-Line Fund Card Parser（蚂蚁持仓截图两行式解析） ──
             // Step 1: 动态检测表头行，获取三列中心 X 坐标
             static (int nameX, int amountX, int profitX, int headerIdx)? FindFundHeaderRow(List<OcrRow> allRows)
@@ -2034,7 +2056,7 @@ namespace 小白养基.Controllers
                 diagnostics.Add($"[结果] 成功识别 0 只基金，未发现任何候选基金卡片。请检查截图是否为蚂蚁持仓列表页。");
             }
 
-
+            BuildResult:
             return new OcrImportPreviewResponse
             {
                 Success = true,
@@ -2044,6 +2066,242 @@ namespace 小白养基.Controllers
                 Diagnostics = diagnostics
             };
         }
+
+        /// <summary>
+        /// 单基金详情页解析器：解析蚂蚁"资产详情"页面截图
+        /// </summary>
+        private OcrImportPreviewItem? ParseAssetDetailPage(
+            List<OcrRow> rows, List<OcrBox> boxes,
+            List<FundInfoCache> robustFundPool, List<OcrCorrection> corrections,
+            Dictionary<string, MyFundConfig> userFundDict, List<string> diagnostics)
+        {
+            var fullText = string.Join(" ", rows.Select(r => r.FullText));
+
+            // 1. 提取基金代码
+            var codeMatch = Regex.Match(fullText, @"\b(\d{6})\b");
+            if (!codeMatch.Success)
+            {
+                diagnostics.Add("[AssetDetail] 失败：未找到6位基金代码");
+                return null;
+            }
+            string fundCode = codeMatch.Groups[1].Value;
+
+            // 2. 提取基金名称：在"资产详情"和基金代码之间的中文文本
+            string fundName = "";
+            // 页面噪声标签
+            string[] detailNoise = { "资产详情", "中高风险", "中风险", "低风险", "高风险",
+                "详情", "金额(元)", "金额（元）", "昨日收益", "持有收益", "持有收益率",
+                "收益明细", "交易记录", "投资计划", "投资指南", "累计盈亏", "业绩走势", "重仓股行情",
+                "买入", "卖出", "定投", "赎回", "转换", "分红方式" };
+
+            // 扫描所有 box，找名称行
+            foreach (var row in rows.OrderBy(r => r.Top))
+            {
+                foreach (var box in row.Boxes)
+                {
+                    if (Regex.IsMatch(box.Words, @"\b\d{6}\b")) continue; // 跳过代码行
+                    string cleaned = box.Words.Trim();
+                    bool isNoise = detailNoise.Any(n => cleaned.Contains(n));
+                    if (isNoise) continue;
+                    if (Regex.IsMatch(cleaned, @"[一-龥]{2,}") && cleaned.Length >= 2)
+                    {
+                        // 取最长的非噪声中文行作为基金名
+                        if (cleaned.Length > fundName.Length)
+                            fundName = cleaned;
+                    }
+                }
+            }
+
+            // 也尝试从相邻行拼接名称（如 "华富科技动能混合" + "C"）
+            if (fundName.Length < 4)
+            {
+                var nameBoxes = boxes
+                    .Where(b => !Regex.IsMatch(b.Words, @"\b\d{6}\b")
+                             && !detailNoise.Any(n => b.Words.Contains(n))
+                             && Regex.IsMatch(b.Words, @"[一-龥A-Za-z]"))
+                    .OrderBy(b => b.Top).ThenBy(b => b.Left)
+                    .ToList();
+                fundName = string.Join("", nameBoxes.Select(b => b.Words)).Trim();
+                // 去掉噪声后缀
+                foreach (var noise in detailNoise)
+                    fundName = fundName.Replace(noise, "");
+                fundName = fundName.Trim();
+            }
+
+            if (string.IsNullOrWhiteSpace(fundName) || fundName.Length < 2)
+            {
+                diagnostics.Add($"[AssetDetail] 失败：未找到基金名称 (提取到='{fundName}')");
+                return null;
+            }
+            diagnostics.Add($"[AssetDetail] name={fundName} code={fundCode}");
+
+            // 3. 提取金额：找"金额(元)"附近的数字
+            double displayedAmount = 0;
+            for (int ri = 0; ri < rows.Count; ri++)
+            {
+                var row = rows[ri];
+                if (!row.FullText.Contains("金额")) continue;
+                // 当前行或下一行的大数字
+                var numBoxes = row.Boxes
+                    .Where(b => Regex.IsMatch(b.Words.Trim(), @"^[\d,]+\.\d{2}$"))
+                    .ToList();
+                if (numBoxes.Count == 0 && ri + 1 < rows.Count)
+                {
+                    numBoxes = rows[ri + 1].Boxes
+                        .Where(b => Regex.IsMatch(b.Words.Trim(), @"^[\d,]+\.\d{2}$"))
+                        .ToList();
+                }
+                if (numBoxes.Count > 0)
+                {
+                    var raw = numBoxes[0].Words.Trim().Replace(",", "");
+                    if (double.TryParse(raw, out double val) && val > 0)
+                    {
+                        displayedAmount = val;
+                        break;
+                    }
+                }
+            }
+
+            if (displayedAmount <= 0)
+            {
+                diagnostics.Add("[AssetDetail] 失败：未找到金额(元)数值");
+                return null;
+            }
+
+            // 4. 提取收益三字段：找包含"昨日收益"+"持有收益"的行
+            double yesterdayIncome = 0, holdingIncome = 0, holdingRate = 0;
+            int labelRowIdx = -1;
+            for (int ri = 0; ri < rows.Count; ri++)
+            {
+                var rowText = rows[ri].FullText;
+                if (rowText.Contains("昨日收益") && rowText.Contains("持有收益"))
+                {
+                    labelRowIdx = ri;
+                    break;
+                }
+            }
+
+            if (labelRowIdx >= 0 && labelRowIdx + 1 < rows.Count)
+            {
+                var valueRow = rows[labelRowIdx + 1];
+                var numBoxes = valueRow.Boxes
+                    .Where(b => Regex.IsMatch(b.Words.Trim().Replace(",", "").Replace("+", "").Replace("%", ""),
+                        @"^[+-]?\d+\.?\d*$") || IsPercentText(b.Words.Trim()))
+                    .OrderBy(b => b.Left)
+                    .ToList();
+                // 按 X 坐标从左到右分配
+                var values = new List<double>();
+                foreach (var box in numBoxes)
+                {
+                    var w = box.Words.Trim().Replace(",", "").Replace("+", "");
+                    if (IsPercentText(box.Words.Trim()))
+                    {
+                        var r = ParseSignedNumber(w.Replace("%", ""));
+                        if (r.HasValue) values.Add(r.Value);
+                    }
+                    else
+                    {
+                        var n = ParseSignedNumber(w);
+                        if (n.HasValue) values.Add(n.Value);
+                    }
+                }
+                if (values.Count >= 3)
+                {
+                    yesterdayIncome = values[0];
+                    holdingIncome = values[1];
+                    holdingRate = values[2];
+                }
+                else if (values.Count == 2)
+                {
+                    yesterdayIncome = values[0];
+                    holdingIncome = values[1];
+                }
+            }
+            diagnostics.Add($"[AssetDetail] displayedAmount={displayedAmount} yesterdayIncome={yesterdayIncome} holdingIncome={holdingIncome} holdingRate={holdingRate}");
+
+            // 5. 识别 pending 买入
+            double pendingBuyAmount = 0;
+            string pendingEvidence = "";
+            for (int ri = 0; ri < rows.Count; ri++)
+            {
+                var rowText = rows[ri].FullText;
+                // 匹配 "买入/10,000.00元" 或 "买入 10000元" 或 "买入待确认 10000"
+                var buyMatch = Regex.Match(rowText, @"买入[/／\s]*([+-]?\d[\d,]*\.?\d*)\s*元");
+                if (buyMatch.Success)
+                {
+                    var raw = buyMatch.Groups[1].Value.Replace(",", "");
+                    if (double.TryParse(raw, out double buyVal) && buyVal > 0)
+                    {
+                        pendingBuyAmount = buyVal;
+                        pendingEvidence = rowText.Trim();
+                        break;
+                    }
+                }
+            }
+            // 也检查 "预计xx可以查看收益"
+            if (pendingBuyAmount > 0 || Regex.IsMatch(fullText, @"预计.{0,20}(可以)?查看收益"))
+            {
+                if (pendingBuyAmount <= 0)
+                    pendingBuyAmount = displayedAmount; // 无具体金额时用全部
+            }
+
+            double confirmedAmount = Math.Max(0, Math.Round(displayedAmount - pendingBuyAmount, 2));
+            diagnostics.Add($"[AssetDetail] pendingBuyAmount={pendingBuyAmount} confirmedAmount={confirmedAmount} pendingEvidence='{pendingEvidence}'");
+
+            // 6. 匹配基金
+            var best = (fund: (FundInfoCache?)null, score: 0d);
+            if (userFundDict.TryGetValue(fundCode, out var uf))
+            {
+                best = (new FundInfoCache { Code = uf.FundCode, Name = uf.FundName, NormalizedName = NormalizeFundName(uf.FundName) }, 100.0);
+            }
+            else
+            {
+                var codeMatch2 = robustFundPool.FirstOrDefault(f => f.Code == fundCode);
+                if (codeMatch2 != null) best = (codeMatch2, 100.0);
+            }
+            if (best.fund == null)
+                best = MatchOcrFund(fundName, "", robustFundPool, corrections, userFundDict);
+            if (best.fund == null || best.score < 50)
+            {
+                diagnostics.Add($"[AssetDetail] 失败：基金匹配失败 (name='{fundName}', code='{fundCode}', best={best.fund?.Name ?? "null"} score={best.score:F1})");
+                return null;
+            }
+
+            return new OcrImportPreviewItem
+            {
+                OcrName = fundName,
+                Code = best.fund.Code,
+                Name = best.fund.Name,
+                MatchScore = Math.Round(best.score, 2),
+                HoldAmount = Math.Round(displayedAmount, 2),
+                CostAmount = holdingIncome != 0
+                    ? Math.Round(displayedAmount - holdingIncome, 2)
+                    : Math.Round(displayedAmount, 2),
+                HoldingIncome = Math.Round(holdingIncome, 2),
+                YesterdayIncome = Math.Round(yesterdayIncome, 2),
+                HoldingRate = Math.Round(holdingRate, 2),
+                HoldShares = 0,
+                CalcMethod = "资产详情页",
+                Warning = pendingBuyAmount > 0 ? "买入待确认，不参与今日收益" : "",
+                IsPendingBuy = pendingBuyAmount > 0,
+                IsSuspiciousPendingBuy = false,
+                PendingBuyAmount = Math.Round(pendingBuyAmount, 2),
+                PendingReason = pendingBuyAmount > 0 ? "资产详情页识别到买入待确认" : "无待确认证据",
+                PendingConfirmDate = pendingBuyAmount > 0 ? EstimatePendingConfirmDate(best.fund.Name) : null,
+                PendingSource = pendingBuyAmount > 0 ? "explicit_detail_page_text" : "",
+                PendingEvidence = pendingEvidence,
+                PendingDecisionReason = pendingBuyAmount > 0
+                    ? $"资产详情页识别到 {pendingEvidence}，不参与今日收益"
+                    : "无待确认证据，按已确认持仓处理",
+                RawTodayProfit = Math.Round(yesterdayIncome, 2),
+                RawPendingAmount = Math.Round(pendingBuyAmount, 2),
+                ConfirmedAmount = confirmedAmount,
+                TodayBaseAmount = confirmedAmount,
+                ParticipatesToday = confirmedAmount > 0,
+                ProfitUpdateState = "DETAIL_PAGE"
+            };
+        }
+
         private static string FindPreviousFundName(List<string> texts, int amountIndex)
         {
             // Legacy wrapper
