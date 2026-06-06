@@ -5252,7 +5252,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const totalRate = ref(0);
                 const totalTodayProfit = ref(0);
                 const totalTodayRate = ref(0);
-                const dashboardSummaryMeta = ref({ effectiveDate: todayDashStr, naturalDate: todayDashStr, marketOpen: true, marketStatus: 'open', summarySource: '' });
+                const initialTodayDash = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+                const dashboardSummaryMeta = ref({ effectiveDate: initialTodayDash, naturalDate: initialTodayDash, marketOpen: true, marketStatus: 'open', summarySource: '' });
                 const loginForm = reactive({ username: '', password: '' });
                 const profileForm = reactive({ displayName: '', saving: false });
                 const fundForm = reactive({ code: '', amount: '' });
@@ -5328,7 +5329,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const pullRefresh = reactive({ startY: 0, startX: 0, distance: 0, active: false, show: false, loading: false });
 
                 const activePage = ref('home');
-                const todayDashStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+                const todayDashStr = initialTodayDash;
                 const analysisMonth = ref(todayDashStr.slice(0, 7));
                 const selectedAnalysisDate = ref(todayDashStr);
                 const getLocalTodayDash = () => {
