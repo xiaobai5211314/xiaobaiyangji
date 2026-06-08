@@ -4486,8 +4486,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         </div>
 
                         <div class="confidence-strip">
-                            <div style="min-width:0;"><strong :style="{color:getConfidence(fund).color}">可信度 {{ getConfidence(fund).score }}/100</strong><div style="color:var(--text-muted);margin-top:2px;">{{ getConfidence(fund).reason }}</div></div>
-                            <div class="confidence-meter"><span :style="{width:getConfidence(fund).score+'%'}"></span></div>
+                            <div style="min-width:0;"><strong :style="{color:(confidenceMap.get(fund.code)||{}).color||'#a8b3cf'}">可信度 {{ (confidenceMap.get(fund.code)||{}).score||0 }}/100</strong><div style="color:var(--text-muted);margin-top:2px;">{{ (confidenceMap.get(fund.code)||{}).reason||'' }}</div></div>
+                            <div class="confidence-meter"><span :style="{width:((confidenceMap.get(fund.code)||{}).score||0)+'%'}"></span></div>
                         </div>
 
                         <div v-if="fund.calibrationSamples > 0 || Math.abs(Number(fund.calibrationOffset || 0)) > 0" class="confidence-strip" style="border-color:rgba(139,92,246,.28);background:rgba(88,28,135,.16);">
@@ -5927,6 +5927,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 };
 
                 const confidenceRows = computed(() => fundsList.value.map(getConfidence).sort((a, b) => a.score - b.score));
+                const confidenceMap = computed(() => { const m = new Map(); for (const r of confidenceRows.value) m.set(r.code, r); return m; });
 
                 const portfolioExposure = computed(() => {
                     const activeFunds = activeHoldings.value;
