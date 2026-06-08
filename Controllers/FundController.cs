@@ -3217,6 +3217,23 @@ namespace 小白养基.Controllers
             exist.OcrHoldingRate = Math.Round(item.HoldingRate, 2);
             exist.OcrSnapshotDate = todayDash;
 
+            // 蚂蚁 OCR 真实值：直接标记为当日已清算，让 GetTodayData 返回 isSettled=true
+            if (item.HoldAmount > 0 && Math.Abs(item.YesterdayIncome) > 0.001)
+            {
+                double confirmedBase = Math.Max(0.01, item.HoldAmount - pendingAmount - item.YesterdayIncome);
+                exist.LastSettledDate = todayDash;
+                exist.LastSettledProfit = Math.Round(item.YesterdayIncome, 2);
+                exist.LastSettledRate = Math.Round(item.YesterdayIncome / confirmedBase * 100.0, 4);
+                Console.WriteLine($"[OCR蚂蚁清算] code={exist.FundCode}, LastSettledProfit={exist.LastSettledProfit:F2}, LastSettledRate={exist.LastSettledRate:F4}");
+            }
+            else if (item.HoldAmount > 0 && Math.Abs(item.HoldingRate) > 0.001 && pendingAmount <= 0)
+            {
+                // 无昨日收益但有持有收益率：用持有收益率反推（小基金金额为0场景）
+                exist.LastSettledDate = todayDash;
+                exist.LastSettledProfit = 0;
+                exist.LastSettledRate = Math.Round(item.HoldingRate, 4);
+            }
+
             Console.WriteLine(
                 $"[OCR校准后] code={exist.FundCode}, HoldAmount={exist.HoldAmount:F2}, Shares={exist.HoldShares:F4}, Cost={exist.CostAmount:F2}, Pending={exist.PendingBuyAmount:F2}, OcrYesterday={exist.OcrYesterdayIncome:F2}, Status={exist.PendingTradeStatus ?? "null"}");
         }
@@ -6256,7 +6273,7 @@ namespace 小白养基.Controllers
                     double todayBaseAmount = GetDailyBaseAmount(config, todayDash, pendingBuyAmount);
                     // 今日收益优先级：已清算真实净值 > OCR识别的昨日收益 > 估算
                     bool hasOcrYesterday = IsOcrSnapshotCurrent(config.OcrYesterdayDate, todayDash, naturalDate);
-                    bool hasOcrHolding = IsOcrSnapshotCurrent(config.OcrSnapshotDate, todayDash, naturalDate);
+                    bool hasOcrHolding = IsOcrSnapshotCurrent(config.OcrSnapshotDate, todayDash, naturalDate) && Math.Abs(config.OcrHoldingIncome) > 0.001;
                     double todayProfitPreview = isSettled ? config.LastSettledProfit
                         : hasOcrYesterday ? config.OcrYesterdayIncome
                         : Math.Round(todayBaseAmount * todayRateForSimulation / 100.0, 2);
@@ -6364,6 +6381,7 @@ namespace 小白养基.Controllers
                         calibrationOffset = Math.Round(avgDiff, 4),
                         data = dataPoints,
                         isSettled = isSettled,
+                        settlementSource = isSettled ? (hasOcrHolding ? "ant-ocr" : "nav-settlement") : null,
                         actualRate = actualRate,
                         actualExactProfit = actualExactProfit,
                         todayBaseAmount = todayBaseAmount,

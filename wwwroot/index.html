@@ -5442,6 +5442,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     }
                     const rawMarketValue = context.marketValue ?? raw.marketValue ?? raw.todayAmount;
                     const marketValue = clearedHolding ? 0 : round2(toNumber(rawMarketValue, rawHoldAmount + todayProfit));
+                    // 蚂蚁 OCR 已确认：强制使用平台值，不再用估值修正覆盖
+                    const hasAntSettledValue = raw.settlementSource === 'ant-ocr' || raw.rateSource === 'ant-ocr' || (raw.isSettled && Number.isFinite(Number(raw.lastSettledProfit)));
+                    if (hasAntSettledValue && !clearedHolding) {
+                        todayProfit = round2(raw.actualExactProfit ?? raw.lastSettledProfit ?? todayProfit);
+                        marketValue = round2(rawHoldAmount > 0 ? rawHoldAmount : marketValue);
+                        todayRate = baseAmountForToday > 0 ? round2(todayProfit / baseAmountForToday * 100) : todayRate;
+                    }
                     const activeCandidate = {
                         ...raw,
                         pendingBuyAmount,
@@ -5514,7 +5521,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         breakEvenRate,
                         clearedProfit: round2(clearedInfo.value),
                         clearedProfitSource: clearedInfo.source,
-                        calibrationOffset: round2(raw.calibrationOffset),
+                        calibrationOffset: hasAntSettledValue ? 0 : round2(raw.calibrationOffset),
                         calibrationSamples: toNumber(raw.calibrationSamples, 0),
                         calibrationNote: raw.calibrationNote || '',
                         currentRate: todayRate,
