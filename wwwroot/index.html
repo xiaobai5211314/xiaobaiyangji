@@ -5482,10 +5482,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         }) || calcBreakEvenRateFromHoldingRate(holdingRate))
                         : 0;
                     const accountAmount = round2(confirmedAmount + pendingBuyAmount);
-                    const confirmedHoldingAmount = Math.max(0, round2(accountAmount - todayPendingBuyAmount));
                     const todayProfitBaseAmount = baseAmountForToday;
-                    const estimatedAccountAmount = clearedHolding ? 0 : round2(todayProfitBaseAmount + todayProfit + todayPendingBuyAmount);
-                    const estimatedConfirmedHoldingAmount = clearedHolding ? 0 : round2(todayProfitBaseAmount + todayProfit);
+                    const derivedAmount = round2(todayProfitBaseAmount + todayProfit + todayPendingBuyAmount);
+                    const displayAccountAmount = clearedHolding ? 0 : round2(accountAmount > 0 ? accountAmount : derivedAmount);
+                    const estimatedAccountAmount = displayAccountAmount;
+                    const confirmedHoldingAmount = Math.max(0, round2(displayAccountAmount - todayPendingBuyAmount));
+                    const estimatedConfirmedHoldingAmount = confirmedHoldingAmount;
                     return {
                         ...rawSnapshot,
                         raw: rawSnapshot,
