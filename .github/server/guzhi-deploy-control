@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-SERVICE_NAME="xiaobaiyangji.service"
+SERVICE_NAME="guzhi-assistant.service"
+LEGACY_SERVICE_NAME="xiaobaiyangji.service"
 PORT="7084"
+APP_DLL_PGREP="/www/wwwroot/小白养基/[小]白养基.dll"
 
 cmd="${1:-}"
 arg="${2:-}"
@@ -15,7 +17,8 @@ case "$cmd" in
     systemctl enable "$SERVICE_NAME" >/dev/null
     ;;
   start)
-    systemctl restart "$SERVICE_NAME"
+    systemctl disable --now "$LEGACY_SERVICE_NAME" 2>/dev/null || true
+    systemctl start "$SERVICE_NAME"
     ;;
   stop)
     systemctl stop "$SERVICE_NAME" || true
@@ -39,7 +42,11 @@ case "$cmd" in
     ss -lntp | grep -q ":${PORT}"
     ;;
   release-port)
+    systemctl disable --now "$LEGACY_SERVICE_NAME" 2>/dev/null || true
+    systemctl reset-failed "$LEGACY_SERVICE_NAME" 2>/dev/null || true
     systemctl stop "$SERVICE_NAME" || true
+    systemctl kill --kill-who=all "$SERVICE_NAME" 2>/dev/null || true
+    systemctl reset-failed "$SERVICE_NAME" 2>/dev/null || true
     for i in $(seq 1 20); do
       if ! ss -lntp | grep -q ":${PORT}"; then
         exit 0
@@ -47,7 +54,10 @@ case "$cmd" in
       sleep 0.2
     done
 
-    pids="$(ss -lntp | grep ":${PORT}" | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | sort -u || true)"
+    pids="$({
+      ss -lntp | grep ":${PORT}" | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p'
+      pgrep -f "$APP_DLL_PGREP" || true
+    } | sort -u || true)"
     if [ -n "$pids" ]; then
       echo "kill 端口 ${PORT} 进程：$pids"
       kill $pids || true
@@ -55,7 +65,10 @@ case "$cmd" in
     fi
 
     if ss -lntp | grep -q ":${PORT}"; then
-      pids="$(ss -lntp | grep ":${PORT}" | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | sort -u || true)"
+      pids="$({
+        ss -lntp | grep ":${PORT}" | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p'
+        pgrep -f "$APP_DLL_PGREP" || true
+      } | sort -u || true)"
       if [ -n "$pids" ]; then
         echo "kill -9 端口 ${PORT} 进程：$pids"
         kill -9 $pids || true

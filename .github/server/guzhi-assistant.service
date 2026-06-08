@@ -1,0 +1,20 @@
+[Unit]
+Description=小白养基 ASP.NET Core Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/www/wwwroot/小白养基
+ExecStartPre=/bin/bash -lc 'pids="$({ ss -lntp | grep ":7084" | sed -n "s/.*pid=\([0-9][0-9]*\).*/\1/p"; pgrep -f "/www/wwwroot/小白养基/[小]白养基.dll" || true; } | sort -u || true)"; if [ -n "$pids" ]; then kill $pids || true; sleep 1; fi; pids="$({ ss -lntp | grep ":7084" | sed -n "s/.*pid=\([0-9][0-9]*\).*/\1/p"; pgrep -f "/www/wwwroot/小白养基/[小]白养基.dll" || true; } | sort -u || true)"; if [ -n "$pids" ]; then kill -9 $pids || true; fi'
+ExecStart=/usr/bin/dotnet /www/wwwroot/小白养基/小白养基.dll --urls http://127.0.0.1:7084
+Restart=always
+RestartSec=12
+TimeoutStopSec=20
+KillMode=control-group
+KillSignal=SIGINT
+SyslogIdentifier=xiaobaiyangji
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+
+[Install]
+WantedBy=multi-user.target

@@ -2,6 +2,9 @@
 # Set default behavior to automatically normalize line endings.
 ###############################################################################
 * text=auto
+.github/server/guzhi-deploy-control text eol=lf
+.github/server/*.sh text eol=lf
+.github/server/*.service text eol=lf
 
 ###############################################################################
 # Set default behavior for command prompt diff.
