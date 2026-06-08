@@ -4207,27 +4207,27 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     <div class="divider"></div>
                     <div style="text-align: center;">
                         <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">💎 昨日总市值 <span @click="showPrivacyModal = true" style="cursor:pointer">{{ privacyMode === 0 ? '👁️' : '🙈' }}</span></div>
-                        <div class="number-display" style="color: var(--text-main); font-weight: 900;">{{ privacyMode === 0 ? '¥ ' + totalPrincipal.toFixed(2) : '****' }}</div>
+                        <div class="number-display" style="color: var(--text-main); font-weight: 900;">{{ privacyMode === 0 ? '¥ ' + Number(dashboardActiveSummary.totalPrincipal || 0).toFixed(2) : '****' }}</div>
                     </div>
                     <div class="divider"></div>
                     <div style="text-align: center;">
                         <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">🌟 今日总收益</div>
-                        <div class="number-display" :style="{ color: privacyMode <= 1 ? (totalTodayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 1 ? (totalTodayProfit >= 0 ? '+' : '') + totalTodayProfit.toFixed(2) : '****' }}</div>
+                        <div class="number-display" :style="{ color: privacyMode <= 1 ? (dashboardActiveSummary.totalTodayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 1 ? (dashboardActiveSummary.totalTodayProfit >= 0 ? '+' : '') + Number(dashboardActiveSummary.totalTodayProfit || 0).toFixed(2) : '****' }}</div>
                     </div>
                     <div class="divider"></div>
                     <div style="text-align: center;">
                         <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">🚀 今日收益率</div>
-                        <div class="number-display" :style="{ color: privacyMode <= 2 ? (totalTodayRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 2 ? (totalTodayRate > 0 ? '+' : '') + totalTodayRate.toFixed(2) + '%' : '****' }}</div>
+                        <div class="number-display" :style="{ color: privacyMode <= 2 ? (dashboardActiveSummary.totalTodayRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 2 ? (dashboardActiveSummary.totalTodayRate > 0 ? '+' : '') + Number(dashboardActiveSummary.totalTodayRate || 0).toFixed(2) + '%' : '****' }}</div>
                     </div>
                     <div class="divider"></div>
                     <div style="text-align: center;">
                         <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">💰 累计总盈亏</div>
-                        <div class="number-display" :style="{ color: privacyMode <= 1 ? (totalProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 1 ? (totalProfit >= 0 ? '+' : '') + totalProfit.toFixed(2) : '****' }}</div>
+                        <div class="number-display" :style="{ color: privacyMode <= 1 ? (dashboardActiveSummary.totalProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 1 ? (dashboardActiveSummary.totalProfit >= 0 ? '+' : '') + Number(dashboardActiveSummary.totalProfit || 0).toFixed(2) : '****' }}</div>
                     </div>
                     <div class="divider"></div>
                     <div style="text-align: center;">
                         <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">📈 累计收益率</div>
-                        <div class="number-display" :style="{ color: privacyMode <= 2 ? (totalRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 2 ? (totalRate > 0 ? '+' : '') + totalRate.toFixed(2) + '%' : '****' }}</div>
+                        <div class="number-display" :style="{ color: privacyMode <= 2 ? (dashboardActiveSummary.totalRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 2 ? (dashboardActiveSummary.totalRate > 0 ? '+' : '') + Number(dashboardActiveSummary.totalRate || 0).toFixed(2) + '%' : '****' }}</div>
                     </div>
                     <div class="total-archive-entry"></div>
                 </div>
@@ -5296,6 +5296,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 };
                 const normalizeFundForDashboard = (rawFund, context = {}) => {
                     const raw = rawFund || {};
+                    const data = Array.isArray(raw.data) ? raw.data : [];
+                    const { raw: _ignoredRaw, ...rawSnapshot } = raw;
+                    rawSnapshot.data = data;
                     const pendingBuyAmount = Math.max(0, round2(context.pendingBuyAmount ?? raw.pendingBuyAmount));
                     const shares = toNumber(raw.shares, 0);
                     const costAmount = round2(raw.costAmount ?? raw.cost ?? raw.rawCostAmount ?? raw.confirmedCost);
@@ -5335,8 +5338,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         ? round2(Math.abs(holdingProfit) / marketValue * 100)
                         : 0;
                     return {
-                        ...raw,
-                        raw,
+                        ...rawSnapshot,
+                        raw: rawSnapshot,
+                        data,
                         code: raw.code || raw.fundCode || '',
                         name: raw.name || raw.fundName || '',
                         isActiveHolding: activeHolding,
@@ -5389,6 +5393,36 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 };
                 const activeHoldings = computed(() => fundsList.value.filter(isActiveHoldingFund));
                 const inactiveHoldings = computed(() => fundsList.value.filter(isClearedFund));
+                const createEmptyDashboardSummary = () => ({
+                    activeFunds: [],
+                    inactiveFunds: [],
+                    totalPrincipal: 0,
+                    currentTotalAssets: 0,
+                    totalTodayProfit: 0,
+                    totalTodayRate: 0,
+                    totalProfit: 0,
+                    totalRate: 0
+                });
+                const dashboardActiveSummary = ref(createEmptyDashboardSummary());
+                const applyDashboardActiveSummary = (activeFunds = [], inactiveFunds = [], summary = null) => {
+                    const nextSummary = summary || calcActivePortfolioSummary(activeFunds);
+                    dashboardActiveSummary.value = {
+                        activeFunds: [...activeFunds],
+                        inactiveFunds: [...inactiveFunds],
+                        totalPrincipal: round2(nextSummary.totalPrincipal),
+                        currentTotalAssets: round2(nextSummary.currentTotalAssets),
+                        totalTodayProfit: round2(nextSummary.totalTodayProfit),
+                        totalTodayRate: round2(nextSummary.totalTodayRate),
+                        totalProfit: round2(nextSummary.totalProfit),
+                        totalRate: round2(nextSummary.totalRate)
+                    };
+                    totalPrincipal.value = dashboardActiveSummary.value.totalPrincipal;
+                    totalTodayProfit.value = dashboardActiveSummary.value.totalTodayProfit;
+                    totalTodayRate.value = dashboardActiveSummary.value.totalTodayRate;
+                    totalProfit.value = dashboardActiveSummary.value.totalProfit;
+                    totalRate.value = dashboardActiveSummary.value.totalRate;
+                    return dashboardActiveSummary.value;
+                };
                 const pickFiniteNumber = (...values) => {
                     for (const v of values) {
                         const n = Number(v);
@@ -5396,23 +5430,52 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     }
                     return null;
                 };
-                const patchPerformanceCurveLivePoint = () => {
-                    if (performancePeriod.value !== 'today' || !performanceCurve.value) return;
-                    const liveRate = Number(totalTodayRate.value || 0);
-                    const liveProfit = Number(totalTodayProfit.value || 0);
-                    const points = Array.isArray(performanceCurve.value.points) ? performanceCurve.value.points : [];
+                const ensureTodayPerformanceCurveFromSummary = (source = performanceCurve.value) => {
+                    if (performancePeriod.value !== 'today') return performanceCurve.value;
+                    const summary = dashboardActiveSummary.value || createEmptyDashboardSummary();
+                    const liveRate = Number(summary.totalTodayRate || 0);
+                    const liveProfit = Number(summary.totalTodayProfit || 0);
+                    const base = source || {};
+                    const points = Array.isArray(base.points) ? base.points.map(p => ({ ...p })) : [];
                     const now = new Date();
                     const timeStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:00`;
+                    const patchPoint = (point = {}) => ({
+                        ...point,
+                        time: point.time || timeStr,
+                        date: point.date || timeStr.slice(0, 10).replaceAll('/', '-'),
+                        myRate: liveRate,
+                        rate: liveRate,
+                        myTotalRate: liveRate,
+                        myProfit: liveProfit,
+                        profit: liveProfit,
+                        myTotalProfit: liveProfit,
+                        indexRate: point.indexRate ?? null
+                    });
                     if (points.length > 0) {
-                        const last = points[points.length - 1];
-                        last.myRate = liveRate;
-                        last.rate = liveRate;
-                        last.myProfit = liveProfit;
-                        last.profit = liveProfit;
+                        points[points.length - 1] = patchPoint(points[points.length - 1]);
                     } else {
-                        points.push({ time: timeStr, myRate: liveRate, rate: liveRate, myProfit: liveProfit, profit: liveProfit, indexRate: null });
+                        points.push(patchPoint());
                     }
-                    performanceCurve.value = { ...performanceCurve.value, myTotalRate: liveRate, myTotalProfit: liveProfit, points };
+                    const lastPoint = points[points.length - 1] || {};
+                    const indexTotalRate = pickFiniteNumber(lastPoint.indexRate, base.indexTotalRate);
+                    const hasIndex = base.indexAvailable === true && indexTotalRate !== null;
+                    performanceCurve.value = {
+                        ...base,
+                        period: 'today',
+                        index: performanceIndex.value,
+                        indexName: base.indexName || selectedPerformanceIndexName.value,
+                        hasMyData: true,
+                        myTotalRate: liveRate,
+                        myTotalProfit: liveProfit,
+                        indexAvailable: hasIndex,
+                        indexTotalRate: hasIndex ? indexTotalRate : null,
+                        excessRate: hasIndex ? round2(liveRate - indexTotalRate) : null,
+                        points
+                    };
+                    return performanceCurve.value;
+                };
+                const patchPerformanceCurveLivePoint = () => {
+                    ensureTodayPerformanceCurveFromSummary(performanceCurve.value);
                 };
                 const chartRef = ref(null);
                 const performanceChartRef = ref(null);
@@ -5512,6 +5575,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     const today = getLocalTodayDash();
                     analysisMonth.value = today.slice(0, 7);
                     selectedAnalysisDate.value = today;
+                    await fetchData({ force: true, silent: true });
+                    await saveDailyArchive(true);
                     await fetchAnalysis(true);
                 };
                 const analysisViewMode = ref('profit');
@@ -5743,7 +5808,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     return n === null ? '--' : `${n.toFixed(2)}%`;
                 };
                 const recoveryWatchList = computed(() => activeHoldings.value
-                    .filter(f => { const n = toFiniteNumberOrNull(f.breakEvenRate); return n !== null && n > 0; })
+                    .filter(f => {
+                        const holdingProfit = toFiniteNumberOrNull(f.holdingProfit);
+                        const marketValue = toFiniteNumberOrNull(f.marketValue);
+                        const breakEven = toFiniteNumberOrNull(f.breakEvenRate);
+                        return holdingProfit !== null && holdingProfit < 0 && marketValue !== null && marketValue > 0 && breakEven !== null && breakEven > 0;
+                    })
                     .sort((a, b) => (toFiniteNumberOrNull(b.breakEvenRate) || 0) - (toFiniteNumberOrNull(a.breakEvenRate) || 0)));
                 const recoveryModal = reactive({ show: false, code: '', name: '', assets: 0, cost: 0, loss: 0, breakEvenRate: 0, addAmount: '' });
                 const openRecoveryModal = (fund) => {
@@ -6316,14 +6386,24 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         return { code: f.code, name: f.name, ...profile };
                     }).filter(x => x.samples > 0 || Math.abs(x.offset) > 0.001).sort((a, b) => Math.abs(b.offset) - Math.abs(a.offset));
                 });
+                const getDashboardArchiveSnapshot = () => {
+                    const current = dashboardActiveSummary.value || createEmptyDashboardSummary();
+                    const activeFunds = Array.isArray(current.activeFunds) && current.activeFunds.length > 0
+                        ? current.activeFunds
+                        : activeHoldings.value;
+                    const inactiveFunds = Array.isArray(current.inactiveFunds) ? current.inactiveFunds : inactiveHoldings.value;
+                    const summary = calcActivePortfolioSummary(activeFunds);
+                    return { activeFunds, inactiveFunds, summary };
+                };
 
                 const saveDailyArchive = async (silent = false) => {
                     if (!silent && !confirm("💾 确定要将大屏当前的数据作为【今日最终收益】永久封存吗？")) return;
                     let d = new Date();
                     let localDateStr = dashboardSummaryMeta.value?.effectiveDate || (d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
                     const safeNumber = (val) => Number((parseFloat(val) || 0).toFixed(2));
-                    const archiveFunds = activeHoldings.value;
-                    const archiveSummary = calcActivePortfolioSummary(archiveFunds);
+                    const archiveSnapshot = getDashboardArchiveSnapshot();
+                    const archiveFunds = archiveSnapshot.activeFunds;
+                    const archiveSummary = archiveSnapshot.summary;
                     const payload = {
                         Username: currentUser.value, DateStr: localDateStr,
                         Total: {
@@ -6948,6 +7028,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                 const renderPerformanceChart = async () => {
                     if (!performanceChartRef.value || activePage.value !== 'home') return;
+                    if (performancePeriod.value === 'today') {
+                        ensureTodayPerformanceCurveFromSummary(performanceCurve.value);
+                    }
                     const points = Array.isArray(performanceCurve.value?.points) ? performanceCurve.value.points : [];
                     if (points.length === 0) {
                         if (performanceChartInstance.value) performanceChartInstance.value.clear();
@@ -7053,21 +7136,29 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         performanceCurve.value = data || null;
                         performanceMessage.value = normalizePerformanceMessage(data);
                         if (data?.indexSource) console.log(`[performance-curve] period=${data.period || '?'} indexSource=${data.indexSource} indexParsedRowsCount=${data.indexParsedRowsCount || data.indexParsedCount || 0}`);
-                        // 今日页签：用 fetchData 实时值覆盖接口返回的 0 值（含 points 最后一个点）
-                        if (performancePeriod.value === 'today' && performanceCurve.value) {
-                            const liveRate = Number(totalTodayRate.value || 0);
-                            if (Math.abs(liveRate) > 0.001 || Math.abs(Number(performanceCurve.value.myTotalRate || 0)) < 0.001) {
-                                patchPerformanceCurveLivePoint();
-                            }
+                        // 今日页签：无论接口 points 是否为空，都用 dashboardActiveSummary 生成/修补最后实时点。
+                        if (performancePeriod.value === 'today') {
+                            ensureTodayPerformanceCurveFromSummary(performanceCurve.value);
                         }
                         await nextTick();
                         await renderPerformanceChart();
                     } catch (e) {
-                        performanceCurve.value = null;
-                        performanceMessage.value = performancePeriod.value === 'today'
-                            ? '暂无今日盘中收益数据'
-                            : '暂无历史收益曲线数据，请先保存每日档案';
-                        if (performanceChartInstance.value) performanceChartInstance.value.clear();
+                        if (performancePeriod.value === 'today') {
+                            performanceMessage.value = '';
+                            ensureTodayPerformanceCurveFromSummary({
+                                period: 'today',
+                                index: performanceIndex.value,
+                                indexName: selectedPerformanceIndexName.value,
+                                indexAvailable: false,
+                                points: []
+                            });
+                            await nextTick();
+                            await renderPerformanceChart();
+                        } else {
+                            performanceCurve.value = null;
+                            performanceMessage.value = '暂无历史收益曲线数据，请先保存每日档案';
+                            if (performanceChartInstance.value) performanceChartInstance.value.clear();
+                        }
                     } finally {
                         performanceLoading.value = false;
                     }
@@ -7271,7 +7362,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     if (!force && fundsList.value.length === 0) {
                         const cached = readJsonCache(dashCacheKey, 3600000);
                         if (Array.isArray(cached) && cached.length > 0) {
-                            fundsList.value = cached;
+                            fundsList.value = cached.map(f => normalizeFundForDashboard(f));
+                            applyDashboardActiveSummary(
+                                fundsList.value.filter(isActiveHoldingFund),
+                                fundsList.value.filter(isClearedFund)
+                            );
                             isLoading.value = false;
                         }
                     }
@@ -7501,31 +7596,27 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const inactiveForSummary = fundsList.value.filter(isClearedFund);
                         const activeSummary = calcActivePortfolioSummary(activeForSummary);
                         if (activeForSummary.length > 0) {
-                            totalPrincipal.value = activeSummary.totalPrincipal;
-                            totalTodayProfit.value = activeSummary.totalTodayProfit;
-                            totalTodayRate.value = activeSummary.totalTodayRate;
-                            totalProfit.value = activeSummary.totalProfit;
-                            totalRate.value = activeSummary.totalRate;
+                            applyDashboardActiveSummary(activeForSummary, inactiveForSummary, activeSummary);
                         } else if (apiSummary) {
-                            totalPrincipal.value = finiteNumber(apiSummary.totalPrincipal ?? apiSummary.totalDisplayAmount, 0);
-                            totalTodayProfit.value = finiteNumber(apiSummary.totalTodayProfit, 0);
-                            totalTodayRate.value = finiteNumber(apiSummary.totalTodayRate, 0);
-                            totalProfit.value = finiteNumber(apiSummary.totalProfit, 0);
-                            totalRate.value = finiteNumber(apiSummary.totalRate, 0);
+                            applyDashboardActiveSummary(activeForSummary, inactiveForSummary, {
+                                totalPrincipal: finiteNumber(apiSummary.totalPrincipal ?? apiSummary.totalDisplayAmount, 0),
+                                currentTotalAssets: finiteNumber(apiSummary.currentTotalAssets ?? apiSummary.totalDisplayAmount, 0),
+                                totalTodayProfit: finiteNumber(apiSummary.totalTodayProfit, 0),
+                                totalTodayRate: finiteNumber(apiSummary.totalTodayRate, 0),
+                                totalProfit: finiteNumber(apiSummary.totalProfit, 0),
+                                totalRate: finiteNumber(apiSummary.totalRate, 0)
+                            });
                         } else {
-                            totalPrincipal.value = 0;
-                            totalTodayProfit.value = 0;
-                            totalTodayRate.value = 0;
-                            totalProfit.value = 0;
-                            totalRate.value = 0;
+                            applyDashboardActiveSummary([], inactiveForSummary, createEmptyDashboardSummary());
                         }
+                        ensureTodayPerformanceCurveFromSummary(performanceCurve.value);
                         console.log('[dashboard-normalized]', {
                             activeCount: activeForSummary.length,
                             inactiveCount: inactiveForSummary.length,
-                            totalTodayProfit: Number(totalTodayProfit.value || 0),
-                            totalTodayRate: Number(totalTodayRate.value || 0),
-                            totalProfit: Number(totalProfit.value || 0),
-                            totalRate: Number(totalRate.value || 0),
+                            totalTodayProfit: Number(dashboardActiveSummary.value.totalTodayProfit || 0),
+                            totalTodayRate: Number(dashboardActiveSummary.value.totalTodayRate || 0),
+                            totalProfit: Number(dashboardActiveSummary.value.totalProfit || 0),
+                            totalRate: Number(dashboardActiveSummary.value.totalRate || 0),
                             sample: fundsList.value.slice(0, 3)
                         });
 
@@ -7604,7 +7695,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     if (currentHash === lastChartDataHash) return;
                     lastChartDataHash = currentHash;
                     if (!chartInstance.value) { chartInstance.value = echarts.init(chartRef.value, 'dark'); window.addEventListener('resize', handleResize); }
-                    var holdAmounts = {}; var validData = apiData.filter(f => f.data && f.data.length > 1 && !f.isHoliday);
+                    var holdAmounts = {}; var validData = apiData.filter(f => isActiveHoldingFund(f) && f.data && f.data.length > 1);
                     var seriesData = validData.map(fund => {
                         holdAmounts[fund.name] = Number(fund.baseAmountForToday ?? fund.amount ?? 0); let diff = 0;
                         if (fund.isSettled && fund.data.length >= 2) { let realRate = fund.actualRate; let estRate = fund.data[fund.data.length - 2][1]; diff = (realRate - estRate).toFixed(2); }
@@ -7704,7 +7795,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 return {
                     appTheme, setAppTheme,
                     toasts, isLoggedIn, currentUser, userDisplayName, fundsList, activeHoldings, inactiveHoldings, getClearedProfit, chartRef, performanceChartRef, loginForm, profileForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, refreshSectorPage, activePage, switchPage, showProfileModal, userAvatar, smartOcrBusy, smartOcrText,
-                    totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
+                    totalPrincipal, totalProfit, totalRate, totalTodayProfit, dashboardActiveSummary, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
                     performanceCurve, performancePeriod, performanceIndex, performanceLoading, performancePeriods, performanceIndices, selectedPerformanceIndexName, performanceIsToday, showPerformanceAmount, canShowPerformanceAmount, togglePerformanceAmount, performanceMessage, performanceVerdict, performanceExcessClass, fetchPerformanceCurve, renderPerformanceChart, switchPerformancePeriod, formatPerformancePercent, formatPerformanceMoney,
                     handleLogin, handleRegister, handleLogout, saveUserProfile, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, setOcrPendingMode, confirmOcrImport, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
