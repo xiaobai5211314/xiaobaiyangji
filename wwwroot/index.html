@@ -7343,10 +7343,15 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 ? (Math.abs(allProfit) / currentRealTimeAmount) * 100
                                 : 0;
                             fund.breakEvenRate = Number.isFinite(safeBreakEvenRate) ? safeBreakEvenRate.toFixed(2) : "--";
+                            // 累计收益率：active holding 用实时 allProfit / cost，接口值只做兜底
                             const apiExistingReturnRate = Number(fund.existingReturnRate ?? fund.holdingRate);
-                            fund.existingReturnRate = Number.isFinite(apiExistingReturnRate)
-                                ? apiExistingReturnRate.toFixed(2)
-                                : ((fund.cost && fund.cost > 0) ? ((allProfit / fund.cost) * 100).toFixed(2) : "0.00");
+                            if (!fund.inactiveHolding && fund.cost > 0 && Number.isFinite(allProfit)) {
+                                fund.existingReturnRate = (allProfit / fund.cost * 100).toFixed(2);
+                            } else if (Number.isFinite(apiExistingReturnRate)) {
+                                fund.existingReturnRate = apiExistingReturnRate.toFixed(2);
+                            } else {
+                                fund.existingReturnRate = "0.00";
+                            }
 
                             const rateBaseForToday = todayBaseAmount;
                             if (!fund.inactiveHolding) {
