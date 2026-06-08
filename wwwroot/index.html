@@ -4428,8 +4428,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 <span style="font-size: 12px; color: var(--text-muted); font-family: monospace;">{{ fund.code }}</span>
                             </div>
                             <div style="display: flex; gap: 16px; margin-top: 6px; font-size: 12px;">
-                                <span>已实现盈亏: <strong :style="{color: (fund.realizedProfit || 0) >= 0 ? '#ff4d4f' : '#10b981'}">{{ (fund.realizedProfit || 0).toFixed(2) }}</strong></span>
-                                <span v-if="fund.platformCumulativeProfit > 0">平台累计: <strong>{{ fund.platformCumulativeProfit.toFixed(2) }}</strong></span>
+                                <span>已清仓收益: <strong :style="{color: getClearedProfit(fund) >= 0 ? '#ff4d4f' : '#10b981'}">{{ getClearedProfit(fund).toFixed(2) }}</strong></span>
+                                <span style="color: var(--text-muted);">来源: {{ fund.platformCumulativeProfit > 0 ? '平台累计' : '系统已实现' }}</span>
                             </div>
                         </div>
                     </details>
@@ -5273,6 +5273,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     if (!f.inactiveHolding) return false;
                     return true;
                 }));
+                const getClearedProfit = (fund) => {
+                    const platform = Number(fund.platformCumulativeProfit);
+                    if (Number.isFinite(platform) && platform !== 0) return platform;
+                    return Number(fund.realizedProfit) || 0;
+                };
                 const chartRef = ref(null);
                 const performanceChartRef = ref(null);
                 const isLoading = ref(true);
@@ -7329,7 +7334,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                         fundsList.value = apiData;
                         writeJsonCache(dashCacheKey, apiData);
-                        const tRealized = fundsList.value.reduce((sum, f) => sum + (f.realizedProfit || 0), 0);
+                        const tRealized = fundsList.value.reduce((sum, f) => {
+                            return sum + (f.inactiveHolding ? getClearedProfit(f) : (f.displayedProfit || f.realizedProfit || 0));
+                        }, 0);
                         totalPrincipal.value = tPrincipal;
                         if (apiSummary) {
                             if (Number.isFinite(Number(apiSummary.totalDisplayAmount))) {
@@ -7517,7 +7524,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                 return {
                     appTheme, setAppTheme,
-                    toasts, isLoggedIn, currentUser, userDisplayName, fundsList, activeHoldings, inactiveHoldings, chartRef, performanceChartRef, loginForm, profileForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, refreshSectorPage, activePage, switchPage, showProfileModal, userAvatar, smartOcrBusy, smartOcrText,
+                    toasts, isLoggedIn, currentUser, userDisplayName, fundsList, activeHoldings, inactiveHoldings, getClearedProfit, chartRef, performanceChartRef, loginForm, profileForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, refreshSectorPage, activePage, switchPage, showProfileModal, userAvatar, smartOcrBusy, smartOcrText,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
                     performanceCurve, performancePeriod, performanceIndex, performanceLoading, performancePeriods, performanceIndices, selectedPerformanceIndexName, performanceIsToday, showPerformanceAmount, canShowPerformanceAmount, togglePerformanceAmount, performanceMessage, performanceVerdict, performanceExcessClass, fetchPerformanceCurve, renderPerformanceChart, switchPerformancePeriod, formatPerformancePercent, formatPerformanceMoney,
                     handleLogin, handleRegister, handleLogout, saveUserProfile, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, setOcrPendingMode, confirmOcrImport, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
