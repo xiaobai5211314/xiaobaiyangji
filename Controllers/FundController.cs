@@ -6234,6 +6234,8 @@ namespace 小白养基.Controllers
                     double confirmedHoldAmount = Math.Max(0, Math.Round(rawHoldAmount - pendingBuyAmount, 2));
                     double todayRateForSimulation = isSettled ? config.LastSettledRate : (dataPoints.Count > 0 ? Convert.ToDouble(dataPoints.Last()[1]) : 0);
                     double todayBaseAmount = GetDailyBaseAmount(config, todayDash, pendingBuyAmount);
+                    // 最终校准率：已确认用 LastSettledRate，未确认用 data 最后点（已含 avgDiff 校准）
+                    double currentRate = isSettled ? config.LastSettledRate : todayRateForSimulation;
                     // 今日收益优先级：已清算真实净值 > OCR识别的昨日收益 > 估算
                     bool hasOcrYesterday = IsOcrSnapshotCurrent(config.OcrYesterdayDate, todayDash, naturalDate);
                     bool hasOcrHolding = IsOcrSnapshotCurrent(config.OcrSnapshotDate, todayDash, naturalDate);
@@ -6347,6 +6349,7 @@ namespace 小白养基.Controllers
                         actualExactProfit = actualExactProfit,
                         todayBaseAmount = todayBaseAmount,
                         todayRateForSimulation = todayRateForSimulation,
+                        currentRate = currentRate,
                         todayProfitPreview = todayProfitPreview,
                         todayProfit = todayProfit,
                         todayRate = todayRateForDisplay,
