@@ -4368,6 +4368,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                                 <span v-if="fund.isHoliday" style="color:var(--text-muted); font-weight: bold; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-size: 11px;">☕ 休市</span>
                                 <span v-else :style="{color: fund.currentRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold'}">{{ fund.currentRate > 0 ? '+' : ''}}{{ fund.currentRate }}%</span>
+                                <span v-if="fund.isStaleQuote && !fund.isSettled" style="font-size: 10px; color: #f59e0b; border: 1px solid rgba(245,158,11,.45); padding: 1px 4px; border-radius: 4px;">旧估值</span>
 
                                 <span v-if="fund.calibrationOffset && Math.abs(fund.calibrationOffset) > 0 && !fund.isHoliday" style="font-size: 10px; color: #8b5cf6; border: 1px solid #8b5cf6; padding: 1px 4px; border-radius: 4px;">
                                     🤖修正: {{ fund.calibrationOffset > 0 ? '+' : '' }}{{ fund.calibrationOffset }}%
@@ -7119,15 +7120,20 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             summarySource: apiSummary?.summarySource || ''
                         };
                         let currentMinutes = d.getHours() * 60 + d.getMinutes(); let isWeekend = (d.getDay() === 0 || d.getDay() === 6);
-                        const getLatestRatePoint = (data = []) => {
+                        const getLatestRateFromFundData = (data = [], todaySlashValue = todaySlash, todayDashValue = todayDash) => {
+                            let fallbackPoint = null;
                             for (let i = data.length - 1; i >= 0; i--) {
                                 const point = data[i];
                                 if (!Array.isArray(point) || point.length < 2) continue;
                                 const rate = nullableNumber(point[1]);
                                 if (rate === null) continue;
-                                return { time: String(point[0] || ''), rate };
+                                const time = String(point[0] || '');
+                                const isToday = time.includes(todaySlashValue) || time.includes(todayDashValue);
+                                const ratePoint = { time, rate, isToday };
+                                if (isToday) return ratePoint;
+                                if (!fallbackPoint) fallbackPoint = ratePoint;
                             }
-                            return null;
+                            return fallbackPoint;
                         };
                         const pickFirstNumber = (...values) => {
                             for (const value of values) {
@@ -7137,27 +7143,28 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             return 0;
                         };
                         const resolveFundCurrentRate = (fund, backendMarketClosed) => {
-                            const latestPoint = getLatestRatePoint(fund.data);
-                            const latestTime = latestPoint?.time || '';
-                            const hasTodayDate = latestTime.includes(todaySlash) || latestTime.includes(todayDash);
-                            const isPast935 = (d.getHours() > 9) || (d.getHours() === 9 && d.getMinutes() >= 35);
-                            const canUseIntraday = !backendMarketClosed && !isWeekend && currentMinutes >= 565 && hasTodayDate && !(isPast935 && fund.data.length <= 2);
-                            if (canUseIntraday && latestPoint) {
-                                return { rate: latestPoint.rate, isHoliday: false, rateSource: 'intraday' };
+                            const latestPoint = getLatestRateFromFundData(fund.data, todaySlash, todayDash);
+                            const hasTodayDate = !!latestPoint?.isToday;
+                            const canUseIntraday = !backendMarketClosed && !isWeekend && currentMinutes >= 565 && hasTodayDate;
+                            if (latestPoint) {
+                                return {
+                                    rate: latestPoint.rate,
+                                    isHoliday: false,
+                                    isStaleQuote: !canUseIntraday,
+                                    rateSource: canUseIntraday ? 'intraday' : (hasTodayDate ? 'thin-intraday' : 'last-trading-estimate')
+                                };
                             }
 
                             const hasBackendEstimate = fund.profitSource && fund.profitSource !== 'none';
                             const simulatedRate = hasBackendEstimate ? nullableNumber(fund.todayRateForSimulation) : null;
                             const backendTodayRate = hasBackendEstimate ? nullableNumber(fund.todayRate) : null;
-                            const latestRate = latestPoint ? latestPoint.rate : null;
                             const settledRate = pickFirstNumber(fund.actualRate, fund.lastSettledRate);
-                            const rate = pickFirstNumber(simulatedRate, backendTodayRate, latestRate, settledRate, fund.currentRate, 0);
+                            const rate = pickFirstNumber(simulatedRate, backendTodayRate, settledRate, fund.currentRate, 0);
                             let rateSource = simulatedRate !== null ? 'backend-estimate'
                                 : backendTodayRate !== null ? 'backend-today-rate'
-                                    : latestRate !== null ? (hasTodayDate ? 'thin-intraday' : 'last-trading-estimate')
-                                        : settledRate !== 0 ? 'last-settled-rate'
-                                            : 'missing';
-                            return { rate, isHoliday: true, rateSource };
+                                    : settledRate !== 0 ? 'last-settled-rate'
+                                        : 'missing';
+                            return { rate, isHoliday: rateSource === 'missing', isStaleQuote: rateSource !== 'missing', rateSource };
                         };
                         await loadCalibrationProfiles();
                         const intradayCalibrationPayload = [];
@@ -7167,15 +7174,17 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             fund.data = Array.isArray(fund.data) ? fund.data : [];
                             const backendMarketClosed = fund.marketOpen === false;
                             if (fund.isSettled) {
-                                const latestPoint = getLatestRatePoint(fund.data);
+                                const latestPoint = getLatestRateFromFundData(fund.data, todaySlash, todayDash);
                                 fund.currentRate = pickFirstNumber(fund.actualRate, fund.lastSettledRate, fund.todayRateForSimulation, latestPoint?.rate, 0);
                                 fund.rateSource = 'settled-nav';
                                 fund.isHoliday = backendMarketClosed;
+                                fund.isStaleQuote = false;
                                 if (fund.data.length > 0 && String(fund.data[fund.data.length - 1][0]).includes("15:00:00")) { fund.data[fund.data.length - 1][1] = fund.currentRate; } else { fund.data.push([`${todaySlash} 15:00:00`, fund.currentRate]); }
                             } else {
                                 const resolvedRate = resolveFundCurrentRate(fund, backendMarketClosed);
                                 fund.currentRate = Number(resolvedRate.rate.toFixed(2));
                                 fund.isHoliday = resolvedRate.isHoliday;
+                                fund.isStaleQuote = !!resolvedRate.isStaleQuote;
                                 fund.rateSource = resolvedRate.rateSource;
                             }
 
@@ -7197,11 +7206,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             fund.calibrationSamples = calibrationProfile.samples;
                             fund.calibrationLastError = Number(calibrationProfile.lastError.toFixed(2));
                             fund.calibrationConfidence = calibrationProfile.confidence;
-                            if (!fund.isSettled && !fund.isHoliday && calibrationProfile.samples >= 1) {
+                            const canUseRateForToday = !fund.isSettled && fund.rateSource !== 'missing';
+                            if (canUseRateForToday && calibrationProfile.samples >= 1) {
                                 fund.currentRate = Number((rawCurrentRate + calibrationProfile.offset).toFixed(2));
                                 fund.calibrationNote = `原估 ${rawCurrentRate >= 0 ? '+' : ''}${rawCurrentRate.toFixed(2)}% · ${calibrationProfile.samples}天样本${calibrationProfile.confidence}可信`;
                                 intradayCalibrationPayload.push({ fundCode: fund.code, fundName: fund.name, tradeDate: todayDash, estimatedRate: rawCurrentRate, estimatedAssets: Number(fund.amount || 0), source: 'today-api' });
-                            } else if (!fund.isSettled && !fund.isHoliday) {
+                            } else if (canUseRateForToday) {
                                 fund.calibrationNote = '正在积累盘中估值样本';
                                 intradayCalibrationPayload.push({ fundCode: fund.code, fundName: fund.name, tradeDate: todayDash, estimatedRate: rawCurrentRate, estimatedAssets: Number(fund.amount || 0), source: 'today-api' });
                             } else if (fund.isSettled && calibrationProfile.samples > 0) {
@@ -7223,7 +7233,6 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             const apiBaseAmount = Number(fund.todayBaseAmount);
                             const todayBaseAmount = Number.isFinite(apiBaseAmount) ? Math.max(0, apiBaseAmount) : confirmedAmount;
                             let todayProfitVal = 0;
-                            // 优先用后端 marketValue（当前确认市值），不用 todayBaseAmount（收益率分母）
                             const apiMarketValue = Number(fund.marketValue);
                             let currentRealTimeAmount = Number.isFinite(apiMarketValue) && apiMarketValue > 0 ? apiMarketValue : todayBaseAmount;
                             const apiTodayProfit = Number(fund.todayProfit ?? fund.todayProfitPreview);
@@ -7237,17 +7246,21 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 todayProfitVal = Number(fund.actualExactProfit) || 0;
                                 fund.todayProfit = todayProfitVal.toFixed(2);
                                 currentRealTimeAmount = Number.isFinite(apiMarketValue) && apiMarketValue > 0 ? apiMarketValue : (todayBaseAmount + todayProfitVal);
+                            } else if (fund.rateSource !== 'missing') {
+                                todayProfitVal = todayBaseAmount * ((Number(fund.currentRate) || 0) / 100);
+                                fund.todayProfit = todayProfitVal.toFixed(2);
+                                currentRealTimeAmount = currentAmount + todayProfitVal;
                             } else if (Number.isFinite(apiTodayProfit) && (!fund.profitSource || fund.profitSource !== 'none')) {
                                 todayProfitVal = apiTodayProfit;
                                 fund.todayProfit = todayProfitVal.toFixed(2);
-                                currentRealTimeAmount = Number.isFinite(apiMarketValue) && apiMarketValue > 0 ? apiMarketValue : (todayBaseAmount + todayProfitVal);
+                                currentRealTimeAmount = currentAmount + todayProfitVal;
                                 if (fund.profitSource === 'ocr_yesterday') {
                                     fund.currentRate = todayBaseAmount > 0 ? Number((todayProfitVal / todayBaseAmount * 100).toFixed(2)) : 0;
                                 }
                             } else {
                                 todayProfitVal = todayBaseAmount * ((Number(fund.currentRate) || 0) / 100);
                                 fund.todayProfit = todayProfitVal.toFixed(2);
-                                currentRealTimeAmount = Number.isFinite(apiMarketValue) && apiMarketValue > 0 ? apiMarketValue : (todayBaseAmount + todayProfitVal);
+                                currentRealTimeAmount = currentAmount + todayProfitVal;
                             }
 
                             fund.todayAmount = currentRealTimeAmount.toFixed(2);
@@ -7287,8 +7300,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             if (Number.isFinite(Number(apiSummary.totalDisplayAmount))) {
                                 totalPrincipal.value = Number(apiSummary.totalDisplayAmount);
                             }
-                            totalTodayProfit.value = finiteNumber(apiSummary.totalTodayProfit);
-                            totalTodayRate.value = finiteNumber(apiSummary.totalTodayRate);
+                            totalTodayProfit.value = tToday;
+                            totalTodayRate.value = tPrincipalForRate > 0 ? (tToday / tPrincipalForRate * 100) : 0;
                             totalProfit.value = finiteNumber(apiSummary.totalProfit);
                             totalRate.value = finiteNumber(apiSummary.totalRate);
                         } else {
