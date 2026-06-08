@@ -4319,12 +4319,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 <div v-show="assetMode === 'fund'" style="margin: 0 15px 10px 15px; display: flex; justify-content: space-between; align-items: center;">
                     <div style="font-size: 16px; font-weight: bold; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
                         🛡️ 总持仓
-                        <span style="font-size: 12px; font-weight: normal; color:var(--text-muted);">(共 {{ fundsList.length }} 支)</span>
+                        <span style="font-size: 12px; font-weight: normal; color:var(--text-muted);">(共 {{ activeHoldings.length }} 支)</span>
                     </div>
                 </div>
 
                 <div v-show="assetMode === 'fund'" class="fund-list-container">
-                    <div v-for="fund in fundsList" :key="fund.code" class="glass-panel fund-card">
+                    <div v-for="fund in activeHoldings" :key="fund.code" class="glass-panel fund-card">
                         <div style="display: flex; justify-content: space-between; align-items: start;">
                             <span style="font-weight: bold; color: var(--text-main); font-size: 15px; max-width: 80%; display: flex; flex-direction: column;">
                                 <span>{{ fund.name }}</span>
@@ -4416,7 +4416,23 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             </div>
                         </div>
                     </div>
-                    <span v-if="fundsList.length === 0 && !isLoading" style="color:var(--text-muted); font-size:13px; width: 100%; text-align: center; padding: 20px;">暂无持仓，请手动添加代码，或点击上方「📷 智能截图导入」自动扫描</span>
+                    <span v-if="activeHoldings.length === 0 && !isLoading" style="color:var(--text-muted); font-size:13px; width: 100%; text-align: center; padding: 20px;">暂无持仓，请手动添加代码，或点击上方「📷 智能截图导入」自动扫描</span>
+                </div>
+
+                <div v-show="assetMode === 'fund' && inactiveHoldings.length > 0" style="margin: 5px 15px 10px 15px;">
+                    <details style="font-size: 13px; color: var(--text-muted);">
+                        <summary style="cursor: pointer; padding: 6px 0;">📋 已清仓 / 历史收益 ({{ inactiveHoldings.length }} 只)</summary>
+                        <div v-for="fund in inactiveHoldings" :key="'inactive-'+fund.code" class="glass-panel" style="padding: 10px 14px; margin-top: 6px; opacity: 0.7;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 13px; color: var(--text-main);">{{ fund.name }}</span>
+                                <span style="font-size: 12px; color: var(--text-muted); font-family: monospace;">{{ fund.code }}</span>
+                            </div>
+                            <div style="display: flex; gap: 16px; margin-top: 6px; font-size: 12px;">
+                                <span>已实现盈亏: <strong :style="{color: (fund.realizedProfit || 0) >= 0 ? '#ff4d4f' : '#10b981'}">{{ (fund.realizedProfit || 0).toFixed(2) }}</strong></span>
+                                <span v-if="fund.platformCumulativeProfit > 0">平台累计: <strong>{{ fund.platformCumulativeProfit.toFixed(2) }}</strong></span>
+                            </div>
+                        </div>
+                    </details>
                 </div>
 
                 <div v-show="assetMode === 'fund' && isLoading" class="glass-panel" style="height: calc(100vh - 280px); margin: 15px; display: flex; flex-direction: column; padding: 20px; box-sizing: border-box; gap: 20px;">
@@ -5246,6 +5262,17 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const currentUser = ref(localStorage.getItem('fund_username') || '');
                 const userDisplayName = ref(localStorage.getItem('fund_display_name') || '');
                 const fundsList = ref([]);
+                const activeHoldings = computed(() => fundsList.value.filter(f => {
+                    if (f.inactiveHolding) return false;
+                    const amt = Number(f.todayAmount || f.amount || f.confirmedAmount || 0);
+                    const shares = Number(f.shares || 0);
+                    const pending = Number(f.pendingBuyAmount || 0);
+                    return amt > 0 || shares > 0 || pending > 0 || f.pendingBuy;
+                }));
+                const inactiveHoldings = computed(() => fundsList.value.filter(f => {
+                    if (!f.inactiveHolding) return false;
+                    return true;
+                }));
                 const chartRef = ref(null);
                 const performanceChartRef = ref(null);
                 const isLoading = ref(true);
@@ -7490,7 +7517,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                 return {
                     appTheme, setAppTheme,
-                    toasts, isLoggedIn, currentUser, userDisplayName, fundsList, chartRef, performanceChartRef, loginForm, profileForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, refreshSectorPage, activePage, switchPage, showProfileModal, userAvatar, smartOcrBusy, smartOcrText,
+                    toasts, isLoggedIn, currentUser, userDisplayName, fundsList, activeHoldings, inactiveHoldings, chartRef, performanceChartRef, loginForm, profileForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, refreshSectorPage, activePage, switchPage, showProfileModal, userAvatar, smartOcrBusy, smartOcrText,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
                     performanceCurve, performancePeriod, performanceIndex, performanceLoading, performancePeriods, performanceIndices, selectedPerformanceIndexName, performanceIsToday, showPerformanceAmount, canShowPerformanceAmount, togglePerformanceAmount, performanceMessage, performanceVerdict, performanceExcessClass, fetchPerformanceCurve, renderPerformanceChart, switchPerformancePeriod, formatPerformancePercent, formatPerformanceMoney,
                     handleLogin, handleRegister, handleLogout, saveUserProfile, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, setOcrPendingMode, confirmOcrImport, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
