@@ -12,6 +12,7 @@ on:
       - "appsettings*.json"
       - "wwwroot/**"
       - ".github/workflows/deploy-backend.yml"
+      - ".github/server/**"
   workflow_dispatch:
 
 permissions:
