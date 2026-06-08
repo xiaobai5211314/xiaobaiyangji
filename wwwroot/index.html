@@ -6631,7 +6631,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     try { localStorage.setItem(key, JSON.stringify({ time: Date.now(), data })); } catch (e) { }
                 };
 
-                let sectorCache = null; let sectorCacheTime = 0; const SECTOR_CACHE_DURATION = 180000;
+                let sectorCache = null; let sectorCacheTime = 0; const SECTOR_CACHE_DURATION = 180000; const SECTOR_FAST_CACHE_KEY = 'sector_fast_cache_v2';
                 const fetchSectors = async (force = false, openModal = true) => {
                     const now = Date.now();
                     if (!force && sectorCache && (now - sectorCacheTime) < SECTOR_CACHE_DURATION) {
@@ -6639,8 +6639,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         if (openModal) showSectorRadar.value = true;
                         return;
                     }
+                    if (force) {
+                        try { localStorage.removeItem('sector_fast_cache_v1'); localStorage.removeItem(SECTOR_FAST_CACHE_KEY); } catch (e) { }
+                    }
                     if (!force && sectorTopList.value.length === 0) {
-                        const cached = readJsonCache('sector_fast_cache_v1', 30 * 60 * 1000);
+                        const cached = readJsonCache(SECTOR_FAST_CACHE_KEY, 30 * 60 * 1000);
                         if (cached) applySectorPayload(cached);
                     }
                     if (openModal) showSectorRadar.value = true;
@@ -6653,7 +6656,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         if (!res.ok) throw new Error(await res.text());
                         const data = await res.json();
                         applySectorPayload(data);
-                        writeJsonCache('sector_fast_cache_v1', data);
+                        writeJsonCache(SECTOR_FAST_CACHE_KEY, data);
                     } catch (e) {
                         if (sectorTopList.value.length === 0) showToast('🚨 板块雷达连接失败', 'error');
                     } finally {
@@ -7098,6 +7101,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             const n = Number(value);
                             return Number.isFinite(n) ? n : fallback;
                         };
+                        const nullableNumber = (value) => {
+                            const n = Number(value);
+                            return Number.isFinite(n) ? n : null;
+                        };
                         let todaySlash = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
                         let todayDash = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
                         if (apiSummary?.effectiveDate) {
@@ -7112,6 +7119,46 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             summarySource: apiSummary?.summarySource || ''
                         };
                         let currentMinutes = d.getHours() * 60 + d.getMinutes(); let isWeekend = (d.getDay() === 0 || d.getDay() === 6);
+                        const getLatestRatePoint = (data = []) => {
+                            for (let i = data.length - 1; i >= 0; i--) {
+                                const point = data[i];
+                                if (!Array.isArray(point) || point.length < 2) continue;
+                                const rate = nullableNumber(point[1]);
+                                if (rate === null) continue;
+                                return { time: String(point[0] || ''), rate };
+                            }
+                            return null;
+                        };
+                        const pickFirstNumber = (...values) => {
+                            for (const value of values) {
+                                const n = nullableNumber(value);
+                                if (n !== null) return n;
+                            }
+                            return 0;
+                        };
+                        const resolveFundCurrentRate = (fund, backendMarketClosed) => {
+                            const latestPoint = getLatestRatePoint(fund.data);
+                            const latestTime = latestPoint?.time || '';
+                            const hasTodayDate = latestTime.includes(todaySlash) || latestTime.includes(todayDash);
+                            const isPast935 = (d.getHours() > 9) || (d.getHours() === 9 && d.getMinutes() >= 35);
+                            const canUseIntraday = !backendMarketClosed && !isWeekend && currentMinutes >= 565 && hasTodayDate && !(isPast935 && fund.data.length <= 2);
+                            if (canUseIntraday && latestPoint) {
+                                return { rate: latestPoint.rate, isHoliday: false, rateSource: 'intraday' };
+                            }
+
+                            const hasBackendEstimate = fund.profitSource && fund.profitSource !== 'none';
+                            const simulatedRate = hasBackendEstimate ? nullableNumber(fund.todayRateForSimulation) : null;
+                            const backendTodayRate = hasBackendEstimate ? nullableNumber(fund.todayRate) : null;
+                            const latestRate = latestPoint ? latestPoint.rate : null;
+                            const settledRate = pickFirstNumber(fund.actualRate, fund.lastSettledRate);
+                            const rate = pickFirstNumber(simulatedRate, backendTodayRate, latestRate, settledRate, fund.currentRate, 0);
+                            let rateSource = simulatedRate !== null ? 'backend-estimate'
+                                : backendTodayRate !== null ? 'backend-today-rate'
+                                    : latestRate !== null ? (hasTodayDate ? 'thin-intraday' : 'last-trading-estimate')
+                                        : settledRate !== 0 ? 'last-settled-rate'
+                                            : 'missing';
+                            return { rate, isHoliday: true, rateSource };
+                        };
                         await loadCalibrationProfiles();
                         const intradayCalibrationPayload = [];
                         const settledCalibrationPayload = [];
@@ -7119,7 +7166,18 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         apiData.forEach(fund => {
                             fund.data = Array.isArray(fund.data) ? fund.data : [];
                             const backendMarketClosed = fund.marketOpen === false;
-                            if (fund.isSettled) { fund.currentRate = finiteNumber(fund.actualRate); fund.isHoliday = backendMarketClosed; if (fund.data.length > 0 && String(fund.data[fund.data.length - 1][0]).includes("15:00:00")) { fund.data[fund.data.length - 1][1] = fund.currentRate; } else { fund.data.push([`${todaySlash} 15:00:00`, fund.currentRate]); } } else if (backendMarketClosed || isWeekend || currentMinutes < 565) { fund.currentRate = finiteNumber(fund.todayRateForSimulation); fund.isHoliday = true; } else if (fund.data.length > 0) { let lastDataTime = String(fund.data[fund.data.length - 1][0]); let hasTodayDate = lastDataTime.includes(todaySlash) || lastDataTime.includes(todayDash); let isPast935 = (d.getHours() > 9) || (d.getHours() === 9 && d.getMinutes() >= 35); if (hasTodayDate && !(isPast935 && fund.data.length <= 2)) { fund.currentRate = finiteNumber(fund.data[fund.data.length - 1][1]); fund.isHoliday = false; } else { fund.currentRate = 0; fund.isHoliday = true; } } else { fund.currentRate = 0; fund.isHoliday = true; }
+                            if (fund.isSettled) {
+                                const latestPoint = getLatestRatePoint(fund.data);
+                                fund.currentRate = pickFirstNumber(fund.actualRate, fund.lastSettledRate, fund.todayRateForSimulation, latestPoint?.rate, 0);
+                                fund.rateSource = 'settled-nav';
+                                fund.isHoliday = backendMarketClosed;
+                                if (fund.data.length > 0 && String(fund.data[fund.data.length - 1][0]).includes("15:00:00")) { fund.data[fund.data.length - 1][1] = fund.currentRate; } else { fund.data.push([`${todaySlash} 15:00:00`, fund.currentRate]); }
+                            } else {
+                                const resolvedRate = resolveFundCurrentRate(fund, backendMarketClosed);
+                                fund.currentRate = Number(resolvedRate.rate.toFixed(2));
+                                fund.isHoliday = resolvedRate.isHoliday;
+                                fund.rateSource = resolvedRate.rateSource;
+                            }
 
                             const rawCurrentRate = Number(fund.currentRate || 0);
                             if (fund.isSettled) {
@@ -7179,7 +7237,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 todayProfitVal = Number(fund.actualExactProfit) || 0;
                                 fund.todayProfit = todayProfitVal.toFixed(2);
                                 currentRealTimeAmount = Number.isFinite(apiMarketValue) && apiMarketValue > 0 ? apiMarketValue : (todayBaseAmount + todayProfitVal);
-                            } else if (Number.isFinite(apiTodayProfit)) {
+                            } else if (Number.isFinite(apiTodayProfit) && (!fund.profitSource || fund.profitSource !== 'none')) {
                                 todayProfitVal = apiTodayProfit;
                                 fund.todayProfit = todayProfitVal.toFixed(2);
                                 currentRealTimeAmount = Number.isFinite(apiMarketValue) && apiMarketValue > 0 ? apiMarketValue : (todayBaseAmount + todayProfitVal);

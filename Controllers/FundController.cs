@@ -6805,6 +6805,9 @@ namespace 小白养基.Controllers
             public double? MonthRate { get; init; }
             public bool HasQuote { get; init; }
             public string UpdatedAt { get; init; } = string.Empty;
+            public string RateSource { get; init; } = string.Empty;
+            public bool IsStale { get; init; }
+            public bool IsZeroQuote { get; init; }
         }
 
         private sealed class SectorSummaryDto
@@ -6814,11 +6817,15 @@ namespace 小白养基.Controllers
             public double Rate { get; init; }
             public int FundCount { get; init; }
             public int QuotedCount { get; init; }
+            public int ZeroQuoteCount { get; init; }
+            public int StaleQuoteCount { get; init; }
             public int StreakDays { get; init; }
             public int HoldingRank { get; init; }
             public string UpdatedAt { get; init; } = string.Empty;
             public List<SectorFundQuote> PreviewFunds { get; init; } = new();
         }
+
+        private sealed record SectorQuoteFallback(double Rate, string UpdatedAt, string RateSource, bool IsStale);
 
         private static readonly IReadOnlyList<SectorDefinition> SectorDefinitions = new List<SectorDefinition>
         {
@@ -6932,6 +6939,9 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             double rate = 0;
             bool hasQuote = false;
             string updatedAt = string.Empty;
+            string rateSource = "none";
+            bool isStale = false;
+            bool isZeroQuote = false;
             try
             {
                 string gzUrl = $"http://fundgz.1234567.com.cn/js/{fund.Code}.js?rt={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
@@ -6945,8 +6955,21 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                     {
                         rate = Math.Round(parsedRate, 2);
                         hasQuote = true;
+                        rateSource = "fundgz";
                     }
                     if (root.TryGetProperty("gztime", out var timeProp)) updatedAt = timeProp.GetString() ?? string.Empty;
+                    var isTodayQuote = IsChinaTodayTimestamp(updatedAt);
+                    isStale = !isTodayQuote;
+                    if (hasQuote && Math.Abs(rate) < 0.000001 && !isTodayQuote)
+                    {
+                        hasQuote = false;
+                        isZeroQuote = true;
+                        rateSource = string.IsNullOrWhiteSpace(updatedAt) ? "fundgz_zero_missing_time" : "fundgz_zero_stale_time";
+                    }
+                    else if (hasQuote && !isTodayQuote)
+                    {
+                        rateSource = "fundgz_stale";
+                    }
                     if (root.TryGetProperty("name", out var nameProp) && !string.IsNullOrWhiteSpace(nameProp.GetString()))
                     {
                         fund.Name = nameProp.GetString()!;
@@ -6956,6 +6979,21 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             catch
             {
                 hasQuote = false;
+                rateSource = "fundgz_error";
+                isStale = true;
+            }
+
+            if (!hasQuote)
+            {
+                var fallback = await FetchFundRecentNavRateAsync(client, fund.Code);
+                if (fallback != null)
+                {
+                    rate = fallback.Rate;
+                    hasQuote = true;
+                    updatedAt = fallback.UpdatedAt;
+                    rateSource = fallback.RateSource;
+                    isStale = fallback.IsStale;
+                }
             }
 
             double? monthRate = null;
@@ -6971,8 +7009,62 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 Rate = rate,
                 MonthRate = monthRate,
                 HasQuote = hasQuote,
-                UpdatedAt = updatedAt
+                UpdatedAt = updatedAt,
+                RateSource = rateSource,
+                IsStale = isStale,
+                IsZeroQuote = isZeroQuote
             };
+        }
+
+        private static bool IsChinaTodayTimestamp(string? text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            var normalized = text.Trim().Replace('/', '-');
+            var formats = new[] { "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm", "yyyy-MM-dd", "yyyyMMdd HH:mm:ss", "yyyyMMdd" };
+            if (DateTime.TryParseExact(normalized, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+            {
+                return parsed.Date == ChinaNow().Date;
+            }
+            return DateTime.TryParse(normalized, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed)
+                   && parsed.Date == ChinaNow().Date;
+        }
+
+        private static async Task<SectorQuoteFallback?> FetchFundRecentNavRateAsync(HttpClient client, string code)
+        {
+            try
+            {
+                string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize=2&_={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+                using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                req.Headers.Referrer = new Uri("http://fundf10.eastmoney.com/");
+                var res = await client.SendAsync(req);
+                if (!res.IsSuccessStatusCode) return null;
+                string body = await res.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(body);
+                if (!doc.RootElement.TryGetProperty("Data", out var data)) return null;
+                if (!data.TryGetProperty("LSJZList", out var list) || list.ValueKind != JsonValueKind.Array || list.GetArrayLength() == 0) return null;
+
+                var latest = list[0];
+                string updatedAt = latest.TryGetProperty("FSRQ", out var fsrq) ? fsrq.GetString() ?? string.Empty : string.Empty;
+                if (TryGetDouble(latest, "JZZZL", out var apiRate) && Math.Abs(apiRate) > 0.000001)
+                {
+                    return new SectorQuoteFallback(Math.Round(apiRate, 2), updatedAt, "nav_jzzzl_fallback", true);
+                }
+
+                if (list.GetArrayLength() >= 2 &&
+                    TryGetDouble(latest, "DWJZ", out var latestNav) &&
+                    TryGetDouble(list[1], "DWJZ", out var previousNav) &&
+                    previousNav > 0)
+                {
+                    var navRate = Math.Round((latestNav - previousNav) / previousNav * 100.0, 2);
+                    return new SectorQuoteFallback(navRate, updatedAt, "nav_dwjz_fallback", true);
+                }
+            }
+            catch
+            {
+                // Fallback failure means the fund has no usable quote for sector aggregation.
+            }
+
+            return null;
         }
 
         private static async Task<double?> FetchFundMonthRateAsync(HttpClient client, string code)
@@ -7028,9 +7120,9 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
         [HttpGet("sectors")]
         public async Task<IActionResult> GetSectors([FromQuery] bool force = false)
         {
-            const string redisKey = "api:fund:sectors:v1";
-            const string freshKey = "FundSectorRadarV5";
-            const string staleKey = "FundSectorRadarV5_Stale";
+            const string redisKey = "api:fund:sectors:v2";
+            const string freshKey = "FundSectorRadarV6";
+            const string staleKey = "FundSectorRadarV6_Stale";
 
             var jsonOptions = new JsonSerializerOptions
             {
@@ -7100,7 +7192,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             // 1b. 普通请求：Redis 没命中，读数据库缓存。
             if (!force)
             {
-                var (dbData, dbSource) = await _marketCache.TryGetAsync<object>("sector_radar_v2");
+                var (dbData, dbSource) = await _marketCache.TryGetAsync<object>("sector_radar_v3");
                 if (dbData != null && dbSource != null)
                 {
                     SetCacheHeader(dbSource);
@@ -7190,7 +7282,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
                 await TrySetRedisAsync(payloadJson, payloadTtl);
 
-                try { await _marketCache.SetAsync("sector_radar_v2", payload, payloadTtl, TimeSpan.FromDays(3), "build"); } catch { }
+                try { await _marketCache.SetAsync("sector_radar_v3", payload, payloadTtl, TimeSpan.FromDays(3), "build"); } catch { }
 
                 SetCacheHeader("build", payloadTtl);
                 return Content(payloadJson, "application/json");
@@ -7209,7 +7301,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 // 9b. 内存 stale 也没有，尝试数据库 stale。
                 try
                 {
-                    var (dbStale, _) = await _marketCache.TryGetStaleAsync<object>("sector_radar_v2", TimeSpan.FromDays(3));
+                    var (dbStale, _) = await _marketCache.TryGetStaleAsync<object>("sector_radar_v3", TimeSpan.FromDays(3));
                     if (dbStale != null)
                     {
                         SetCacheHeader("db-stale-fallback");
@@ -7248,8 +7340,8 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
         private void SetSectorRadarCache(object payload)
         {
-            _cache.Set("FundSectorRadarV5", payload, GetExternalDataFreshTtl());
-            _cache.Set("FundSectorRadarV5_Stale", payload, _staleExternalDataTtl);
+            _cache.Set("FundSectorRadarV6", payload, GetExternalDataFreshTtl());
+            _cache.Set("FundSectorRadarV6_Stale", payload, _staleExternalDataTtl);
         }
 
         private async Task<object> BuildSectorRadarPayloadAsync()
@@ -7278,10 +7370,13 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                     finally { limiter.Release(); }
                 });
 
-                var quotes = (await Task.WhenAll(quoteTasks)).Where(q => q.HasQuote).ToList();
+                var allQuotes = (await Task.WhenAll(quoteTasks)).ToList();
+                var quotes = allQuotes.Where(q => q.HasQuote).ToList();
                 if (quotes.Count == 0) continue;
 
                 double avgRate = Math.Round(quotes.Average(q => q.Rate), 2);
+                int zeroQuoteCount = allQuotes.Count(q => q.IsZeroQuote || (q.HasQuote && Math.Abs(q.Rate) < 0.000001));
+                int staleQuoteCount = allQuotes.Count(q => q.IsStale);
                 summaries.Add(new SectorSummaryDto
                 {
                     Key = def.Key,
@@ -7289,6 +7384,8 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                     Rate = avgRate,
                     FundCount = matched.Count,
                     QuotedCount = quotes.Count,
+                    ZeroQuoteCount = zeroQuoteCount,
+                    StaleQuoteCount = staleQuoteCount,
                     StreakDays = avgRate > 0.005 ? 1 : (avgRate < -0.005 ? -1 : 0),
                     HoldingRank = rank++,
                     UpdatedAt = quotes.Select(q => q.UpdatedAt).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t)) ?? ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
