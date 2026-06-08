@@ -6873,6 +6873,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         performanceCurve.value = data || null;
                         performanceMessage.value = normalizePerformanceMessage(data);
                         if (data?.indexSource) console.log(`[performance-curve] period=${data.period || '?'} indexSource=${data.indexSource} indexParsedRowsCount=${data.indexParsedRowsCount || data.indexParsedCount || 0}`);
+                        // 今日页签：用 fetchData 实时值覆盖接口返回的 0 值
+                        if (performancePeriod.value === 'today' && performanceCurve.value) {
+                            const liveRate = Number(totalTodayRate.value || 0);
+                            const liveProfit = Number(totalTodayProfit.value || 0);
+                            if (Math.abs(liveRate) > 0.001 || Math.abs(Number(performanceCurve.value.myTotalRate || 0)) < 0.001) {
+                                performanceCurve.value = { ...performanceCurve.value, myTotalRate: liveRate, myTotalProfit: liveProfit };
+                            }
+                        }
                         await nextTick();
                         await renderPerformanceChart();
                     } catch (e) {
@@ -7300,17 +7308,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             if (Number.isFinite(Number(apiSummary.totalDisplayAmount))) {
                                 totalPrincipal.value = Number(apiSummary.totalDisplayAmount);
                             }
-                            totalTodayProfit.value = tToday;
-                            totalTodayRate.value = tPrincipalForRate > 0 ? (tToday / tPrincipalForRate * 100) : 0;
-                            totalProfit.value = finiteNumber(apiSummary.totalProfit);
-                            totalRate.value = finiteNumber(apiSummary.totalRate);
-                        } else {
-                            totalTodayProfit.value = tToday;
-                            totalTodayRate.value = tPrincipalForRate > 0 ? (tToday / tPrincipalForRate * 100) : 0;
-                            const currentTotalAssets = fundsList.value.reduce((sum, f) => sum + (parseFloat(f.todayAmount || f.amount) || 0), 0);
-                            totalProfit.value = currentTotalAssets - tCost + tRealized;
-                            totalRate.value = tCost > 0 ? ((currentTotalAssets - tCost + tRealized) / tCost * 100) : 0;
                         }
+                        totalTodayProfit.value = tToday;
+                        totalTodayRate.value = tPrincipalForRate > 0 ? (tToday / tPrincipalForRate * 100) : 0;
+                        // 累计收益率始终用前端实时值，不依赖 apiSummary 旧数据
+                        const currentTotalAssets = fundsList.value.reduce((sum, f) => sum + (parseFloat(f.todayAmount || f.amount) || 0), 0);
+                        totalProfit.value = currentTotalAssets - tCost + tRealized;
+                        totalRate.value = tCost > 0 ? ((currentTotalAssets - tCost + tRealized) / tCost * 100) : 0;
 
                         saveIntradayCalibrationSnapshots(intradayCalibrationPayload);
                         settleCalibrationSamples(settledCalibrationPayload);
