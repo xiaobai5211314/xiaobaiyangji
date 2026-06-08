@@ -18,7 +18,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: xiaobaiyangji-backend-deploy-${{ github.ref }}
+  group: guzhi-backend-deploy-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -29,11 +29,11 @@ jobs:
     env:
       SERVER_PORT: ${{ secrets.SERVER_PORT || '22' }}
       APP_DIR: /www/wwwroot/小白养基
-      SERVICE_NAME: xiaobaiyangji.service
+      SERVICE_NAME: guzhi-assistant.service
       PORT: "7084"
-      REMOTE_PACKAGE: /home/deploy/xiaobaiyangji_release.tar.gz
-      REMOTE_TMP_DIR: /home/deploy/xiaobaiyangji_release_unpack
-      CONTROL_SCRIPT: /usr/local/sbin/xiaobaiyangji-deploy-control
+      REMOTE_PACKAGE: /home/deploy/guzhi_release.tar.gz
+      REMOTE_TMP_DIR: /home/deploy/guzhi_release_unpack
+      CONTROL_SCRIPT: /usr/local/sbin/guzhi-deploy-control
       NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
       DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
@@ -80,7 +80,8 @@ jobs:
             -o ./publish \
             --no-restore \
             --nologo \
-            -p:UseAppHost=false
+            -p:UseAppHost=false \
+            -p:AssemblyName=小白养基
 
           MAIN_DLL="$(find ./publish -maxdepth 1 -name '*.dll' | sed 's#^./publish/##' | head -n 1)"
           if [ -z "$MAIN_DLL" ]; then
@@ -126,11 +127,11 @@ jobs:
           set -Eeuo pipefail
 
           APP_DIR="/www/wwwroot/小白养基"
-          SERVICE_NAME="xiaobaiyangji.service"
+          SERVICE_NAME="guzhi-assistant.service"
           PORT="7084"
-          REMOTE_PACKAGE="/home/deploy/xiaobaiyangji_release.tar.gz"
-          TMP_DIR="/home/deploy/xiaobaiyangji_release_unpack"
-          CONTROL_SCRIPT="/usr/local/sbin/xiaobaiyangji-deploy-control"
+          REMOTE_PACKAGE="/home/deploy/guzhi_release.tar.gz"
+          TMP_DIR="/home/deploy/guzhi_release_unpack"
+          CONTROL_SCRIPT="/usr/local/sbin/guzhi-deploy-control"
 
           echo "======= 0. 基础检查 ======="
           whoami
@@ -142,13 +143,13 @@ jobs:
             exit 1
           fi
 
-          if ! sudo -n "$CONTROL_SCRIPT" is-active >/tmp/xiaobaiyangji_service_state.txt 2>/tmp/xiaobaiyangji_sudo_err.txt; then
+          if ! sudo -n "$CONTROL_SCRIPT" is-active >/tmp/guzhi_service_state.txt 2>/tmp/guzhi_sudo_err.txt; then
             echo "sudo 免密控制脚本不可用。错误："
-            cat /tmp/xiaobaiyangji_sudo_err.txt || true
+            cat /tmp/guzhi_sudo_err.txt || true
             echo "先用 root 执行 server/one-time-root-setup.sh"
             exit 1
           fi
-          cat /tmp/xiaobaiyangji_service_state.txt || true
+          cat /tmp/guzhi_service_state.txt || true
 
           echo "======= 1. 解压发布包 ======="
           rm -rf "$TMP_DIR"
@@ -197,11 +198,11 @@ jobs:
           echo "======= 5. 健康检查 ======="
           OK=""
           for i in $(seq 1 10); do
-            CODE="$(curl -sS --max-time 3 -o /tmp/xiaobaiyangji_health.json -w "%{http_code}" "http://127.0.0.1:${PORT}/api/health" || true)"
+            CODE="$(curl -sS --max-time 3 -o /tmp/guzhi_health.json -w "%{http_code}" "http://127.0.0.1:${PORT}/api/health" || true)"
             if [ "$CODE" = "200" ]; then
               OK="1"
               echo "健康检查通过：/api/health"
-              head -c 500 /tmp/xiaobaiyangji_health.json || true
+              head -c 500 /tmp/guzhi_health.json || true
               echo ""
               break
             fi
