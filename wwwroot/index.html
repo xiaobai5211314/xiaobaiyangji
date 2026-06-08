@@ -5454,6 +5454,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     const activeHolding = !clearedHolding && isActiveHoldingFund(activeCandidate);
                     const activeRealizedProfit = activeHolding ? round2(raw.displayedProfit ?? raw.realizedProfit) : 0;
                     const apiHoldingProfit = round2(raw.holdingIncome ?? raw.estimatedProfit);
+                    const todayPendingBuyAmount = pendingBuyAmount;
                     const costWithPending = round2(costAmount + todayPendingBuyAmount);
                     const holdingProfit = activeHolding
                         ? (Number.isFinite(apiHoldingProfit) && apiHoldingProfit !== 0
@@ -5481,7 +5482,6 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         }) || calcBreakEvenRateFromHoldingRate(holdingRate))
                         : 0;
                     const accountAmount = round2(confirmedAmount + pendingBuyAmount);
-                    const todayPendingBuyAmount = pendingBuyAmount;
                     const confirmedHoldingAmount = Math.max(0, round2(accountAmount - todayPendingBuyAmount));
                     const todayProfitBaseAmount = baseAmountForToday;
                     const estimatedAccountAmount = clearedHolding ? 0 : round2(todayProfitBaseAmount + todayProfit + todayPendingBuyAmount);
