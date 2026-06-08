@@ -5267,6 +5267,23 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     return Number.isFinite(n) ? n : fallback;
                 };
                 const round2 = (value) => Number(toNumber(value, 0).toFixed(2));
+                const toFiniteNumberOrNull = (value) => {
+                    const n = Number(value);
+                    return Number.isFinite(n) ? n : null;
+                };
+                const calcBreakEvenRateFromHoldingRate = (holdingRate) => {
+                    const r = Number(holdingRate);
+                    if (!Number.isFinite(r) || r >= 0 || r <= -100) return 0;
+                    return Math.round((Math.abs(r) / (100 + r) * 100) * 100) / 100;
+                };
+                const calcBreakEvenRate = (fund) => {
+                    const marketValue = Number(fund?.marketValue ?? fund?.todayAmount ?? fund?.amount ?? 0);
+                    const holdingProfit = Number(fund?.holdingProfit ?? fund?.estimatedProfit ?? fund?.holdingIncome ?? 0);
+                    if (fund?.inactiveHolding || fund?.isClearedHolding || isClearedFund(fund)) return 0;
+                    if (!Number.isFinite(marketValue) || marketValue <= 0) return 0;
+                    if (!Number.isFinite(holdingProfit) || holdingProfit >= 0) return 0;
+                    return Math.round((Math.abs(holdingProfit) / marketValue * 100) * 100) / 100;
+                };
                 const getClearedProfit = (fund) => {
                     const platform = toNumber(fund?.platformCumulativeProfit, 0);
                     if (platform !== 0) return { value: platform, source: '平台累计' };
@@ -5334,8 +5351,18 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     const holdingRate = activeHolding
                         ? round2(costAmount > 0 ? (holdingProfit / costAmount * 100) : (raw.existingReturnRate ?? raw.holdingRate ?? 0))
                         : 0;
-                    const breakEvenRate = activeHolding && holdingProfit < 0 && marketValue > 0
-                        ? round2(Math.abs(holdingProfit) / marketValue * 100)
+                    const breakEvenRate = activeHolding && holdingProfit < 0
+                        ? (calcBreakEvenRate({
+                            ...raw,
+                            inactiveHolding: !activeHolding,
+                            isClearedHolding: clearedHolding,
+                            marketValue,
+                            todayAmount: marketValue,
+                            amount: marketValue,
+                            holdingProfit,
+                            estimatedProfit: holdingProfit,
+                            holdingRate
+                        }) || calcBreakEvenRateFromHoldingRate(holdingRate))
                         : 0;
                     return {
                         ...rawSnapshot,
@@ -5828,15 +5855,18 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     return Array.from(map.values()).sort((a, b) => Math.abs(b.score) - Math.abs(a.score)).slice(0, 6);
                 });
 
-                const toFiniteNumberOrNull = (value) => {
-                    const n = Number(value);
-                    return Number.isFinite(n) ? n : null;
-                };
                 const formatFinitePercent = (value) => {
                     const n = toFiniteNumberOrNull(value);
                     return n === null ? '--' : `${n.toFixed(2)}%`;
                 };
                 const recoveryWatchList = computed(() => activeHoldings.value
+                    .map(f => {
+                        const holdingProfit = toFiniteNumberOrNull(f.holdingProfit);
+                        const breakEvenRate = holdingProfit !== null && holdingProfit < 0
+                            ? (calcBreakEvenRate(f) || calcBreakEvenRateFromHoldingRate(f.holdingRate ?? f.existingReturnRate))
+                            : 0;
+                        return { ...f, breakEvenRate };
+                    })
                     .filter(f => {
                         const holdingProfit = toFiniteNumberOrNull(f.holdingProfit);
                         const marketValue = toFiniteNumberOrNull(f.marketValue);
@@ -5847,15 +5877,20 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const recoveryModal = reactive({ show: false, code: '', name: '', assets: 0, cost: 0, loss: 0, breakEvenRate: 0, addAmount: '' });
                 const openRecoveryModal = (fund) => {
                     const assets = toFiniteNumberOrNull(fund.marketValue) ?? 0;
-                    const cost = toFiniteNumberOrNull(fund.costAmount) ?? 0;
                     const holdingProfit = toFiniteNumberOrNull(fund.holdingProfit) ?? 0;
+                    const loss = Math.max(0, -holdingProfit);
+                    const cost = Math.max(toFiniteNumberOrNull(fund.costAmount) ?? 0, assets + loss);
+                    const breakEvenRate = holdingProfit < 0
+                        ? (calcBreakEvenRate({ ...fund, marketValue: assets, todayAmount: assets, holdingProfit })
+                            || calcBreakEvenRateFromHoldingRate(fund.holdingRate ?? fund.existingReturnRate))
+                        : 0;
                     recoveryModal.show = true;
                     recoveryModal.code = fund.code;
                     recoveryModal.name = fund.name;
                     recoveryModal.assets = assets;
                     recoveryModal.cost = cost;
-                    recoveryModal.loss = Math.max(0, -holdingProfit);
-                    recoveryModal.breakEvenRate = toFiniteNumberOrNull(fund.breakEvenRate) ?? 0;
+                    recoveryModal.loss = loss;
+                    recoveryModal.breakEvenRate = breakEvenRate;
                     const savedRecovery = uiStateMap.value?.[`recovery_amount_${fund.code}`];
                     recoveryModal.addAmount = savedRecovery?.amount ? String(savedRecovery.amount) : '';
                 };
@@ -5863,7 +5898,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     const amount = Math.max(0, Number(recoveryModal.addAmount || 0));
                     const newAssets = recoveryModal.assets + amount;
                     const newCost = recoveryModal.cost + amount;
-                    const calculated = amount > 0 && newAssets > 0 ? Math.max(0, (newCost / newAssets - 1) * 100) : recoveryModal.breakEvenRate;
+                    const calculated = amount > 0 && newAssets > 0
+                        ? Math.round((Math.max(0, newCost - newAssets) / newAssets * 100) * 100) / 100
+                        : recoveryModal.breakEvenRate;
                     const newBreakEven = Number.isFinite(calculated) ? calculated : null;
                     return { amount, newAssets, newCost, newBreakEven };
                 });
@@ -7603,9 +7640,17 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             const computedAllProfit = fund.shares > 0 ? (floatProfit + fund.displayedProfit) : fund.displayedProfit;
                             const allProfit = Number.isFinite(apiHoldingIncome) ? apiHoldingIncome : computedAllProfit;
                             fund.estimatedProfit = allProfit.toFixed(2);
-                            // 回本幅度 = |累计亏损| / 当前市值 * 100，与卡片累计盈亏口径一致
-                            const safeBreakEvenRate = !fund.inactiveHolding && allProfit < 0 && currentRealTimeAmount > 0
-                                ? (Math.abs(allProfit) / currentRealTimeAmount) * 100
+                            // 回本幅度不是累计收益率的绝对值，必须按“当前市值还需上涨多少”计算。
+                            const safeBreakEvenRate = allProfit < 0
+                                ? (calcBreakEvenRate({
+                                    ...fund,
+                                    marketValue: currentRealTimeAmount,
+                                    todayAmount: currentRealTimeAmount,
+                                    amount: currentRealTimeAmount,
+                                    holdingProfit: allProfit,
+                                    estimatedProfit: allProfit,
+                                    inactiveHolding: !!fund.inactiveHolding
+                                }) || calcBreakEvenRateFromHoldingRate(fund.existingReturnRate ?? fund.holdingRate))
                                 : 0;
                             fund.breakEvenRate = Number.isFinite(safeBreakEvenRate) ? safeBreakEvenRate.toFixed(2) : "--";
                             // 累计收益率：active holding 用实时 allProfit / cost，接口值只做兜底
