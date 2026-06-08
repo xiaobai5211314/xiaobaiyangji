@@ -4206,8 +4206,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     </div>
                     <div class="divider"></div>
                     <div style="text-align: center;">
-                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">💎 昨日总市值 <span @click="showPrivacyModal = true" style="cursor:pointer">{{ privacyMode === 0 ? '👁️' : '🙈' }}</span></div>
-                        <div class="number-display" style="color: var(--text-main); font-weight: 900;">{{ privacyMode === 0 ? '¥ ' + Number(dashboardActiveSummary.confirmedDisplayTotalAmount || 0).toFixed(2) : '****' }}</div>
+                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">💎 账户总金额 <span @click="showPrivacyModal = true" style="cursor:pointer">{{ privacyMode === 0 ? '👁️' : '🙈' }}</span></div>
+                        <div class="number-display" style="color: var(--text-main); font-weight: 900;">{{ privacyMode === 0 ? '¥ ' + Number(dashboardActiveSummary.accountTotalAmount || 0).toFixed(2) : '****' }}</div>
+                        <div v-if="dashboardActiveSummary.todayPendingBuyTotal > 0" style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">确认持仓 ¥{{ Number(dashboardActiveSummary.confirmedHoldingTotalAmount || 0).toFixed(2) }} · 今日待确认 ¥{{ Number(dashboardActiveSummary.todayPendingBuyTotal || 0).toFixed(2) }}</div>
                     </div>
                     <div class="divider"></div>
                     <div style="text-align: center;">
@@ -4394,9 +4395,15 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 <span class="metric-value" :style="{color: privacyMode === 0 ? ((fund.costAmount || 0) > 0 ? '#cbd5e1' : '#eab308') : '#cbd5e1'}">{{ privacyMode === 0 ? (fund.costAmount > 0 ? Number(fund.costAmount || 0).toFixed(2) : '未设置') : '****' }}</span>
                             </div>
                             <div class="metric-item" style="background: rgba(16, 185, 129, 0.1); padding: 2px; border-radius: 4px;">
-                                <span class="metric-label" style="color: #10b981;">💎 今日市值{{ Number(fund.pendingBuyAmount || 0) > 0 ? ' (含待确认)' : '' }}</span>
+                                <span class="metric-label" style="color: #10b981;">💎 今日市值</span>
                                 <span class="metric-value" style="color:var(--text-main); font-weight: bold;">
-                                    {{ privacyMode === 0 ? Number(fund.accountEstimatedMarketValue || fund.marketValue || 0).toFixed(2) : '****' }}
+                                    {{ privacyMode === 0 ? Number(fund.estimatedConfirmedHoldingAmount || 0).toFixed(2) : '****' }}
+                                </span>
+                            </div>
+                            <div v-if="Number(fund.todayPendingBuyAmount || 0) > 0" class="metric-item" style="background: rgba(234, 179, 8, 0.1); padding: 2px; border-radius: 4px;">
+                                <span class="metric-label" style="color: #eab308;">⏳ 今日待确认</span>
+                                <span class="metric-value" style="color:#eab308; font-weight: bold;">
+                                    {{ privacyMode === 0 ? Number(fund.todayPendingBuyAmount || 0).toFixed(2) : '****' }}
                                 </span>
                             </div>
                             <div class="metric-item" style="background: rgba(79, 172, 254, 0.1); padding: 2px; border-radius: 4px;">
@@ -5365,10 +5372,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             holdingRate
                         }) || calcBreakEvenRateFromHoldingRate(holdingRate))
                         : 0;
-                    const platformAmount = round2(confirmedAmount + pendingBuyAmount);
-                    const confirmedDisplayAmount = Math.max(0, round2(platformAmount - pendingBuyAmount));
-                    const confirmedEstimatedMarketValue = clearedHolding ? 0 : round2(baseAmountForToday + todayProfit);
-                    const accountEstimatedMarketValue = round2(confirmedEstimatedMarketValue + pendingBuyAmount);
+                    const accountAmount = round2(confirmedAmount + pendingBuyAmount);
+                    const todayPendingBuyAmount = pendingBuyAmount;
+                    const confirmedHoldingAmount = Math.max(0, round2(accountAmount - todayPendingBuyAmount));
+                    const todayProfitBaseAmount = baseAmountForToday;
+                    const estimatedAccountAmount = clearedHolding ? 0 : round2(todayProfitBaseAmount + todayProfit + todayPendingBuyAmount);
+                    const estimatedConfirmedHoldingAmount = clearedHolding ? 0 : round2(todayProfitBaseAmount + todayProfit);
                     return {
                         ...rawSnapshot,
                         raw: rawSnapshot,
@@ -5377,15 +5386,17 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         name: raw.name || raw.fundName || '',
                         isActiveHolding: activeHolding,
                         isClearedHolding: clearedHolding,
-                        platformAmount,
-                        pendingBuyAmount,
-                        confirmedDisplayAmount,
+                        accountAmount,
+                        todayPendingBuyAmount,
+                        pendingBuyAmount: todayPendingBuyAmount,
+                        confirmedHoldingAmount,
+                        todayProfitBaseAmount,
+                        baseAmountForToday: todayProfitBaseAmount,
+                        estimatedAccountAmount,
+                        estimatedConfirmedHoldingAmount,
                         costAmount,
                         shares,
-                        baseAmountForToday,
-                        confirmedEstimatedMarketValue,
-                        accountEstimatedMarketValue,
-                        marketValue: accountEstimatedMarketValue,
+                        marketValue: estimatedAccountAmount,
                         todayProfit,
                         todayRate,
                         holdingProfit,
@@ -5397,7 +5408,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         calibrationSamples: toNumber(raw.calibrationSamples, 0),
                         calibrationNote: raw.calibrationNote || '',
                         currentRate: todayRate,
-                        todayAmount: accountEstimatedMarketValue.toFixed(2),
+                        todayAmount: estimatedAccountAmount.toFixed(2),
                         estimatedProfit: holdingProfit.toFixed(2),
                         existingReturnRate: holdingRate.toFixed(2)
                     };
@@ -5405,24 +5416,20 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const calcActivePortfolioSummary = (activeFunds = []) => {
                     const rows = Array.isArray(activeFunds) ? activeFunds.filter(isActiveHoldingFund) : [];
                     const safeNum = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
-                    const platformTotalAmount = round2(rows.reduce((s, f) => s + safeNum(f.platformAmount), 0));
-                    const pendingBuyTotal = round2(rows.reduce((s, f) => s + safeNum(f.pendingBuyAmount), 0));
-                    const confirmedDisplayTotalAmount = round2(rows.reduce((s, f) => s + safeNum(f.confirmedDisplayAmount), 0));
-                    const confirmedBaseTotal = round2(rows.reduce((s, f) => s + safeNum(f.baseAmountForToday), 0));
-                    const confirmedEstimatedAssets = round2(rows.reduce((s, f) => s + safeNum(f.confirmedEstimatedMarketValue), 0));
-                    const accountEstimatedAssets = round2(rows.reduce((s, f) => s + safeNum(f.accountEstimatedMarketValue), 0));
+                    const accountTotalAmount = round2(rows.reduce((s, f) => s + safeNum(f.estimatedAccountAmount), 0));
+                    const todayPendingBuyTotal = round2(rows.reduce((s, f) => s + safeNum(f.todayPendingBuyAmount), 0));
+                    const confirmedHoldingTotalAmount = round2(rows.reduce((s, f) => s + safeNum(f.estimatedConfirmedHoldingAmount), 0));
+                    const todayProfitBaseTotal = round2(rows.reduce((s, f) => s + safeNum(f.todayProfitBaseAmount), 0));
                     const totalTodayProfit = round2(rows.reduce((s, f) => s + safeNum(f.todayProfit), 0));
                     const totalProfit = round2(rows.reduce((s, f) => s + safeNum(f.holdingProfit), 0));
                     const totalCost = round2(rows.reduce((s, f) => s + safeNum(f.costAmount), 0));
                     return {
-                        platformTotalAmount,
-                        pendingBuyTotal,
-                        confirmedDisplayTotalAmount,
-                        confirmedBaseTotal,
-                        confirmedEstimatedAssets,
-                        accountEstimatedAssets,
+                        accountTotalAmount,
+                        todayPendingBuyTotal,
+                        confirmedHoldingTotalAmount,
+                        todayProfitBaseTotal,
                         totalTodayProfit,
-                        totalTodayRate: confirmedBaseTotal > 0 ? round2(totalTodayProfit / confirmedBaseTotal * 100) : 0,
+                        totalTodayRate: todayProfitBaseTotal > 0 ? round2(totalTodayProfit / todayProfitBaseTotal * 100) : 0,
                         totalProfit,
                         totalRate: totalCost > 0 ? round2(totalProfit / totalCost * 100) : 0,
                         totalCost
@@ -5433,12 +5440,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const createEmptyDashboardSummary = () => ({
                     activeFunds: [],
                     inactiveFunds: [],
-                    platformTotalAmount: 0,
-                    pendingBuyTotal: 0,
-                    confirmedDisplayTotalAmount: 0,
-                    confirmedBaseTotal: 0,
-                    confirmedEstimatedAssets: 0,
-                    accountEstimatedAssets: 0,
+                    accountTotalAmount: 0,
+                    todayPendingBuyTotal: 0,
+                    confirmedHoldingTotalAmount: 0,
+                    todayProfitBaseTotal: 0,
                     totalTodayProfit: 0,
                     totalTodayRate: 0,
                     totalProfit: 0,
@@ -5451,19 +5456,17 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     dashboardActiveSummary.value = {
                         activeFunds: [...activeFunds],
                         inactiveFunds: [...inactiveFunds],
-                        platformTotalAmount: round2(nextSummary.platformTotalAmount ?? 0),
-                        pendingBuyTotal: round2(nextSummary.pendingBuyTotal ?? 0),
-                        confirmedDisplayTotalAmount: round2(nextSummary.confirmedDisplayTotalAmount ?? nextSummary.totalPrincipal ?? 0),
-                        confirmedBaseTotal: round2(nextSummary.confirmedBaseTotal ?? 0),
-                        confirmedEstimatedAssets: round2(nextSummary.confirmedEstimatedAssets ?? 0),
-                        accountEstimatedAssets: round2(nextSummary.accountEstimatedAssets ?? 0),
+                        accountTotalAmount: round2(nextSummary.accountTotalAmount ?? 0),
+                        todayPendingBuyTotal: round2(nextSummary.todayPendingBuyTotal ?? 0),
+                        confirmedHoldingTotalAmount: round2(nextSummary.confirmedHoldingTotalAmount ?? 0),
+                        todayProfitBaseTotal: round2(nextSummary.todayProfitBaseTotal ?? 0),
                         totalTodayProfit: round2(nextSummary.totalTodayProfit),
                         totalTodayRate: round2(nextSummary.totalTodayRate),
                         totalProfit: round2(nextSummary.totalProfit),
                         totalRate: round2(nextSummary.totalRate),
                         totalCost: round2(nextSummary.totalCost ?? 0)
                     };
-                    totalPrincipal.value = dashboardActiveSummary.value.confirmedDisplayTotalAmount;
+                    totalPrincipal.value = dashboardActiveSummary.value.confirmedHoldingTotalAmount;
                     totalTodayProfit.value = dashboardActiveSummary.value.totalTodayProfit;
                     totalTodayRate.value = dashboardActiveSummary.value.totalTodayRate;
                     totalProfit.value = dashboardActiveSummary.value.totalProfit;
@@ -6495,7 +6498,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         Username: currentUser.value, DateStr: localDateStr,
                         Total: {
                             FundName: "总持仓",
-                            Assets: safeNumber(archiveSummary.confirmedDisplayTotalAmount ?? archiveSummary.currentTotalAssets),
+                            Assets: safeNumber(archiveSummary.confirmedHoldingTotalAmount ?? archiveSummary.confirmedDisplayTotalAmount ?? archiveSummary.currentTotalAssets),
                             DailyProfit: safeNumber(archiveSummary.totalTodayProfit),
                             DailyRate: safeNumber(archiveSummary.totalTodayRate),
                             TotalProfit: safeNumber(archiveSummary.totalProfit),
@@ -7709,12 +7712,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             applyDashboardActiveSummary(activeForSummary, inactiveForSummary, activeSummary);
                         } else if (apiSummary) {
                             applyDashboardActiveSummary(activeForSummary, inactiveForSummary, {
-                                platformTotalAmount: finiteNumber(apiSummary.platformTotalAmount, 0),
-                                pendingBuyTotal: finiteNumber(apiSummary.pendingBuyTotal, 0),
-                                confirmedDisplayTotalAmount: finiteNumber(apiSummary.confirmedDisplayTotalAmount ?? apiSummary.totalPrincipal ?? apiSummary.totalDisplayAmount, 0),
-                                confirmedBaseTotal: finiteNumber(apiSummary.confirmedBaseTotal, 0),
-                                confirmedEstimatedAssets: finiteNumber(apiSummary.confirmedEstimatedAssets, 0),
-                                accountEstimatedAssets: finiteNumber(apiSummary.accountEstimatedAssets, 0),
+                                accountTotalAmount: finiteNumber(apiSummary.accountTotalAmount, 0),
+                                todayPendingBuyTotal: finiteNumber(apiSummary.todayPendingBuyTotal, 0),
+                                confirmedHoldingTotalAmount: finiteNumber(apiSummary.confirmedHoldingTotalAmount ?? apiSummary.totalPrincipal ?? apiSummary.totalDisplayAmount, 0),
+                                todayProfitBaseTotal: finiteNumber(apiSummary.todayProfitBaseTotal, 0),
                                 totalTodayProfit: finiteNumber(apiSummary.totalTodayProfit, 0),
                                 totalTodayRate: finiteNumber(apiSummary.totalTodayRate, 0),
                                 totalProfit: finiteNumber(apiSummary.totalProfit, 0),
@@ -7726,24 +7727,24 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         }
                         ensureTodayPerformanceCurveFromSummary(performanceCurve.value);
                         const dashSum = dashboardActiveSummary.value;
-                        console.log('[dashboard-amount-reconcile]', {
-                            platformTotalAmount: dashSum.platformTotalAmount,
-                            pendingBuyTotal: dashSum.pendingBuyTotal,
-                            confirmedDisplayTotalAmount: dashSum.confirmedDisplayTotalAmount,
-                            confirmedBaseTotal: dashSum.confirmedBaseTotal,
-                            accountEstimatedAssets: dashSum.accountEstimatedAssets,
+                        console.log('[amount-reconcile]', {
+                            accountTotalAmount: dashSum.accountTotalAmount,
+                            confirmedHoldingTotalAmount: dashSum.confirmedHoldingTotalAmount,
+                            todayPendingBuyTotal: dashSum.todayPendingBuyTotal,
+                            todayProfitBaseTotal: dashSum.todayProfitBaseTotal,
                             totalTodayProfit: dashSum.totalTodayProfit,
                             totalTodayRate: dashSum.totalTodayRate,
-                            sample: activeForSummary.map(f => ({
+                            funds: activeForSummary.map(f => ({
                                 code: f.code,
                                 name: f.name,
-                                platformAmount: f.platformAmount,
-                                pendingBuyAmount: f.pendingBuyAmount,
-                                confirmedDisplayAmount: f.confirmedDisplayAmount,
-                                baseAmountForToday: f.baseAmountForToday,
+                                accountAmount: f.accountAmount,
+                                todayPendingBuyAmount: f.todayPendingBuyAmount,
+                                confirmedHoldingAmount: f.confirmedHoldingAmount,
+                                todayProfitBaseAmount: f.todayProfitBaseAmount,
+                                estimatedAccountAmount: f.estimatedAccountAmount,
+                                estimatedConfirmedHoldingAmount: f.estimatedConfirmedHoldingAmount,
                                 todayProfit: f.todayProfit,
-                                accountEstimatedMarketValue: f.accountEstimatedMarketValue,
-                                costAmount: f.costAmount
+                                todayRate: f.todayRate
                             }))
                         });
                         console.log('[dashboard-normalized]', {
