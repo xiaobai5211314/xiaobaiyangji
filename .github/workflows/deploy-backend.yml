@@ -1,4 +1,4 @@
-name: 部署估值助手后端
+name: 部署小白养基后端
 
 on:
   push:
@@ -28,7 +28,7 @@ jobs:
 
     env:
       SERVER_PORT: ${{ secrets.SERVER_PORT || '22' }}
-      APP_DIR: /www/wwwroot/估值助手
+      APP_DIR: /www/wwwroot/小白养基
       SERVICE_NAME: guzhi-assistant.service
       PORT: "7084"
       REMOTE_PACKAGE: /home/deploy/guzhi_release.tar.gz
@@ -80,7 +80,8 @@ jobs:
             -o ./publish \
             --no-restore \
             --nologo \
-            -p:UseAppHost=false
+            -p:UseAppHost=false \
+            -p:AssemblyName=小白养基
 
           MAIN_DLL="$(find ./publish -maxdepth 1 -name '*.dll' | sed 's#^./publish/##' | head -n 1)"
           if [ -z "$MAIN_DLL" ]; then
@@ -89,8 +90,8 @@ jobs:
             exit 1
           fi
 
-          if [ ! -f "./publish/估值助手.dll" ]; then
-            echo "警告：发布目录里没有 估值助手.dll，当前 DLL：$MAIN_DLL"
+          if [ ! -f "./publish/小白养基.dll" ]; then
+            echo "警告：发布目录里没有 小白养基.dll，当前 DLL：$MAIN_DLL"
           fi
 
           tar -cf - -C ./publish . | gzip -1 > release.tar.gz
@@ -125,7 +126,7 @@ jobs:
             "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" <<'EOF_REMOTE'
           set -Eeuo pipefail
 
-          APP_DIR="/www/wwwroot/估值助手"
+          APP_DIR="/www/wwwroot/小白养基"
           SERVICE_NAME="guzhi-assistant.service"
           PORT="7084"
           REMOTE_PACKAGE="/home/deploy/guzhi_release.tar.gz"
@@ -179,8 +180,8 @@ jobs:
             exit 1
           fi
 
-          if [ -f "$APP_DIR/估值助手.dll" ]; then
-            cp -f "$APP_DIR/估值助手.dll" "$APP_DIR/估值助手.dll.bak"
+          if [ -f "$APP_DIR/小白养基.dll" ]; then
+            cp -f "$APP_DIR/小白养基.dll" "$APP_DIR/小白养基.dll.bak"
           fi
 
           cp -a "$TMP_DIR"/. "$APP_DIR"/

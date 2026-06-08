@@ -1,11 +1,11 @@
 [Unit]
-Description=估值助手 ASP.NET Core Service
+Description=小白养基 ASP.NET Core Service
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-WorkingDirectory=/www/wwwroot/估值助手
-ExecStart=/usr/bin/dotnet /www/wwwroot/估值助手/估值助手.dll --urls http://127.0.0.1:7084
+WorkingDirectory=/www/wwwroot/小白养基
+ExecStart=/usr/bin/dotnet /www/wwwroot/小白养基/小白养基.dll --urls http://127.0.0.1:7084
 Restart=always
 RestartSec=3
 KillSignal=SIGINT

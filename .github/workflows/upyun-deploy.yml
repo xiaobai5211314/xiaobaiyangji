@@ -7,6 +7,8 @@ on:
       - gpt-two
     paths:
       - 'wwwroot/index.html'
+      - '.github/workflows/upyun-deploy.yml'
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -30,7 +32,13 @@ jobs:
           
       - name: 刷新又拍云CDN缓存
         run: |
-          curl -X POST "https://purge.upyun.com/purge/" \
+          set +e
+          curl --fail --show-error -X POST "https://purge.upyun.com/purge/" \
             -H "Content-Type: application/json" \
             -u "${{ secrets.UPYUN_OPERATOR }}:${{ secrets.UPYUN_PASSWORD }}" \
             -d '{"urls":"https://guzhicdn.21212121.xyz/index.html"}'
+          code=$?
+          if [ "$code" -ne 0 ]; then
+            echo "::warning::又拍云 CDN 刷新失败，index.html 已上传；跳过刷新避免阻断前端部署。curl exit code: $code"
+          fi
+          exit 0

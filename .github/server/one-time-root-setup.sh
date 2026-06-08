@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-APP_DIR="/www/wwwroot/估值助手"
+APP_DIR="/www/wwwroot/小白养基"
 DEPLOY_USER="deploy"
 CONTROL_SCRIPT="/usr/local/sbin/guzhi-deploy-control"
 SERVICE_FILE="/etc/systemd/system/guzhi-assistant.service"
-SUDOERS_FILE="/etc/sudoers.d/guzhi-deploy"
+SUDOERS_FILE="/etc/sudoers.d/guzhi-deploy-control"
 
 mkdir -p "$APP_DIR" /home/deploy
 
@@ -19,7 +19,7 @@ install -m 0755 ./guzhi-deploy-control "$CONTROL_SCRIPT"
 install -m 0644 ./guzhi-assistant.service "$SERVICE_FILE"
 
 cat > "$SUDOERS_FILE" <<SUDOERS
-$DEPLOY_USER ALL=(root) NOPASSWD: $CONTROL_SCRIPT *
+$DEPLOY_USER ALL=(root) NOPASSWD: $CONTROL_SCRIPT
 SUDOERS
 chmod 0440 "$SUDOERS_FILE"
 visudo -cf "$SUDOERS_FILE"
