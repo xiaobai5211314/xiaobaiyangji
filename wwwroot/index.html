@@ -7358,8 +7358,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                         fundsList.value = apiData;
                         writeJsonCache(dashCacheKey, apiData);
-                        const tRealized = fundsList.value.reduce((sum, f) => {
-                            return sum + (f.inactiveHolding ? getClearedProfit(f) : (f.displayedProfit || f.realizedProfit || 0));
+                        // 顶部总览只统计当前持仓，已清仓基金不参与累计盈亏
+                        const activeForSummary = fundsList.value.filter(f => !f.inactiveHolding);
+                        const tRealized = activeForSummary.reduce((sum, f) => {
+                            return sum + Number(f.displayedProfit || f.realizedProfit || 0);
                         }, 0);
                         totalPrincipal.value = tPrincipal;
                         if (apiSummary) {
@@ -7369,8 +7371,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         }
                         totalTodayProfit.value = tToday;
                         totalTodayRate.value = tPrincipalForRate > 0 ? (tToday / tPrincipalForRate * 100) : 0;
-                        // 累计收益率始终用前端实时值，不依赖 apiSummary 旧数据
-                        const currentTotalAssets = fundsList.value.reduce((sum, f) => sum + (parseFloat(f.todayAmount || f.amount) || 0), 0);
+                        // 累计收益率只按当前持仓计算，不包含已清仓
+                        const currentTotalAssets = activeForSummary.reduce((sum, f) => sum + (parseFloat(f.todayAmount || f.amount) || 0), 0);
                         totalProfit.value = currentTotalAssets - tCost + tRealized;
                         totalRate.value = tCost > 0 ? ((currentTotalAssets - tCost + tRealized) / tCost * 100) : 0;
 
