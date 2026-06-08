@@ -600,11 +600,16 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             gap: 8px;
             position: relative;
             transition: transform 0.2s;
+            min-height: 0;
         }
 
             .fund-card:hover {
                 background: rgba(236, 72, 153, 0.06);
             }
+
+        .fund-card .metrics-grid {
+            margin-top: auto;
+        }
 
         /* 新版状态标签 */
         .fund-badge {
@@ -703,21 +708,21 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         .xb-tag--compact { min-height: 20px; padding: 2px 6px; font-size: 11px; line-height: 1.2; }
 
         .fund-share-row {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            flex-wrap: wrap;
+            display: flex !important;
+            align-items: center !important;
+            gap: 6px !important;
+            flex-wrap: wrap !important;
             min-width: 0;
             margin-top: 4px;
         }
         .fund-share-row .xb-tag,
         .fund-share-row .share-chip {
-            display: inline-flex;
-            align-items: center;
-            width: auto;
+            display: inline-flex !important;
+            align-items: center !important;
+            width: auto !important;
             max-width: 100%;
-            flex: 0 0 auto;
-            white-space: nowrap;
+            flex: 0 0 auto !important;
+            white-space: nowrap !important;
         }
 
         /* === Unified Button System === */
