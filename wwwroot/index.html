@@ -5633,12 +5633,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             return n !== null && n > 0;
                         });
                 };
-                const recoveryWatchList = computed(() => fundsList.value
-                    .filter(f => hasRecoveryBase(f))
-                    .map(f => ({ fund: f, rate: toFiniteNumberOrNull(f.breakEvenRate) }))
-                    .filter(x => x.rate !== null && x.rate > 0)
-                    .sort((a, b) => b.rate - a.rate)
-                    .map(x => x.fund));
+                const recoveryWatchList = computed(() => activeHoldings.value
+                    .filter(f => { const n = toFiniteNumberOrNull(f.breakEvenRate); return n !== null && n > 0; })
+                    .sort((a, b) => (toFiniteNumberOrNull(b.breakEvenRate) || 0) - (toFiniteNumberOrNull(a.breakEvenRate) || 0)));
                 const recoveryModal = reactive({ show: false, code: '', name: '', assets: 0, cost: 0, loss: 0, breakEvenRate: 0, addAmount: '' });
                 const openRecoveryModal = (fund) => {
                     const assets = toFiniteNumberOrNull(fund.todayAmount) ?? toFiniteNumberOrNull(fund.amount) ?? 0;
@@ -7341,8 +7338,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             const computedAllProfit = fund.shares > 0 ? (floatProfit + fund.displayedProfit) : fund.displayedProfit;
                             const allProfit = Number.isFinite(apiHoldingIncome) ? apiHoldingIncome : computedAllProfit;
                             fund.estimatedProfit = allProfit.toFixed(2);
-                            const safeBreakEvenRate = !fund.inactiveHolding && fund.cost && currentRealTimeAmount > 0 && fund.cost > currentRealTimeAmount
-                                ? ((fund.cost / currentRealTimeAmount) - 1) * 100
+                            // 回本幅度 = |累计亏损| / 当前市值 * 100，与卡片累计盈亏口径一致
+                            const safeBreakEvenRate = !fund.inactiveHolding && allProfit < 0 && currentRealTimeAmount > 0
+                                ? (Math.abs(allProfit) / currentRealTimeAmount) * 100
                                 : 0;
                             fund.breakEvenRate = Number.isFinite(safeBreakEvenRate) ? safeBreakEvenRate.toFixed(2) : "--";
                             const apiExistingReturnRate = Number(fund.existingReturnRate ?? fund.holdingRate);
