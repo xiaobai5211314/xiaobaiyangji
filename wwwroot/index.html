@@ -5988,8 +5988,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const recoveryWatchList = computed(() => activeHoldings.value
                     .map(f => {
                         const holdingProfit = toFiniteNumberOrNull(f.holdingProfit);
+                        const existing = Number(f.breakEvenRate);
                         const breakEvenRate = holdingProfit !== null && holdingProfit < 0
-                            ? (calcBreakEvenRate(f) || calcBreakEvenRateFromHoldingRate(f.holdingRate ?? f.existingReturnRate))
+                            ? (Number.isFinite(existing) && existing > 0 ? existing : (calcBreakEvenRate(f) || calcBreakEvenRateFromHoldingRate(f.holdingRate ?? f.existingReturnRate)))
                             : 0;
                         return { ...f, breakEvenRate };
                     })
