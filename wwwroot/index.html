@@ -6137,7 +6137,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                 const renderStockChart = (rows) => {
                     if (!stockChartRef.value || !window.echarts) return;
-                    if (!stockChartInstance.value) stockChartInstance.value = echarts.init(stockChartRef.value);
+                    if (!stockChartInstance.value) stockChartInstance.value = echarts.init(stockChartRef.value, 'dark');
                     const rawRows = Array.isArray(rows) ? rows : [];
                     const parseChartNumber = (value) => {
                         if (value === null || value === undefined || value === '') return null;
@@ -7556,6 +7556,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             renderPerformanceChart();
                         }
                     });
+                    if (page === 'stock' && assetMode.value === 'stock') nextTick(() => {
+                        if (stockChartInstance.value) stockChartInstance.value.resize();
+                    });
                 };
 
                 const fetchData = async (options = {}) => {
@@ -7919,6 +7922,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const handleResize = () => {
                     if (chartInstance.value) chartInstance.value.resize();
                     if (performanceChartInstance.value) performanceChartInstance.value.resize();
+                    if (stockChartInstance.value) stockChartInstance.value.resize();
                 };
                 let lastChartDataHash = '';
                 const renderChart = async (apiData) => {
