@@ -5278,6 +5278,31 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     if (Number.isFinite(platform) && platform !== 0) return platform;
                     return Number(fund.realizedProfit) || 0;
                 };
+                const pickFiniteNumber = (...values) => {
+                    for (const v of values) {
+                        const n = Number(v);
+                        if (Number.isFinite(n)) return n;
+                    }
+                    return null;
+                };
+                const patchPerformanceCurveLivePoint = () => {
+                    if (performancePeriod.value !== 'today' || !performanceCurve.value) return;
+                    const liveRate = Number(totalTodayRate.value || 0);
+                    const liveProfit = Number(totalTodayProfit.value || 0);
+                    const points = Array.isArray(performanceCurve.value.points) ? performanceCurve.value.points : [];
+                    const now = new Date();
+                    const timeStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:00`;
+                    if (points.length > 0) {
+                        const last = points[points.length - 1];
+                        last.myRate = liveRate;
+                        last.rate = liveRate;
+                        last.myProfit = liveProfit;
+                        last.profit = liveProfit;
+                    } else {
+                        points.push({ time: timeStr, myRate: liveRate, rate: liveRate, myProfit: liveProfit, profit: liveProfit, indexRate: null });
+                    }
+                    performanceCurve.value = { ...performanceCurve.value, myTotalRate: liveRate, myTotalProfit: liveProfit, points };
+                };
                 const chartRef = ref(null);
                 const performanceChartRef = ref(null);
                 const isLoading = ref(true);
@@ -6825,7 +6850,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             smooth: true,
                             symbol: 'circle',
                             symbolSize: 5,
-                            data: points.map(p => Number(p.myRate || 0)),
+                            data: points.map(p => pickFiniteNumber(p.myRate, p.rate, p.myTotalRate) ?? null),
                             lineStyle: { width: 3, color: '#ff4d8f' },
                             itemStyle: { color: '#ff4d8f' },
                             areaStyle: { color: 'rgba(255,77,143,.10)' }
@@ -6861,7 +6886,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 params.forEach(p => {
                                     html += `<div>${p.marker} ${p.seriesName}: <strong>${formatPerformancePercent(p.value)}</strong></div>`;
                                 });
-                                const excess = row.indexRate === null || row.indexRate === undefined ? null : Number(row.myRate || 0) - Number(row.indexRate || 0);
+                                const excess = row.indexRate === null || row.indexRate === undefined ? null : (pickFiniteNumber(row.myRate, row.rate, row.myTotalRate) ?? 0) - Number(row.indexRate || 0);
                                 if (excess !== null && Number.isFinite(excess)) html += `<div style="color:#94a3b8;">超额收益 ${formatPerformancePercent(excess)}</div>`;
                                 if (canShowPerformanceAmount.value) {
                                     const myProfit = Number(row.myProfit ?? row.dailyProfit ?? 0);
@@ -6905,12 +6930,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         performanceCurve.value = data || null;
                         performanceMessage.value = normalizePerformanceMessage(data);
                         if (data?.indexSource) console.log(`[performance-curve] period=${data.period || '?'} indexSource=${data.indexSource} indexParsedRowsCount=${data.indexParsedRowsCount || data.indexParsedCount || 0}`);
-                        // 今日页签：用 fetchData 实时值覆盖接口返回的 0 值
+                        // 今日页签：用 fetchData 实时值覆盖接口返回的 0 值（含 points 最后一个点）
                         if (performancePeriod.value === 'today' && performanceCurve.value) {
                             const liveRate = Number(totalTodayRate.value || 0);
-                            const liveProfit = Number(totalTodayProfit.value || 0);
                             if (Math.abs(liveRate) > 0.001 || Math.abs(Number(performanceCurve.value.myTotalRate || 0)) < 0.001) {
-                                performanceCurve.value = { ...performanceCurve.value, myTotalRate: liveRate, myTotalProfit: liveProfit };
+                                patchPerformanceCurveLivePoint();
                             }
                         }
                         await nextTick();
