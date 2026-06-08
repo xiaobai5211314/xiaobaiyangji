@@ -5583,6 +5583,35 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const analysisDetailMode = ref('daily');
                 const analysisLoading = ref(false);
                 const analysisRecords = ref([]);
+                const normalizeAnalysisRecords = (records = []) => {
+                    const source = Array.isArray(records) ? records : [];
+                    const sorted = source
+                        .filter(Boolean)
+                        .slice()
+                        .sort((a, b) => {
+                            const da = String(a.recordDate || '').slice(0, 10);
+                            const db = String(b.recordDate || '').slice(0, 10);
+                            if (da !== db) return db.localeCompare(da);
+                            const ia = Number(a.id || 0);
+                            const ib = Number(b.id || 0);
+                            if (ia !== ib) return ib - ia;
+                            return 0;
+                        });
+                    const map = new Map();
+                    for (const row of sorted) {
+                        const date = String(row.recordDate || '').slice(0, 10);
+                        const code = String(row.fundCode || '');
+                        if (!date || !code) continue;
+                        const key = `${date}_${code}`;
+                        if (!map.has(key)) map.set(key, row);
+                    }
+                    return Array.from(map.values());
+                };
+                const mergeAnalysisArchiveRecords = (records = []) => {
+                    const rows = Array.isArray(records) ? records.filter(Boolean) : [];
+                    if (rows.length === 0) return;
+                    analysisRecords.value = normalizeAnalysisRecords([...rows, ...analysisRecords.value]);
+                };
                 const uiStateMap = ref({});
                 const calibrationProfileMap = ref({});
 
@@ -5679,8 +5708,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     return;
                 };
 
-                const analysisTotalRecords = computed(() => analysisRecords.value.filter(r => r.fundCode === 'TOTAL'));
-                const selectedDayFundRecords = computed(() => analysisRecords.value.filter(r => r.fundCode !== 'TOTAL' && String(r.recordDate || '').slice(0, 10) === selectedAnalysisDate.value).sort((a, b) => Math.abs(Number(b.dailyProfit || 0)) - Math.abs(Number(a.dailyProfit || 0))));
+                const analysisTotalRecords = computed(() => normalizeAnalysisRecords(analysisRecords.value.filter(r => r.fundCode === 'TOTAL')));
+                const selectedDayFundRecords = computed(() => normalizeAnalysisRecords(analysisRecords.value.filter(r => r.fundCode !== 'TOTAL' && String(r.recordDate || '').slice(0, 10) === selectedAnalysisDate.value)).sort((a, b) => Math.abs(Number(b.dailyProfit || 0)) - Math.abs(Number(a.dailyProfit || 0))));
                 const selectedDayTotalProfitRecords = computed(() => activeHoldings.value.map(f => ({
                     fundCode: f.code,
                     fundName: f.name,
@@ -5698,7 +5727,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     const totalMap = new Map();
                     for (const r of analysisTotalRecords.value) {
                         const d = String(r.recordDate || '').slice(0, 10);
-                        if (d.slice(0, 7) === analysisMonth.value) totalMap.set(d, r);
+                        if (d.slice(0, 7) === analysisMonth.value && !totalMap.has(d)) totalMap.set(d, r);
                     }
                     const arr = [];
                     for (let i = 0; i < offset; i++) arr.push({ key: 'e' + i, empty: true });
@@ -6426,7 +6455,21 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     };
                     try {
                         const response = await fetch(`${API_BASE}/api/fund/save-archive`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                        if (response.ok) { if (!silent) showToast("今日收益已安全锁入", "success"); }
+                        if (response.ok) {
+                            let body = null;
+                            try { body = await response.json(); } catch { body = null; }
+                            const savedRows = [];
+                            if (body?.totalRecord) savedRows.push(body.totalRecord);
+                            if (Array.isArray(body?.records)) savedRows.push(...body.records);
+                            if (savedRows.length > 0) {
+                                mergeAnalysisArchiveRecords(savedRows);
+                            } else if (activePage.value === 'analysis') {
+                                analysisRecords.value = [];
+                                await fetchAnalysis(true, { targetDate: localDateStr, keepSelectedDate: true });
+                            }
+                            if (!silent) showToast("今日收益已安全锁入", "success");
+                            return body;
+                        }
                         else {
                             let msg = `封存失败 HTTP ${response.status}`;
                             try { const body = await response.json(); msg = body.message || body.msg || JSON.stringify(body).slice(0, 120); } catch { try { msg = await response.text(); msg = msg.slice(0, 120); } catch {} }
@@ -6434,6 +6477,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             if (!silent) showToast(msg, "error");
                         }
                     } catch (e) { console.warn('[save-archive] error:', e); if (!silent) showToast("网络错误: " + (e.message || ""), "error"); }
+                    return null;
                 };
 
                 const formatIndexPoint = (value) => {
@@ -7322,7 +7366,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const url = `${API_BASE}/api/fund/get-archives?username=${encodeURIComponent(currentUser.value)}&limit=500`;
                         const res = await fetch(url, { cache: 'no-store' });
                         if (!res.ok) throw new Error(await res.text());
-                        analysisRecords.value = await res.json();
+                        analysisRecords.value = normalizeAnalysisRecords(await res.json());
                         const monthRecords = analysisTotalRecords.value.filter(r => String(r.recordDate || '').slice(0, 7) === analysisMonth.value);
                         if (!keepSelectedDate && monthRecords.length > 0 && !monthRecords.some(r => String(r.recordDate || '').slice(0, 10) === selectedAnalysisDate.value)) {
                             selectedAnalysisDate.value = String(monthRecords[0].recordDate || '').slice(0, 10);

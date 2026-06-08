@@ -621,6 +621,8 @@ namespace 小白养基.Controllers
 
         private async Task UpsertDailyArchivesAsync(string username, DateTime date, IEnumerable<DailyArchive> incoming)
         {
+            var dayStart = date.Date;
+            var dayEnd = dayStart.AddDays(1);
             var normalizedIncoming = incoming
                 .Where(x => !string.IsNullOrWhiteSpace(x.FundCode))
                 .GroupBy(x => x.FundCode)
@@ -629,7 +631,7 @@ namespace 小白养基.Controllers
 
             var codes = normalizedIncoming.Select(x => x.FundCode).ToList();
             var existing = await _context.DailyArchives
-                .Where(a => a.Username == username && a.RecordDate == date && codes.Contains(a.FundCode))
+                .Where(a => a.Username == username && a.RecordDate >= dayStart && a.RecordDate < dayEnd && codes.Contains(a.FundCode))
                 .ToListAsync();
 
             var duplicateGroups = existing.GroupBy(x => x.FundCode).Where(g => g.Count() > 1).ToList();
@@ -647,10 +649,11 @@ namespace 小白养基.Controllers
             foreach (var item in normalizedIncoming)
             {
                 item.Username = username;
-                item.RecordDate = date;
+                item.RecordDate = dayStart;
 
                 if (existingDict.TryGetValue(item.FundCode, out var old))
                 {
+                    old.RecordDate = dayStart;
                     CopyArchiveValues(old, item);
                     _context.DailyArchives.Update(old);
                 }
@@ -659,6 +662,23 @@ namespace 小白养基.Controllers
                     _context.DailyArchives.Add(item);
                 }
             }
+        }
+
+        private static object ToArchiveResponse(DailyArchive a)
+        {
+            return new
+            {
+                id = a.Id,
+                fundCode = a.FundCode,
+                fundName = a.FundName,
+                recordDate = a.RecordDate,
+                assets = a.Assets,
+                dailyProfit = a.DailyProfit,
+                dailyRate = a.DailyRate,
+                totalProfit = a.TotalProfit,
+                totalRate = a.TotalRate,
+                updatedAt = string.Empty
+            };
         }
 
 
@@ -8501,12 +8521,29 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 await _context.SaveChangesAsync();
                 ClearTodayCache(req.Username);
 
+                var dayStart = date.Date;
+                var dayEnd = dayStart.AddDays(1);
+                var latestRecords = await _context.DailyArchives
+                    .AsNoTracking()
+                    .Where(a => a.Username == req.Username && a.RecordDate >= dayStart && a.RecordDate < dayEnd)
+                    .OrderByDescending(a => a.Id)
+                    .ToListAsync();
+                var dedupedLatest = latestRecords
+                    .GroupBy(a => a.FundCode)
+                    .Select(g => g.OrderByDescending(a => a.Id).First())
+                    .OrderByDescending(a => a.FundCode == "TOTAL")
+                    .ThenBy(a => a.FundName)
+                    .ToList();
+                var totalRecord = dedupedLatest.FirstOrDefault(a => a.FundCode == "TOTAL");
+
                 return Ok(new
                 {
                     success = true,
                     saved = incoming.Count,
                     date = date.ToString("yyyy-MM-dd"),
                     skippedMissingCode,
+                    totalRecord = totalRecord == null ? null : ToArchiveResponse(totalRecord),
+                    records = dedupedLatest.Select(ToArchiveResponse).ToList(),
                     message = skippedMissingCode > 0
                         ? $"已保存 {incoming.Count} 条，跳过 {skippedMissingCode} 条缺少基金代码的数据"
                         : $"已保存 {incoming.Count} 条收益档案"
@@ -8733,22 +8770,20 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 query = query.Where(a => a.FundCode == fundCode);
             }
 
-            var records = await query
+            var rawRecords = await query
+                .OrderByDescending(a => a.RecordDate)
+                .ThenByDescending(a => a.Id)
+                .Take(Math.Min(limit * 4, 2000))
+                .ToListAsync();
+
+            var records = rawRecords
+                .GroupBy(a => new { Date = a.RecordDate.Date, a.FundCode })
+                .Select(g => g.OrderByDescending(a => a.Id).First())
                 .OrderByDescending(a => a.RecordDate)
                 .ThenByDescending(a => a.Id)
                 .Take(limit)
-                .Select(a => new
-                {
-                    fundCode = a.FundCode,
-                    fundName = a.FundName,
-                    recordDate = a.RecordDate,
-                    assets = a.Assets,
-                    dailyProfit = a.DailyProfit,
-                    dailyRate = a.DailyRate,
-                    totalProfit = a.TotalProfit,
-                    totalRate = a.TotalRate
-                })
-                .ToListAsync();
+                .Select(ToArchiveResponse)
+                .ToList();
 
             return Ok(records);
         }
