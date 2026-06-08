@@ -6257,6 +6257,15 @@ namespace 小白养基.Controllers
 
                     // 是否已完成今日真实净值清算。只读本地字段，不在 today 请求里访问外部接口。
                     bool isSettled = config.LastSettledDate == todayDash;
+                    // carryForward：今天没有新净值时，沿用最近已确认交易日数据
+                    bool isCarryForward = false;
+                    if (!isSettled && !string.IsNullOrEmpty(config.LastSettledDate)
+                        && string.CompareOrdinal(config.LastSettledDate, todayDash) <= 0
+                        && (config.LastSettledProfit != 0 || config.LastSettledRate != 0 || config.HoldAmount > 0))
+                    {
+                        isCarryForward = true;
+                        isSettled = true;
+                    }
                     double? actualRate = isSettled ? config.LastSettledRate : null;
                     double? actualExactProfit = isSettled ? config.LastSettledProfit : null;
 
@@ -6381,7 +6390,9 @@ namespace 小白养基.Controllers
                         calibrationOffset = Math.Round(avgDiff, 4),
                         data = dataPoints,
                         isSettled = isSettled,
-                        settlementSource = isSettled ? (hasOcrHolding ? "ant-ocr" : "nav-settlement") : null,
+                        isCarryForward = isCarryForward,
+                        displayDate = isSettled ? (config.LastSettledDate ?? todayDash) : todayDash,
+                        settlementSource = isSettled ? (isCarryForward ? "carry-forward" : (hasOcrHolding ? "ant-ocr" : "nav-settlement")) : null,
                         actualRate = actualRate,
                         actualExactProfit = actualExactProfit,
                         todayBaseAmount = todayBaseAmount,
