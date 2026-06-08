@@ -26,13 +26,18 @@ namespace 小白养基.Services
                 try
                 {
                     await FetchAndSaveDataAsync(stoppingToken);
+                    await Task.Delay(TimeSpan.FromSeconds(60), stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "基金估值抓取批处理异常");
+                    try { await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken); }
+                    catch (OperationCanceledException) { break; }
                 }
-
-                await Task.Delay(TimeSpan.FromSeconds(60), stoppingToken);
             }
         }
 

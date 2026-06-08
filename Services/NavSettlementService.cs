@@ -33,13 +33,20 @@ namespace 小白养基.Services
                     {
                         await SettleTodayNavAsync(localTime, stoppingToken);
                     }
+
+                    await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    // 正常停止，不视为错误
+                    break;
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "夜间清算主循环异常");
+                    try { await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken); }
+                    catch (OperationCanceledException) { break; }
                 }
-
-                await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
             }
         }
 
