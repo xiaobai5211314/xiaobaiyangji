@@ -1,10 +1,10 @@
 <template>
-  <div class="glass-card" style="display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
-    <!-- 头部：名称 + 操作按钮 -->
+  <div class="glass-card fund-card">
+    <!-- 头部：名称 + 按钮 -->
     <div style="display: flex; justify-content: space-between; align-items: start;">
-      <div style="font-weight: bold; color: #f8fafc; font-size: 15px; max-width: 80%;">
-        <div>{{ fund.name }}</div>
-        <div style="font-size: 11px; color: #a8b3cf; font-weight: normal; margin-top: 4px; font-family: monospace; background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; width: fit-content;">
+      <div style="font-weight: bold; color: #f8fafc; font-size: 15px; max-width: 80%; min-width: 0;">
+        <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ fund.name }}</div>
+        <div style="font-size: 11px; color: #a8b3cf; font-weight: normal; margin-top: 4px; font-family: monospace; background: rgba(0,0,0,.2); padding: 2px 6px; border-radius: 4px; width: fit-content;">
           {{ fund.code }}
         </div>
         <div style="margin-top: 4px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
@@ -16,16 +16,20 @@
           </span>
         </div>
       </div>
-      <div style="display: flex; gap: 6px; flex-shrink: 0; align-items: center;">
-        <t-tooltip content="查看官方档案"><t-button shape="circle" size="small" theme="primary" variant="outline">📈</t-button></t-tooltip>
-        <t-tooltip content="回本路径模拟"><t-tooltip content="回本路径模拟"><t-button shape="circle" size="small" theme="warning" variant="outline">🧭</t-button></t-tooltip></t-tooltip>
+      <div style="display: flex; gap: 5px; flex-shrink: 0; align-items: center;">
+        <t-tooltip content="查看官方档案">
+          <t-button shape="circle" size="small" variant="outline" style="--td-button-bg-color: rgba(56,189,248,.18); --td-button-border-color: rgba(56,189,248,.3); --td-button-text-color: #38bdf8;">📈</t-button>
+        </t-tooltip>
+        <t-tooltip content="回本路径模拟">
+          <t-button shape="circle" size="small" variant="outline" style="--td-button-bg-color: rgba(251,191,36,.18); --td-button-border-color: rgba(251,191,36,.35); --td-button-text-color: #fbbf24;">🧭</t-button>
+        </t-tooltip>
       </div>
     </div>
 
     <!-- 状态行 -->
-    <div style="display: flex; align-items: center; gap: 5px; flex-wrap: wrap; padding-bottom: 6px; border-bottom: 1px dashed rgba(255,255,255,0.1);">
+    <div style="display: flex; align-items: center; gap: 5px; flex-wrap: wrap; padding-bottom: 6px; border-bottom: 1px dashed rgba(255,255,255,.1);">
       <span v-if="fund.isHoliday" class="xb-tag xb-tag--ghost" style="font-weight: bold;">☕ 休市</span>
-      <span v-else :style="{ color: fund.todayRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold', fontSize: '14px' }">
+      <span v-else :style="{ color: fund.todayRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 900, fontSize: '14px' }">
         {{ fund.todayRate > 0 ? '+' : '' }}{{ Number(fund.todayRate || 0).toFixed(2) }}%
       </span>
       <span v-if="fund.isStaleQuote && !fund.isSettled" class="xb-tag xb-tag--warning">旧估值</span>
@@ -43,31 +47,33 @@
       </span>
     </div>
 
-    <!-- 指标区 -->
-    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 10px; text-align: center;">
+    <!-- 指标区 — 旧版 3x2 网格 -->
+    <div class="metrics-grid">
       <div>
-        <div style="font-size: 11px; color: #a8b3cf;">持仓本金</div>
-        <div class="num" style="font-weight: bold; color: #f8fafc;">{{ formatAmount(fund.costAmount) }}</div>
+        <div class="metric-label">💰 持仓本金</div>
+        <div class="metric-value" :style="{ color: Number(fund.costAmount || 0) > 0 ? '#cbd5e1' : '#eab308' }">
+          {{ Number(fund.costAmount || 0) > 0 ? formatAmount(fund.costAmount) : '未设置' }}
+        </div>
       </div>
-      <div style="background: rgba(16, 185, 129, 0.08); border-radius: 3px; padding: 2px;">
-        <div style="font-size: 11px; color: #10b981;">今日市值</div>
-        <div class="num" style="font-weight: bold; color: #f8fafc;">{{ formatAmount(fund.estimatedConfirmedHoldingAmount) }}</div>
+      <div style="background: rgba(16,185,129,.08); border-radius: 4px; padding: 2px;">
+        <div class="metric-label" style="color: #10b981;">💎 今日市值</div>
+        <div class="metric-value" style="color: #f8fafc;">{{ formatAmount(fund.estimatedConfirmedHoldingAmount) }}</div>
       </div>
-      <div style="background: rgba(56, 189, 248, 0.08); border-radius: 3px; padding: 2px;">
-        <div style="font-size: 11px; color: #38bdf8;">今日收益</div>
-        <div class="num" :style="{ color: profitColor(fund.todayProfit), fontWeight: 'bold' }">{{ signed(fund.todayProfit) }}</div>
-      </div>
-      <div>
-        <div style="font-size: 11px; color: #a8b3cf;">今日收益率</div>
-        <div class="num" :style="{ color: profitColor(fund.todayRate), fontWeight: 'bold' }">{{ signed(fund.todayRate) }}%</div>
+      <div style="background: rgba(56,189,248,.08); border-radius: 4px; padding: 2px;">
+        <div class="metric-label" style="color: #38bdf8;">🌟 今日收益</div>
+        <div class="metric-value" :style="{ color: profitColor(fund.todayProfit) }">{{ signed(fund.todayProfit) }}</div>
       </div>
       <div>
-        <div style="font-size: 11px; color: #a8b3cf;">累计盈亏</div>
-        <div class="num" :style="{ color: profitColor(fund.holdingProfit), fontWeight: 'bold' }">{{ signed(fund.holdingProfit) }}</div>
+        <div class="metric-label">🚀 今日收益率</div>
+        <div class="metric-value" :style="{ color: profitColor(fund.todayRate) }">{{ signed(fund.todayRate) }}%</div>
       </div>
       <div>
-        <div style="font-size: 11px; color: #a8b3cf;">累计收益率</div>
-        <div class="num" :style="{ color: profitColor(fund.holdingRate), fontWeight: 'bold' }">{{ signed(fund.holdingRate) }}%</div>
+        <div class="metric-label">💰 累计盈亏</div>
+        <div class="metric-value" :style="{ color: profitColor(fund.holdingProfit) }">{{ signed(fund.holdingProfit) }}</div>
+      </div>
+      <div>
+        <div class="metric-label">📈 累计收益率</div>
+        <div class="metric-value" :style="{ color: profitColor(fund.holdingRate) }">{{ signed(fund.holdingRate) }}%</div>
       </div>
     </div>
   </div>
