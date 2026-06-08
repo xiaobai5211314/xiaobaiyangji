@@ -4292,14 +4292,15 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         </div>
                     </div>
                     <div class="glass-panel feature-card">
-                        <div class="feature-title">🧭 回本幅度榜</div>
-                        <div class="feature-subtitle">当前所有未回本持仓，按回本所需涨幅从高到低排序。</div>
+                        <div class="feature-title">🧭 回本所需涨幅</div>
+                        <div class="feature-subtitle">当前所有未回本持仓，按需涨幅度从高到低排序。</div>
                         <div class="compact-scroll-list" style="margin-top:8px;">
                             <div v-if="recoveryWatchList.length===0" class="feature-subtitle" style="padding:14px 0;">当前没有需要回本的持仓。</div>
                             <div v-for="fund in recoveryWatchList" :key="'home-rw-'+fund.code" class="report-line">
                                 <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;">{{ fund.name }}</span>
-                                <strong style="color:#fbbf24;">{{ formatFinitePercent(fund.breakEvenRate) }}</strong>
+                                <strong style="color:#fbbf24;">需涨{{ formatFinitePercent(fund.breakEvenRate) }}</strong>
                             </div>
+                            <div v-if="recoveryWatchList.length > 0" class="feature-subtitle" style="padding:8px 0 2px;font-size:11px;opacity:.7;">回本所需涨幅 = 当前亏损金额 ÷ 当前市值 × 100%，不是累计收益率</div>
                         </div>
                     </div>
                     <div class="glass-panel feature-card">
@@ -4596,7 +4597,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 <div class="modal-content" style="max-width:520px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><h3 style="margin:0;color:#fbbf24;">🧭 回本路径模拟器</h3><span @click="recoveryModal.show=false" style="font-size:24px;color:var(--text-muted);cursor:pointer;">&times;</span></div>
                     <div style="color:var(--text-muted);font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ recoveryModal.name }}</div>
-                    <div class="feature-subtitle" style="margin:6px 0 12px;">当前亏损 {{ recoveryModal.loss.toFixed(2) }} 元，回本需要上涨 {{ formatFinitePercent(recoveryModal.breakEvenRate) }}。输入计划加仓金额后，实时估算新的回本涨幅。</div>
+                    <div class="feature-subtitle" style="margin:6px 0 12px;">当前亏损 {{ recoveryModal.loss.toFixed(2) }} 元，还需涨 {{ formatFinitePercent(recoveryModal.breakEvenRate) }} 才能回本。输入计划加仓金额后，实时估算新的回本涨幅。</div>
                     <div class="recovery-input-row">
                         <strong style="color:#93c5fd;">加仓金额</strong>
                         <input class="recovery-input" type="number" min="0" step="100" v-model="recoveryModal.addAmount" placeholder="例如 500" inputmode="decimal">
@@ -5876,7 +5877,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                 const formatFinitePercent = (value) => {
                     const n = toFiniteNumberOrNull(value);
-                    return n === null ? '--' : `${n.toFixed(2)}%`;
+                    if (n === null) return '--';
+                    return n > 0 && n < 1 ? `${n.toFixed(3)}%` : `${n.toFixed(2)}%`;
                 };
                 const recoveryWatchList = computed(() => activeHoldings.value
                     .map(f => {
