@@ -6034,7 +6034,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     assetMode.value = mode;
                     localStorage.setItem('asset_mode', mode);
                     saveUiState('asset_mode', { value: mode });
-                    if (mode === 'stock') nextTick(() => { loadStockDashboard(false); renderStockChart([]); });
+                    if (mode === 'stock') nextTick(() => { loadStockDashboard(false); renderStockChart([]); safeResizeChart(stockChartInstance); });
                 };
 
                 const triggerStockOcr = () => document.getElementById('stockOcrInput')?.click();
@@ -6137,7 +6137,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                 const renderStockChart = (rows) => {
                     if (!stockChartRef.value || !window.echarts) return;
-                    if (!stockChartInstance.value) stockChartInstance.value = echarts.init(stockChartRef.value, 'dark');
+                    if (!stockChartInstance.value) stockChartInstance.value = echarts.init(stockChartRef.value);
                     const rawRows = Array.isArray(rows) ? rows : [];
                     const parseChartNumber = (value) => {
                         if (value === null || value === undefined || value === '') return null;
@@ -7550,14 +7550,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     if (page === 'news') fetchNews(newsMode.value, false);
                     if (page === 'analysis') { persistAnalysisPreferences(); await fetchAnalysis(false); }
                     if (page === 'home') nextTick(() => {
-                        if (chartInstance.value) chartInstance.value.resize();
-                        if (performanceChartInstance.value) {
-                            performanceChartInstance.value.resize();
-                            renderPerformanceChart();
-                        }
-                    });
-                    if (page === 'stock' && assetMode.value === 'stock') nextTick(() => {
-                        if (stockChartInstance.value) stockChartInstance.value.resize();
+                        safeResizeChart(chartInstance);
+                        safeResizeChart(performanceChartInstance);
+                        if (performanceChartInstance.value) renderPerformanceChart();
+                        if (assetMode.value === 'stock') safeResizeChart(stockChartInstance);
                     });
                 };
 
@@ -7919,10 +7915,16 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     }
                 };
 
+                const safeResizeChart = (ref) => {
+                    try {
+                        const c = ref?.value;
+                        if (c && typeof c.resize === 'function') c.resize();
+                    } catch (e) { console.warn('chart resize skipped', e); }
+                };
                 const handleResize = () => {
-                    if (chartInstance.value) chartInstance.value.resize();
-                    if (performanceChartInstance.value) performanceChartInstance.value.resize();
-                    if (stockChartInstance.value) stockChartInstance.value.resize();
+                    safeResizeChart(chartInstance);
+                    safeResizeChart(performanceChartInstance);
+                    safeResizeChart(stockChartInstance);
                 };
                 let lastChartDataHash = '';
                 const renderChart = async (apiData) => {
