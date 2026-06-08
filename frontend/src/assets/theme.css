@@ -1,0 +1,144 @@
+/* 暗色霓虹主题 — 覆盖 TDesign 默认亮色 */
+:root {
+  --td-brand-color: #8b5cf6;
+  --td-brand-color-hover: #a78bfa;
+  --td-brand-color-focus: #7c3aed;
+  --td-brand-color-active: #6d28d9;
+  --td-warning-color: #f59e0b;
+  --td-error-color: #ef4444;
+  --td-success-color: #10b981;
+  --td-text-color-primary: #f8fafc;
+  --td-text-color-secondary: #a8b3cf;
+  --td-text-color-placeholder: #64748b;
+  --td-bg-color-page: #080b1b;
+  --td-bg-color-container: rgba(24, 31, 68, 0.88);
+  --td-bg-color-container-hover: rgba(35, 30, 78, 0.88);
+  --td-border-color: rgba(174, 201, 255, 0.16);
+  --td-border-level-1-color: rgba(174, 201, 255, 0.12);
+  --td-shadow-1: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --td-shadow-2: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --td-radius-default: 10px;
+  --td-radius-medium: 14px;
+  --td-radius-large: 20px;
+}
+
+/* TDesign 组件暗色覆盖 */
+.t-button--variant-base {
+  --td-button-bg-color: rgba(255, 255, 255, 0.08);
+  --td-button-border-color: rgba(255, 255, 255, 0.15);
+  --td-button-text-color: var(--td-text-color-primary);
+}
+.t-tag {
+  --td-tag-bg-color: rgba(255, 255, 255, 0.06);
+  --td-tag-text-color: var(--td-text-color-secondary);
+  --td-tag-border-color: rgba(255, 255, 255, 0.12);
+}
+.t-card {
+  background: rgba(24, 31, 68, 0.88) !important;
+  border: 1px solid rgba(174, 201, 255, 0.16) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 18px 46px rgba(2, 6, 23, 0.36), 0 0 32px rgba(139, 92, 246, 0.14) !important;
+  color: var(--td-text-color-primary) !important;
+}
+.t-dialog {
+  --td-dialog-bg-color: rgba(20, 28, 58, 0.96);
+  --td-dialog-border-radius: 18px;
+}
+.t-tooltip {
+  --td-tooltip-bg-color: rgba(30, 41, 59, 0.95);
+  --td-tooltip-text-color: #e2e8f0;
+}
+.t-loading {
+  --td-loading-text-color: var(--td-text-color-secondary);
+}
+
+/* 全局基础 */
+html, body {
+  margin: 0;
+  padding: 0;
+  background: linear-gradient(145deg, rgba(24, 31, 68, 0.88), rgba(13, 23, 48, 0.82));
+  background-color: #080b1b;
+  color: #f8fafc;
+  font-family: "Microsoft YaHei", "PingFang SC", -apple-system, BlinkMacSystemFont, sans-serif;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 12px 80px;
+}
+
+/* 卡片玻璃拟态 */
+.glass-card {
+  background: rgba(24, 31, 68, 0.88);
+  border: 1px solid rgba(174, 201, 255, 0.16);
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 18px 46px rgba(2, 6, 23, 0.36), 0 0 32px rgba(139, 92, 246, 0.14);
+}
+
+/* 数字等宽 */
+.num {
+  font-variant-numeric: tabular-nums;
+  font-family: 'Courier New', monospace;
+}
+
+/* 统一标签 */
+.xb-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  white-space: nowrap;
+  line-height: 1.5;
+  border: 1px solid transparent;
+}
+.xb-tag--success { color: #10b981; background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3); }
+.xb-tag--warning { color: #f59e0b; background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.3); }
+.xb-tag--danger  { color: #ef4444; background: rgba(239, 68, 68, 0.1);  border-color: rgba(239, 68, 68, 0.3); }
+.xb-tag--info    { color: #38bdf8; background: rgba(56, 189, 248, 0.1); border-color: rgba(56, 189, 248, 0.3); }
+.xb-tag--primary { color: #8b5cf6; background: rgba(139, 92, 246, 0.1); border-color: rgba(139, 92, 246, 0.3); }
+.xb-tag--ghost   { color: #a8b3cf; background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.15); }
+.xb-tag--compact { min-height: 20px; padding: 2px 6px; font-size: 11px; line-height: 1.2; }
+
+/* 底部导航 */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  padding: 10px 16px;
+  background: rgba(15, 23, 42, 0.86);
+  border-top: 1px solid rgba(148, 163, 184, 0.22);
+  box-shadow: 0 16px 45px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(12px);
+  z-index: 100;
+  gap: 8px;
+}
+.bottom-nav a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  text-decoration: none;
+  color: #a8b3cf;
+  font-size: 11px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+.bottom-nav a.router-link-active {
+  background: rgba(139, 92, 246, 0.18);
+  color: #c4b5fd;
+}
+.bottom-nav a .nav-icon {
+  font-size: 18px;
+}
