@@ -4804,12 +4804,31 @@
 
                 const getFundDataPointTime = (point) => {
                     if (Array.isArray(point)) return String(point[0] || '');
+                    if (Array.isArray(point?.value)) return String(point.value[0] || '');
+                    if (Array.isArray(point?.data)) return String(point.data[0] || '');
                     return String(point?.time || point?.date || point?.gztime || '');
                 };
 
                 const getFundDataPointRate = (point) => {
                     if (Array.isArray(point)) return toNullableNumber(point[1]);
+                    if (Array.isArray(point?.value)) return toNullableNumber(point.value[1]);
+                    if (Array.isArray(point?.data)) return toNullableNumber(point.data[1]);
                     return toNullableNumber(point?.rate ?? point?.currentRate ?? point?.gszzl);
+                };
+
+                const getLatestRateFromFundData = (data, todaySlash, todayDash) => {
+                    if (!Array.isArray(data) || data.length === 0) return null;
+                    let fallbackPoint = null;
+                    for (let i = data.length - 1; i >= 0; i--) {
+                        const point = data[i];
+                        const rate = getFundDataPointRate(point);
+                        if (rate === null) continue;
+                        const time = getFundDataPointTime(point);
+                        const normalized = { time, rate };
+                        if (!fallbackPoint) fallbackPoint = normalized;
+                        if (time.includes(todaySlash) || time.includes(todayDash)) return { ...normalized, source: 'intraday' };
+                    }
+                    return fallbackPoint ? { ...fallbackPoint, source: 'fallback' } : null;
                 };
 
                 const resolveFundCurrentRate = (fund, todaySlash, todayDash, now) => {
@@ -4836,27 +4855,14 @@
                         return { rate: lastSettledRate, source: 'last-settled' };
                     }
 
-                    const validPoints = data
-                        .map(point => ({ time: getFundDataPointTime(point), rate: getFundDataPointRate(point) }))
-                        .filter(point => point.rate !== null);
-                    const todayPoints = validPoints.filter(point => point.time.includes(todaySlash) || point.time.includes(todayDash));
-                    const latestTodayPoint = todayPoints[todayPoints.length - 1];
-                    if (latestTodayPoint) {
-                        fund.currentRate = latestTodayPoint.rate;
+                    const latestRatePoint = getLatestRateFromFundData(data, todaySlash, todayDash);
+                    if (latestRatePoint) {
+                        fund.currentRate = latestRatePoint.rate;
                         fund.isHoliday = false;
-                        fund.currentRateSource = 'intraday';
+                        fund.isStaleQuote = latestRatePoint.source !== 'intraday';
+                        fund.currentRateSource = latestRatePoint.source === 'intraday' ? 'intraday' : 'stale-data';
                         fund.canApplyCalibration = true;
-                        return { rate: latestTodayPoint.rate, source: 'intraday' };
-                    }
-
-                    const latestPoint = validPoints[validPoints.length - 1];
-                    if (latestPoint) {
-                        fund.currentRate = latestPoint.rate;
-                        fund.isHoliday = false;
-                        fund.isStaleQuote = true;
-                        fund.currentRateSource = 'stale-data';
-                        fund.canApplyCalibration = true;
-                        return { rate: latestPoint.rate, source: 'stale-data' };
+                        return { rate: latestRatePoint.rate, source: fund.currentRateSource };
                     }
 
                     fund.currentRate = 0;
@@ -4941,14 +4947,15 @@
                                 todayProfitVal = Number(fund.lastSettledProfit) || 0;
                                 fund.todayProfit = todayProfitVal.toFixed(2);
                                 currentRealTimeAmount = currentAmount;
-                                fund.currentRate = Number(fund.lastSettledRate) || fund.currentRate || 0;
+                                const settledRate = toNullableNumber(fund.lastSettledRate);
+                                fund.currentRate = settledRate !== null ? settledRate : (toNullableNumber(fund.currentRate) ?? 0);
                             } else if (fund.isSettled && fund.actualExactProfit != null) {
                                 todayProfitVal = Number(fund.actualExactProfit) || 0;
                                 fund.todayProfit = todayProfitVal.toFixed(2);
                                 currentRealTimeAmount = currentAmount + todayProfitVal;
                             } else {
-                                let baseAmount = currentAmount - todayAddAmount;
-                                todayProfitVal = baseAmount * ((Number(fund.currentRate) || 0) / 100);
+                                let baseAmount = Math.max(0, currentAmount - todayAddAmount);
+                                todayProfitVal = baseAmount * ((toNullableNumber(fund.currentRate) ?? 0) / 100);
                                 fund.todayProfit = todayProfitVal.toFixed(2);
                                 currentRealTimeAmount = currentAmount + todayProfitVal;
                             }
@@ -4964,8 +4971,8 @@
                             fund.existingReturnRate = (fund.cost && fund.cost > 0) ? ((allProfit / fund.cost) * 100).toFixed(2) : "0.00";
 
                             const rateBaseForToday = isAlreadySettled
-                                ? (currentAmount - todayProfitVal - todayAddAmount)
-                                : (currentAmount - todayAddAmount);
+                                ? Math.max(0, currentAmount - todayProfitVal - todayAddAmount)
+                                : Math.max(0, currentAmount - todayAddAmount);
                             tPrincipal += currentAmount; tPrincipalForRate += rateBaseForToday; tCost += (fund.cost || currentAmount);
                         });
 
