@@ -61,6 +61,24 @@
         --text-size-2xl: 1.45rem;
         --text-size-3xl: 1.8rem;
         --text-soft: #6b7280;
+        /* TDesign-inspired design tokens */
+        --td-radius-s: 3px;
+        --td-radius-default: 6px;
+        --td-radius-m: 10px;
+        --td-radius-l: 18px;
+        --td-font-size-xs: 10px;
+        --td-font-size-s: 11px;
+        --td-font-size-base: 13px;
+        --td-font-size-l: 15px;
+        --td-space-xs: 2px;
+        --td-space-s: 4px;
+        --td-space-m: 8px;
+        --td-space-l: 15px;
+        --td-color-primary: #8b5cf6;
+        --td-color-success: #10b981;
+        --td-color-warning: #f59e0b;
+        --td-color-danger: #ef4444;
+        --td-color-info: #38bdf8;
         }
 
             :root[data-theme="warm"] {
@@ -661,6 +679,74 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             font-weight: bold;
             font-variant-numeric: tabular-nums; /* 数字等宽对齐 */
         }
+
+        /* === Unified Tag System (TDesign-inspired) === */
+        .xb-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            font-size: var(--td-font-size-xs);
+            padding: var(--td-space-xs) var(--td-space-s);
+            border-radius: var(--td-radius-s);
+            font-weight: 600;
+            white-space: nowrap;
+            line-height: 1.5;
+            border: 1px solid transparent;
+            background: transparent;
+        }
+        .xb-tag--success { color: var(--td-color-success); background: rgba(16,185,129,.1); border-color: rgba(16,185,129,.3); }
+        .xb-tag--warning { color: var(--td-color-warning); background: rgba(245,158,11,.1); border-color: rgba(245,158,11,.3); }
+        .xb-tag--danger  { color: var(--td-color-danger);  background: rgba(239,68,68,.1);  border-color: rgba(239,68,68,.3); }
+        .xb-tag--info    { color: var(--td-color-info);    background: rgba(56,189,248,.1); border-color: rgba(56,189,248,.3); }
+        .xb-tag--primary { color: var(--td-color-primary); background: rgba(139,92,246,.1); border-color: rgba(139,92,246,.3); }
+        .xb-tag--ghost   { color: var(--text-muted);       background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.15); }
+
+        /* === Unified Button System === */
+        .xb-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: all .2s;
+            font-size: 12px;
+            padding: 0;
+            background: transparent;
+        }
+        .xb-btn--circle {
+            border-radius: 50%;
+            width: 26px;
+            height: 26px;
+        }
+        .xb-btn--sm {
+            border-radius: var(--td-radius-default);
+            padding: var(--td-space-xs) var(--td-space-m);
+            height: 24px;
+        }
+        .xb-btn--info    { background: rgba(56,189,248,.18); border-color: rgba(56,189,248,.3); color: #38bdf8; }
+        .xb-btn--info:hover    { background: rgba(56,189,248,.3); }
+        .xb-btn--warning { background: rgba(251,191,36,.18); border-color: rgba(251,191,36,.35); color: #fbbf24; }
+        .xb-btn--warning:hover { background: rgba(251,191,36,.3); }
+        .xb-btn--success { background: rgba(16,185,129,.2);  border-color: rgba(16,185,129,.3); color: #34d399; }
+        .xb-btn--success:hover { background: rgba(16,185,129,.35); }
+        .xb-btn--danger  { background: rgba(239,68,68,.2);   border-color: rgba(239,68,68,.3);  color: #ef4444; }
+        .xb-btn--danger:hover  { background: rgba(239,68,68,.35); }
+        .xb-btn--primary { background: var(--primary-gradient); border: none; color: #fff; box-shadow: 0 4px 14px rgba(236,72,153,.32); }
+        .xb-btn--primary:hover { box-shadow: 0 6px 20px rgba(236,72,153,.4); transform: translateY(-1px); }
+        .xb-btn--ghost   { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.15); color: var(--text-muted); }
+        .xb-btn--ghost:hover   { background: rgba(255,255,255,.12); }
+        :root[data-theme="rainbow"] .xb-btn--circle,
+        :root[data-theme="rainbow"] .xb-btn--sm {
+            background: rgba(255,255,255,.1);
+            border-color: rgba(255,255,255,.15);
+            color: var(--text-main);
+        }
+
+        /* === Unified Metric Highlight === */
+        .xb-metric--success { background: rgba(16,185,129,.08); border-radius: var(--td-radius-s); padding: var(--td-space-xs); }
+        .xb-metric--success .metric-label { color: var(--td-color-success); }
+        .xb-metric--info    { background: rgba(56,189,248,.08);  border-radius: var(--td-radius-s); padding: var(--td-space-xs); }
+        .xb-metric--info .metric-label    { color: var(--td-color-info); }
 
         /* 统一大数字显示*/
         .number-display {
@@ -4206,9 +4292,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     </div>
                     <div class="divider"></div>
                     <div style="text-align: center;">
-                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">💎 账户总金额 <span @click="showPrivacyModal = true" style="cursor:pointer">{{ privacyMode === 0 ? '👁️' : '🙈' }}</span></div>
+                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;" title="确认持仓 + 今日待确认买入">💎 账户总金额 <span @click="showPrivacyModal = true" style="cursor:pointer">{{ privacyMode === 0 ? '👁️' : '🙈' }}</span></div>
                         <div class="number-display" style="color: var(--text-main); font-weight: 900;">{{ privacyMode === 0 ? '¥ ' + Number(dashboardActiveSummary.accountTotalAmount || 0).toFixed(2) : '****' }}</div>
-                        <div v-if="dashboardActiveSummary.todayPendingBuyTotal > 0" style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">确认持仓 ¥{{ Number(dashboardActiveSummary.confirmedHoldingTotalAmount || 0).toFixed(2) }} · 今日待确认 ¥{{ Number(dashboardActiveSummary.todayPendingBuyTotal || 0).toFixed(2) }}</div>
+                        <div v-if="dashboardActiveSummary.todayPendingBuyTotal > 0" style="font-size: 11px; color: var(--text-muted); margin-top: 3px;"><span title="不含今日待确认买入">确认持仓 ¥{{ Number(dashboardActiveSummary.confirmedHoldingTotalAmount || 0).toFixed(2) }}</span> · <span title="今天买入但未确认份额，不参与今日收益和今日收益率">今日待确认 ¥{{ Number(dashboardActiveSummary.todayPendingBuyTotal || 0).toFixed(2) }}</span></div>
                     </div>
                     <div class="divider"></div>
                     <div style="text-align: center;">
@@ -4334,31 +4420,30 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                     {{ fund.code }}
                                 </span>
                                 <div style="margin-top: 6px; display: flex; gap: 5px; flex-wrap: wrap;">
-                                    <span v-if="fund.shares > 0" style="color:#10b981; font-size: 10px; border: 1px solid rgba(16,185,129,0.3); padding: 1px 4px; border-radius: 4px; background: rgba(16,185,129,0.1);">
+                                    <span v-if="fund.shares > 0" class="xb-tag xb-tag--success">
                                         💠 份额: {{ fund.shares }}
                                     </span>
-                                    <span v-if="fund.pendingBuy || Number(fund.todayPendingBuyAmount || 0) > 0" style="color:#fbbf24; font-size: 10px; border: 1px solid rgba(251,191,36,0.35); padding: 1px 4px; border-radius: 4px; background: rgba(251,191,36,0.12);" title="买入待确认，不参与今日收益">
+                                    <span v-if="fund.pendingBuy || Number(fund.todayPendingBuyAmount || 0) > 0" class="xb-tag xb-tag--warning" title="今天买入但未确认份额，不参与今日收益和今日收益率">
                                         ⏳ 待确认: {{ privacyMode === 0 ? Number(fund.todayPendingBuyAmount || 0).toFixed(2) : '****' }}
                                     </span>
-                                    <span v-if="fund.pendingRedeem && fund.platformCumulativeProfit > 0" style="color:#38bdf8; font-size: 10px; border: 1px solid rgba(56,189,248,0.3); padding: 1px 4px; border-radius: 4px; background: rgba(56,189,248,0.1);">
+                                    <span v-if="fund.pendingRedeem && fund.platformCumulativeProfit > 0" class="xb-tag xb-tag--info">
                                         📊 平台累计收益: {{ fund.platformCumulativeProfit > 0 ? '+' : '' }}{{ fund.platformCumulativeProfit.toFixed(2) }}
                                     </span>
-                                    <span v-else-if="fund.pendingRedeem" style="color:#f59e0b; font-size: 10px; border: 1px solid rgba(245,158,11,0.3); padding: 1px 4px; border-radius: 4px; background: rgba(245,158,11,0.1);">
+                                    <span v-else-if="fund.pendingRedeem" class="xb-tag xb-tag--warning">
                                         ⏳ 赎回待确认 · 累计收益待确认
                                     </span>
-                                    <span v-else-if="fund.displayedProfit && fund.displayedProfit !== 0" style="color:#f59e0b; font-size: 10px; border: 1px solid rgba(245,158,11,0.3); padding: 1px 4px; border-radius: 4px; background: rgba(245,158,11,0.1);">
+                                    <span v-else-if="fund.displayedProfit && fund.displayedProfit !== 0" class="xb-tag xb-tag--warning">
                                         💰 已落袋: {{ fund.displayedProfit > 0 ? '+' : '' }}{{ fund.displayedProfit.toFixed(2) }}
                                     </span>
                                 </div>
                             </span>
 
                             <div style="display: flex; gap: 6px; flex-shrink: 0; align-items: center;">
-                                <button @click="fetchHistory(fund.code, fund.name)" style="background: rgba(56, 189, 248, 0.2); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 12px; display: flex; align-items: center; justify-content: center;" title="查看官方档案">📈</button>
-                                <button @click="openRecoveryModal(fund)" style="background: rgba(251, 191, 36, 0.18); border: 1px solid rgba(251, 191, 36, 0.35); color: #fbbf24; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 12px; display:flex;align-items:center;justify-content:center;" title="回本路径模拟">🧭</button>
-
-                                <button @click="openAddModal(fund)" style="background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;" title="加仓">➕</button>
-                                <button @click="openReduceModal(fund)" style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;" title="减仓">➖</button>
-                                <button @click="handleDeleteFund(fund.code, fund.name)" style="background: rgba(239, 68, 68, 0.2); border: none; color: #ff4d4f; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;">✕</button>
+                                <button @click="fetchHistory(fund.code, fund.name)" class="xb-btn xb-btn--circle xb-btn--info" title="查看官方档案">📈</button>
+                                <button @click="openRecoveryModal(fund)" class="xb-btn xb-btn--circle xb-btn--warning" title="回本路径模拟">🧭</button>
+                                <button @click="openAddModal(fund)" class="xb-btn xb-btn--circle xb-btn--success" title="加仓">➕</button>
+                                <button @click="openReduceModal(fund)" class="xb-btn xb-btn--circle xb-btn--danger" title="减仓">➖</button>
+                                <button @click="handleDeleteFund(fund.code, fund.name)" class="xb-btn xb-btn--circle xb-btn--danger">✕</button>
                             </div>
                         </div>
 
@@ -4368,12 +4453,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                     {{ getFundStatusBadgeText(fund) }}
                                 </span>
 
-                                <span v-if="fund.isHoliday" style="color:var(--text-muted); font-weight: bold; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-size: 11px;">☕ 休市</span>
+                                <span v-if="fund.isHoliday" class="xb-tag xb-tag--ghost" style="font-weight:bold;">☕ 休市</span>
                                 <span v-else :style="{color: fund.todayRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold'}">{{ fund.todayRate > 0 ? '+' : ''}}{{ Number(fund.todayRate || 0).toFixed(2) }}%</span>
-                                <span v-if="fund.isStaleQuote && !fund.isSettled" style="font-size: 10px; color: #f59e0b; border: 1px solid rgba(245,158,11,.45); padding: 1px 4px; border-radius: 4px;">旧估值</span>
-                                <span v-if="fund.isSettled && (fund.actualRate != null || fund.lastSettledRate != null)" style="font-size: 10px; color: #38bdf8; border: 1px solid rgba(56,189,248,.45); padding: 1px 4px; border-radius: 4px;">正式净值 {{ (Number(fund.actualRate ?? fund.lastSettledRate) >= 0 ? '+' : '') + Number(fund.actualRate ?? fund.lastSettledRate).toFixed(2) }}%</span>
+                                <span v-if="fund.isStaleQuote && !fund.isSettled" class="xb-tag xb-tag--warning">旧估值</span>
+                                <span v-if="fund.isSettled && (fund.actualRate != null || fund.lastSettledRate != null)" class="xb-tag xb-tag--info" title="盘后基金公司确认后的真实净值涨跌幅">正式净值 {{ (Number(fund.actualRate ?? fund.lastSettledRate) >= 0 ? '+' : '') + Number(fund.actualRate ?? fund.lastSettledRate).toFixed(2) }}%</span>
 
-                                <span v-if="fund.calibrationOffset && Math.abs(fund.calibrationOffset) > 0 && !fund.isHoliday" style="font-size: 10px; color: #8b5cf6; border: 1px solid #8b5cf6; padding: 1px 4px; border-radius: 4px;">
+                                <span v-if="fund.calibrationOffset && Math.abs(fund.calibrationOffset) > 0 && !fund.isHoliday" class="xb-tag xb-tag--primary">
                                     🤖修正: {{ fund.calibrationOffset > 0 ? '+' : '' }}{{ fund.calibrationOffset }}%
                                 </span>
                             </span>
@@ -4395,14 +4480,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 <span class="metric-label">💰 持仓本金</span>
                                 <span class="metric-value" :style="{color: privacyMode === 0 ? ((fund.costAmount || 0) > 0 ? '#cbd5e1' : '#eab308') : '#cbd5e1'}">{{ privacyMode === 0 ? (fund.costAmount > 0 ? Number(fund.costAmount || 0).toFixed(2) : '未设置') : '****' }}</span>
                             </div>
-                            <div class="metric-item" style="background: rgba(16, 185, 129, 0.1); padding: 2px; border-radius: 4px;">
-                                <span class="metric-label" style="color: #10b981;">💎 今日市值</span>
+                            <div class="metric-item xb-metric--success">
+                                <span class="metric-label">💎 今日市值</span>
                                 <span class="metric-value" style="color:var(--text-main); font-weight: bold;">
                                     {{ privacyMode === 0 ? Number(fund.estimatedConfirmedHoldingAmount || 0).toFixed(2) : '****' }}
                                 </span>
                             </div>
-                            <div class="metric-item" style="background: rgba(79, 172, 254, 0.1); padding: 2px; border-radius: 4px;">
-                                <span class="metric-label" style="color: #4facfe;">🌟 今日收益</span>
+                            <div class="metric-item xb-metric--info">
+                                <span class="metric-label">🌟 今日收益</span>
                                 <span class="metric-value" :style="{color: privacyMode <= 1 ? (fund.todayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 1 ? (fund.todayProfit >= 0 ? '+' : '') + Number(fund.todayProfit || 0).toFixed(2) : '****' }}</span>
                             </div>
                             <div class="metric-item">
