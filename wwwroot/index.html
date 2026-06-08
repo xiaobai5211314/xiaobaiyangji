@@ -5453,11 +5453,18 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     const activeHolding = !clearedHolding && isActiveHoldingFund(activeCandidate);
                     const activeRealizedProfit = activeHolding ? round2(raw.displayedProfit ?? raw.realizedProfit) : 0;
                     const apiHoldingProfit = round2(raw.holdingIncome ?? raw.estimatedProfit);
+                    const costWithPending = round2(costAmount + todayPendingBuyAmount);
                     const holdingProfit = activeHolding
-                        ? round2(costAmount > 0 ? (marketValue - costAmount + activeRealizedProfit) : apiHoldingProfit)
+                        ? (Number.isFinite(apiHoldingProfit) && apiHoldingProfit !== 0
+                            ? apiHoldingProfit
+                            : round2(costAmount > 0 ? (marketValue - costWithPending + activeRealizedProfit) : 0))
                         : 0;
                     const holdingRate = activeHolding
-                        ? round2(costAmount > 0 ? (holdingProfit / costAmount * 100) : (raw.existingReturnRate ?? raw.holdingRate ?? 0))
+                        ? (Number.isFinite(apiHoldingProfit) && apiHoldingProfit !== 0 && costAmount > 0
+                            ? round2(holdingProfit / costWithPending * 100)
+                            : costAmount > 0
+                                ? round2(holdingProfit / costWithPending * 100)
+                                : Number(raw.existingReturnRate ?? raw.holdingRate ?? 0))
                         : 0;
                     const breakEvenRate = activeHolding && holdingProfit < 0
                         ? (calcBreakEvenRate({
