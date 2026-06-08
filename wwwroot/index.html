@@ -7722,7 +7722,20 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             const hasPendingBuy = !!fund.pendingBuy || pendingBuyAmount > 0;
                             fund.pendingBuy = hasPendingBuy;
                             fund.pendingBuyAmount = pendingBuyAmount;
-                            let isAlreadySettled = (fund.lastSettledDate === todayDash);
+                            const hasOfficialSettlement = fund.isSettled === true || fund.rateSource === 'official-nav' || fund.settlementSource === 'official-nav' || fund.lastSettledDate === todayDash || fund.actualRate != null || fund.actualExactProfit != null;
+                            if (hasOfficialSettlement) {
+                                fund.isSettled = true;
+                                fund.rateSource = 'official-nav';
+                            }
+                            console.log('[official-settlement-check]', {
+                                code: fund.code, name: fund.name, hasOfficialSettlement,
+                                isSettled: fund.isSettled, rateSource: fund.rateSource,
+                                actualRate: fund.actualRate, lastSettledRate: fund.lastSettledRate,
+                                actualExactProfit: fund.actualExactProfit, lastSettledProfit: fund.lastSettledProfit,
+                                marketValue: fund.marketValue, todayAmount: fund.todayAmount,
+                                pendingBuyAmount: fund.pendingBuyAmount
+                            });
+                            let isAlreadySettled = hasOfficialSettlement;
                             let currentAmount = Number(fund.rawHoldAmount ?? fund.amount) || 0;
                             const apiConfirmedAmount = Number(fund.confirmedAmount);
                             const confirmedAmount = Number.isFinite(apiConfirmedAmount) ? Math.max(0, apiConfirmedAmount) : Math.max(0, currentAmount - pendingBuyAmount);

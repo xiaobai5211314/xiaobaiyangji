@@ -578,9 +578,9 @@ namespace 小白养基.Controllers
             }
             else
             {
-                // 没有份额或没有单位净值时，保留旧逻辑。
-                settledProfit = Math.Round(exactProfit ?? (baseAmount * (actualRate / 100.0)), 2);
-                newHoldAmount = Math.Round(baseAmount + settledProfit + pending, 2);
+                // 没有份额或没有单位净值时，用 rawHoldAmount（含待确认）算收益，和平台口径一致。
+                settledProfit = Math.Round(exactProfit ?? (fund.HoldAmount * (actualRate / 100.0)), 2);
+                newHoldAmount = Math.Round(fund.HoldAmount + settledProfit, 2);
             }
 
             Console.WriteLine(
@@ -6306,7 +6306,8 @@ namespace 小白养基.Controllers
                     bool isInactiveHolding = config.HoldShares <= 0 && !pendingBuy;
                     double displayAmount = isInactiveHolding ? 0 : rawHoldAmount;
                     // marketValue = 当前确认市值（显示用），todayBaseAmount = 收益率分母
-                    double marketValue = isInactiveHolding ? 0 : Math.Round(currentAssetsPreview, 2);
+                    // settled 基金用 rawHoldAmount（含待确认），和平台口径一致
+                    double marketValue = isInactiveHolding ? 0 : (isSettled ? Math.Round(rawHoldAmount, 2) : Math.Round(currentAssetsPreview, 2));
                     double todayProfit = Math.Round(todayProfitPreview, 2);
                     double todayRateForDisplay = todayBaseAmount > 0
                         ? Math.Round(todayProfit / todayBaseAmount * 100.0, 2)
