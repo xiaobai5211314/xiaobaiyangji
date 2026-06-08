@@ -4367,7 +4367,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 </span>
 
                                 <span v-if="fund.isHoliday" style="color:var(--text-muted); font-weight: bold; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-size: 11px;">☕ 休市</span>
-                                <span v-else :style="{color: fund.currentRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold'}">{{ fund.currentRate > 0 ? '+' : ''}}{{ fund.currentRate }}%</span>
+                                <span v-else :style="{color: fund.todayRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold'}">{{ fund.todayRate > 0 ? '+' : ''}}{{ Number(fund.todayRate || 0).toFixed(2) }}%</span>
                                 <span v-if="fund.isStaleQuote && !fund.isSettled" style="font-size: 10px; color: #f59e0b; border: 1px solid rgba(245,158,11,.45); padding: 1px 4px; border-radius: 4px;">旧估值</span>
 
                                 <span v-if="fund.calibrationOffset && Math.abs(fund.calibrationOffset) > 0 && !fund.isHoliday" style="font-size: 10px; color: #8b5cf6; border: 1px solid #8b5cf6; padding: 1px 4px; border-radius: 4px;">
@@ -4390,29 +4390,29 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <div class="metrics-grid">
                             <div class="metric-item">
                                 <span class="metric-label">💰 持仓本金</span>
-                                <span class="metric-value" :style="{color: privacyMode === 0 ? ((fund.cost || 0) > 0 ? '#cbd5e1' : '#eab308') : '#cbd5e1'}">{{ privacyMode === 0 ? (fund.cost > 0 ? fund.cost : '未设置') : '****' }}</span>
+                                <span class="metric-value" :style="{color: privacyMode === 0 ? ((fund.costAmount || 0) > 0 ? '#cbd5e1' : '#eab308') : '#cbd5e1'}">{{ privacyMode === 0 ? (fund.costAmount > 0 ? Number(fund.costAmount || 0).toFixed(2) : '未设置') : '****' }}</span>
                             </div>
                             <div class="metric-item" style="background: rgba(16, 185, 129, 0.1); padding: 2px; border-radius: 4px;">
                                 <span class="metric-label" style="color: #10b981;">💎 今日市值</span>
                                 <span class="metric-value" style="color:var(--text-main); font-weight: bold;">
-                                    {{ privacyMode === 0 ? fund.todayAmount : '****' }}
+                                    {{ privacyMode === 0 ? Number(fund.marketValue || 0).toFixed(2) : '****' }}
                                 </span>
                             </div>
                             <div class="metric-item" style="background: rgba(79, 172, 254, 0.1); padding: 2px; border-radius: 4px;">
                                 <span class="metric-label" style="color: #4facfe;">🌟 今日收益</span>
-                                <span class="metric-value" :style="{color: privacyMode <= 1 ? (fund.todayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 1 ? (fund.todayProfit >= 0 ? '+' : '') + fund.todayProfit : '****' }}</span>
+                                <span class="metric-value" :style="{color: privacyMode <= 1 ? (fund.todayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 1 ? (fund.todayProfit >= 0 ? '+' : '') + Number(fund.todayProfit || 0).toFixed(2) : '****' }}</span>
                             </div>
                             <div class="metric-item">
                                 <span class="metric-label">🚀 今日收益率</span>
-                                <span class="metric-value" :style="{color: privacyMode <= 2 ? (fund.currentRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 2 ? ((fund.currentRate > 0 ? '+' : '') + fund.currentRate + '%') : '****' }}</span>
+                                <span class="metric-value" :style="{color: privacyMode <= 2 ? (fund.todayRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 2 ? ((fund.todayRate > 0 ? '+' : '') + Number(fund.todayRate || 0).toFixed(2) + '%') : '****' }}</span>
                             </div>
                             <div class="metric-item">
                                 <span class="metric-label">💰 累计盈亏</span>
-                                <span class="metric-value" :style="{color: privacyMode <= 1 ? (fund.estimatedProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 1 ? (fund.estimatedProfit >= 0 ? '+' : '') + fund.estimatedProfit : '****' }}</span>
+                                <span class="metric-value" :style="{color: privacyMode <= 1 ? (fund.holdingProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 1 ? (fund.holdingProfit >= 0 ? '+' : '') + Number(fund.holdingProfit || 0).toFixed(2) : '****' }}</span>
                             </div>
                             <div class="metric-item">
                                 <span class="metric-label">📈 累计收益率</span>
-                                <span class="metric-value" :style="{color: privacyMode <= 2 ? (fund.existingReturnRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 2 ? fund.existingReturnRate + '%' : '****' }}</span>
+                                <span class="metric-value" :style="{color: privacyMode <= 2 ? (fund.holdingRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 2 ? Number(fund.holdingRate || 0).toFixed(2) + '%' : '****' }}</span>
                             </div>
                         </div>
                     </div>
@@ -4428,8 +4428,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 <span style="font-size: 12px; color: var(--text-muted); font-family: monospace;">{{ fund.code }}</span>
                             </div>
                             <div style="display: flex; gap: 16px; margin-top: 6px; font-size: 12px;">
-                                <span>已清仓收益: <strong :style="{color: getClearedProfit(fund) >= 0 ? '#ff4d4f' : '#10b981'}">{{ getClearedProfit(fund).toFixed(2) }}</strong></span>
-                                <span style="color: var(--text-muted);">来源: {{ fund.platformCumulativeProfit > 0 ? '平台累计' : '系统已实现' }}</span>
+                                <span>已清仓收益: <strong :style="{color: Number(fund.clearedProfit || 0) >= 0 ? '#ff4d4f' : '#10b981'}">{{ Number(fund.clearedProfit || 0).toFixed(2) }}</strong></span>
+                                <span style="color: var(--text-muted);">来源: {{ fund.clearedProfitSource || '系统已实现' }}</span>
                             </div>
                         </div>
                     </details>
@@ -5262,22 +5262,133 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const currentUser = ref(localStorage.getItem('fund_username') || '');
                 const userDisplayName = ref(localStorage.getItem('fund_display_name') || '');
                 const fundsList = ref([]);
-                const activeHoldings = computed(() => fundsList.value.filter(f => {
-                    if (f.inactiveHolding) return false;
-                    const amt = Number(f.todayAmount || f.amount || f.confirmedAmount || 0);
-                    const shares = Number(f.shares || 0);
-                    const pending = Number(f.pendingBuyAmount || 0);
-                    return amt > 0 || shares > 0 || pending > 0 || f.pendingBuy;
-                }));
-                const inactiveHoldings = computed(() => fundsList.value.filter(f => {
-                    if (!f.inactiveHolding) return false;
-                    return true;
-                }));
-                const getClearedProfit = (fund) => {
-                    const platform = Number(fund.platformCumulativeProfit);
-                    if (Number.isFinite(platform) && platform !== 0) return platform;
-                    return Number(fund.realizedProfit) || 0;
+                const toNumber = (value, fallback = 0) => {
+                    const n = Number(value);
+                    return Number.isFinite(n) ? n : fallback;
                 };
+                const round2 = (value) => Number(toNumber(value, 0).toFixed(2));
+                const getClearedProfit = (fund) => {
+                    const platform = toNumber(fund?.platformCumulativeProfit, 0);
+                    if (platform !== 0) return { value: platform, source: '平台累计' };
+                    const realized = toNumber(fund?.realizedProfit, 0);
+                    if (realized !== 0) return { value: realized, source: '系统已实现' };
+                    return { value: 0, source: '系统已实现' };
+                };
+                const isClearedFund = (fund) => {
+                    if (!fund) return false;
+                    if (fund.inactiveHolding === true || fund.isClearedHolding === true) return true;
+                    const shares = toNumber(fund.shares, 0);
+                    const todayAmount = toNumber(fund.marketValue ?? fund.todayAmount, 0);
+                    const amount = toNumber(fund.amount, 0);
+                    const hasClearedProfit = toNumber(fund.realizedProfit, 0) !== 0 || toNumber(fund.platformCumulativeProfit, 0) !== 0;
+                    return shares <= 0 && todayAmount <= 0 && amount <= 0 && hasClearedProfit;
+                };
+                const isActiveHoldingFund = (fund) => {
+                    if (!fund || isClearedFund(fund)) return false;
+                    return [
+                        fund.marketValue,
+                        fund.todayAmount,
+                        fund.amount,
+                        fund.confirmedAmount,
+                        fund.shares,
+                        fund.pendingBuyAmount
+                    ].some(value => toNumber(value, 0) > 0) || fund.pendingBuy === true;
+                };
+                const normalizeFundForDashboard = (rawFund, context = {}) => {
+                    const raw = rawFund || {};
+                    const pendingBuyAmount = Math.max(0, round2(context.pendingBuyAmount ?? raw.pendingBuyAmount));
+                    const shares = toNumber(raw.shares, 0);
+                    const costAmount = round2(raw.costAmount ?? raw.cost ?? raw.rawCostAmount ?? raw.confirmedCost);
+                    const rawHoldAmount = round2(raw.rawHoldAmount ?? raw.amount);
+                    const confirmedAmount = Math.max(0, round2(context.confirmedAmount ?? raw.confirmedAmount ?? (rawHoldAmount - pendingBuyAmount)));
+                    const baseAmountForToday = Math.max(0, round2(context.baseAmountForToday ?? raw.todayBaseAmount ?? confirmedAmount));
+                    const clearedInfo = getClearedProfit(raw);
+                    const clearedHolding = isClearedFund(raw);
+                    let todayRate = clearedHolding ? 0 : round2(context.todayRate ?? raw.todayRate ?? raw.currentRate ?? raw.todayRateForSimulation);
+                    const fallbackTodayProfit = baseAmountForToday > 0 ? baseAmountForToday * todayRate / 100 : 0;
+                    const todayProfit = clearedHolding ? 0 : round2(context.todayProfit ?? raw.todayProfit ?? raw.todayProfitPreview ?? fallbackTodayProfit);
+                    const rateMissing = raw.rateSource === 'missing' || !Number.isFinite(Number(context.todayRate ?? raw.todayRate ?? raw.currentRate ?? raw.todayRateForSimulation));
+                    if (!clearedHolding && rateMissing && baseAmountForToday > 0 && Number.isFinite(Number(todayProfit))) {
+                        todayRate = round2(todayProfit / baseAmountForToday * 100);
+                    }
+                    const rawMarketValue = context.marketValue ?? raw.marketValue ?? raw.todayAmount;
+                    const marketValue = clearedHolding ? 0 : round2(toNumber(rawMarketValue, rawHoldAmount + todayProfit));
+                    const activeCandidate = {
+                        ...raw,
+                        pendingBuyAmount,
+                        shares,
+                        amount: rawHoldAmount,
+                        confirmedAmount,
+                        todayAmount: marketValue,
+                        marketValue
+                    };
+                    const activeHolding = !clearedHolding && isActiveHoldingFund(activeCandidate);
+                    const activeRealizedProfit = activeHolding ? round2(raw.displayedProfit ?? raw.realizedProfit) : 0;
+                    const apiHoldingProfit = round2(raw.holdingIncome ?? raw.estimatedProfit);
+                    const holdingProfit = activeHolding
+                        ? round2(costAmount > 0 ? (marketValue - costAmount + activeRealizedProfit) : apiHoldingProfit)
+                        : 0;
+                    const holdingRate = activeHolding
+                        ? round2(costAmount > 0 ? (holdingProfit / costAmount * 100) : (raw.existingReturnRate ?? raw.holdingRate ?? 0))
+                        : 0;
+                    const breakEvenRate = activeHolding && holdingProfit < 0 && marketValue > 0
+                        ? round2(Math.abs(holdingProfit) / marketValue * 100)
+                        : 0;
+                    return {
+                        ...raw,
+                        raw,
+                        code: raw.code || raw.fundCode || '',
+                        name: raw.name || raw.fundName || '',
+                        isActiveHolding: activeHolding,
+                        isClearedHolding: clearedHolding,
+                        costAmount,
+                        shares,
+                        pendingBuyAmount,
+                        baseAmountForToday,
+                        marketValue,
+                        todayProfit,
+                        todayRate,
+                        holdingProfit,
+                        holdingRate,
+                        breakEvenRate,
+                        clearedProfit: round2(clearedInfo.value),
+                        clearedProfitSource: clearedInfo.source,
+                        calibrationOffset: round2(raw.calibrationOffset),
+                        calibrationSamples: toNumber(raw.calibrationSamples, 0),
+                        calibrationNote: raw.calibrationNote || '',
+                        currentRate: todayRate,
+                        todayAmount: marketValue.toFixed(2),
+                        estimatedProfit: holdingProfit.toFixed(2),
+                        existingReturnRate: holdingRate.toFixed(2)
+                    };
+                };
+                const calcActivePortfolioSummary = (activeFunds = []) => {
+                    const rows = Array.isArray(activeFunds) ? activeFunds.filter(isActiveHoldingFund) : [];
+                    const totalPrincipal = round2(rows.reduce((sum, f) => {
+                        const cost = toNumber(f.costAmount ?? f.cost, 0);
+                        const base = toNumber(f.baseAmountForToday ?? f.todayBaseAmount, 0);
+                        const pending = toNumber(f.pendingBuyAmount, 0);
+                        return sum + (pending > 0 ? base : (cost > 0 ? cost : base));
+                    }, 0));
+                    const totalCost = round2(rows.reduce((sum, f) => {
+                        const cost = Math.max(0, toNumber(f.costAmount ?? f.cost, 0));
+                        const base = Math.max(0, toNumber(f.baseAmountForToday ?? f.todayBaseAmount, 0));
+                        return sum + (toNumber(f.pendingBuyAmount, 0) > 0 ? (base > 0 ? base : cost) : cost);
+                    }, 0));
+                    const totalTodayProfit = round2(rows.reduce((sum, f) => sum + toNumber(f.todayProfit, 0), 0));
+                    const totalProfit = round2(rows.reduce((sum, f) => sum + toNumber(f.holdingProfit, 0), 0));
+                    const currentTotalAssets = round2(rows.reduce((sum, f) => sum + toNumber(f.marketValue ?? f.todayAmount, 0), 0));
+                    return {
+                        totalPrincipal,
+                        totalTodayProfit,
+                        totalTodayRate: totalPrincipal > 0 ? round2(totalTodayProfit / totalPrincipal * 100) : 0,
+                        totalProfit,
+                        totalRate: totalCost > 0 ? round2(totalProfit / totalCost * 100) : 0,
+                        currentTotalAssets
+                    };
+                };
+                const activeHoldings = computed(() => fundsList.value.filter(isActiveHoldingFund));
+                const inactiveHoldings = computed(() => fundsList.value.filter(isClearedFund));
                 const pickFiniteNumber = (...values) => {
                     for (const v of values) {
                         const n = Number(v);
@@ -5505,7 +5616,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                 const analysisTotalRecords = computed(() => analysisRecords.value.filter(r => r.fundCode === 'TOTAL'));
                 const selectedDayFundRecords = computed(() => analysisRecords.value.filter(r => r.fundCode !== 'TOTAL' && String(r.recordDate || '').slice(0, 10) === selectedAnalysisDate.value).sort((a, b) => Math.abs(Number(b.dailyProfit || 0)) - Math.abs(Number(a.dailyProfit || 0))));
-                const selectedDayTotalProfitRecords = computed(() => fundsList.value.map(f => ({ fundCode: f.code, fundName: f.name, assets: Number(f.todayAmount || f.amount || 0), totalProfit: Number(f.estimatedProfit || 0), totalRate: Number(f.existingReturnRate || 0) })).sort((a, b) => Math.abs(Number(b.totalProfit || 0)) - Math.abs(Number(a.totalProfit || 0))));
+                const selectedDayTotalProfitRecords = computed(() => activeHoldings.value.map(f => ({
+                    fundCode: f.code,
+                    fundName: f.name,
+                    assets: Number(f.marketValue || 0),
+                    totalProfit: Number(f.holdingProfit || 0),
+                    totalRate: Number(f.holdingRate || 0)
+                })).sort((a, b) => Math.abs(Number(b.totalProfit || 0)) - Math.abs(Number(a.totalProfit || 0))));
                 const analysisMonthTotal = computed(() => analysisTotalRecords.value.filter(r => String(r.recordDate || '').slice(0, 7) === analysisMonth.value).reduce((sum, r) => sum + Number(r.dailyProfit || 0), 0));
                 const analysisCalendarDays = computed(() => {
                     const [y, m] = analysisMonth.value.split('-').map(Number);
@@ -5568,13 +5685,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const confidenceRows = computed(() => fundsList.value.map(getConfidence).sort((a, b) => a.score - b.score));
 
                 const portfolioExposure = computed(() => {
-                    const activeFunds = fundsList.value.filter(f => !f.inactiveHolding);
-                    const total = activeFunds.reduce((sum, f) => sum + Number(f.todayAmount || f.amount || 0), 0);
+                    const activeFunds = activeHoldings.value;
+                    const total = activeFunds.reduce((sum, f) => sum + Number(f.marketValue || 0), 0);
                     const map = new Map();
                     for (const fund of activeFunds) {
                         const name = classifyFundSector(fund);
                         const row = map.get(name) || { name, amount: 0, dailyProfit: 0, count: 0, funds: [] };
-                        row.amount += Number(fund.todayAmount || fund.amount || 0);
+                        row.amount += Number(fund.marketValue || 0);
                         row.dailyProfit += Number(fund.todayProfit || 0);
                         row.count += 1;
                         row.funds.push(fund.name);
@@ -5584,8 +5701,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 });
 
                 const dailyBattleReport = computed(() => {
-                    const activeFunds = fundsList.value.filter(f => !f.inactiveHolding);
-                    const rows = activeFunds.map(f => ({ ...f, p: Number(f.todayProfit || 0), amountNum: Number(f.todayAmount || f.amount || 0) }));
+                    const activeFunds = activeHoldings.value;
+                    const rows = activeFunds.map(f => ({ ...f, p: Number(f.todayProfit || 0), amountNum: Number(f.marketValue || 0) }));
                     const best = rows.slice().sort((a, b) => b.p - a.p)[0];
                     const worst = rows.slice().sort((a, b) => a.p - b.p)[0];
                     const exposure = portfolioExposure.value[0];
@@ -5625,27 +5742,20 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     const n = toFiniteNumberOrNull(value);
                     return n === null ? '--' : `${n.toFixed(2)}%`;
                 };
-                const hasRecoveryBase = (fund) => {
-                    if (fund?.inactiveHolding === true) return false;
-                    return [fund?.todayBaseAmount, fund?.todayAmount, fund?.amount, fund?.holdingValue]
-                        .some(value => {
-                            const n = toFiniteNumberOrNull(value);
-                            return n !== null && n > 0;
-                        });
-                };
                 const recoveryWatchList = computed(() => activeHoldings.value
                     .filter(f => { const n = toFiniteNumberOrNull(f.breakEvenRate); return n !== null && n > 0; })
                     .sort((a, b) => (toFiniteNumberOrNull(b.breakEvenRate) || 0) - (toFiniteNumberOrNull(a.breakEvenRate) || 0)));
                 const recoveryModal = reactive({ show: false, code: '', name: '', assets: 0, cost: 0, loss: 0, breakEvenRate: 0, addAmount: '' });
                 const openRecoveryModal = (fund) => {
-                    const assets = toFiniteNumberOrNull(fund.todayAmount) ?? toFiniteNumberOrNull(fund.amount) ?? 0;
-                    const cost = toFiniteNumberOrNull(fund.cost) ?? toFiniteNumberOrNull(fund.amount) ?? 0;
+                    const assets = toFiniteNumberOrNull(fund.marketValue) ?? 0;
+                    const cost = toFiniteNumberOrNull(fund.costAmount) ?? 0;
+                    const holdingProfit = toFiniteNumberOrNull(fund.holdingProfit) ?? 0;
                     recoveryModal.show = true;
                     recoveryModal.code = fund.code;
                     recoveryModal.name = fund.name;
                     recoveryModal.assets = assets;
                     recoveryModal.cost = cost;
-                    recoveryModal.loss = Math.max(0, cost - assets);
+                    recoveryModal.loss = Math.max(0, -holdingProfit);
                     recoveryModal.breakEvenRate = toFiniteNumberOrNull(fund.breakEvenRate) ?? 0;
                     const savedRecovery = uiStateMap.value?.[`recovery_amount_${fund.code}`];
                     recoveryModal.addAmount = savedRecovery?.amount ? String(savedRecovery.amount) : '';
@@ -6212,11 +6322,27 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     let d = new Date();
                     let localDateStr = dashboardSummaryMeta.value?.effectiveDate || (d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
                     const safeNumber = (val) => Number((parseFloat(val) || 0).toFixed(2));
-                    const totalAssetsNow = fundsList.value.reduce((sum, f) => sum + safeNumber(f.todayAmount || f.amount), 0);
+                    const archiveFunds = activeHoldings.value;
+                    const archiveSummary = calcActivePortfolioSummary(archiveFunds);
                     const payload = {
                         Username: currentUser.value, DateStr: localDateStr,
-                        Total: { FundName: "总持仓", Assets: safeNumber(totalAssetsNow), DailyProfit: safeNumber(totalTodayProfit.value), DailyRate: safeNumber(totalTodayRate.value), TotalProfit: safeNumber(totalProfit.value), TotalRate: safeNumber(totalRate.value) },
-                        Funds: fundsList.value.map(f => ({ FundCode: f.code, FundName: f.name, Assets: safeNumber(f.todayAmount || f.amount), DailyProfit: safeNumber(f.todayProfit), DailyRate: safeNumber(f.currentRate), TotalProfit: safeNumber(f.estimatedProfit), TotalRate: safeNumber(f.existingReturnRate) }))
+                        Total: {
+                            FundName: "总持仓",
+                            Assets: safeNumber(archiveSummary.currentTotalAssets),
+                            DailyProfit: safeNumber(archiveSummary.totalTodayProfit),
+                            DailyRate: safeNumber(archiveSummary.totalTodayRate),
+                            TotalProfit: safeNumber(archiveSummary.totalProfit),
+                            TotalRate: safeNumber(archiveSummary.totalRate)
+                        },
+                        Funds: archiveFunds.map(f => ({
+                            FundCode: f.code,
+                            FundName: f.name,
+                            Assets: safeNumber(f.marketValue),
+                            DailyProfit: safeNumber(f.todayProfit),
+                            DailyRate: safeNumber(f.todayRate),
+                            TotalProfit: safeNumber(f.holdingProfit),
+                            TotalRate: safeNumber(f.holdingRate)
+                        }))
                     };
                     try {
                         const response = await fetch(`${API_BASE}/api/fund/save-archive`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -7353,6 +7479,15 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 fund.existingReturnRate = "0.00";
                             }
 
+                            Object.assign(fund, normalizeFundForDashboard(fund, {
+                                pendingBuyAmount,
+                                confirmedAmount,
+                                baseAmountForToday: todayBaseAmount,
+                                marketValue: currentRealTimeAmount,
+                                todayProfit: todayProfitVal,
+                                todayRate: fund.currentRate
+                            }));
+
                             const rateBaseForToday = todayBaseAmount;
                             if (!fund.inactiveHolding) {
                                 tPrincipal += currentAmount; tPrincipalForRate += rateBaseForToday; tCost += (fund.cost || currentAmount);
@@ -7361,23 +7496,38 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                         fundsList.value = apiData;
                         writeJsonCache(dashCacheKey, apiData);
-                        // 顶部总览只统计当前持仓，已清仓基金不参与累计盈亏
-                        const activeForSummary = fundsList.value.filter(f => !f.inactiveHolding);
-                        const tRealized = activeForSummary.reduce((sum, f) => {
-                            return sum + Number(f.displayedProfit || f.realizedProfit || 0);
-                        }, 0);
-                        totalPrincipal.value = tPrincipal;
-                        if (apiSummary) {
-                            if (Number.isFinite(Number(apiSummary.totalDisplayAmount))) {
-                                totalPrincipal.value = Number(apiSummary.totalDisplayAmount);
-                            }
+                        // 顶部总览只统计当前持仓，已清仓基金不参与今日收益、累计盈亏和累计收益率。
+                        const activeForSummary = fundsList.value.filter(isActiveHoldingFund);
+                        const inactiveForSummary = fundsList.value.filter(isClearedFund);
+                        const activeSummary = calcActivePortfolioSummary(activeForSummary);
+                        if (activeForSummary.length > 0) {
+                            totalPrincipal.value = activeSummary.totalPrincipal;
+                            totalTodayProfit.value = activeSummary.totalTodayProfit;
+                            totalTodayRate.value = activeSummary.totalTodayRate;
+                            totalProfit.value = activeSummary.totalProfit;
+                            totalRate.value = activeSummary.totalRate;
+                        } else if (apiSummary) {
+                            totalPrincipal.value = finiteNumber(apiSummary.totalPrincipal ?? apiSummary.totalDisplayAmount, 0);
+                            totalTodayProfit.value = finiteNumber(apiSummary.totalTodayProfit, 0);
+                            totalTodayRate.value = finiteNumber(apiSummary.totalTodayRate, 0);
+                            totalProfit.value = finiteNumber(apiSummary.totalProfit, 0);
+                            totalRate.value = finiteNumber(apiSummary.totalRate, 0);
+                        } else {
+                            totalPrincipal.value = 0;
+                            totalTodayProfit.value = 0;
+                            totalTodayRate.value = 0;
+                            totalProfit.value = 0;
+                            totalRate.value = 0;
                         }
-                        totalTodayProfit.value = tToday;
-                        totalTodayRate.value = tPrincipalForRate > 0 ? (tToday / tPrincipalForRate * 100) : 0;
-                        // 累计收益率只按当前持仓计算，不包含已清仓
-                        const currentTotalAssets = activeForSummary.reduce((sum, f) => sum + (parseFloat(f.todayAmount || f.amount) || 0), 0);
-                        totalProfit.value = currentTotalAssets - tCost + tRealized;
-                        totalRate.value = tCost > 0 ? ((currentTotalAssets - tCost + tRealized) / tCost * 100) : 0;
+                        console.log('[dashboard-normalized]', {
+                            activeCount: activeForSummary.length,
+                            inactiveCount: inactiveForSummary.length,
+                            totalTodayProfit: Number(totalTodayProfit.value || 0),
+                            totalTodayRate: Number(totalTodayRate.value || 0),
+                            totalProfit: Number(totalProfit.value || 0),
+                            totalRate: Number(totalRate.value || 0),
+                            sample: fundsList.value.slice(0, 3)
+                        });
 
                         saveIntradayCalibrationSnapshots(intradayCalibrationPayload);
                         settleCalibrationSamples(settledCalibrationPayload);
@@ -7456,14 +7606,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     if (!chartInstance.value) { chartInstance.value = echarts.init(chartRef.value, 'dark'); window.addEventListener('resize', handleResize); }
                     var holdAmounts = {}; var validData = apiData.filter(f => f.data && f.data.length > 1 && !f.isHoliday);
                     var seriesData = validData.map(fund => {
-                        holdAmounts[fund.name] = fund.amount; let diff = 0;
+                        holdAmounts[fund.name] = Number(fund.baseAmountForToday ?? fund.amount ?? 0); let diff = 0;
                         if (fund.isSettled && fund.data.length >= 2) { let realRate = fund.actualRate; let estRate = fund.data[fund.data.length - 2][1]; diff = (realRate - estRate).toFixed(2); }
                         fund._diff = diff;
                         return {
                             name: fund.name, type: 'line', smooth: true, symbol: 'none', lineStyle: { width: 3, shadowColor: 'rgba(0,0,0,0.5)', shadowBlur: 10 },
                             endLabel: {
                                 show: true, color: 'inherit', fontSize: 13, fontWeight: 'bold', lineHeight: 20, formatter: (p) => {
-                                    let profit = (fund.amount * p.value[1] / 100).toFixed(2); let sign = profit >= 0 ? '+' : ''; let profitDisplay = privacyMode.value <= 1 ? `${sign}${profit} 元` : '**** 元'; let rateDisplay = privacyMode.value <= 2 ? `${p.value[1]}%` : '****';
+                                    let profit = ((Number(fund.baseAmountForToday ?? fund.amount ?? 0)) * p.value[1] / 100).toFixed(2); let sign = profit >= 0 ? '+' : ''; let profitDisplay = privacyMode.value <= 1 ? `${sign}${profit} 元` : '**** 元'; let rateDisplay = privacyMode.value <= 2 ? `${p.value[1]}%` : '****';
                                     if (fund.isSettled) { let diffSign = fund._diff > 0 ? '+' : ''; return `${profitDisplay}\n✅ 真: ${rateDisplay}\n差: ${diffSign}${fund._diff}%`; } else if (isNight.value && fund.data.length > 50) { return `${profitDisplay}\n⏳ 等待财报...`; } else { return `${profitDisplay}\n估: ${rateDisplay}`; }
                                 }
                             }, data: fund.data
