@@ -5858,8 +5858,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     return;
                 };
 
-                const analysisTotalRecords = computed(() => normalizeAnalysisRecords(analysisRecords.value.filter(r => r.fundCode === 'TOTAL')));
-                const selectedDayFundRecords = computed(() => normalizeAnalysisRecords(analysisRecords.value.filter(r => r.fundCode !== 'TOTAL' && String(r.recordDate || '').slice(0, 10) === selectedAnalysisDate.value)).sort((a, b) => Math.abs(Number(b.dailyProfit || 0)) - Math.abs(Number(a.dailyProfit || 0))));
+                const normalizedAnalysisRecords = computed(() => normalizeAnalysisRecords(analysisRecords.value));
+                const analysisTotalRecords = computed(() => normalizedAnalysisRecords.value.filter(r => r.fundCode === 'TOTAL'));
+                const selectedDayFundRecords = computed(() => normalizedAnalysisRecords.value.filter(r => r.fundCode !== 'TOTAL' && String(r.recordDate || '').slice(0, 10) === selectedAnalysisDate.value).sort((a, b) => Math.abs(Number(b.dailyProfit || 0)) - Math.abs(Number(a.dailyProfit || 0))));
                 const selectedDayTotalProfitRecords = computed(() => activeHoldings.value.map(f => ({
                     fundCode: f.code,
                     fundName: f.name,
