@@ -6259,11 +6259,14 @@ namespace 小白养基.Controllers
 
                     // 是否已完成今日真实净值清算。只读本地字段，不在 today 请求里访问外部接口。
                     bool isSettled = config.LastSettledDate == todayDash;
-                    // 如果今天有盘中估值数据（FundRecords），优先用估值，不用 settled 值
-                    bool hasTodayEstimate = fundRecords != null && fundRecords.Count > 0;
+                    // 如果今天有盘中估值数据（FundRecords 且最新点非零），优先用估值，不用 settled 值
+                    var latestTodayRecord = fundRecords != null && fundRecords.Count > 0
+                        ? fundRecords.OrderByDescending(r => r.FetchTime).FirstOrDefault()
+                        : null;
+                    bool hasTodayEstimate = latestTodayRecord != null && Math.Abs(latestTodayRecord.EstimatedRate) > 0.001;
                     if (isSettled && hasTodayEstimate)
                     {
-                        // 有今天估值时，不算 settled（避免跳过估值逻辑）
+                        // 有今天真实估值时，不算 settled（避免跳过估值逻辑）
                         isSettled = false;
                     }
                     // carryForward：今天没有新净值时，沿用最近已确认交易日数据
