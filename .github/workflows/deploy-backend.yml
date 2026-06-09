@@ -199,27 +199,7 @@ jobs:
             DB_USER=$(python3 -c "import json; c=json.load(open('$APPSETTINGS'))['ConnectionStrings']['DefaultConnection']; print([p.split('=',1)[1] for p in c.split(';') if p.strip().startswith('User=')][0])" 2>/dev/null || echo "guzhi")
             DB_PASS=$(python3 -c "import json; c=json.load(open('$APPSETTINGS'))['ConnectionStrings']['DefaultConnection']; print([p.split('=',1)[1] for p in c.split(';') if p.strip().startswith('Password=')][0])" 2>/dev/null || echo "guzhi")
             echo "执行 DDL 迁移 (db=$DB_NAME)..."
-            mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" <<'DDL_SQL'
-SET @c = (SELECT COUNT(1) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'FundRecords' AND COLUMN_NAME = 'NavDate');
-SET @s = IF(@c = 0, 'ALTER TABLE FundRecords ADD COLUMN NavDate VARCHAR(20) NULL', 'SELECT 1');
-PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @c = (SELECT COUNT(1) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'FundRecords' AND COLUMN_NAME = 'Nav');
-SET @s = IF(@c = 0, 'ALTER TABLE FundRecords ADD COLUMN Nav DOUBLE NULL', 'SELECT 1');
-PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @c = (SELECT COUNT(1) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'FundRecords' AND COLUMN_NAME = 'Source');
-SET @s = IF(@c = 0, 'ALTER TABLE FundRecords ADD COLUMN Source VARCHAR(50) NULL', 'SELECT 1');
-PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @c = (SELECT COUNT(1) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'FundRecords' AND COLUMN_NAME = 'IsOfficial');
-SET @s = IF(@c = 0, 'ALTER TABLE FundRecords ADD COLUMN IsOfficial TINYINT(1) NOT NULL DEFAULT 0', 'SELECT 1');
-PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @i = (SELECT COUNT(1) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'FundRecords' AND INDEX_NAME = 'IX_FundRecord_Code_Official_NavDate');
-SET @s = IF(@i = 0, 'CREATE INDEX IX_FundRecord_Code_Official_NavDate ON FundRecords (FundCode, IsOfficial, NavDate)', 'SELECT 1');
-PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-DDL_SQL
+            mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e "SET @c=(SELECT COUNT(1) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='FundRecords' AND COLUMN_NAME='NavDate'); SET @s=IF(@c=0,'ALTER TABLE FundRecords ADD COLUMN NavDate VARCHAR(20) NULL','SELECT 1'); PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt; SET @c=(SELECT COUNT(1) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='FundRecords' AND COLUMN_NAME='Nav'); SET @s=IF(@c=0,'ALTER TABLE FundRecords ADD COLUMN Nav DOUBLE NULL','SELECT 1'); PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt; SET @c=(SELECT COUNT(1) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='FundRecords' AND COLUMN_NAME='Source'); SET @s=IF(@c=0,'ALTER TABLE FundRecords ADD COLUMN Source VARCHAR(50) NULL','SELECT 1'); PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt; SET @c=(SELECT COUNT(1) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='FundRecords' AND COLUMN_NAME='IsOfficial'); SET @s=IF(@c=0,'ALTER TABLE FundRecords ADD COLUMN IsOfficial TINYINT(1) NOT NULL DEFAULT 0','SELECT 1'); PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt; SET @i=(SELECT COUNT(1) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='FundRecords' AND INDEX_NAME='IX_FundRecord_Code_Official_NavDate'); SET @s=IF(@i=0,'CREATE INDEX IX_FundRecord_Code_Official_NavDate ON FundRecords (FundCode, IsOfficial, NavDate)','SELECT 1'); PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;" 2>&1 || echo "DDL 迁移失败（可能已存在）"
             echo "DDL 迁移完成"
           else
             echo "未找到 $APPSETTINGS，跳过 DDL 迁移"
