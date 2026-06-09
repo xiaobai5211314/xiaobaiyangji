@@ -6228,59 +6228,58 @@ namespace 小白养基.Controllers
                     var fundRecords = todayRecords.Where(r => r.FundCode == config.FundCode).ToList();
                     lastRecordDict.TryGetValue(config.FundCode, out var lastRecord);
 
-                    var past3DaysRecords = pastActualDict.TryGetValue(config.FundCode, out var pastList)
-                        ? pastList
-                        : new List<FundData>();
+                    // ============ dataStatus 计算 ============
+                    var officialTodayRecord = fundRecords?
+                        .Where(r => r.IsOfficial && r.NavDate == todayDash)
+                        .OrderByDescending(r => r.FetchTime)
+                        .FirstOrDefault();
+                    bool hasOfficialToday = officialTodayRecord != null;
 
-                    double avgDiff = 0;
-                    if (past3DaysRecords.Count > 0)
+                    var latestEstimateRecord = fundRecords?
+                        .Where(r => !r.IsOfficial)
+                        .OrderByDescending(r => r.FetchTime)
+                        .FirstOrDefault();
+                    bool hasTodayEstimate = latestEstimateRecord != null;
+
+                    string dataStatus;
+                    if (hasOfficialToday)
                     {
-                        avgDiff = past3DaysRecords.Average(r => r.ActualRate - r.EstimatedRate);
-                        if (avgDiff > 0.5) avgDiff = 0.5;
-                        if (avgDiff < -0.5) avgDiff = -0.5;
+                        dataStatus = "official_today";
+                    }
+                    else if (hasTodayEstimate)
+                    {
+                        dataStatus = "estimate_today";
+                    }
+                    else if (fundRecords != null && fundRecords.Any(r => r.IsOfficial && r.NavDate != null && string.CompareOrdinal(r.NavDate, todayDash) < 0))
+                    {
+                        dataStatus = "stale_official";
+                    }
+                    else
+                    {
+                        dataStatus = "waiting_today";
                     }
 
-                    var dataPoints = new List<object[]>();
+                    bool isSettled = dataStatus == "official_today";
+                    bool isCarryForward = dataStatus == "stale_official";
 
-                    // 只用今天真实 FundRecords 构建今日曲线，不用 lastRecord 伪造
-                    if (fundRecords != null && fundRecords.Count > 0)
+                    double todayRate;
+                    if (dataStatus == "official_today")
                     {
-                        dataPoints.AddRange(fundRecords.Select(r => new object[] {
-                            r.FetchTime.ToString("yyyy'/'MM'/'dd HH:mm:ss"),
-                            Math.Round(r.EstimatedRate + avgDiff, 2)
-                        }));
+                        todayRate = officialTodayRecord!.ActualRate;
+                    }
+                    else if (dataStatus == "estimate_today")
+                    {
+                        double estRate = latestEstimateRecord!.EstimatedRate;
+                        double actRate = latestEstimateRecord.ActualRate;
+                        todayRate = Math.Abs(actRate) > 0.000001 ? actRate : estRate;
+                    }
+                    else
+                    {
+                        todayRate = 0;
                     }
 
-                    // 是否已完成今日真实净值清算。只读本地字段，不在 today 请求里访问外部接口。
-                    bool isSettled = config.LastSettledDate == todayDash;
-                    // 如果今天有盘中估值数据（FundRecords），优先用估值，不用 settled 值
-                    var latestTodayRecord = fundRecords != null && fundRecords.Count > 0
-                        ? fundRecords.OrderByDescending(r => r.FetchTime).FirstOrDefault()
-                        : null;
-                    bool hasTodayEstimate = latestTodayRecord != null;
-                    if (isSettled && hasTodayEstimate)
-                    {
-                        // 有今天真实估值时，不算 settled（避免跳过估值逻辑）
-                        isSettled = false;
-                    }
-                    // carryForward：今天没有新净值时，沿用最近已确认交易日数据
-                    bool isCarryForward = false;
-                    if (!isSettled && config.HoldAmount > 0)
-                    {
-                        // LastSettledDate 有值且 <= today，或 LastSettledDate 为空但有 OCR/持仓数据
-                        bool hasSettledHistory = !string.IsNullOrEmpty(config.LastSettledDate)
-                            && string.CompareOrdinal(config.LastSettledDate, todayDash) <= 0
-                            && (config.LastSettledProfit != 0 || config.LastSettledRate != 0);
-                        bool hasOcrSnapshot = !string.IsNullOrEmpty(config.OcrSnapshotDate) && config.OcrSnapshotDate == todayDash;
-                        bool hasAnyHolding = config.HoldAmount > 0 && (config.HoldShares > 0 || config.CostAmount > 0 || config.PendingBuyAmount > 0);
-                        if (hasSettledHistory || hasOcrSnapshot || hasAnyHolding)
-                        {
-                            isCarryForward = true;
-                            // carryForward 不设 isSettled=true，避免前端把旧数据当今天正式净值
-                        }
-                    }
-                    double? actualRate = isSettled ? config.LastSettledRate : null;
-                    double? actualExactProfit = isSettled ? config.LastSettledProfit : null;
+                    double? actualRate = dataStatus == "official_today" ? todayRate : (double?)null;
+                    double? actualExactProfit = null;
 
                     double activePendingBuyAmount = GetActivePendingBuyAmount(config, todayDash, naturalDate);
                     double? previousArchiveAssets = FindPreviousArchiveAssets(config, archiveHistoryDict, dateInfo.EffectiveDateStart);
@@ -6291,26 +6290,76 @@ namespace 小白养基.Controllers
                     bool pendingBuy = pendingBuyAmount > 0;
                     double rawHoldAmount = Math.Max(0, config.HoldAmount);
                     double confirmedHoldAmount = Math.Max(0, Math.Round(rawHoldAmount - pendingBuyAmount, 2));
-                    double todayRateForSimulation = isSettled ? config.LastSettledRate : (dataPoints.Count > 0 ? Convert.ToDouble(dataPoints.Last()[1]) : 0);
                     double todayBaseAmount = GetDailyBaseAmount(config, todayDash, pendingBuyAmount);
-                    // 今日收益优先级：已清算真实净值 > OCR识别的昨日收益 > 估算
-                    bool hasOcrYesterday = IsOcrSnapshotCurrent(config.OcrYesterdayDate, todayDash, naturalDate);
-                    bool hasOcrHolding = IsOcrSnapshotCurrent(config.OcrSnapshotDate, todayDash, naturalDate) && Math.Abs(config.OcrHoldingIncome) > 0.001;
-                    double todayProfitPreview = isSettled ? config.LastSettledProfit
-                        : hasTodayEstimate ? Math.Round(todayBaseAmount * todayRateForSimulation / 100.0, 2)
-                        : hasOcrYesterday ? config.OcrYesterdayIncome
-                        : Math.Round(todayBaseAmount * todayRateForSimulation / 100.0, 2);
-                    double currentAssetsPreview = Math.Round(todayBaseAmount + todayProfitPreview, 2);
+
+                    var dataPoints = new List<object[]>();
+                    if (fundRecords != null && fundRecords.Count > 0)
+                    {
+                        foreach (var r in fundRecords.Where(r => !r.IsOfficial).OrderBy(r => r.FetchTime))
+                        {
+                            dataPoints.Add(new object[] {
+                                r.FetchTime.ToString("yyyy'/'MM'/'dd HH:mm:ss"),
+                                Math.Round(r.EstimatedRate, 2)
+                            });
+                        }
+                    }
+
+                    if (dataStatus == "official_today" && todayRate != 0)
+                    {
+                        string settlementTime = todayDash.Replace("-", "/") + " 15:00:00";
+                        bool hasSettlementPoint = dataPoints.Any(p => p[0]?.ToString()?.Contains("15:00:00") == true);
+                        if (!hasSettlementPoint)
+                        {
+                            dataPoints.Add(new object[] { settlementTime, Math.Round(todayRate, 2) });
+                        }
+                        else
+                        {
+                            var lastPoint = dataPoints.Last(p => p[0]?.ToString()?.Contains("15:00:00") == true);
+                            lastPoint[1] = Math.Round(todayRate, 2);
+                        }
+                    }
+
+                    double todayRateForSimulation = todayRate;
+                    double previousMarketValue = Math.Max(0, todayBaseAmount);
+
+                    double todayProfit;
+                    double marketValue;
+
+                    if (dataStatus == "official_today")
+                    {
+                        marketValue = Math.Round(rawHoldAmount, 2);
+                        todayProfit = Math.Round(rawHoldAmount - todayBaseAmount, 2);
+                        actualExactProfit = config.LastSettledProfit;
+                    }
+                    else if (dataStatus == "estimate_today")
+                    {
+                        todayProfit = Math.Round(todayBaseAmount * todayRate / 100.0, 2);
+                        marketValue = Math.Round(todayBaseAmount + todayProfit, 2);
+                    }
+                    else
+                    {
+                        todayProfit = 0;
+                        marketValue = previousMarketValue;
+                    }
+
+                    double todayRateForDisplay = todayBaseAmount > 0
+                        ? Math.Round(todayProfit / todayBaseAmount * 100.0, 2)
+                        : 0;
+
+                    string profitSource = dataStatus == "official_today" ? "nav_settlement"
+                        : dataStatus == "estimate_today" ? "estimate"
+                        : "none";
+
                     double rawCostBasis = config.CostAmount > 0 ? config.CostAmount : rawHoldAmount;
                     double costBasis = Math.Max(0, Math.Round(rawCostBasis - pendingBuyAmount, 2));
                     bool pendingRedeem = PortfolioSettlementService.IsPendingRedeem(config);
                     double soldCost = PortfolioSettlementService.GetSoldCost(config);
-                    // For sold-out pending funds, use soldCost as display cost
                     if (config.HoldShares <= 0 && pendingRedeem && soldCost > 0)
                         costBasis = soldCost;
 
-                    // 累计收益显示优先级：平台累计收益 > 已确认落袋 > 待确认
                     bool isSoldOut = config.HoldShares <= 0 && !pendingBuy;
+                    bool isCleared = isSoldOut;
+
                     double displayedProfit;
                     string displayedProfitSource;
                     if (isSoldOut && config.PlatformCumulativeProfit > 0)
@@ -6329,58 +6378,63 @@ namespace 小白养基.Controllers
                         displayedProfitSource = config.RealizedProfit > 0 ? "confirmed_redeem" : "none";
                     }
 
-                    double totalProfitPreview = hasOcrHolding
-                        ? Math.Round(config.OcrHoldingIncome + displayedProfit, 2)
-                        : Math.Round(currentAssetsPreview - costBasis + displayedProfit, 2);
+                    double totalProfitPreview = Math.Round(marketValue - costBasis + displayedProfit, 2);
                     double existingReturnRateValue = isSoldOut && displayedProfit > 0 && costBasis > 0
                         ? Math.Round(displayedProfit / costBasis * 100.0, 2)
-                        : hasOcrHolding
-                            ? Math.Round(config.OcrHoldingRate, 2)
-                            : (costBasis > 0 ? Math.Round(totalProfitPreview / costBasis * 100.0, 2) : 0);
-                    double breakEvenRateValue = !isSoldOut && currentAssetsPreview > 0 && totalProfitPreview < 0 ? Math.Round(-totalProfitPreview / currentAssetsPreview * 100.0, 2) : 0;
+                        : (costBasis > 0 ? Math.Round(totalProfitPreview / costBasis * 100.0, 2) : 0);
+                    double breakEvenRateValue = !isCleared && marketValue > 0 && totalProfitPreview < 0 ? Math.Round(-totalProfitPreview / marketValue * 100.0, 2) : 0;
+
                     double diffAbs = lastRecord != null ? Math.Abs(lastRecord.DiffRate) : 0;
-                    int reliabilityScore = isSettled ? 100 : Math.Clamp(80 - (int)Math.Round(Math.Abs(avgDiff) * 40) - (diffAbs > 0.15 ? 10 : 0), 35, 92);
+                    int reliabilityScore = isSettled ? 100 : Math.Clamp(80 - (int)Math.Round(diffAbs * 40) - (diffAbs > 0.15 ? 10 : 0), 35, 92);
                     string reliabilityLevel = isSettled ? "真实净值确认" : reliabilityScore >= 80 ? "估值较稳" : reliabilityScore >= 60 ? "估值需观察" : "估值偏弱";
 
-                    // FundController.cs 中 GetTodayData 方法内部
-                    bool isInactiveHolding = config.HoldShares <= 0 && !pendingBuy;
-                    double displayAmount = isInactiveHolding ? 0 : rawHoldAmount;
-                    // marketValue = 当前确认市值（显示用），todayBaseAmount = 收益率分母
-                    // settled 基金用 rawHoldAmount（含待确认），和平台口径一致
-                    double marketValue = isInactiveHolding ? 0 : (isSettled ? Math.Round(rawHoldAmount, 2) : Math.Round(currentAssetsPreview, 2));
-                    double todayProfit = Math.Round(todayProfitPreview, 2);
-                    double todayRateForDisplay = todayBaseAmount > 0
-                        ? Math.Round(todayProfit / todayBaseAmount * 100.0, 2)
-                        : 0;
-                    string profitSource = isSettled ? "nav_settlement" : hasOcrYesterday ? "ocr_yesterday" : (dataPoints.Count > 0 ? "estimate" : "none");
+                    double displayAmount = isCleared ? 0 : rawHoldAmount;
+
+                    string navDateDisplay = hasOfficialToday ? officialTodayRecord!.NavDate
+                        : hasTodayEstimate ? todayDash
+                        : null;
+                    string sourceDisplay = dataStatus == "official_today" ? "official-nav"
+                        : dataStatus == "estimate_today" ? "estimate"
+                        : dataStatus == "stale_official" ? "stale"
+                        : "waiting";
 
                     return new
                     {
                         code = config.FundCode,
                         name = config.FundName,
-                        amount = displayAmount,
-                        marketValue,
-                        rawHoldAmount = isInactiveHolding ? 0 : rawHoldAmount,
-                        confirmedAmount = isInactiveHolding ? 0 : confirmedHoldAmount,
-                        pendingBuy = pendingBuy,
+                        shares = config.HoldShares,
+                        cost = isCleared ? (soldCost > 0 ? soldCost : (double?)null) : (costBasis > 0 ? costBasis : (double?)null),
+                        previousMarketValue = Math.Round(previousMarketValue, 2),
+                        nav = hasOfficialToday ? officialTodayRecord!.Nav : (double?)null,
+                        navDate = navDateDisplay,
+                        source = sourceDisplay,
+                        dataStatus,
+                        todayRate = Math.Round(todayRateForDisplay, 2),
+                        todayProfit = Math.Round(todayProfit, 2),
+                        marketValue = Math.Round(marketValue, 2),
+                        holdingProfit = Math.Round(totalProfitPreview, 2),
+                        holdingRate = Math.Round(existingReturnRateValue, 2),
+                        isCleared,
                         pendingBuyAmount = pendingBuy ? pendingBuyAmount : 0,
+                        amount = displayAmount,
+                        rawHoldAmount = isCleared ? 0 : rawHoldAmount,
+                        confirmedAmount = isCleared ? 0 : confirmedHoldAmount,
+                        pendingBuy,
                         pendingTradeDate = config.PendingTradeDate,
                         pendingTradeTime = config.PendingTradeTime,
                         pendingTradeStatus = resolvedPendingStatus,
                         pendingConfirmDate = config.PendingConfirmDate,
                         pendingSource = resolvedPendingSource,
                         pendingNote = pendingBuy ? "买入待确认，不参与今日收益" : string.Empty,
-                        shares = config.HoldShares,
-                        cost = isInactiveHolding ? (soldCost > 0 ? soldCost : (double?)null) : (costBasis > 0 ? costBasis : (double?)null),
-                        rawCostAmount = isInactiveHolding ? (double?)null : (rawCostBasis > 0 ? rawCostBasis : (double?)null),
-                        confirmedCost = isInactiveHolding ? (double?)null : costBasis,
+                        rawCostAmount = isCleared ? (double?)null : (rawCostBasis > 0 ? rawCostBasis : (double?)null),
+                        confirmedCost = isCleared ? (double?)null : costBasis,
                         realizedProfit = config.RealizedProfit,
                         platformCumulativeProfit = config.PlatformCumulativeProfit,
-                        displayedProfit = displayedProfit,
-                        displayedProfitSource = displayedProfitSource,
-                        pendingRedeem = pendingRedeem,
-                        soldCost = soldCost,
-                        inactiveHolding = isInactiveHolding,
+                        displayedProfit,
+                        displayedProfitSource,
+                        pendingRedeem,
+                        soldCost,
+                        inactiveHolding = isCleared,
                         lastTradeDate = config.LastTradeDate,
                         lastAddAmount = config.LastAddAmount,
                         lastSettledDate = config.LastSettledDate,
@@ -6388,38 +6442,30 @@ namespace 小白养基.Controllers
                         lastSettledRate = config.LastSettledRate,
                         existingReturnRate = existingReturnRateValue,
                         holdingIncome = Math.Round(totalProfitPreview, 2),
-                        holdingRate = existingReturnRateValue,
-                        holdingSource = hasOcrHolding ? "ocr_platform" : "computed",
+                        holdingSource = "computed",
                         breakEvenRate = breakEvenRateValue,
-                        reliabilityScore = reliabilityScore,
-                        reliabilityLevel = reliabilityLevel,
+                        reliabilityScore,
+                        reliabilityLevel,
                         breakEvenSimulator = new[]
                         {
-                            new { scenario = "+1%", projectedAssets = Math.Round(currentAssetsPreview * 1.01, 2), projectedProfit = Math.Round(currentAssetsPreview * 1.01 - costBasis + displayedProfit, 2) },
-                            new { scenario = "+3%", projectedAssets = Math.Round(currentAssetsPreview * 1.03, 2), projectedProfit = Math.Round(currentAssetsPreview * 1.03 - costBasis + displayedProfit, 2) },
-                            new { scenario = "+5%", projectedAssets = Math.Round(currentAssetsPreview * 1.05, 2), projectedProfit = Math.Round(currentAssetsPreview * 1.05 - costBasis + displayedProfit, 2) },
-                            new { scenario = "-3%", projectedAssets = Math.Round(currentAssetsPreview * 0.97, 2), projectedProfit = Math.Round(currentAssetsPreview * 0.97 - costBasis + displayedProfit, 2) }
+                            new { scenario = "+1%", projectedAssets = Math.Round(marketValue * 1.01, 2), projectedProfit = Math.Round(marketValue * 1.01 - costBasis + displayedProfit, 2) },
+                            new { scenario = "+3%", projectedAssets = Math.Round(marketValue * 1.03, 2), projectedProfit = Math.Round(marketValue * 1.03 - costBasis + displayedProfit, 2) },
+                            new { scenario = "+5%", projectedAssets = Math.Round(marketValue * 1.05, 2), projectedProfit = Math.Round(marketValue * 1.05 - costBasis + displayedProfit, 2) },
+                            new { scenario = "-3%", projectedAssets = Math.Round(marketValue * 0.97, 2), projectedProfit = Math.Round(marketValue * 0.97 - costBasis + displayedProfit, 2) }
                         },
                         diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
-                        calibrationOffset = Math.Round(avgDiff, 4),
+                        calibrationOffset = 0,
                         data = dataPoints,
-                        isSettled = isSettled,
-                        isCarryForward = isCarryForward,
-                        displayDate = isSettled ? (config.LastSettledDate ?? todayDash) : todayDash,
-                        settlementSource = isSettled ? (isCarryForward ? (hasOcrHolding ? "db-snapshot" : (string.IsNullOrEmpty(config.LastSettledDate) || config.LastSettledDate != todayDash ? "db-snapshot" : "carry-forward")) : (hasOcrHolding ? "ant-ocr" : "nav-settlement")) : null,
-                        actualRate = actualRate,
-                        actualExactProfit = actualExactProfit,
-                        todayBaseAmount = todayBaseAmount,
-                        todayRateForSimulation = todayRateForSimulation,
-                        todayProfitPreview = todayProfitPreview,
-                        todayProfit = todayProfit,
-                        todayRate = todayRateForDisplay,
-                        profitSource = profitSource,
-                        ocrYesterdayIncome = hasOcrYesterday ? config.OcrYesterdayIncome : (double?)null,
-                        ocrYesterdayDate = hasOcrYesterday ? config.OcrYesterdayDate : null,
-                        ocrHoldingIncome = hasOcrHolding ? config.OcrHoldingIncome : (double?)null,
-                        ocrHoldingRate = hasOcrHolding ? config.OcrHoldingRate : (double?)null,
-                        ocrSnapshotDate = hasOcrHolding ? config.OcrSnapshotDate : null,
+                        isSettled,
+                        isCarryForward,
+                        displayDate = todayDash,
+                        settlementSource = isSettled ? "nav-settlement" : null,
+                        actualRate,
+                        actualExactProfit,
+                        todayBaseAmount,
+                        todayRateForSimulation,
+                        todayProfitPreview = Math.Round(todayProfit, 2),
+                        profitSource,
                         marketOpen = fundDateInfo.MarketOpen,
                         marketStatus = fundDateInfo.MarketStatus,
                         marketLabel = fundDateInfo.MarketLabel,
@@ -6428,6 +6474,9 @@ namespace 小白养基.Controllers
                         {
                             code = config.FundCode,
                             name = config.FundName,
+                            dataStatus,
+                            hasOfficialToday,
+                            hasTodayEstimate,
                             rawHoldAmount,
                             confirmedAmount = confirmedHoldAmount,
                             pendingBuyAmount = pendingBuy ? pendingBuyAmount : 0,
@@ -6446,13 +6495,8 @@ namespace 小白养基.Controllers
                             lastSettledRate = config.LastSettledRate,
                             todayBaseAmount,
                             todayRateForSimulation,
-                            todayProfitPreview,
-                            hasOcrYesterday,
-                            ocrYesterdayIncome = config.OcrYesterdayIncome,
-                            ocrYesterdayDate = config.OcrYesterdayDate
                         }
                     };
-
                 });
 
                 var finalResult = result.OrderByDescending(x => x.amount).ToList();
@@ -6505,6 +6549,7 @@ namespace 小白养基.Controllers
 
                 var summary = new
                 {
+                    tradeDate = todayDash,
                     totalTodayProfit = Math.Round(summaryTodayProfit, 2),
                     totalTodayBaseAmount = Math.Round(Math.Abs(summaryTodayBase), 2),
                     totalTodayRate = Math.Round(summaryTodayRate, 2),
@@ -6594,6 +6639,26 @@ namespace 小白养基.Controllers
                     {
                         targetRecord.ActualRate = snapshot.Rate;
                         targetRecord.DiffRate = Math.Round(snapshot.Rate - targetRecord.EstimatedRate, 2);
+                    }
+
+                    // 写入官方净值 FundRecord
+                    bool hasOfficialToday = await _context.FundRecords
+                        .AnyAsync(r => r.FundCode == group.Key && r.IsOfficial && r.NavDate == settleDate);
+                    if (!hasOfficialToday)
+                    {
+                        var officialRecord = new FundData
+                        {
+                            FundCode = group.Key,
+                            FundName = group.First().FundName,
+                            EstimatedRate = snapshot.Rate,
+                            ActualRate = snapshot.Rate,
+                            FetchTime = ChinaNow(),
+                            NavDate = settleDate,
+                            Nav = snapshot.TodayNav,
+                            Source = "official-nav",
+                            IsOfficial = true
+                        };
+                        _context.FundRecords.Add(officialRecord);
                     }
 
                     foreach (var fund in group)

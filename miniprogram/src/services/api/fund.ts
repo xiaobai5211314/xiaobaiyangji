@@ -54,6 +54,14 @@ export interface FundTodayItem {
   calibrationConfidence?: string;
   calibrationNote?: string;
   todayProfit?: number;
+  todayRate?: number;
+  marketValue?: number;
+  holdingProfit?: number;
+  previousMarketValue?: number;
+  navDate?: string | null;
+  source?: string;
+  dataStatus?: string;
+  isCleared?: boolean;
   totalProfit?: number;
   estimatedProfit?: number;
   todayAmount?: number;

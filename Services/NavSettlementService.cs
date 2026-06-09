@@ -480,6 +480,29 @@ namespace 小白养基.Services
                         targetRecord.DiffRate = Math.Round(actualRate - targetRecord.EstimatedRate, 2);
                     }
 
+                    // 写入官方净值 FundRecord（IsOfficial=true），用于 /today 接口判断 dataStatus
+                    bool hasOfficialToday = todayRecordList.Any(r =>
+                        r.FundCode == code && r.IsOfficial && r.NavDate == settleDate);
+                    if (!hasOfficialToday)
+                    {
+                        string fundName = holdingsByCode.TryGetValue(code, out var holdings) && holdings.Count > 0
+                            ? holdings[0].FundName : code;
+                        var officialRecord = new FundData
+                        {
+                            FundCode = code,
+                            FundName = fundName,
+                            EstimatedRate = actualRate,
+                            ActualRate = actualRate,
+                            FetchTime = ChinaNow(),
+                            NavDate = settleDate,
+                            Nav = navSnapshot.TodayNav,
+                            Source = "official-nav",
+                            IsOfficial = true
+                        };
+                        dbContext.FundRecords.Add(officialRecord);
+                        todayRecordList.Add(officialRecord);
+                    }
+
                     // 使用预加载的持仓数据
                     if (holdingsByCode.TryGetValue(code, out var holdingUsers))
                     {

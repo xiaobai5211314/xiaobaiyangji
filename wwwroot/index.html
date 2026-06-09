@@ -4476,8 +4476,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                                 <span v-if="fund.isHoliday" class="xb-tag xb-tag--ghost" style="font-weight:bold;">☕ 休市</span>
                                 <span v-else :style="{color: fund.todayRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold'}">{{ fund.todayRate > 0 ? '+' : ''}}{{ Number(fund.todayRate || 0).toFixed(2) }}%</span>
-                                <span v-if="fund.isStaleQuote && !getRateDisplayMeta(fund).canShowTodayOfficial" class="xb-tag xb-tag--warning">旧估值</span>
-                                <span v-if="getRateDisplayMeta(fund).canShowTodayOfficial" class="xb-tag xb-tag--info" title="今日正式净值已确认">正式净值 {{ (Number(fund.actualRate ?? fund.lastSettledRate) >= 0 ? '+' : '') + Number(fund.actualRate ?? fund.lastSettledRate).toFixed(2) }}%</span>
+                                <span v-if="fund.dataStatus === 'stale_official'" class="xb-tag xb-tag--warning">旧值</span>
+                                <span v-if="fund.dataStatus === 'waiting_today'" class="xb-tag xb-tag--ghost">等待净值</span>
+                                <span v-if="fund.dataStatus === 'official_today'" class="xb-tag xb-tag--info" title="今日正式净值已确认">净值确认</span>
 
                                 <span v-if="fund.calibrationOffset && Math.abs(fund.calibrationOffset) > 0 && !fund.isHoliday" class="xb-tag xb-tag--primary">
                                     🤖修正: {{ fund.calibrationOffset > 0 ? '+' : '' }}{{ fund.calibrationOffset }}%
@@ -6706,25 +6707,20 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                 const getNaturalDateDash = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
                 const getRateDisplayMeta = (fund) => {
-                    const naturalDate = getNaturalDateDash();
-                    const officialDate = fund?.lastSettledDate || '';
-                    const src = String(fund?.settlementSource || '');
-                    const isTodayOfficial = fund?.isSettled && officialDate === naturalDate && src === 'nav-settlement';
-                    const hasTodayTrend = Array.isArray(fund?.todayTrendData) && fund.todayTrendData.length > 0;
-                    if (isTodayOfficial) return { label: '真', kind: 'today-official', canShowTodayOfficial: true };
-                    if (hasTodayTrend) return { label: '估', kind: 'estimate', canShowTodayOfficial: false };
-                    if (fund?.isSettled && officialDate && officialDate < naturalDate) return { label: '昨真', kind: 'previous-official', canShowTodayOfficial: false };
-                    return { label: '', kind: 'none', canShowTodayOfficial: false };
+                    const ds = fund?.dataStatus || '';
+                    if (ds === 'official_today') return { label: '真', kind: 'today-official', canShowTodayOfficial: true };
+                    if (ds === 'estimate_today') return { label: '估', kind: 'estimate', canShowTodayOfficial: false };
+                    if (ds === 'stale_official') return { label: '旧值', kind: 'previous-official', canShowTodayOfficial: false };
+                    return { label: '等待净值', kind: 'waiting', canShowTodayOfficial: false };
                 };
                 const getFundStatusBadgeText = (fund) => {
                     if (fund?.marketOpen === false) return '☕ 休市';
                     if (fund?.pendingBuy || Number(fund?.pendingBuyAmount || 0) > 0) return '⏳ 买入待确认';
-                    const meta = getRateDisplayMeta(fund);
-                    if (meta.canShowTodayOfficial) return '✅ 净值确认';
-                    if (meta.kind === 'estimate') return '⏱️ 盘中估值';
-                    if (meta.kind === 'previous-official') return '🌙 沿用昨日净值';
-                    if (fund?.isSettled) return '🌙 沿用持仓';
-                    return '⏱️ 盘中侦测';
+                    const ds = fund?.dataStatus || '';
+                    if (ds === 'official_today') return '✅ 净值确认';
+                    if (ds === 'estimate_today') return '⏱️ 盘中估值';
+                    if (ds === 'stale_official') return '🌙 旧值';
+                    return '⏳ 等待净值';
                 };
 
                 const getFundStatusBadgeClass = (fund) => {
@@ -7723,29 +7719,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                         apiData.forEach(fund => {
                             fund.data = Array.isArray(fund.data) ? fund.data : [];
-                            const backendMarketClosed = fund.marketOpen === false;
-                            if (fund.isSettled) {
-                                const latestPoint = getLatestRateFromFundData(fund.data, todaySlash, todayDash);
-                                fund.currentRate = pickFirstNumber(fund.actualRate, fund.lastSettledRate, fund.todayRateForSimulation, latestPoint?.rate, 0);
-                                fund.rateSource = fund.lastSettledDate === todayDash ? 'settled-nav' : 'carry-forward';
-                                fund.isHoliday = backendMarketClosed;
-                                fund.isStaleQuote = false;
-                                // 只有 lastSettledDate === 今天时才给今日曲线补 15:00 点
-                                if (fund.lastSettledDate === todayDash) {
-                                    const lastDataTime = fund.data.length > 0 ? String(fund.data[fund.data.length - 1][0] || '') : '';
-                                    if (lastDataTime.includes(todaySlash) && lastDataTime.includes("15:00:00")) {
-                                        fund.data[fund.data.length - 1][1] = fund.currentRate;
-                                    } else {
-                                        fund.data.push([`${todaySlash} 15:00:00`, fund.currentRate]);
-                                    }
-                                }
-                            } else {
-                                const resolvedRate = resolveFundCurrentRate(fund, backendMarketClosed);
-                                fund.currentRate = Number(resolvedRate.rate.toFixed(2));
-                                fund.isHoliday = resolvedRate.isHoliday;
-                                fund.isStaleQuote = !!resolvedRate.isStaleQuote;
-                                fund.rateSource = resolvedRate.rateSource;
-                            }
+                            // 使用后端 dataStatus 和 API 值，不重新计算
+                            const ds = fund.dataStatus || (fund.isSettled ? 'official_today' : 'waiting_today');
+                            fund.currentRate = Number(fund.todayRate) || 0;
+                            fund.rateSource = ds === 'official_today' ? 'official-nav' : ds === 'estimate_today' ? 'estimate' : 'missing';
+                            fund.isHoliday = fund.marketOpen === false;
+                            fund.isStaleQuote = ds === 'stale_official';
+                            fund.isSettled = ds === 'official_today';
 
                             const rawCurrentRate = Number(fund.currentRate || 0);
                             if (fund.isSettled) {
@@ -7783,22 +7763,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             const hasPendingBuy = !!fund.pendingBuy || pendingBuyAmount > 0;
                             fund.pendingBuy = hasPendingBuy;
                             fund.pendingBuyAmount = pendingBuyAmount;
-                            const naturalDateDash = new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0') + '-' + String(new Date().getDate()).padStart(2, '0');
-                            const hasOfficialSettlement = fund.isSettled === true && fund.lastSettledDate === naturalDateDash
-                                && (fund.settlementSource === 'nav-settlement' || fund.settlementSource === 'ant-ocr');
-                            if (hasOfficialSettlement) {
-                                fund.isSettled = true;
-                                fund.rateSource = 'official-nav';
-                            }
-                            console.log('[official-settlement-check]', {
-                                code: fund.code, name: fund.name, hasOfficialSettlement,
-                                isSettled: fund.isSettled, rateSource: fund.rateSource,
-                                actualRate: fund.actualRate, lastSettledRate: fund.lastSettledRate,
-                                actualExactProfit: fund.actualExactProfit, lastSettledProfit: fund.lastSettledProfit,
-                                marketValue: fund.marketValue, todayAmount: fund.todayAmount,
-                                pendingBuyAmount: fund.pendingBuyAmount
-                            });
-                            let isAlreadySettled = hasOfficialSettlement;
+                            let isAlreadySettled = fund.dataStatus === 'official_today';
                             let currentAmount = Number(fund.rawHoldAmount ?? fund.amount) || 0;
                             const apiConfirmedAmount = Number(fund.confirmedAmount);
                             const confirmedAmount = Number.isFinite(apiConfirmedAmount) ? Math.max(0, apiConfirmedAmount) : Math.max(0, currentAmount - pendingBuyAmount);
@@ -7806,36 +7771,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             fund.confirmedAmount = confirmedAmount;
                             const apiBaseAmount = Number(fund.todayBaseAmount);
                             const todayBaseAmount = Number.isFinite(apiBaseAmount) ? Math.max(0, apiBaseAmount) : confirmedAmount;
-                            let todayProfitVal = 0;
-                            const apiMarketValue = Number(fund.marketValue);
-                            let currentRealTimeAmount = Number.isFinite(apiMarketValue) && apiMarketValue > 0 ? apiMarketValue : todayBaseAmount;
-                            const apiTodayProfit = Number(fund.todayProfit ?? fund.todayProfitPreview);
-
-                            if (isAlreadySettled) {
-                                todayProfitVal = Number(fund.lastSettledProfit) || 0;
-                                fund.todayProfit = todayProfitVal.toFixed(2);
-                                // settled 时 currentRealTimeAmount 已由 marketValue 正确设置
-                                fund.currentRate = Number(fund.lastSettledRate) || fund.currentRate || 0;
-                            } else if (fund.isSettled && fund.actualExactProfit != null) {
-                                todayProfitVal = Number(fund.actualExactProfit) || 0;
-                                fund.todayProfit = todayProfitVal.toFixed(2);
-                                currentRealTimeAmount = Number.isFinite(apiMarketValue) && apiMarketValue > 0 ? apiMarketValue : (todayBaseAmount + todayProfitVal);
-                            } else if (fund.rateSource !== 'missing') {
-                                todayProfitVal = todayBaseAmount * ((Number(fund.currentRate) || 0) / 100);
-                                fund.todayProfit = todayProfitVal.toFixed(2);
-                                currentRealTimeAmount = currentAmount + todayProfitVal;
-                            } else if (Number.isFinite(apiTodayProfit) && (!fund.profitSource || fund.profitSource !== 'none')) {
-                                todayProfitVal = apiTodayProfit;
-                                fund.todayProfit = todayProfitVal.toFixed(2);
-                                currentRealTimeAmount = currentAmount + todayProfitVal;
-                                if (fund.profitSource === 'ocr_yesterday') {
-                                    fund.currentRate = todayBaseAmount > 0 ? Number((todayProfitVal / todayBaseAmount * 100).toFixed(2)) : 0;
-                                }
-                            } else {
-                                todayProfitVal = todayBaseAmount * ((Number(fund.currentRate) || 0) / 100);
-                                fund.todayProfit = todayProfitVal.toFixed(2);
-                                currentRealTimeAmount = currentAmount + todayProfitVal;
-                            }
+                            // 直接使用 API 返回的值，不重新计算
+                            let todayProfitVal = Number(fund.todayProfit) || 0;
+                            let currentRealTimeAmount = Number(fund.marketValue) || (todayBaseAmount + todayProfitVal);
 
                             fund.todayAmount = currentRealTimeAmount.toFixed(2);
                             if (!isNaN(todayProfitVal)) { tToday += todayProfitVal; }

@@ -38,6 +38,10 @@ namespace 小白养基.Models
                 .HasIndex(r => r.FetchTime)
                 .HasDatabaseName("IX_FundRecord_Time");
 
+            modelBuilder.Entity<FundData>()
+                .HasIndex(r => new { r.FundCode, r.IsOfficial, r.NavDate })
+                .HasDatabaseName("IX_FundRecord_Code_Official_NavDate");
+
             modelBuilder.Entity<MyFundConfig>()
                 .HasIndex(f => f.Username)
                 .HasDatabaseName("IX_MyFundConfig_Username");
