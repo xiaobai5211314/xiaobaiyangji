@@ -7621,18 +7621,6 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     const force = !!options.force;
                     const silent = !!options.silent;
                     isFetchingData = true;
-                    const dashCacheKey = `dashboard_cache_${currentUser.value}_v1`;
-                    if (!force && fundsList.value.length === 0) {
-                        const cached = readJsonCache(dashCacheKey, 3600000);
-                        if (Array.isArray(cached) && cached.length > 0) {
-                            fundsList.value = cached.map(f => normalizeFundForDashboard(f));
-                            applyDashboardActiveSummary(
-                                fundsList.value.filter(isActiveHoldingFund),
-                                fundsList.value.filter(isClearedFund)
-                            );
-                            isLoading.value = false;
-                        }
-                    }
                     if (!silent && fundsList.value.length === 0) isLoading.value = true;
                     try {
                         const forceParam = force ? `&_t=${Date.now()}` : '';
@@ -7875,7 +7863,6 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             return;
                         }
                         fundsList.value = apiData;
-                        writeJsonCache(dashCacheKey, apiData);
                         // 顶部总览只统计当前持仓，已清仓基金不参与今日收益、累计盈亏和累计收益率。
                         const activeForSummary = fundsList.value.filter(isActiveHoldingFund);
                         const inactiveForSummary = fundsList.value.filter(isClearedFund);
