@@ -5457,9 +5457,23 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             if (rawHoldAmount <= 0) rawHoldAmount = bestMarketValue;
                             if (confirmedAmount <= 0 && pendingBuyAmount <= 0) confirmedAmount = bestMarketValue;
                         }
-                        todayProfit = round2(raw.actualExactProfit ?? raw.lastSettledProfit ?? todayProfit);
-                        todayRate = baseAmountForToday > 0 ? round2(todayProfit / baseAmountForToday * 100) : todayRate;
-                        console.log('[ant-settled]', { code: raw.code, todayProfit, marketValue, todayRate, rawHoldAmount });
+                        // 检查 fund.data 最新点是否是今天的（有盘中估值）
+                        const lastDataPoint = data.length > 0 ? String(data[data.length - 1][0] || '') : '';
+                        const lastPointIsToday = lastDataPoint.includes('2026/') || lastDataPoint.includes('2026-'); // 简化：data 已按时间排序，最新点日期即可
+                        const todaySlashCheck = new Date().getFullYear() + '/' + String(new Date().getMonth() + 1).padStart(2, '0') + '/' + String(new Date().getDate()).padStart(2, '0');
+                        const hasTodayTrend = data.some(p => String(p[0] || '').includes(todaySlashCheck));
+                        if (hasTodayTrend && baseAmountForToday > 0) {
+                            // 有今天估值点：用估值收益率重算 todayProfit，累计盈亏 = snapshot + todayEstimate
+                            const latestRate = context.todayRate ?? raw.currentRate ?? 0;
+                            todayProfit = round2(baseAmountForToday * latestRate / 100);
+                            todayRate = round2(latestRate);
+                            marketValue = round2(rawHoldAmount + todayProfit);
+                        } else {
+                            // 无今天估值点：沿用 snapshot
+                            todayProfit = round2(raw.actualExactProfit ?? raw.lastSettledProfit ?? 0);
+                            todayRate = baseAmountForToday > 0 ? round2(todayProfit / baseAmountForToday * 100) : 0;
+                        }
+                        console.log('[ant-settled]', { code: raw.code, hasTodayTrend, todayProfit, todayRate, marketValue, rawHoldAmount, baseAmountForToday });
                     }
                     const activeCandidate = {
                         ...raw,
@@ -5472,20 +5486,22 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     };
                     const activeHolding = !clearedHolding && isActiveHoldingFund(activeCandidate);
                     const activeRealizedProfit = activeHolding ? round2(raw.displayedProfit ?? raw.realizedProfit) : 0;
+                    const hasTodayIntraday = hasAntSettledValue && data.some(p => {
+                        const d = new Date(); const ts = d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0');
+                        return String(p[0] || '').includes(ts);
+                    });
                     const apiHoldingProfit = round2(raw.holdingIncome ?? raw.estimatedProfit);
                     const todayPendingBuyAmount = pendingBuyAmount;
                     const costWithPending = round2(costAmount + todayPendingBuyAmount);
                     const holdingProfit = activeHolding
-                        ? (Number.isFinite(apiHoldingProfit) && apiHoldingProfit !== 0
-                            ? apiHoldingProfit
-                            : round2(costAmount > 0 ? (marketValue - costWithPending + activeRealizedProfit) : 0))
+                        ? (hasTodayIntraday && Number.isFinite(apiHoldingProfit)
+                            ? round2(apiHoldingProfit + todayProfit)
+                            : Number.isFinite(apiHoldingProfit) && apiHoldingProfit !== 0
+                                ? apiHoldingProfit
+                                : round2(costAmount > 0 ? (marketValue - costWithPending + activeRealizedProfit) : 0))
                         : 0;
                     const holdingRate = activeHolding
-                        ? (Number.isFinite(apiHoldingProfit) && apiHoldingProfit !== 0 && costAmount > 0
-                            ? round2(holdingProfit / costWithPending * 100)
-                            : costAmount > 0
-                                ? round2(holdingProfit / costWithPending * 100)
-                                : Number(raw.existingReturnRate ?? raw.holdingRate ?? 0))
+                        ? (costAmount > 0 ? round2(holdingProfit / costWithPending * 100) : Number(raw.existingReturnRate ?? raw.holdingRate ?? 0))
                         : 0;
                     const breakEvenRate = activeHolding && holdingProfit < 0
                         ? (calcBreakEvenRate({
@@ -7857,7 +7873,19 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 fund.accountAmount = fund.marketValue;
                                 fund.isActiveHolding = true;
                             }
-                            console.log('[normalized-fund-check]', { code: fund.code, name: fund.name, amount: fund.amount, marketValue: fund.marketValue, estimatedAccountAmount: fund.estimatedAccountAmount, todayProfit: fund.todayProfit, holdingProfit: fund.holdingProfit, isActiveHolding: fund.isActiveHolding });
+                            console.log('[fund-display-reconcile]', {
+                                code: fund.code, name: fund.name,
+                                snapshotDate: fund.lastSettledDate,
+                                snapshotAmount: fund.amount,
+                                todayTrendPoints: fund.todayTrendData?.length || 0,
+                                todayEstimateRate: fund.todayRate,
+                                todayEstimateProfit: fund.todayProfit,
+                                estimatedCurrentAmount: fund.marketValue,
+                                estimatedHoldingProfit: fund.holdingProfit,
+                                estimatedHoldingRate: fund.holdingRate,
+                                costAmount: fund.costAmount,
+                                rateSource: fund.rateSource
+                            });
 
                             const rateBaseForToday = todayBaseAmount;
                             if (!fund.inactiveHolding) {
