@@ -6300,6 +6300,7 @@ namespace 小白养基.Controllers
                     bool hasOcrYesterday = IsOcrSnapshotCurrent(config.OcrYesterdayDate, todayDash, naturalDate);
                     bool hasOcrHolding = IsOcrSnapshotCurrent(config.OcrSnapshotDate, todayDash, naturalDate) && Math.Abs(config.OcrHoldingIncome) > 0.001;
                     double todayProfitPreview = isSettled ? config.LastSettledProfit
+                        : hasTodayEstimate ? Math.Round(todayBaseAmount * todayRateForSimulation / 100.0, 2)
                         : hasOcrYesterday ? config.OcrYesterdayIncome
                         : Math.Round(todayBaseAmount * todayRateForSimulation / 100.0, 2);
                     double currentAssetsPreview = Math.Round(todayBaseAmount + todayProfitPreview, 2);
