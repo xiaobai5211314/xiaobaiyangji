@@ -6242,19 +6242,13 @@ namespace 小白养基.Controllers
 
                     var dataPoints = new List<object[]>();
 
-                    if (lastRecord != null)
+                    // 只用今天真实 FundRecords 构建今日曲线，不用 lastRecord 伪造
+                    if (fundRecords != null && fundRecords.Count > 0)
                     {
-                        dataPoints.Add(new object[] { todayStr + " 09:30:00", Math.Round(lastRecord.EstimatedRate + avgDiff, 2) });
-                    }
-
-                    dataPoints.AddRange(fundRecords.Select(r => new object[] {
-                        r.FetchTime.ToString("yyyy'/'MM'/'dd HH:mm:ss"),
-                        Math.Round(r.EstimatedRate + avgDiff, 2)
-                    }));
-
-                    if (dataPoints.Count == 0)
-                    {
-                        dataPoints.Add(new object[] { todayStr + " 09:30:00", 0 });
+                        dataPoints.AddRange(fundRecords.Select(r => new object[] {
+                            r.FetchTime.ToString("yyyy'/'MM'/'dd HH:mm:ss"),
+                            Math.Round(r.EstimatedRate + avgDiff, 2)
+                        }));
                     }
 
                     // 是否已完成今日真实净值清算。只读本地字段，不在 today 请求里访问外部接口。
@@ -6282,7 +6276,7 @@ namespace 小白养基.Controllers
                         if (hasSettledHistory || hasOcrSnapshot || hasAnyHolding)
                         {
                             isCarryForward = true;
-                            isSettled = true;
+                            // carryForward 不设 isSettled=true，避免前端把旧数据当今天正式净值
                         }
                     }
                     double? actualRate = isSettled ? config.LastSettledRate : null;

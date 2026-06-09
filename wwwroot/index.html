@@ -7783,7 +7783,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             const hasPendingBuy = !!fund.pendingBuy || pendingBuyAmount > 0;
                             fund.pendingBuy = hasPendingBuy;
                             fund.pendingBuyAmount = pendingBuyAmount;
-                            const hasOfficialSettlement = fund.isSettled === true || fund.isCarryForward === true || fund.rateSource === 'official-nav' || fund.settlementSource === 'ant-ocr' || fund.settlementSource === 'carry-forward' || fund.settlementSource === 'db-snapshot' || fund.settlementSource === 'nav-settlement' || fund.lastSettledDate === effectiveDateDash || fund.actualRate != null || fund.actualExactProfit != null;
+                            const naturalDateDash = new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0') + '-' + String(new Date().getDate()).padStart(2, '0');
+                            const hasOfficialSettlement = fund.isSettled === true && fund.lastSettledDate === naturalDateDash
+                                && (fund.settlementSource === 'nav-settlement' || fund.settlementSource === 'ant-ocr');
                             if (hasOfficialSettlement) {
                                 fund.isSettled = true;
                                 fund.rateSource = 'official-nav';
