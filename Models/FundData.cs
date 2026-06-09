@@ -14,7 +14,7 @@ namespace 小白养基.Models
         // 真实净值扩展字段
         public string? NavDate { get; set; }        // 真实净值日期 (yyyy-MM-dd)，来自接口 FSRQ/jzrq
         public double? Nav { get; set; }             // 真实单位净值 (DWJZ)
-        public string Source { get; set; } = string.Empty; // 数据来源：estimate / official-nav / eastmoney-official
+        public string? Source { get; set; } // 数据来源：estimate / official-nav / eastmoney-official
         public bool IsOfficial { get; set; }         // 是否真实净值记录
     }
 }
