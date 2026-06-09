@@ -5462,7 +5462,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const todayPoints = data.filter(p => String(p[0] || '').includes(todaySlashCheck));
                         const latestTodayPoint = todayPoints.length > 0 ? todayPoints[todayPoints.length - 1] : null;
                         const latestTodayRate = latestTodayPoint ? Number(latestTodayPoint[1]) : 0;
-                        const hasRealTodayEstimate = latestTodayPoint && Math.abs(latestTodayRate) > 0.001;
+                        const hasRealTodayEstimate = latestTodayPoint != null;
                         if (hasRealTodayEstimate && baseAmountForToday > 0) {
                             // 有今天真实估值点：用最新点的 rate 重算 todayProfit
                             todayProfit = round2(rawHoldAmount * latestTodayRate / 100);
@@ -5490,7 +5490,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     const todaySlashForCheck = dNow.getFullYear() + '/' + String(dNow.getMonth() + 1).padStart(2, '0') + '/' + String(dNow.getDate()).padStart(2, '0');
                     const todayPointsForCheck = data.filter(p => String(p[0] || '').includes(todaySlashForCheck));
                     const latestPointForCheck = todayPointsForCheck.length > 0 ? todayPointsForCheck[todayPointsForCheck.length - 1] : null;
-                    const hasTodayIntraday = hasAntSettledValue && latestPointForCheck && Math.abs(Number(latestPointForCheck[1])) > 0.001;
+                    const hasTodayIntraday = hasAntSettledValue && latestPointForCheck != null;
                     const apiHoldingProfit = round2(raw.holdingIncome ?? raw.estimatedProfit);
                     const todayPendingBuyAmount = pendingBuyAmount;
                     const costWithPending = round2(costAmount + todayPendingBuyAmount);
@@ -7880,7 +7880,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 code: fund.code, name: fund.name,
                                 snapshotDate: fund.lastSettledDate,
                                 snapshotAmount: fund.amount,
-                                hasTodayIntradayEstimate: todayPts.length > 0 && Math.abs(Number(latestPt?.[1] || 0)) > 0.001,
+                                hasTodayIntradayEstimate: todayPts.length > 0,
                                 latestEstimatedRate: latestPt ? Number(latestPt[1]) : null,
                                 latestEstimatedTime: latestPt ? latestPt[0] : null,
                                 cardTodayRate: fund.todayRate,

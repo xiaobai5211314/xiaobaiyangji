@@ -6263,7 +6263,7 @@ namespace 小白养基.Controllers
                     var latestTodayRecord = fundRecords != null && fundRecords.Count > 0
                         ? fundRecords.OrderByDescending(r => r.FetchTime).FirstOrDefault()
                         : null;
-                    bool hasTodayEstimate = latestTodayRecord != null && Math.Abs(latestTodayRecord.EstimatedRate) > 0.001;
+                    bool hasTodayEstimate = latestTodayRecord != null;
                     if (isSettled && hasTodayEstimate)
                     {
                         // 有今天真实估值时，不算 settled（避免跳过估值逻辑）
