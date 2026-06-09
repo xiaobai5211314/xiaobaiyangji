@@ -6253,7 +6253,7 @@ namespace 小白养基.Controllers
 
                     // 是否已完成今日真实净值清算。只读本地字段，不在 today 请求里访问外部接口。
                     bool isSettled = config.LastSettledDate == todayDash;
-                    // 如果今天有盘中估值数据（FundRecords 且最新点非零），优先用估值，不用 settled 值
+                    // 如果今天有盘中估值数据（FundRecords），优先用估值，不用 settled 值
                     var latestTodayRecord = fundRecords != null && fundRecords.Count > 0
                         ? fundRecords.OrderByDescending(r => r.FetchTime).FirstOrDefault()
                         : null;
@@ -6265,7 +6265,7 @@ namespace 小白养基.Controllers
                     }
                     // carryForward：今天没有新净值时，沿用最近已确认交易日数据
                     bool isCarryForward = false;
-                    if (!isSettled && !hasTodayEstimate && config.HoldAmount > 0)
+                    if (!isSettled && config.HoldAmount > 0)
                     {
                         // LastSettledDate 有值且 <= today，或 LastSettledDate 为空但有 OCR/持仓数据
                         bool hasSettledHistory = !string.IsNullOrEmpty(config.LastSettledDate)
