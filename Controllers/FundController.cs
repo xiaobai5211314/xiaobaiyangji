@@ -6299,14 +6299,20 @@ namespace 小白养基.Controllers
                     {
                         string settlementTime = todayDash.Replace("-", "/") + " 15:00:00";
                         bool hasSettlementPoint = dataPoints.Any(p => p[0]?.ToString()?.Contains("15:00:00") == true);
+                        double displayRate = Math.Round(todayRate, 2);
                         if (!hasSettlementPoint)
                         {
-                            dataPoints.Add(new object[] { settlementTime, Math.Round(todayRate, 2) });
+                            dataPoints.Add(new object[] { settlementTime, displayRate });
                         }
                         else
                         {
                             var lastPoint = dataPoints.Last(p => p[0]?.ToString()?.Contains("15:00:00") == true);
-                            lastPoint[1] = Math.Round(todayRate, 2);
+                            lastPoint[1] = displayRate;
+                        }
+                        if (dataPoints.Count <= 1)
+                        {
+                            string openTime = todayDash.Replace("-", "/") + " 09:30:00";
+                            dataPoints.Insert(0, new object[] { openTime, 0.0 });
                         }
                     }
 
@@ -6412,7 +6418,7 @@ namespace 小白养基.Controllers
                         hasTodayOfficial = hasOfficialToday,
                         isTradingTime = fundDateInfo.MarketOpen,
                         isMarketOpen = fundDateInfo.MarketOpen,
-                        todayRate = Math.Round(todayRateForDisplay, 2),
+                        todayRate = Math.Round(todayRate, 2),
                         todayProfit = Math.Round(todayProfit, 2),
                         marketValue = Math.Round(marketValue, 2),
                         holdingProfit = Math.Round(totalProfitPreview, 2),
