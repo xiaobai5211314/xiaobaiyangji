@@ -191,6 +191,32 @@ jobs:
           echo "线上 DLL："
           find "$APP_DIR" -maxdepth 1 -name '*.dll' -printf '%f %s bytes\n'
 
+          echo "======= 3.5. 数据库迁移 ======="
+          APPSETTINGS="$APP_DIR/appsettings.Production.json"
+          if [ -f "$APPSETTINGS" ]; then
+            DB_HOST=$(python3 -c "import json; c=json.load(open('$APPSETTINGS'))['ConnectionStrings']['DefaultConnection']; print([p.split('=',1)[1] for p in c.split(';') if p.strip().startswith('Server=')][0])" 2>/dev/null || echo "127.0.0.1")
+            DB_NAME=$(python3 -c "import json; c=json.load(open('$APPSETTINGS'))['ConnectionStrings']['DefaultConnection']; print([p.split('=',1)[1] for p in c.split(';') if p.strip().startswith('Database=')][0])" 2>/dev/null || echo "guzhi")
+            DB_USER=$(python3 -c "import json; c=json.load(open('$APPSETTINGS'))['ConnectionStrings']['DefaultConnection']; print([p.split('=',1)[1] for p in c.split(';') if p.strip().startswith('User=')][0])" 2>/dev/null || echo "guzhi")
+            DB_PASS=$(python3 -c "import json; c=json.load(open('$APPSETTINGS'))['ConnectionStrings']['DefaultConnection']; print([p.split('=',1)[1] for p in c.split(';') if p.strip().startswith('Password=')][0])" 2>/dev/null || echo "guzhi")
+            echo "执行 DDL 迁移 (db=$DB_NAME)..."
+            mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e "
+              ALTER TABLE FundRecords ADD COLUMN IF NOT EXISTS NavDate VARCHAR(20) NULL;
+              ALTER TABLE FundRecords ADD COLUMN IF NOT EXISTS Nav DOUBLE NULL;
+              ALTER TABLE FundRecords ADD COLUMN IF NOT EXISTS Source VARCHAR(50) NOT NULL DEFAULT '';
+              ALTER TABLE FundRecords ADD COLUMN IF NOT EXISTS IsOfficial TINYINT(1) NOT NULL DEFAULT 0;
+            " 2>&1 || echo "DDL 列迁移跳过（可能已存在）"
+            mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e "
+              SET @idx_ok = (SELECT COUNT(1) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'FundRecords' AND INDEX_NAME = 'IX_FundRecord_Code_Official_NavDate');
+              SELECT IF(@idx_ok = 0, '需要创建索引', '索引已存在') AS idx_status;
+            " 2>&1 || true
+            mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e "
+              CREATE INDEX IF NOT EXISTS IX_FundRecord_Code_Official_NavDate ON FundRecords (FundCode, IsOfficial, NavDate);
+            " 2>&1 || echo "DDL 索引迁移跳过（可能已存在）"
+            echo "DDL 迁移完成"
+          else
+            echo "未找到 $APPSETTINGS，跳过 DDL 迁移"
+          fi
+
           echo "======= 4. 启动服务 ======="
           sudo -n "$CONTROL_SCRIPT" daemon-reload
           sudo -n "$CONTROL_SCRIPT" enable
