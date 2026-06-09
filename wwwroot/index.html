@@ -4476,8 +4476,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                                 <span v-if="fund.isHoliday" class="xb-tag xb-tag--ghost" style="font-weight:bold;">☕ 休市</span>
                                 <span v-else :style="{color: fund.todayRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold'}">{{ fund.todayRate > 0 ? '+' : ''}}{{ Number(fund.todayRate || 0).toFixed(2) }}%</span>
-                                <span v-if="fund.isStaleQuote && !fund.isSettled" class="xb-tag xb-tag--warning">旧估值</span>
-                                <span v-if="fund.isSettled && (fund.actualRate != null || fund.lastSettledRate != null)" class="xb-tag xb-tag--info" title="盘后基金公司确认后的真实净值涨跌幅">正式净值 {{ (Number(fund.actualRate ?? fund.lastSettledRate) >= 0 ? '+' : '') + Number(fund.actualRate ?? fund.lastSettledRate).toFixed(2) }}%</span>
+                                <span v-if="fund.isStaleQuote && !getRateDisplayMeta(fund).canShowTodayOfficial" class="xb-tag xb-tag--warning">旧估值</span>
+                                <span v-if="getRateDisplayMeta(fund).canShowTodayOfficial" class="xb-tag xb-tag--info" title="今日正式净值已确认">正式净值 {{ (Number(fund.actualRate ?? fund.lastSettledRate) >= 0 ? '+' : '') + Number(fund.actualRate ?? fund.lastSettledRate).toFixed(2) }}%</span>
 
                                 <span v-if="fund.calibrationOffset && Math.abs(fund.calibrationOffset) > 0 && !fund.isHoliday" class="xb-tag xb-tag--primary">
                                     🤖修正: {{ fund.calibrationOffset > 0 ? '+' : '' }}{{ fund.calibrationOffset }}%
@@ -5959,7 +5959,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const getConfidence = (fund) => {
                     let score = 62;
                     const reasons = [];
-                    if (fund?.isSettled) { score += 28; reasons.push('净值确认'); }
+                    const rateMeta = getRateDisplayMeta(fund);
+                    if (rateMeta.canShowTodayOfficial) { score += 28; reasons.push('净值确认'); }
+                    else if (fund?.isSettled) { score += 18; reasons.push('沿用确认值'); }
                     else if (fund?.isHoliday) { score += 8; reasons.push('休市沿用'); }
                     else { score += 12; reasons.push('盘中估算'); }
                     const diff = Math.abs(Number(fund?.diffRate || 0));
@@ -6702,21 +6704,34 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
                 };
 
+                const getNaturalDateDash = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+                const getRateDisplayMeta = (fund) => {
+                    const naturalDate = getNaturalDateDash();
+                    const officialDate = fund?.lastSettledDate || '';
+                    const src = String(fund?.settlementSource || '');
+                    const isTodayOfficial = fund?.isSettled && officialDate === naturalDate && src === 'nav-settlement';
+                    const hasTodayTrend = Array.isArray(fund?.todayTrendData) && fund.todayTrendData.length > 0;
+                    if (isTodayOfficial) return { label: '真', kind: 'today-official', canShowTodayOfficial: true };
+                    if (hasTodayTrend) return { label: '估', kind: 'estimate', canShowTodayOfficial: false };
+                    if (fund?.isSettled && officialDate && officialDate < naturalDate) return { label: '昨真', kind: 'previous-official', canShowTodayOfficial: false };
+                    return { label: '', kind: 'none', canShowTodayOfficial: false };
+                };
                 const getFundStatusBadgeText = (fund) => {
                     if (fund?.marketOpen === false) return '☕ 休市';
                     if (fund?.pendingBuy || Number(fund?.pendingBuyAmount || 0) > 0) return '⏳ 买入待确认';
-                    if (fund?.isSettled) {
-                        if (fund?.settlementSource === 'db-snapshot' || fund?.isCarryForward && fund?.settlementSource !== 'ant-ocr' && fund?.settlementSource !== 'nav-settlement') return '🌙 沿用持仓';
-                        if (fund?.isCarryForward) return '🌙 沿用已确认';
-                        return '✅ 净值确认';
-                    }
+                    const meta = getRateDisplayMeta(fund);
+                    if (meta.canShowTodayOfficial) return '✅ 净值确认';
+                    if (meta.kind === 'estimate') return '⏱️ 盘中估值';
+                    if (meta.kind === 'previous-official') return '🌙 沿用昨日净值';
+                    if (fund?.isSettled) return '🌙 沿用持仓';
                     return '⏱️ 盘中侦测';
                 };
 
                 const getFundStatusBadgeClass = (fund) => {
                     if (fund?.marketOpen === false) return 'badge-holiday';
                     if (fund?.pendingBuy || Number(fund?.pendingBuyAmount || 0) > 0) return 'badge-pending';
-                    return fund?.isSettled ? 'badge-actual' : 'badge-estimate';
+                    const meta = getRateDisplayMeta(fund);
+                    return meta.canShowTodayOfficial ? 'badge-actual' : 'badge-estimate';
                 };
 
                 const sortIndexHistoryRowsDesc = (rows = []) => (Array.isArray(rows) ? rows : [])
@@ -8071,7 +8086,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             endLabel: {
                                 show: true, color: 'inherit', fontSize: 13, fontWeight: 'bold', lineHeight: 20, formatter: (p) => {
                                     let profit = ((Number(fund.baseAmountForToday ?? fund.amount ?? 0)) * p.value[1] / 100).toFixed(2); let sign = profit >= 0 ? '+' : ''; let profitDisplay = privacyMode.value <= 1 ? `${sign}${profit} 元` : '**** 元'; let rateDisplay = privacyMode.value <= 2 ? `${p.value[1]}%` : '****';
-                                    if (fund.isSettled) { let diffSign = fund._diff > 0 ? '+' : ''; return `${profitDisplay}\n✅ 真: ${rateDisplay}\n差: ${diffSign}${fund._diff}%`; } else if (isNight.value && fund.todayTrendData.length > 50) { return `${profitDisplay}\n⏳ 等待财报...`; } else { return `${profitDisplay}\n估: ${rateDisplay}`; }
+                                    const meta = getRateDisplayMeta(fund); const diffSign = fund._diff > 0 ? '+' : '';
+                                    if (meta.canShowTodayOfficial) { return `${profitDisplay}\n✅ 真: ${rateDisplay}\n差: ${diffSign}${fund._diff}%`; }
+                                    if (meta.kind === 'previous-official') { return `${profitDisplay}\n昨真: ${rateDisplay}`; }
+                                    if (isNight.value && fund.todayTrendData.length > 50) { return `${profitDisplay}\n⏳ 等待财报...`; }
+                                    return `${profitDisplay}\n估: ${rateDisplay}`;
                                 }
                             }, data: fund.todayTrendData
                         };
@@ -8083,8 +8102,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             trigger: 'axis', backgroundColor: 'rgba(15, 23, 42, 0.9)', borderColor: '#334155', textStyle: { color: '#f8fafc' }, formatter: function (params) {
                                 let html = `<div style="margin-bottom:5px;color:var(--text-muted);">${params[0].axisValueLabel}</div>`;
                                 params.forEach(p => {
-                                    let profit = (holdAmounts[p.seriesName] * p.data[1] / 100).toFixed(2); let color = profit >= 0 ? '#ff4d4f' : '#10b981'; let originalFund = apiData.find(f => f.name === p.seriesName); let labelSuffix = '估';
-                                    if (isNight.value && originalFund && originalFund.data && p.dataIndex === originalFund.data.length - 1) { labelSuffix = originalFund.isSettled ? '✅ 真' : '⏳ 待更新'; }
+                                    let profit = (holdAmounts[p.seriesName] * p.data[1] / 100).toFixed(2); let color = profit >= 0 ? '#ff4d4f' : '#10b981'; let originalFund = apiData.find(f => f.name === p.seriesName);
+                                    let labelSuffix = '估';
+                                    if (originalFund) {
+                                        const meta = getRateDisplayMeta(originalFund);
+                                        if (meta.canShowTodayOfficial) labelSuffix = '✅ 真';
+                                        else if (meta.kind === 'previous-official') labelSuffix = '昨真';
+                                        else if (isNight.value && p.dataIndex === (originalFund.todayTrendData?.length || 0) - 1) labelSuffix = '⏳ 待更新';
+                                    }
                                     let profitDisplay = privacyMode.value <= 1 ? `${profit >= 0 ? '+' : ''}${profit} 元` : '**** 元'; let rateDisplay = privacyMode.value <= 2 ? `${p.data[1]}%` : '****';
                                     html += `<div>${p.marker} ${p.seriesName}: <span style="color:${color};font-weight:bold;">${profitDisplay}</span> (${rateDisplay} [${labelSuffix}])</div>`;
                                 });
@@ -8164,7 +8189,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
                     sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, capitalFlowError, isCapitalLoading, fetchCapitalFlow,
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, isDetailsLoading, expandedSectors, toggleSector,
-                    fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices, formatIndexPoint, formatIndexRate, getFundStatusBadgeText, getFundStatusBadgeClass,
+                    fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices, formatIndexPoint, formatIndexRate, getFundStatusBadgeText, getFundStatusBadgeClass, getRateDisplayMeta,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
                     analysisMonth, selectedAnalysisDate, analysisViewMode, analysisDetailMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, analysisProfitTop, analysisLossTop, analysisMonthTotal, fetchAnalysis, refreshAnalysisPage, goAnalysisToday, todayDashStr,
                     assetMode, setAssetMode, stockHoldings, stockWatchList, stockSearchKeyword, stockSearchResults, stockOcrLoading, stockOcrPreview, selectedStock, stockKlinePeriod, stockKlinePeriods, stockChartRef, stockChartStatus, triggerStockOcr, handleStockOcrUpload, confirmStockOcr, loadStockDashboard, searchStocks, addStockWatch, openStockHoldingEditor, deleteStockHolding, deleteStockWatch, openStockDetail, switchStockKline, recalculateStockOcrItem, formatOcrNumber, signedOcrNumber, profitColor, dailyBattleReport, confidenceRows, confidenceMap, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, formatFinitePercent, calibrationRows,
