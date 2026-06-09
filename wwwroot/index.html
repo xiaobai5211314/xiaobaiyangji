@@ -5455,6 +5455,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         todayProfit = round2(raw.actualExactProfit ?? raw.lastSettledProfit ?? todayProfit);
                         marketValue = round2(rawHoldAmount > 0 ? rawHoldAmount : marketValue);
                         todayRate = baseAmountForToday > 0 ? round2(todayProfit / baseAmountForToday * 100) : todayRate;
+                        console.log('[ant-settled]', { code: raw.code, todayProfit, marketValue, todayRate, rawHoldAmount, baseAmountForToday });
                     }
                     const activeCandidate = {
                         ...raw,
@@ -7846,6 +7847,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                         // 安全兜底：如果 API 返回空数据但本地已有持仓，不清空
                         const apiHasValidData = apiData.some(f => Number(f.amount || f.marketValue || f.todayAmount || f.rawHoldAmount || 0) > 0);
+                        console.log('[fetchData-debug]', { apiDataLen: apiData.length, apiHasValidData, localLen: fundsList.value.length, sample: apiData.slice(0,2).map(f => ({ code: f.code, amount: f.amount, mv: f.marketValue, settled: f.isSettled, src: f.settlementSource })) });
                         if (!apiHasValidData && fundsList.value.length > 0 && fundsList.value.some(f => Number(f.amount || f.marketValue || 0) > 0)) {
                             showToast("今日暂无新行情，使用数据库持仓快照", "warning");
                             isLoading.value = false;
@@ -7858,6 +7860,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const activeForSummary = fundsList.value.filter(isActiveHoldingFund);
                         const inactiveForSummary = fundsList.value.filter(isClearedFund);
                         const activeSummary = calcActivePortfolioSummary(activeForSummary);
+                        console.log('[summary-debug]', { fundsLen: fundsList.value.length, activeLen: activeForSummary.length, inactiveLen: inactiveForSummary.length, accountTotal: activeSummary.accountTotalAmount, todayProfit: activeSummary.totalTodayProfit, sampleFund: fundsList.value[0] ? { code: fundsList.value[0].code, mv: fundsList.value[0].marketValue, est: fundsList.value[0].estimatedAccountAmount, isActive: fundsList.value[0].isActiveHolding } : null });
                         if (activeForSummary.length > 0) {
                             applyDashboardActiveSummary(activeForSummary, inactiveForSummary, activeSummary);
                         } else if (apiSummary) {
