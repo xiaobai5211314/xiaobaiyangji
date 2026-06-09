@@ -3099,9 +3099,11 @@ namespace 小白养基.Controllers
                         PendingTradeStatus = item.IsPendingBuy ? "pending_buy" : null,
                         PendingConfirmDate = item.PendingConfirmDate,
                         PendingSource = item.IsPendingBuy ? (string.IsNullOrWhiteSpace(item.PendingSource) ? "ocr" : item.PendingSource) : null,
-                        LastSettledDate = null,
-                        LastSettledProfit = 0,
-                        LastSettledRate = 0,
+                        LastSettledDate = (Math.Abs(item.YesterdayIncome) > 0.001 || Math.Abs(item.HoldingIncome) > 0.001) ? ChinaDateDash() : null,
+                        LastSettledProfit = Math.Round(item.YesterdayIncome, 2),
+                        LastSettledRate = Math.Abs(item.YesterdayIncome) > 0.001
+                            ? Math.Round(item.YesterdayIncome / Math.Max(0.01, item.HoldAmount - newPendingAmount - item.YesterdayIncome) * 100.0, 4)
+                            : Math.Round(item.HoldingRate, 4),
                         OcrYesterdayIncome = Math.Round(item.YesterdayIncome, 2),
                         OcrYesterdayDate = ChinaDateDash(),
                         OcrHoldingIncome = Math.Round(item.HoldingIncome, 2),
@@ -6259,12 +6261,19 @@ namespace 小白养基.Controllers
                     bool isSettled = config.LastSettledDate == todayDash;
                     // carryForward：今天没有新净值时，沿用最近已确认交易日数据
                     bool isCarryForward = false;
-                    if (!isSettled && !string.IsNullOrEmpty(config.LastSettledDate)
-                        && string.CompareOrdinal(config.LastSettledDate, todayDash) <= 0
-                        && (config.LastSettledProfit != 0 || config.LastSettledRate != 0 || config.HoldAmount > 0))
+                    if (!isSettled && config.HoldAmount > 0)
                     {
-                        isCarryForward = true;
-                        isSettled = true;
+                        // LastSettledDate 有值且 <= today，或 LastSettledDate 为空但有 OCR/持仓数据
+                        bool hasSettledHistory = !string.IsNullOrEmpty(config.LastSettledDate)
+                            && string.CompareOrdinal(config.LastSettledDate, todayDash) <= 0
+                            && (config.LastSettledProfit != 0 || config.LastSettledRate != 0);
+                        bool hasOcrSnapshot = !string.IsNullOrEmpty(config.OcrSnapshotDate) && config.OcrSnapshotDate == todayDash;
+                        bool hasAnyHolding = config.HoldAmount > 0 && (config.HoldShares > 0 || config.CostAmount > 0 || config.PendingBuyAmount > 0);
+                        if (hasSettledHistory || hasOcrSnapshot || hasAnyHolding)
+                        {
+                            isCarryForward = true;
+                            isSettled = true;
+                        }
                     }
                     double? actualRate = isSettled ? config.LastSettledRate : null;
                     double? actualExactProfit = isSettled ? config.LastSettledProfit : null;
@@ -6392,7 +6401,7 @@ namespace 小白养基.Controllers
                         isSettled = isSettled,
                         isCarryForward = isCarryForward,
                         displayDate = isSettled ? (config.LastSettledDate ?? todayDash) : todayDash,
-                        settlementSource = isSettled ? (isCarryForward ? "carry-forward" : (hasOcrHolding ? "ant-ocr" : "nav-settlement")) : null,
+                        settlementSource = isSettled ? (isCarryForward ? (hasOcrHolding ? "db-snapshot" : (string.IsNullOrEmpty(config.LastSettledDate) || config.LastSettledDate != todayDash ? "db-snapshot" : "carry-forward")) : (hasOcrHolding ? "ant-ocr" : "nav-settlement")) : null,
                         actualRate = actualRate,
                         actualExactProfit = actualExactProfit,
                         todayBaseAmount = todayBaseAmount,

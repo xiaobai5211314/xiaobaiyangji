@@ -5442,10 +5442,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     }
                     const rawMarketValue = context.marketValue ?? raw.marketValue ?? raw.todayAmount;
                     const marketValue = clearedHolding ? 0 : round2(toNumber(rawMarketValue, rawHoldAmount + todayProfit));
-                    // 蚂蚁 OCR 已确认 / carryForward：强制使用平台值，不再用估值修正覆盖
+                    // 蚂蚁 OCR 已确认 / carryForward / db-snapshot：强制使用平台值
                     const hasAntSettledValue = raw.isSettled && (
                         raw.settlementSource === 'ant-ocr' ||
                         raw.settlementSource === 'carry-forward' ||
+                        raw.settlementSource === 'db-snapshot' ||
                         raw.settlementSource === 'nav-settlement' ||
                         raw.isCarryForward === true ||
                         Number.isFinite(Number(raw.lastSettledProfit)) && raw.lastSettledProfit !== 0
@@ -6682,7 +6683,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const getFundStatusBadgeText = (fund) => {
                     if (fund?.marketOpen === false) return '☕ 休市';
                     if (fund?.pendingBuy || Number(fund?.pendingBuyAmount || 0) > 0) return '⏳ 买入待确认';
-                    if (fund?.isSettled) return fund?.isCarryForward ? '🌙 沿用已确认' : '✅ 净值确认';
+                    if (fund?.isSettled) {
+                        if (fund?.settlementSource === 'db-snapshot' || fund?.isCarryForward && fund?.settlementSource !== 'ant-ocr' && fund?.settlementSource !== 'nav-settlement') return '🌙 沿用持仓';
+                        if (fund?.isCarryForward) return '🌙 沿用已确认';
+                        return '✅ 净值确认';
+                    }
                     return '⏱️ 盘中侦测';
                 };
 
@@ -7735,7 +7740,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             const hasPendingBuy = !!fund.pendingBuy || pendingBuyAmount > 0;
                             fund.pendingBuy = hasPendingBuy;
                             fund.pendingBuyAmount = pendingBuyAmount;
-                            const hasOfficialSettlement = fund.isSettled === true || fund.isCarryForward === true || fund.rateSource === 'official-nav' || fund.settlementSource === 'ant-ocr' || fund.settlementSource === 'carry-forward' || fund.settlementSource === 'nav-settlement' || fund.lastSettledDate === todayDash || fund.actualRate != null || fund.actualExactProfit != null;
+                            const hasOfficialSettlement = fund.isSettled === true || fund.isCarryForward === true || fund.rateSource === 'official-nav' || fund.settlementSource === 'ant-ocr' || fund.settlementSource === 'carry-forward' || fund.settlementSource === 'db-snapshot' || fund.settlementSource === 'nav-settlement' || fund.lastSettledDate === todayDash || fund.actualRate != null || fund.actualExactProfit != null;
                             if (hasOfficialSettlement) {
                                 fund.isSettled = true;
                                 fund.rateSource = 'official-nav';
@@ -7839,6 +7844,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             }
                         });
 
+                        // 安全兜底：如果 API 返回空数据但本地已有持仓，不清空
+                        const apiHasValidData = apiData.some(f => Number(f.amount || f.marketValue || f.todayAmount || f.rawHoldAmount || 0) > 0);
+                        if (!apiHasValidData && fundsList.value.length > 0 && fundsList.value.some(f => Number(f.amount || f.marketValue || 0) > 0)) {
+                            showToast("今日暂无新行情，使用数据库持仓快照", "warning");
+                            isLoading.value = false;
+                            isFetchingData = false;
+                            return;
+                        }
                         fundsList.value = apiData;
                         writeJsonCache(dashCacheKey, apiData);
                         // 顶部总览只统计当前持仓，已清仓基金不参与今日收益、累计盈亏和累计收益率。
