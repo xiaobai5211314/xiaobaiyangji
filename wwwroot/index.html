@@ -4474,13 +4474,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                     {{ getFundStatusBadgeText(fund) }}
                                 </span>
 
-                                <span v-if="fund.isHoliday" class="xb-tag xb-tag--ghost" style="font-weight:bold;">☕ 休市</span>
-                                <span v-else :style="{color: fund.todayRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold'}">{{ fund.todayRate > 0 ? '+' : ''}}{{ Number(fund.todayRate || 0).toFixed(2) }}%</span>
-                                <span v-if="fund.dataStatus === 'stale_official'" class="xb-tag xb-tag--warning">旧值</span>
-                                <span v-if="fund.dataStatus === 'waiting_today'" class="xb-tag xb-tag--ghost">等待净值</span>
-                                <span v-if="fund.dataStatus === 'official_today'" class="xb-tag xb-tag--info" title="今日正式净值已确认">净值确认</span>
+                                <span :style="{color: fund.todayRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold'}">{{ fund.todayRate > 0 ? '+' : ''}}{{ Number(fund.todayRate || 0).toFixed(2) }}%</span>
 
-                                <span v-if="fund.calibrationOffset && Math.abs(fund.calibrationOffset) > 0 && !fund.isHoliday" class="xb-tag xb-tag--primary">
+                                <span v-if="fund.calibrationOffset && Math.abs(fund.calibrationOffset) > 0 && !fund.isHoliday && fund.dataStatus !== 'official_today'" class="xb-tag xb-tag--primary">
                                     🤖修正: {{ fund.calibrationOffset > 0 ? '+' : '' }}{{ fund.calibrationOffset }}%
                                 </span>
                             </span>
@@ -6714,12 +6710,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     return { label: '等待净值', kind: 'waiting', canShowTodayOfficial: false };
                 };
                 const getFundStatusBadgeText = (fund) => {
-                    if (fund?.marketOpen === false) return '☕ 休市';
-                    if (fund?.pendingBuy || Number(fund?.pendingBuyAmount || 0) > 0) return '⏳ 买入待确认';
                     const ds = fund?.dataStatus || '';
                     if (ds === 'official_today') return '✅ 净值确认';
                     if (ds === 'estimate_today') return '⏱️ 盘中估值';
-                    if (ds === 'stale_official') return '🌙 旧值';
+                    if (ds === 'stale_official') return '🌙 旧净值';
+                    if (fund?.pendingBuy || Number(fund?.pendingBuyAmount || 0) > 0) return '⏳ 买入待确认';
+                    if (fund?.marketOpen === false) return '☕ 休市';
                     return '⏳ 等待净值';
                 };
 

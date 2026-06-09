@@ -6295,7 +6295,7 @@ namespace 小白养基.Controllers
                         }
                     }
 
-                    if (dataStatus == "official_today" && todayRate != 0)
+                    if (dataStatus == "official_today")
                     {
                         string settlementTime = todayDash.Replace("-", "/") + " 15:00:00";
                         bool hasSettlementPoint = dataPoints.Any(p => p[0]?.ToString()?.Contains("15:00:00") == true);
@@ -6400,6 +6400,18 @@ namespace 小白养基.Controllers
                         navDate = navDateDisplay,
                         source = sourceDisplay,
                         dataStatus,
+                        dataStatusLabel = dataStatus == "official_today" ? "净值确认"
+                            : dataStatus == "estimate_today" ? "盘中估值"
+                            : dataStatus == "stale_official" ? "旧净值"
+                            : "等待净值",
+                        currentNav = hasOfficialToday ? officialTodayRecord!.Nav
+                            : hasTodayEstimate ? (double?)null
+                            : (double?)null,
+                        isOfficial = hasOfficialToday,
+                        hasTodayEstimate,
+                        hasTodayOfficial = hasOfficialToday,
+                        isTradingTime = fundDateInfo.MarketOpen,
+                        isMarketOpen = fundDateInfo.MarketOpen,
                         todayRate = Math.Round(todayRateForDisplay, 2),
                         todayProfit = Math.Round(todayProfit, 2),
                         marketValue = Math.Round(marketValue, 2),
