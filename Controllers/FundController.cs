@@ -6154,15 +6154,6 @@ namespace 小白养基.Controllers
             {
                 var localTime = ChinaNow();
                 var dateInfo = GetEffectiveFundDateInfo(localTime);
-                string cacheKey = $"Tactical_TodayData_{username}_{dateInfo.EffectiveDateText}_{dateInfo.MarketStatus}";
-                if (force)
-                {
-                    _cache.Remove(cacheKey);
-                }
-                else if (_cache.TryGetValue(cacheKey, out object cachedResult))
-                {
-                    return Ok(cachedResult);
-                }
 
                 // ✅ 优化后（只读查询，不跟踪变更）
                 var myFunds = await _context.MyFunds
@@ -6579,12 +6570,7 @@ namespace 小白养基.Controllers
                     await _context.SaveChangesAsync();
                 }
 
-                var cacheOptions = new MemoryCacheEntryOptions()
-                    .SetAbsoluteExpiration(TimeSpan.FromSeconds(60))
-                    .SetSlidingExpiration(TimeSpan.FromSeconds(30));
                 var payload = new { funds = finalResult, summary };
-                _cache.Set(cacheKey, payload, cacheOptions);
-
                 return Ok(payload);
             }
             catch (Exception ex)
