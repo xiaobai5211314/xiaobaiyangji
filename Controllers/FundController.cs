@@ -6580,14 +6580,6 @@ namespace 小白养基.Controllers
                     summarySource
                 };
 
-                // 真实净值一出现，后端立即修正”今日总持仓 + 单只基金”档案。
-                // 这样不再依赖前端 save-archive，也能覆盖旧版本写坏的 TOTAL 记录。
-                if (dateInfo.DateMode == "today" && myFunds.Any(f => f.LastSettledDate == todayDash))
-                {
-                    await UpsertTodayArchivesFromCurrentHoldingsAsync(username, today, myFunds, todayRecords);
-                    await _context.SaveChangesAsync();
-                }
-
                 var payload = new { funds = finalResult, summary };
                 return Ok(payload);
             }
