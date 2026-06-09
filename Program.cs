@@ -138,7 +138,14 @@ app.UseResponseCompression();
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    dbContext.Database.Migrate();
+    try
+    {
+        dbContext.Database.Migrate();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[警告] 数据库迁移失败，服务继续启动: {ex.Message}");
+    }
 }
 
 app.UseDefaultFiles();
