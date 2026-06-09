@@ -337,3 +337,13 @@ export function postForm<TResponse = unknown>(
     }
   });
 }
+
+export function clearGetCache(pathPattern?: string) {
+  if (!pathPattern) {
+    getCache.clear();
+    return;
+  }
+  for (const key of getCache.keys()) {
+    if (key.includes(pathPattern)) getCache.delete(key);
+  }
+}

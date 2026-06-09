@@ -651,6 +651,7 @@ import { computed, ref } from 'vue';
 import { onPullDownRefresh, onShow } from '@dcloudio/uni-app';
 import AppTabBar from '../../components/AppTabBar.vue';
 import SparklineChart from '../../components/SparklineChart.vue';
+import { clearGetCache } from '../../services/request';
 import { getProfile, isGeneratedWechatUsername, pickAvatar, pickDisplayName, pickUsername } from '../../services/api/auth';
 import {
   confirmFundOcr,
@@ -1720,6 +1721,7 @@ async function confirmOcrImport() {
 
     uni.showToast({ title: result.message || '导入成功', icon: 'none' });
     closeOcrPreview();
+    clearGetCache('/api/fund/today');
     await loadFunds(true);
   } catch (error) {
     console.warn('[fund:ocr-confirm]', error);

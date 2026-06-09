@@ -153,7 +153,8 @@ export interface FundArchiveRow {
 }
 
 export function getTodayFunds(username: string, force = false, silent = false) {
-  const query = `username=${encodeURIComponent(username)}${force ? '&force=true' : ''}`;
+  const bustParam = force ? `&_t=${Date.now()}` : '';
+  const query = `username=${encodeURIComponent(username)}${bustParam}`;
   return get<unknown>(`/api/fund/today?${query}`, {
     loadingText: '读取持仓',
     silent,

@@ -7635,8 +7635,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     }
                     if (!silent && fundsList.value.length === 0) isLoading.value = true;
                     try {
-                        const forceParam = force ? '&force=true' : '';
-                        const response = await fetch(`${API_BASE}/api/fund/today?username=${encodeURIComponent(currentUser.value)}${forceParam}`, { cache: force ? 'no-store' : 'default' });
+                        const forceParam = force ? `&_t=${Date.now()}` : '';
+                        const response = await fetch(`${API_BASE}/api/fund/today?username=${encodeURIComponent(currentUser.value)}${forceParam}`, { cache: 'no-store' });
                         if (!response.ok) throw new Error('today接口异常');
                         const rawData = await response.json();
                         const apiData = Array.isArray(rawData) ? rawData : (rawData.funds || []);
