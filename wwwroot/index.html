@@ -7629,10 +7629,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         };
                         let todaySlash = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
                         let todayDash = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                        if (apiSummary?.effectiveDate) {
-                            todayDash = apiSummary.effectiveDate;
-                            todaySlash = String(apiSummary.effectiveDate).split('-').join('/');
-                        }
+                        const effectiveDateDash = apiSummary?.effectiveDate || todayDash;
+                        const effectiveDateSlash = effectiveDateDash.split('-').join('/');
+                        const naturalDateDash = apiSummary?.naturalDate || apiSummary?.date || todayDash;
+                        console.log('[date-check]', { naturalDateDash, effectiveDateDash, todayDash, apiEffectiveDate: apiSummary?.effectiveDate, apiNaturalDate: apiSummary?.naturalDate });
                         dashboardSummaryMeta.value = {
                             effectiveDate: apiSummary?.effectiveDate || todayDash,
                             naturalDate: apiSummary?.naturalDate || apiSummary?.date || todayDash,
@@ -7642,19 +7642,17 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         };
                         let currentMinutes = d.getHours() * 60 + d.getMinutes(); let isWeekend = (d.getDay() === 0 || d.getDay() === 6);
                         const getLatestRateFromFundData = (data = [], todaySlashValue = todaySlash, todayDashValue = todayDash) => {
-                            let fallbackPoint = null;
                             for (let i = data.length - 1; i >= 0; i--) {
                                 const point = data[i];
                                 if (!Array.isArray(point) || point.length < 2) continue;
                                 const rate = nullableNumber(point[1]);
                                 if (rate === null) continue;
                                 const time = String(point[0] || '');
-                                const isToday = time.includes(todaySlashValue) || time.includes(todayDashValue);
-                                const ratePoint = { time, rate, isToday };
-                                if (isToday) return ratePoint;
-                                if (!fallbackPoint) fallbackPoint = ratePoint;
+                                if (time.includes(todaySlashValue) || time.includes(todayDashValue)) {
+                                    return { time, rate, isToday: true };
+                                }
                             }
-                            return fallbackPoint;
+                            return null;
                         };
                         const pickFirstNumber = (...values) => {
                             for (const value of values) {
@@ -7697,10 +7695,18 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             if (fund.isSettled) {
                                 const latestPoint = getLatestRateFromFundData(fund.data, todaySlash, todayDash);
                                 fund.currentRate = pickFirstNumber(fund.actualRate, fund.lastSettledRate, fund.todayRateForSimulation, latestPoint?.rate, 0);
-                                fund.rateSource = 'settled-nav';
+                                fund.rateSource = fund.lastSettledDate === todayDash ? 'settled-nav' : 'carry-forward';
                                 fund.isHoliday = backendMarketClosed;
                                 fund.isStaleQuote = false;
-                                if (fund.data.length > 0 && String(fund.data[fund.data.length - 1][0]).includes("15:00:00")) { fund.data[fund.data.length - 1][1] = fund.currentRate; } else { fund.data.push([`${todaySlash} 15:00:00`, fund.currentRate]); }
+                                // 只有 lastSettledDate === 今天时才给今日曲线补 15:00 点
+                                if (fund.lastSettledDate === todayDash) {
+                                    const lastDataTime = fund.data.length > 0 ? String(fund.data[fund.data.length - 1][0] || '') : '';
+                                    if (lastDataTime.includes(todaySlash) && lastDataTime.includes("15:00:00")) {
+                                        fund.data[fund.data.length - 1][1] = fund.currentRate;
+                                    } else {
+                                        fund.data.push([`${todaySlash} 15:00:00`, fund.currentRate]);
+                                    }
+                                }
                             } else {
                                 const resolvedRate = resolveFundCurrentRate(fund, backendMarketClosed);
                                 fund.currentRate = Number(resolvedRate.rate.toFixed(2));
@@ -7745,7 +7751,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             const hasPendingBuy = !!fund.pendingBuy || pendingBuyAmount > 0;
                             fund.pendingBuy = hasPendingBuy;
                             fund.pendingBuyAmount = pendingBuyAmount;
-                            const hasOfficialSettlement = fund.isSettled === true || fund.isCarryForward === true || fund.rateSource === 'official-nav' || fund.settlementSource === 'ant-ocr' || fund.settlementSource === 'carry-forward' || fund.settlementSource === 'db-snapshot' || fund.settlementSource === 'nav-settlement' || fund.lastSettledDate === todayDash || fund.actualRate != null || fund.actualExactProfit != null;
+                            const hasOfficialSettlement = fund.isSettled === true || fund.isCarryForward === true || fund.rateSource === 'official-nav' || fund.settlementSource === 'ant-ocr' || fund.settlementSource === 'carry-forward' || fund.settlementSource === 'db-snapshot' || fund.settlementSource === 'nav-settlement' || fund.lastSettledDate === effectiveDateDash || fund.actualRate != null || fund.actualExactProfit != null;
                             if (hasOfficialSettlement) {
                                 fund.isSettled = true;
                                 fund.rateSource = 'official-nav';
@@ -7857,6 +7863,22 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             if (!fund.inactiveHolding) {
                                 tPrincipal += currentAmount; tPrincipalForRate += rateBaseForToday; tCost += (fund.cost || currentAmount);
                             }
+                        });
+
+                        // 过滤今日曲线数据：只使用 naturalDate 的点，不混入昨天
+                        apiData.forEach(fund => {
+                            fund.todayTrendData = (fund.data || []).filter(p => {
+                                const t = String(p[0] || '');
+                                return t.includes(todaySlash) || t.includes(todayDash);
+                            });
+                            console.log('[today-trend-check]', {
+                                code: fund.code, name: fund.name,
+                                rawPoints: (fund.data || []).length,
+                                todayPoints: fund.todayTrendData.length,
+                                rateSource: fund.rateSource,
+                                currentRate: fund.currentRate,
+                                lastSettledDate: fund.lastSettledDate
+                            });
                         });
 
                         // 安全兜底：如果 API 返回空数据但本地已有持仓，不清空
@@ -8006,19 +8028,19 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     if (currentHash === lastChartDataHash) return;
                     lastChartDataHash = currentHash;
                     if (!chartInstance.value) { chartInstance.value = echarts.init(chartRef.value, 'dark'); window.addEventListener('resize', handleResize); }
-                    var holdAmounts = {}; var validData = apiData.filter(f => isActiveHoldingFund(f) && f.data && f.data.length > 1);
+                    var holdAmounts = {}; var validData = apiData.filter(f => isActiveHoldingFund(f) && f.todayTrendData && f.todayTrendData.length > 1);
                     var seriesData = validData.map(fund => {
                         holdAmounts[fund.name] = Number(fund.baseAmountForToday ?? fund.amount ?? 0); let diff = 0;
-                        if (fund.isSettled && fund.data.length >= 2) { let realRate = fund.actualRate; let estRate = fund.data[fund.data.length - 2][1]; diff = (realRate - estRate).toFixed(2); }
+                        if (fund.isSettled && fund.todayTrendData.length >= 2) { let realRate = fund.actualRate; let estRate = fund.todayTrendData[fund.todayTrendData.length - 2][1]; diff = (realRate - estRate).toFixed(2); }
                         fund._diff = diff;
                         return {
                             name: fund.name, type: 'line', smooth: true, symbol: 'none', lineStyle: { width: 3, shadowColor: 'rgba(0,0,0,0.5)', shadowBlur: 10 },
                             endLabel: {
                                 show: true, color: 'inherit', fontSize: 13, fontWeight: 'bold', lineHeight: 20, formatter: (p) => {
                                     let profit = ((Number(fund.baseAmountForToday ?? fund.amount ?? 0)) * p.value[1] / 100).toFixed(2); let sign = profit >= 0 ? '+' : ''; let profitDisplay = privacyMode.value <= 1 ? `${sign}${profit} 元` : '**** 元'; let rateDisplay = privacyMode.value <= 2 ? `${p.value[1]}%` : '****';
-                                    if (fund.isSettled) { let diffSign = fund._diff > 0 ? '+' : ''; return `${profitDisplay}\n✅ 真: ${rateDisplay}\n差: ${diffSign}${fund._diff}%`; } else if (isNight.value && fund.data.length > 50) { return `${profitDisplay}\n⏳ 等待财报...`; } else { return `${profitDisplay}\n估: ${rateDisplay}`; }
+                                    if (fund.isSettled) { let diffSign = fund._diff > 0 ? '+' : ''; return `${profitDisplay}\n✅ 真: ${rateDisplay}\n差: ${diffSign}${fund._diff}%`; } else if (isNight.value && fund.todayTrendData.length > 50) { return `${profitDisplay}\n⏳ 等待财报...`; } else { return `${profitDisplay}\n估: ${rateDisplay}`; }
                                 }
-                            }, data: fund.data
+                            }, data: fund.todayTrendData
                         };
                     });
                     var d = new Date(); var todayStr = d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0');
