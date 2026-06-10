@@ -49,17 +49,18 @@ namespace 小白养基.Services
                     if (stoppingToken.IsCancellationRequested) break;
 
                     now = ChinaNow();
-                    bool isEarlyMorning = now.Hour < 6;
+                    // 00:10 和 08:30 补结算上一个交易日，21:30/22:30/23:30 结算当天
+                    bool settlePrevious = now.Hour < 17;
 
-                    // 0:10 和 8:30 结算上一个交易日
-                    if (isEarlyMorning)
+                    if (settlePrevious)
                     {
                         var prevDate = GetPreviousTradeDate(now.Date);
+                        _logger.LogInformation("补结算上一个交易日: {Date}", prevDate.ToString("yyyy-MM-dd"));
                         await SettleForDate(prevDate, stoppingToken);
                     }
                     else
                     {
-                        // 21:30, 22:30, 23:30 结算当天
+                        _logger.LogInformation("结算当天: {Date}", now.Date.ToString("yyyy-MM-dd"));
                         await SettleForDate(now.Date, stoppingToken);
                     }
                 }
@@ -128,44 +129,42 @@ namespace 小白养基.Services
                 return;
             }
 
+            // 查询当日 FundRecords：优先按 NavDate（官方净值），再按 FetchTime（盘中估值）
             var todayStart = targetDate;
             var todayEnd = targetDate.AddDays(1);
             var todayRecords = await dbContext.FundRecords
                 .AsNoTracking()
-                .Where(r => r.FetchTime >= todayStart && r.FetchTime < todayEnd)
+                .Where(r => (r.IsOfficial && r.NavDate == dateDash)
+                         || (r.FetchTime >= todayStart && r.FetchTime < todayEnd))
                 .ToListAsync(stoppingToken);
 
             var usernames = allHoldings.Select(f => f.Username).Distinct().ToList();
             int totalSaved = 0;
+            int totalSkipped = 0;
 
             foreach (var username in usernames)
             {
                 var userFunds = allHoldings.Where(f => f.Username == username).ToList();
 
-                // 跳过已有完整 TOTAL 记录的用户（幂等）
-                var existingTotal = await dbContext.DailyArchives
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(a => a.Username == username && a.FundCode == "TOTAL" && a.RecordDate == targetDate, stoppingToken);
-
-                if (existingTotal != null && Math.Abs(existingTotal.DailyProfit) > 0.001)
+                var rows = BuildArchiveRows(username, targetDate, userFunds, todayRecords, dateDash);
+                if (rows.Count == 0)
                 {
-                    _logger.LogInformation("{User} {Date} 已有结算记录（profit={Profit}），更新", username, dateDash, existingTotal.DailyProfit);
+                    _logger.LogInformation("{User} {Date} 无有效数据，跳过", username, dateDash);
+                    continue;
                 }
 
-                var rows = BuildArchiveRows(username, targetDate, userFunds, todayRecords);
-                await UpsertArchives(dbContext, username, targetDate, rows, stoppingToken);
+                var skipped = await UpsertArchives(dbContext, username, targetDate, rows, stoppingToken);
                 totalSaved += rows.Count;
+                totalSkipped += skipped;
 
-                // 清除 today 缓存
                 _cache.Remove($"Tactical_TodayData_{username}");
             }
 
             await dbContext.SaveChangesAsync(stoppingToken);
-
-            // 标记已结算（1小时过期，允许后续重试）
             _cache.Set(cacheKey, true, TimeSpan.FromHours(1));
 
-            _logger.LogInformation("结算完成 {Date}，共 {Count} 条记录", dateDash, totalSaved);
+            _logger.LogInformation("结算完成 {Date}，写入 {Count} 条，跳过 {Skipped} 条（已有非零记录）",
+                dateDash, totalSaved, totalSkipped);
         }
 
         private static double GetActivePendingBuyAmount(MyFundConfig fund, string settleDate)
@@ -179,15 +178,22 @@ namespace 小白养基.Services
             return Math.Round(Math.Max(explicitPending, legacyTodayAdd), 2);
         }
 
-        private static List<DailyArchive> BuildArchiveRows(string username, DateTime date, List<MyFundConfig> funds, List<FundData> todayRecords)
+        private static List<DailyArchive> BuildArchiveRows(string username, DateTime date, List<MyFundConfig> funds, List<FundData> todayRecords, string dateDash)
         {
-            string dateDash = date.ToString("yyyy-MM-dd");
-            var latestRecordDict = todayRecords
+            // 按 FundCode 索引：优先取官方净值记录，再取最新估值
+            var officialDict = todayRecords
+                .Where(r => r.IsOfficial && r.NavDate == dateDash)
+                .GroupBy(r => r.FundCode)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).First());
+
+            var estimateDict = todayRecords
+                .Where(r => !r.IsOfficial && r.FetchTime >= date && r.FetchTime < date.AddDays(1))
                 .GroupBy(r => r.FundCode)
                 .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).First());
 
             var rows = new List<DailyArchive>();
             double totalCost = 0, totalRealized = 0, totalDailyProfit = 0, totalDailyBase = 0, totalCurrentAssets = 0;
+            int skippedCount = 0;
 
             foreach (var fund in funds)
             {
@@ -208,19 +214,51 @@ namespace 小白养基.Services
                     continue;
                 }
 
-                latestRecordDict.TryGetValue(fund.FundCode, out var record);
+                // 判断数据来源
+                bool hasOfficial = officialDict.ContainsKey(fund.FundCode);
+                bool hasEstimate = estimateDict.ContainsKey(fund.FundCode);
+                bool hasLastSettled = fund.LastSettledDate == dateDash;
+
+                if (!hasOfficial && !hasEstimate && !hasLastSettled)
+                {
+                    // 无任何有效数据源，不写 0，跳过
+                    skippedCount++;
+                    Console.WriteLine($"[settle-daily] 跳过 {fund.FundCode} {dateDash}：无官方净值、无估值记录、无 LastSettledDate");
+                    continue;
+                }
+
                 double confirmedHoldAmount = Math.Max(0, Math.Round(fund.HoldAmount - pendingBuyAmount, 2));
                 double cost = Math.Max(0, Math.Round((fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount) - pendingBuyAmount, 2));
-                double baseAmount = fund.LastSettledDate == dateDash
+                double baseAmount = hasLastSettled
                     ? Math.Max(0, Math.Round(fund.HoldAmount - pendingBuyAmount - fund.LastSettledProfit, 4))
                     : Math.Max(0, Math.Round(fund.HoldAmount - pendingBuyAmount, 4));
 
-                double dailyRate = fund.LastSettledDate == dateDash ? fund.LastSettledRate
-                    : (record != null ? (Math.Abs(record.ActualRate) > 0.000001 ? record.ActualRate : record.EstimatedRate) : 0);
-                double dailyProfit = fund.LastSettledDate == dateDash ? fund.LastSettledProfit
-                    : Math.Round(baseAmount * (dailyRate / 100.0), 2);
-                double currentAssets = fund.LastSettledDate == dateDash ? confirmedHoldAmount
-                    : Math.Round(confirmedHoldAmount + dailyProfit, 2);
+                double dailyRate, dailyProfit;
+                double currentAssets;
+
+                if (hasLastSettled)
+                {
+                    // 优先用 LastSettled（NavSettlementService 已写入的真实结算值）
+                    dailyRate = fund.LastSettledRate;
+                    dailyProfit = fund.LastSettledProfit;
+                    currentAssets = confirmedHoldAmount;
+                }
+                else if (hasOfficial)
+                {
+                    // 有官方净值记录但 LastSettled 未更新（罕见），用官方记录
+                    var rec = officialDict[fund.FundCode];
+                    dailyRate = rec.ActualRate;
+                    dailyProfit = Math.Round(baseAmount * (dailyRate / 100.0), 2);
+                    currentAssets = Math.Round(confirmedHoldAmount + dailyProfit, 2);
+                }
+                else
+                {
+                    // 只有盘中估值
+                    var rec = estimateDict[fund.FundCode];
+                    dailyRate = Math.Abs(rec.ActualRate) > 0.000001 ? rec.ActualRate : rec.EstimatedRate;
+                    dailyProfit = Math.Round(baseAmount * (dailyRate / 100.0), 2);
+                    currentAssets = Math.Round(confirmedHoldAmount + dailyProfit, 2);
+                }
 
                 double totalProfit = currentAssets - cost + fund.RealizedProfit;
                 double totalRate = cost > 0 ? totalProfit / cost * 100.0 : 0;
@@ -240,6 +278,8 @@ namespace 小白养基.Services
                 totalCurrentAssets += currentAssets;
             }
 
+            if (rows.Count == 0) return rows;
+
             rows.Add(new DailyArchive
             {
                 Username = username, FundCode = "TOTAL", FundName = "总持仓",
@@ -250,17 +290,20 @@ namespace 小白养基.Services
                 TotalRate = Math.Round(totalCost > 0 ? (totalCurrentAssets - totalCost + totalRealized) / totalCost * 100.0 : 0, 2)
             });
 
+            if (skippedCount > 0)
+                Console.WriteLine($"[settle-daily] {username} {dateDash}: 跳过 {skippedCount} 只基金（无有效数据），写入 {rows.Count} 条");
+
             return rows;
         }
 
-        private static async Task UpsertArchives(AppDbContext dbContext, string username, DateTime date, IEnumerable<DailyArchive> incoming, CancellationToken stoppingToken)
+        private static async Task<int> UpsertArchives(AppDbContext dbContext, string username, DateTime date, IEnumerable<DailyArchive> incoming, CancellationToken stoppingToken)
         {
             var normalized = incoming
                 .Where(x => !string.IsNullOrWhiteSpace(x.FundCode))
                 .GroupBy(x => x.FundCode)
                 .Select(g => g.Last())
                 .ToList();
-            if (normalized.Count == 0) return;
+            if (normalized.Count == 0) return 0;
 
             var codes = normalized.Select(x => x.FundCode).ToList();
             var existing = await dbContext.DailyArchives
@@ -271,12 +314,23 @@ namespace 小白养基.Services
                 .GroupBy(x => x.FundCode)
                 .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Id).First());
 
+            int skipped = 0;
             foreach (var item in normalized)
             {
                 item.Username = username;
                 item.RecordDate = date;
+
+                // 如果新数据 profit=0 且 rate=0，但旧记录有非零值，不覆盖
+                bool incomingIsZero = Math.Abs(item.DailyProfit) < 0.001 && Math.Abs(item.DailyRate) < 0.001;
                 if (existingDict.TryGetValue(item.FundCode, out var old))
                 {
+                    bool oldIsNonZero = Math.Abs(old.DailyProfit) > 0.001 || Math.Abs(old.DailyRate) > 0.001;
+                    if (incomingIsZero && oldIsNonZero && item.FundCode != "TOTAL")
+                    {
+                        // 不用空数据覆盖已有非零记录
+                        skipped++;
+                        continue;
+                    }
                     old.FundName = string.IsNullOrWhiteSpace(item.FundName) ? old.FundName : item.FundName;
                     old.Assets = Math.Round(item.Assets, 2);
                     old.DailyProfit = Math.Round(item.DailyProfit, 2);
@@ -287,9 +341,15 @@ namespace 小白养基.Services
                 }
                 else
                 {
+                    if (incomingIsZero && item.FundCode != "TOTAL")
+                    {
+                        skipped++;
+                        continue;
+                    }
                     dbContext.DailyArchives.Add(item);
                 }
             }
+            return skipped;
         }
     }
 }

@@ -52,6 +52,14 @@ namespace 小白养基.Services
 
         private static DateTime ChinaNow() => DateTime.UtcNow.AddHours(8);
 
+        private static DateTime GetPreviousTradeDate(DateTime date)
+        {
+            var d = date.AddDays(-1);
+            while (d.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+                d = d.AddDays(-1);
+            return d;
+        }
+
         private static bool IsPendingStatusActive(string? status)
         {
             if (string.IsNullOrWhiteSpace(status)) return false;
@@ -420,9 +428,14 @@ namespace 小白养基.Services
             using var scope = _serviceProvider.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-            string settleDate = localTime.ToString("yyyy-MM-dd");
-            var todayStart = localTime.Date;
-            var tomorrowStart = todayStart.AddDays(1);
+            // 0:00~16:59 期间，东方财富最新净值仍是上一个交易日的，必须用上一个交易日
+            // 17:00~23:59 期间，当天净值已出，用当天
+            string settleDate = localTime.Hour < 17
+                ? GetPreviousTradeDate(localTime.Date).ToString("yyyy-MM-dd")
+                : localTime.ToString("yyyy-MM-dd");
+            var settleDateDt = DateTime.Parse(settleDate);
+            var todayStart = settleDateDt;
+            var tomorrowStart = settleDateDt.AddDays(1);
             var affectedUsers = new HashSet<string>();
 
             var targetFunds = await dbContext.MyFunds
