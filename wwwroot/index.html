@@ -7583,7 +7583,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     if (analysisRecords.value.length > 0 && !force) return;
                     analysisLoading.value = true;
                     try {
-                        const url = `${API_BASE}/api/fund/get-archives?username=${encodeURIComponent(currentUser.value)}&limit=500`;
+                        const url = `${API_BASE}/api/fund/get-archives?username=${encodeURIComponent(currentUser.value)}&limit=500&_t=${Date.now()}`;
                         const res = await fetch(url, { cache: 'no-store' });
                         if (!res.ok) throw new Error(await res.text());
                         analysisRecords.value = normalizeAnalysisRecords(await res.json());
@@ -7606,7 +7606,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                     if (page === 'sector') { await fetchSectors(false, false); fetchCapitalFlow(false); }
                     if (page === 'news') fetchNews(newsMode.value, false);
-                    if (page === 'analysis') { persistAnalysisPreferences(); await fetchAnalysis(false); }
+                    if (page === 'analysis') { persistAnalysisPreferences(); await fetchAnalysis(true); }
                     if (page === 'home') nextTick(() => {
                         safeResizeChart(chartInstance);
                         safeResizeChart(performanceChartInstance);
