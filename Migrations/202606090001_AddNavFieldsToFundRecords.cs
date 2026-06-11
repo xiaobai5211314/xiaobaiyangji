@@ -17,7 +17,8 @@ namespace 小白养基.Migrations
             AddColumnIfMissing(migrationBuilder, "Nav", "DOUBLE NULL");
             AddColumnIfMissing(migrationBuilder, "Source", "VARCHAR(50) NOT NULL DEFAULT ''");
             AddColumnIfMissing(migrationBuilder, "IsOfficial", "TINYINT(1) NOT NULL DEFAULT 0");
-            AddIndexIfMissing(migrationBuilder, "IX_FundRecord_Code_Official_NavDate", "FundRecords", "FundCode, IsOfficial, NavDate");
+            // FundCode 是历史 LONGTEXT 字段，MySQL 索引必须指定前缀长度。
+            AddIndexIfMissing(migrationBuilder, "IX_FundRecord_Code_Official_NavDate", "FundRecords", "FundCode(20), IsOfficial, NavDate");
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)
