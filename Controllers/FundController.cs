@@ -8931,6 +8931,9 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
         public async Task<IActionResult> GetArchives([FromQuery] string username, [FromQuery] string? fundCode = null, [FromQuery] int limit = 120)
         {
             if (string.IsNullOrWhiteSpace(username)) return Unauthorized("缺少账号");
+            Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+            Response.Headers["Pragma"] = "no-cache";
+            Response.Headers["Expires"] = "0";
             if (limit <= 0) limit = 120;
             if (limit > 500) limit = 500;
 
@@ -9154,6 +9157,9 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
         public async Task<IActionResult> GetDailyReport([FromQuery] string username, [FromQuery] string? date = null)
         {
             if (string.IsNullOrWhiteSpace(username)) return Unauthorized("缺少账号");
+            Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+            Response.Headers["Pragma"] = "no-cache";
+            Response.Headers["Expires"] = "0";
             DateTime targetDate = DateTime.TryParse(date, out var parsed) ? parsed.Date : ChinaNow().Date;
 
             var rows = await _context.DailyArchives
