@@ -5386,7 +5386,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     const marketValue = Number(fund?.marketValue ?? fund?.todayAmount ?? fund?.amount ?? 0);
                     const holdingProfit = Number(fund?.holdingProfit ?? fund?.estimatedProfit ?? fund?.holdingIncome ?? 0);
                     if (fund?.inactiveHolding || fund?.isClearedHolding || isClearedFund(fund)) return 0;
-                    if (!Number.isFinite(marketValue) || marketValue <= 0) return 0;
+                    if (!Number.isFinite(marketValue) || marketValue <= 1) return 0;
                     if (!Number.isFinite(holdingProfit) || holdingProfit >= 0) return 0;
                     return Math.round((Math.abs(holdingProfit) / marketValue * 100) * 100) / 100;
                 };
@@ -5417,110 +5417,34 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         fund.pendingBuyAmount
                     ].some(value => toNumber(value, 0) > 0) || fund.pendingBuy === true;
                 };
-                const normalizeFundForDashboard = (rawFund, context = {}) => {
+                const normalizeFundForDashboard = (rawFund) => {
                     const raw = rawFund || {};
                     const data = Array.isArray(raw.data) ? raw.data : [];
                     const { raw: _ignoredRaw, ...rawSnapshot } = raw;
                     rawSnapshot.data = data;
-                    const pendingBuyAmount = Math.max(0, round2(context.pendingBuyAmount ?? raw.pendingBuyAmount));
+
+                    const pendingBuyAmount = Math.max(0, round2(raw.pendingBuyAmount));
                     const shares = toNumber(raw.shares, 0);
-                    const costAmount = round2(raw.costAmount ?? raw.cost ?? raw.rawCostAmount ?? raw.confirmedCost);
-                    let rawHoldAmount = round2(raw.rawHoldAmount ?? raw.amount ?? raw.marketValue ?? raw.todayAmount ?? context.marketValue ?? 0);
-                    let confirmedAmount = Math.max(0, round2(context.confirmedAmount ?? raw.confirmedAmount ?? (rawHoldAmount - pendingBuyAmount)));
-                    const baseAmountForToday = Math.max(0, round2(context.baseAmountForToday ?? raw.todayBaseAmount ?? confirmedAmount));
-                    const clearedInfo = getClearedProfit(raw);
-                    const clearedHolding = isClearedFund(raw);
-                    let todayRate = clearedHolding ? 0 : round2(context.todayRate ?? raw.todayRate ?? raw.currentRate ?? raw.todayRateForSimulation);
-                    const fallbackTodayProfit = baseAmountForToday > 0 ? baseAmountForToday * todayRate / 100 : 0;
-                    let todayProfit = clearedHolding ? 0 : round2(context.todayProfit ?? raw.todayProfit ?? raw.todayProfitPreview ?? fallbackTodayProfit);
-                    const rateMissing = raw.rateSource === 'missing' || !Number.isFinite(Number(context.todayRate ?? raw.todayRate ?? raw.currentRate ?? raw.todayRateForSimulation));
-                    if (!clearedHolding && rateMissing && baseAmountForToday > 0 && Number.isFinite(Number(todayProfit))) {
-                        todayRate = round2(todayProfit / baseAmountForToday * 100);
-                    }
-                    let marketValue = clearedHolding ? 0 : round2(toNumber(context.marketValue ?? raw.marketValue ?? raw.todayAmount, rawHoldAmount + todayProfit));
-                    // 蚂蚁 OCR 已确认 / carryForward / db-snapshot：强制使用平台值
-                    const hasAntSettledValue = raw.isSettled && (
-                        raw.settlementSource === 'ant-ocr' ||
-                        raw.settlementSource === 'carry-forward' ||
-                        raw.settlementSource === 'db-snapshot' ||
-                        raw.settlementSource === 'nav-settlement' ||
-                        raw.isCarryForward === true ||
-                        Number.isFinite(Number(raw.lastSettledProfit)) && raw.lastSettledProfit !== 0
+                    const clearedHolding = raw.inactiveHolding === true || raw.isCleared === true;
+                    const rawHoldAmount = clearedHolding ? 0 : Math.max(0, round2(raw.rawHoldAmount ?? raw.amount));
+                    const confirmedAmount = clearedHolding ? 0 : Math.max(0, round2(raw.confirmedAmount));
+                    const marketValue = clearedHolding ? 0 : Math.max(0, round2(raw.marketValue));
+                    const todayProfit = clearedHolding ? 0 : round2(raw.todayProfit);
+                    const todayRate = clearedHolding ? 0 : round2(raw.todayRate);
+                    const holdingProfit = clearedHolding ? 0 : round2(raw.holdingProfit ?? raw.holdingIncome);
+                    const holdingRate = clearedHolding ? 0 : round2(raw.holdingRate ?? raw.existingReturnRate);
+                    const costAmount = clearedHolding ? 0 : Math.max(0, round2(raw.confirmedCost ?? raw.cost ?? raw.rawCostAmount));
+                    const todayProfitBaseAmount = clearedHolding ? 0 : Math.max(0, round2(raw.todayBaseAmount));
+                    const breakEvenRate = !clearedHolding && marketValue > 1
+                        ? Math.max(0, round2(raw.breakEvenRate))
+                        : 0;
+                    const activeHolding = !clearedHolding && (
+                        marketValue > 0.01 ||
+                        confirmedAmount > 0.01 ||
+                        pendingBuyAmount > 0.01 ||
+                        shares > 0
                     );
-                    if (hasAntSettledValue && !clearedHolding) {
-                        const bestMarketValue = round2(raw.marketValue ?? raw.todayAmount ?? context.marketValue ?? rawHoldAmount ?? 0);
-                        if (bestMarketValue > 0) {
-                            marketValue = bestMarketValue;
-                            if (rawHoldAmount <= 0) rawHoldAmount = bestMarketValue;
-                            if (confirmedAmount <= 0 && pendingBuyAmount <= 0) confirmedAmount = bestMarketValue;
-                        }
-                        // 检查 fund.data 最新点是否是今天的盘中估值（非零 rate）
-                        const todaySlashCheck = new Date().getFullYear() + '/' + String(new Date().getMonth() + 1).padStart(2, '0') + '/' + String(new Date().getDate()).padStart(2, '0');
-                        const todayPoints = data.filter(p => String(p[0] || '').includes(todaySlashCheck));
-                        const latestTodayPoint = todayPoints.length > 0 ? todayPoints[todayPoints.length - 1] : null;
-                        const latestTodayRate = latestTodayPoint ? Number(latestTodayPoint[1]) : 0;
-                        const hasRealTodayEstimate = latestTodayPoint != null;
-                        if (hasRealTodayEstimate && baseAmountForToday > 0) {
-                            // 有今天真实估值点：用最新点的 rate 重算 todayProfit
-                            todayProfit = round2(rawHoldAmount * latestTodayRate / 100);
-                            todayRate = round2(latestTodayRate);
-                            marketValue = round2(rawHoldAmount + todayProfit);
-                        } else {
-                            // 无今天估值点：沿用 snapshot（不画今天曲线，不参与今日收益）
-                            todayProfit = 0;
-                            todayRate = 0;
-                        }
-                        console.log('[ant-settled]', { code: raw.code, hasRealTodayEstimate, latestTodayRate, todayProfit, todayRate, marketValue, rawHoldAmount });
-                    }
-                    const activeCandidate = {
-                        ...raw,
-                        pendingBuyAmount,
-                        shares,
-                        amount: rawHoldAmount,
-                        confirmedAmount,
-                        todayAmount: marketValue,
-                        marketValue
-                    };
-                    const activeHolding = !clearedHolding && isActiveHoldingFund(activeCandidate);
-                    const activeRealizedProfit = activeHolding ? round2(raw.displayedProfit ?? raw.realizedProfit) : 0;
-                    const dNow = new Date();
-                    const todaySlashForCheck = dNow.getFullYear() + '/' + String(dNow.getMonth() + 1).padStart(2, '0') + '/' + String(dNow.getDate()).padStart(2, '0');
-                    const todayPointsForCheck = data.filter(p => String(p[0] || '').includes(todaySlashForCheck));
-                    const latestPointForCheck = todayPointsForCheck.length > 0 ? todayPointsForCheck[todayPointsForCheck.length - 1] : null;
-                    const hasTodayIntraday = hasAntSettledValue && latestPointForCheck != null;
-                    const apiHoldingProfit = round2(raw.holdingIncome ?? raw.estimatedProfit);
-                    const todayPendingBuyAmount = pendingBuyAmount;
-                    const costWithPending = round2(costAmount + todayPendingBuyAmount);
-                    const holdingProfit = activeHolding
-                        ? (hasTodayIntraday && Number.isFinite(apiHoldingProfit)
-                            ? round2(apiHoldingProfit + todayProfit)
-                            : Number.isFinite(apiHoldingProfit) && apiHoldingProfit !== 0
-                                ? apiHoldingProfit
-                                : round2(costAmount > 0 ? (marketValue - costWithPending + activeRealizedProfit) : 0))
-                        : 0;
-                    const holdingRate = activeHolding
-                        ? (costAmount > 0 ? round2(holdingProfit / costWithPending * 100) : Number(raw.existingReturnRate ?? raw.holdingRate ?? 0))
-                        : 0;
-                    const breakEvenRate = activeHolding && holdingProfit < 0
-                        ? (calcBreakEvenRate({
-                            ...raw,
-                            inactiveHolding: !activeHolding,
-                            isClearedHolding: clearedHolding,
-                            marketValue,
-                            todayAmount: marketValue,
-                            amount: marketValue,
-                            holdingProfit,
-                            estimatedProfit: holdingProfit,
-                            holdingRate
-                        }) || calcBreakEvenRateFromHoldingRate(holdingRate))
-                        : 0;
-                    const accountAmount = round2(confirmedAmount + pendingBuyAmount);
-                    const todayProfitBaseAmount = baseAmountForToday;
-                    const derivedAmount = round2(todayProfitBaseAmount + todayProfit + todayPendingBuyAmount);
-                    const displayAccountAmount = clearedHolding ? 0 : round2(accountAmount > 0 ? accountAmount : derivedAmount);
-                    const estimatedAccountAmount = displayAccountAmount;
-                    const confirmedHoldingAmount = Math.max(0, round2(displayAccountAmount - todayPendingBuyAmount));
-                    const estimatedConfirmedHoldingAmount = confirmedHoldingAmount;
+
                     return {
                         ...rawSnapshot,
                         raw: rawSnapshot,
@@ -5529,53 +5453,30 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         name: raw.name || raw.fundName || '',
                         isActiveHolding: activeHolding,
                         isClearedHolding: clearedHolding,
-                        accountAmount,
-                        todayPendingBuyAmount,
-                        pendingBuyAmount: todayPendingBuyAmount,
-                        confirmedHoldingAmount,
+                        accountAmount: rawHoldAmount,
+                        amount: rawHoldAmount,
+                        todayPendingBuyAmount: pendingBuyAmount,
+                        pendingBuyAmount,
+                        confirmedHoldingAmount: confirmedAmount,
+                        confirmedAmount,
                         todayProfitBaseAmount,
                         baseAmountForToday: todayProfitBaseAmount,
-                        estimatedAccountAmount,
-                        estimatedConfirmedHoldingAmount,
+                        estimatedAccountAmount: marketValue,
+                        estimatedConfirmedHoldingAmount: marketValue,
                         costAmount,
                         shares,
-                        marketValue: estimatedAccountAmount,
+                        marketValue,
                         todayProfit,
                         todayRate,
                         holdingProfit,
                         holdingRate,
                         breakEvenRate,
-                        clearedProfit: round2(clearedInfo.value),
-                        clearedProfitSource: clearedInfo.source,
-                        calibrationOffset: hasAntSettledValue ? 0 : round2(raw.calibrationOffset),
-                        calibrationSamples: toNumber(raw.calibrationSamples, 0),
-                        calibrationNote: raw.calibrationNote || '',
+                        clearedProfit: round2(raw.displayedProfit ?? raw.realizedProfit),
+                        clearedProfitSource: raw.displayedProfitSource || 'none',
                         currentRate: todayRate,
-                        todayAmount: estimatedAccountAmount.toFixed(2),
+                        todayAmount: marketValue.toFixed(2),
                         estimatedProfit: holdingProfit.toFixed(2),
                         existingReturnRate: holdingRate.toFixed(2)
-                    };
-                };
-                const calcActivePortfolioSummary = (activeFunds = []) => {
-                    const rows = Array.isArray(activeFunds) ? activeFunds.filter(isActiveHoldingFund) : [];
-                    const safeNum = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
-                    const accountTotalAmount = round2(rows.reduce((s, f) => s + safeNum(f.estimatedAccountAmount), 0));
-                    const todayPendingBuyTotal = round2(rows.reduce((s, f) => s + safeNum(f.todayPendingBuyAmount), 0));
-                    const confirmedHoldingTotalAmount = round2(rows.reduce((s, f) => s + safeNum(f.estimatedConfirmedHoldingAmount), 0));
-                    const todayProfitBaseTotal = round2(rows.reduce((s, f) => s + safeNum(f.todayProfitBaseAmount), 0));
-                    const totalTodayProfit = round2(rows.reduce((s, f) => s + safeNum(f.todayProfit), 0));
-                    const totalProfit = round2(rows.reduce((s, f) => s + safeNum(f.holdingProfit), 0));
-                    const totalCost = round2(rows.reduce((s, f) => s + safeNum(f.costAmount), 0));
-                    return {
-                        accountTotalAmount,
-                        todayPendingBuyTotal,
-                        confirmedHoldingTotalAmount,
-                        todayProfitBaseTotal,
-                        totalTodayProfit,
-                        totalTodayRate: todayProfitBaseTotal > 0 ? round2(totalTodayProfit / todayProfitBaseTotal * 100) : 0,
-                        totalProfit,
-                        totalRate: totalCost > 0 ? round2(totalProfit / totalCost * 100) : 0,
-                        totalCost
                     };
                 };
                 const activeHoldings = computed(() => fundsList.value.filter(isActiveHoldingFund));
@@ -5595,7 +5496,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 });
                 const dashboardActiveSummary = ref(createEmptyDashboardSummary());
                 const applyDashboardActiveSummary = (activeFunds = [], inactiveFunds = [], summary = null) => {
-                    const nextSummary = summary || calcActivePortfolioSummary(activeFunds);
+                    const nextSummary = summary || createEmptyDashboardSummary();
                     dashboardActiveSummary.value = {
                         activeFunds: [...activeFunds],
                         inactiveFunds: [...inactiveFunds],
@@ -5768,7 +5669,6 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     analysisMonth.value = today.slice(0, 7);
                     selectedAnalysisDate.value = today;
                     await fetchData({ force: true, silent: true });
-                    await saveDailyArchive(true);
                     await fetchAnalysis(true);
                 };
                 const analysisViewMode = ref('profit');
@@ -6049,7 +5949,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const holdingProfit = toFiniteNumberOrNull(f.holdingProfit);
                         const marketValue = toFiniteNumberOrNull(f.marketValue);
                         const breakEven = toFiniteNumberOrNull(f.breakEvenRate);
-                        return holdingProfit !== null && holdingProfit < 0 && marketValue !== null && marketValue > 0 && breakEven !== null && breakEven > 0;
+                        return holdingProfit !== null && holdingProfit < 0 && marketValue !== null && marketValue > 1 && breakEven !== null && breakEven > 0;
                     })
                     .sort((a, b) => (toFiniteNumberOrNull(b.breakEvenRate) || 0) - (toFiniteNumberOrNull(a.breakEvenRate) || 0)));
                 const recoveryModal = reactive({ show: false, code: '', name: '', assets: 0, cost: 0, loss: 0, breakEvenRate: 0, addAmount: '' });
@@ -6630,71 +6530,6 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         return { code: f.code, name: f.name, ...profile };
                     }).filter(x => x.samples > 0 || Math.abs(x.offset) > 0.001).sort((a, b) => Math.abs(b.offset) - Math.abs(a.offset));
                 });
-                const getDashboardArchiveSnapshot = () => {
-                    const current = dashboardActiveSummary.value || createEmptyDashboardSummary();
-                    const activeFunds = Array.isArray(current.activeFunds) && current.activeFunds.length > 0
-                        ? current.activeFunds
-                        : activeHoldings.value;
-                    const inactiveFunds = Array.isArray(current.inactiveFunds) ? current.inactiveFunds : inactiveHoldings.value;
-                    const summary = calcActivePortfolioSummary(activeFunds);
-                    return { activeFunds, inactiveFunds, summary };
-                };
-
-                const saveDailyArchive = async (silent = false) => {
-                    if (!silent && !confirm("💾 确定要将大屏当前的数据作为【今日最终收益】永久封存吗？")) return;
-                    let d = new Date();
-                    let localDateStr = dashboardSummaryMeta.value?.effectiveDate || (d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
-                    const safeNumber = (val) => Number((parseFloat(val) || 0).toFixed(2));
-                    const archiveSnapshot = getDashboardArchiveSnapshot();
-                    const archiveFunds = archiveSnapshot.activeFunds;
-                    const archiveSummary = archiveSnapshot.summary;
-                    const payload = {
-                        Username: currentUser.value, DateStr: localDateStr,
-                        Total: {
-                            FundName: "总持仓",
-                            Assets: safeNumber(archiveSummary.confirmedHoldingTotalAmount ?? archiveSummary.confirmedDisplayTotalAmount ?? archiveSummary.currentTotalAssets),
-                            DailyProfit: safeNumber(archiveSummary.totalTodayProfit),
-                            DailyRate: safeNumber(archiveSummary.totalTodayRate),
-                            TotalProfit: safeNumber(archiveSummary.totalProfit),
-                            TotalRate: safeNumber(archiveSummary.totalRate)
-                        },
-                        Funds: archiveFunds.map(f => ({
-                            FundCode: f.code,
-                            FundName: f.name,
-                            Assets: safeNumber(f.marketValue),
-                            DailyProfit: safeNumber(f.todayProfit),
-                            DailyRate: safeNumber(f.todayRate),
-                            TotalProfit: safeNumber(f.holdingProfit),
-                            TotalRate: safeNumber(f.holdingRate)
-                        }))
-                    };
-                    try {
-                        const response = await fetch(`${API_BASE}/api/fund/save-archive`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                        if (response.ok) {
-                            let body = null;
-                            try { body = await response.json(); } catch { body = null; }
-                            const savedRows = [];
-                            if (body?.totalRecord) savedRows.push(body.totalRecord);
-                            if (Array.isArray(body?.records)) savedRows.push(...body.records);
-                            if (savedRows.length > 0) {
-                                mergeAnalysisArchiveRecords(savedRows);
-                            } else if (activePage.value === 'analysis') {
-                                analysisRecords.value = [];
-                                await fetchAnalysis(true, { targetDate: localDateStr, keepSelectedDate: true });
-                            }
-                            if (!silent) showToast("今日收益已安全锁入", "success");
-                            return body;
-                        }
-                        else {
-                            let msg = `封存失败 HTTP ${response.status}`;
-                            try { const body = await response.json(); msg = body.message || body.msg || JSON.stringify(body).slice(0, 120); } catch { try { msg = await response.text(); msg = msg.slice(0, 120); } catch {} }
-                            console.warn('[save-archive] failed:', msg, payload);
-                            if (!silent) showToast(msg, "error");
-                        }
-                    } catch (e) { console.warn('[save-archive] error:', e); if (!silent) showToast("网络错误: " + (e.message || ""), "error"); }
-                    return null;
-                };
-
                 const formatIndexPoint = (value) => {
                     if (value === null || value === undefined) return '--';
                     const n = Number(value);
@@ -6713,6 +6548,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     const ds = fund?.dataStatus || '';
                     if (ds === 'official_today') return { label: '真', kind: 'today-official', canShowTodayOfficial: true };
                     if (ds === 'estimate_today') return { label: '估', kind: 'estimate', canShowTodayOfficial: false };
+                    if (ds === 'official_latest') return { label: '最新值', kind: 'previous-official', canShowTodayOfficial: false };
                     if (ds === 'stale_official') return { label: '旧值', kind: 'previous-official', canShowTodayOfficial: false };
                     return { label: '等待净值', kind: 'waiting', canShowTodayOfficial: false };
                 };
@@ -6720,6 +6556,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     const ds = fund?.dataStatus || '';
                     if (ds === 'official_today') return '✅ 净值确认';
                     if (ds === 'estimate_today') return '⏱️ 盘中估值';
+                    if (ds === 'official_latest') return '📌 最新净值';
                     if (ds === 'stale_official') return '🌙 旧净值';
                     if (fund?.pendingBuy || Number(fund?.pendingBuyAmount || 0) > 0) return '⏳ 买入待确认';
                     if (fund?.marketOpen === false) return '☕ 休市';
@@ -7452,7 +7289,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     try {
                         const fd = new FormData();
                         fd.append('username', currentUser.value);
-                        await fetch(`${API_BASE}/api/fund/sync-real-nav`, {
+                        await fetch(`${API_BASE}/api/fund/sync-real-nav?_t=${Date.now()}`, {
                             method: 'POST',
                             body: fd,
                             signal: controller.signal,
@@ -7572,7 +7409,6 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     try {
                         await syncRealNavIfNeeded();
                         await fetchData({ force: true, silent: true });
-                        await saveDailyArchive(true);
                         await fetchAnalysis(true);
                         showToast('✅ 盈亏数据已刷新', 'success');
                     } catch (e) {
@@ -7637,7 +7473,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const apiData = Array.isArray(rawData) ? rawData : (rawData.funds || []);
                         const apiSummary = rawData.summary || null;
                         lastDataFetchAt = Date.now();
-                        let tPrincipal = 0; let tPrincipalForRate = 0; let tCost = 0; let tToday = 0; let d = new Date();
+                        let d = new Date();
                         const finiteNumber = (value, fallback = 0) => {
                             const n = Number(value);
                             return Number.isFinite(n) ? n : fallback;
@@ -7710,140 +7546,45 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                         apiData.forEach(fund => {
                             fund.data = Array.isArray(fund.data) ? fund.data : [];
-                            // 使用后端 dataStatus 和 API 值，不重新计算
-                            const ds = fund.dataStatus || (fund.isSettled ? 'official_today' : 'waiting_today');
-                            fund.currentRate = Number(fund.todayRate) || 0;
-                            fund.rateSource = ds === 'official_today' ? 'official-nav' : ds === 'estimate_today' ? 'estimate' : 'missing';
+                            const dataStatus = fund.dataStatus || 'waiting_today';
+                            fund.currentRate = finiteNumber(fund.todayRate, 0);
+                            fund.rawCurrentRate = fund.currentRate;
+                            fund.rateSource = dataStatus === 'official_today'
+                                ? 'official-nav'
+                                : dataStatus === 'estimate_today'
+                                    ? 'estimate'
+                                    : dataStatus === 'official_latest'
+                                        ? 'official-latest'
+                                        : dataStatus === 'stale_official'
+                                            ? 'stale-official'
+                                            : 'missing';
                             fund.isHoliday = fund.marketOpen === false;
-                            fund.isStaleQuote = ds === 'stale_official';
-                            fund.isSettled = ds === 'official_today';
+                            fund.isStaleQuote = dataStatus === 'official_latest' || dataStatus === 'stale_official';
+                            fund.isSettled = dataStatus === 'official_today';
 
-                            const rawCurrentRate = Number(fund.currentRate || 0);
-                            if (fund.isSettled) {
+                            if (dataStatus === 'estimate_today') {
+                                intradayCalibrationPayload.push({
+                                    fundCode: fund.code,
+                                    fundName: fund.name,
+                                    tradeDate: effectiveDateDash,
+                                    estimatedRate: fund.currentRate,
+                                    estimatedAssets: finiteNumber(fund.marketValue, 0),
+                                    source: 'today-api'
+                                });
+                            } else if (dataStatus === 'official_today') {
                                 settledCalibrationPayload.push({
                                     fundCode: fund.code,
                                     fundName: fund.name,
-                                    tradeDate: todayDash,
-                                    estimatedRate: rawCurrentRate,
-                                    actualRate: Number(fund.actualRate ?? fund.lastSettledRate ?? fund.currentRate ?? 0),
-                                    estimatedAssets: Number(fund.amount || 0),
-                                    actualAssets: Number(fund.todayAmount || fund.amount || 0)
+                                    tradeDate: effectiveDateDash,
+                                    estimatedRate: fund.currentRate,
+                                    actualRate: finiteNumber(fund.actualRate ?? fund.lastSettledRate ?? fund.todayRate, 0),
+                                    estimatedAssets: finiteNumber(fund.marketValue, 0),
+                                    actualAssets: finiteNumber(fund.marketValue, 0)
                                 });
                             }
-                            const calibrationProfile = getCalibrationProfileByCode(fund.code);
-                            fund.rawCurrentRate = rawCurrentRate;
-                            fund.calibrationOffset = Number(calibrationProfile.offset.toFixed(2));
-                            fund.calibrationSamples = calibrationProfile.samples;
-                            fund.calibrationLastError = Number(calibrationProfile.lastError.toFixed(2));
-                            fund.calibrationConfidence = calibrationProfile.confidence;
-                            const canUseRateForToday = !fund.isSettled && fund.rateSource !== 'missing';
-                            if (canUseRateForToday && calibrationProfile.samples >= 1) {
-                                fund.currentRate = Number((rawCurrentRate + calibrationProfile.offset).toFixed(2));
-                                fund.calibrationNote = `原估 ${rawCurrentRate >= 0 ? '+' : ''}${rawCurrentRate.toFixed(2)}% · ${calibrationProfile.samples}天样本${calibrationProfile.confidence}可信`;
-                                intradayCalibrationPayload.push({ fundCode: fund.code, fundName: fund.name, tradeDate: todayDash, estimatedRate: rawCurrentRate, estimatedAssets: Number(fund.amount || 0), source: 'today-api' });
-                            } else if (canUseRateForToday) {
-                                fund.calibrationNote = '正在积累盘中估值样本';
-                                intradayCalibrationPayload.push({ fundCode: fund.code, fundName: fund.name, tradeDate: todayDash, estimatedRate: rawCurrentRate, estimatedAssets: Number(fund.amount || 0), source: 'today-api' });
-                            } else if (fund.isSettled && calibrationProfile.samples > 0) {
-                                fund.calibrationNote = `盘后已校准 · 最近误差 ${calibrationProfile.lastError >= 0 ? '+' : ''}${calibrationProfile.lastError.toFixed(2)}%`;
-                            } else {
-                                fund.calibrationNote = '';
-                            }
 
-                            const pendingBuyAmount = Math.max(0, Number(fund.pendingBuyAmount || 0));
-                            const hasPendingBuy = !!fund.pendingBuy || pendingBuyAmount > 0;
-                            fund.pendingBuy = hasPendingBuy;
-                            fund.pendingBuyAmount = pendingBuyAmount;
-                            let isAlreadySettled = fund.dataStatus === 'official_today';
-                            let currentAmount = Number(fund.rawHoldAmount ?? fund.amount) || 0;
-                            const apiConfirmedAmount = Number(fund.confirmedAmount);
-                            const confirmedAmount = Number.isFinite(apiConfirmedAmount) ? Math.max(0, apiConfirmedAmount) : Math.max(0, currentAmount - pendingBuyAmount);
-                            fund.amount = currentAmount;
-                            fund.confirmedAmount = confirmedAmount;
-                            const apiBaseAmount = Number(fund.todayBaseAmount);
-                            const todayBaseAmount = Number.isFinite(apiBaseAmount) ? Math.max(0, apiBaseAmount) : confirmedAmount;
-                            // 直接使用 API 返回的值，不重新计算
-                            let todayProfitVal = Number(fund.todayProfit) || 0;
-                            let currentRealTimeAmount = Number(fund.marketValue) || (todayBaseAmount + todayProfitVal);
-
-                            fund.todayAmount = currentRealTimeAmount.toFixed(2);
-                            if (!isNaN(todayProfitVal)) { tToday += todayProfitVal; }
-
-                            fund.realizedProfit = Number(fund.realizedProfit) || 0;
-                            fund.platformCumulativeProfit = Number(fund.platformCumulativeProfit) || 0;
-                            fund.displayedProfit = Number(fund.displayedProfit) || 0;
-                            fund.pendingRedeem = !!fund.pendingRedeem;
-                            fund.soldCost = Number(fund.soldCost) || 0;
-                            fund.inactiveHolding = !!fund.inactiveHolding;
-                            const apiHoldingIncome = Number(fund.holdingIncome ?? fund.estimatedProfit);
-                            const floatProfit = (fund.cost && fund.cost > 0 && fund.shares > 0) ? (currentRealTimeAmount - fund.cost) : 0;
-                            const computedAllProfit = fund.shares > 0 ? (floatProfit + fund.displayedProfit) : fund.displayedProfit;
-                            const allProfit = Number.isFinite(apiHoldingIncome) ? apiHoldingIncome : computedAllProfit;
-                            fund.estimatedProfit = allProfit.toFixed(2);
-                            // 回本幅度不是累计收益率的绝对值，必须按“当前市值还需上涨多少”计算。
-                            const safeBreakEvenRate = allProfit < 0
-                                ? (calcBreakEvenRate({
-                                    ...fund,
-                                    marketValue: currentRealTimeAmount,
-                                    todayAmount: currentRealTimeAmount,
-                                    amount: currentRealTimeAmount,
-                                    holdingProfit: allProfit,
-                                    estimatedProfit: allProfit,
-                                    inactiveHolding: !!fund.inactiveHolding
-                                }) || calcBreakEvenRateFromHoldingRate(fund.existingReturnRate ?? fund.holdingRate))
-                                : 0;
-                            fund.breakEvenRate = Number.isFinite(safeBreakEvenRate) ? safeBreakEvenRate.toFixed(2) : "--";
-                            // 累计收益率：active holding 用实时 allProfit / cost，接口值只做兜底
-                            const apiExistingReturnRate = Number(fund.existingReturnRate ?? fund.holdingRate);
-                            if (!fund.inactiveHolding && fund.cost > 0 && Number.isFinite(allProfit)) {
-                                fund.existingReturnRate = (allProfit / fund.cost * 100).toFixed(2);
-                            } else if (Number.isFinite(apiExistingReturnRate)) {
-                                fund.existingReturnRate = apiExistingReturnRate.toFixed(2);
-                            } else {
-                                fund.existingReturnRate = "0.00";
-                            }
-
-                            try {
-                                Object.assign(fund, normalizeFundForDashboard(fund, {
-                                    pendingBuyAmount,
-                                    confirmedAmount,
-                                    baseAmountForToday: todayBaseAmount,
-                                    marketValue: currentRealTimeAmount,
-                                    todayProfit: todayProfitVal,
-                                    todayRate: fund.currentRate
-                                }));
-                            } catch (normErr) {
-                                console.error('[normalize-fund-error]', fund.code, fund.name, normErr, fund);
-                                fund.marketValue = fund.marketValue || currentRealTimeAmount || fund.amount || 0;
-                                fund.todayAmount = String(fund.marketValue);
-                                fund.estimatedAccountAmount = fund.marketValue;
-                                fund.accountAmount = fund.marketValue;
-                                fund.isActiveHolding = true;
-                            }
-                            const todayPts = (fund.data || []).filter(p => { const d = new Date(); const ts = d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0'); return String(p[0] || '').includes(ts); });
-                            const latestPt = todayPts.length > 0 ? todayPts[todayPts.length - 1] : null;
-                            console.log('[card-rate-source]', {
-                                code: fund.code, name: fund.name,
-                                snapshotDate: fund.lastSettledDate,
-                                snapshotAmount: fund.amount,
-                                hasTodayIntradayEstimate: todayPts.length > 0,
-                                latestEstimatedRate: latestPt ? Number(latestPt[1]) : null,
-                                latestEstimatedTime: latestPt ? latestPt[0] : null,
-                                cardTodayRate: fund.todayRate,
-                                cardTodayProfit: fund.todayProfit,
-                                cardMarketValue: fund.marketValue,
-                                cardHoldingProfit: fund.holdingProfit,
-                                cardHoldingRate: fund.holdingRate,
-                                costAmount: fund.costAmount,
-                                rateSource: fund.rateSource
-                            });
-
-                            const rateBaseForToday = todayBaseAmount;
-                            if (!fund.inactiveHolding) {
-                                tPrincipal += currentAmount; tPrincipalForRate += rateBaseForToday; tCost += (fund.cost || currentAmount);
-                            }
+                            Object.assign(fund, normalizeFundForDashboard(fund));
                         });
-
                         // 过滤今日曲线数据：只使用 naturalDate 的点，不混入昨天
                         apiData.forEach(fund => {
                             fund.todayTrendData = (fund.data || []).filter(p => {
@@ -7873,21 +7614,17 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         // 顶部总览只统计当前持仓，已清仓基金不参与今日收益、累计盈亏和累计收益率。
                         const activeForSummary = fundsList.value.filter(isActiveHoldingFund);
                         const inactiveForSummary = fundsList.value.filter(isClearedFund);
-                        const activeSummary = calcActivePortfolioSummary(activeForSummary);
-                        console.log('[summary-debug]', { fundsLen: fundsList.value.length, activeLen: activeForSummary.length, inactiveLen: inactiveForSummary.length, accountTotal: activeSummary.accountTotalAmount, todayProfit: activeSummary.totalTodayProfit, sampleFund: fundsList.value[0] ? { code: fundsList.value[0].code, mv: fundsList.value[0].marketValue, est: fundsList.value[0].estimatedAccountAmount, isActive: fundsList.value[0].isActiveHolding } : null });
-                        if (activeForSummary.length > 0) {
-                            applyDashboardActiveSummary(activeForSummary, inactiveForSummary, activeSummary);
-                        } else if (apiSummary) {
+                        if (apiSummary) {
                             applyDashboardActiveSummary(activeForSummary, inactiveForSummary, {
-                                accountTotalAmount: finiteNumber(apiSummary.accountTotalAmount, 0),
-                                todayPendingBuyTotal: finiteNumber(apiSummary.todayPendingBuyTotal, 0),
-                                confirmedHoldingTotalAmount: finiteNumber(apiSummary.confirmedHoldingTotalAmount ?? apiSummary.totalPrincipal ?? apiSummary.totalDisplayAmount, 0),
-                                todayProfitBaseTotal: finiteNumber(apiSummary.todayProfitBaseTotal, 0),
+                                accountTotalAmount: finiteNumber(apiSummary.totalAssets ?? apiSummary.totalDisplayAmount, 0),
+                                todayPendingBuyTotal: finiteNumber(apiSummary.totalPendingBuyAmount, 0),
+                                confirmedHoldingTotalAmount: finiteNumber(apiSummary.totalConfirmedAmount ?? apiSummary.totalAssets, 0),
+                                todayProfitBaseTotal: finiteNumber(apiSummary.totalTodayBaseAmount, 0),
                                 totalTodayProfit: finiteNumber(apiSummary.totalTodayProfit, 0),
                                 totalTodayRate: finiteNumber(apiSummary.totalTodayRate, 0),
                                 totalProfit: finiteNumber(apiSummary.totalProfit, 0),
                                 totalRate: finiteNumber(apiSummary.totalRate, 0),
-                                totalCost: finiteNumber(apiSummary.totalCost, 0)
+                                totalCost: finiteNumber(apiSummary.totalHoldingCost, 0)
                             });
                         } else {
                             applyDashboardActiveSummary([], inactiveForSummary, createEmptyDashboardSummary());
@@ -7926,49 +7663,6 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                         saveIntradayCalibrationSnapshots(intradayCalibrationPayload);
                         settleCalibrationSamples(settledCalibrationPayload);
-                        saveUiState('dashboard_summary', {
-                            date: todayDash,
-                            totalPrincipal: Number(totalPrincipal.value || 0),
-                            totalTodayProfit: Number(totalTodayProfit.value || 0),
-                            totalTodayRate: Number(totalTodayRate.value || 0),
-                            totalProfit: Number(totalProfit.value || 0),
-                            totalRate: Number(totalRate.value || 0)
-                        });
-                        saveInsightSnapshot('dashboard', {
-                            dailyBattleReport: dailyBattleReport.value,
-                            confidenceRows: confidenceRows.value,
-                            recoveryWatchList: recoveryWatchList.value,
-                            portfolioExposure: portfolioExposure.value
-                        }, todayDash);
-
-                        // 真实净值确认后，自动重写一次今日档案。
-                        // 用“已确认基金代码+真实收益/涨跌幅”的指纹判断，后续更多基金确认时会再次覆盖。
-                        // 不再使用旧的 real_archive 固定锁，避免旧版本写坏 TOTAL 后无法修正。
-                        const settledFingerprint = fundsList.value
-                            .filter(f => f.isSettled)
-                            .map(f => `${f.code}:${f.lastSettledProfit || f.actualExactProfit || 0}:${f.lastSettledRate || f.actualRate || 0}`)
-                            .sort()
-                            .join('|');
-                        const realArchiveKey = `real_archive_v4_${currentUser.value}_${todayDash}`;
-                        if (settledFingerprint && localStorage.getItem(realArchiveKey) !== settledFingerprint) {
-                            try {
-                                await saveDailyArchive(true);
-                                localStorage.setItem(realArchiveKey, settledFingerprint);
-                            } catch (e) { }
-                        }
-
-                        if (!window.hasAutoSavedToday && !isNight.value && fundsList.value.length > 0) {
-                            const now = new Date(); const hour = now.getHours();
-                            if (hour >= 15) {
-                                try {
-                                    const hasSettled = fundsList.value.some(f => f.isSettled || (f.actualRate != null && f.actualRate !== 0));
-                                    if (hasSettled || hour >= 17) {
-                                        saveDailyArchive(true);
-                                        window.hasAutoSavedToday = true;
-                                    }
-                                } catch (e) { }
-                            }
-                        }
                         isLoading.value = false;
                         const runChart = () => renderChart(apiData);
                         if ('requestIdleCallback' in window) requestIdleCallback(runChart, { timeout: 800 });
@@ -8123,7 +7817,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
                     analysisMonth, selectedAnalysisDate, analysisViewMode, analysisDetailMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, analysisProfitTop, analysisLossTop, analysisMonthTotal, fetchAnalysis, refreshAnalysisPage, goAnalysisToday, todayDashStr,
                     assetMode, setAssetMode, stockHoldings, stockWatchList, stockSearchKeyword, stockSearchResults, stockOcrLoading, stockOcrPreview, selectedStock, stockKlinePeriod, stockKlinePeriods, stockChartRef, stockChartStatus, triggerStockOcr, handleStockOcrUpload, confirmStockOcr, loadStockDashboard, searchStocks, addStockWatch, openStockHoldingEditor, deleteStockHolding, deleteStockWatch, openStockDetail, switchStockKline, recalculateStockOcrItem, formatOcrNumber, signedOcrNumber, profitColor, dailyBattleReport, confidenceRows, confidenceMap, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, formatFinitePercent, calibrationRows,
-                    globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, saveDailyArchive, ocrModal, ocrPreviewTotal, isConfirmingOcrImport,
+                    globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, ocrModal, ocrPreviewTotal, isConfirmingOcrImport,
                     reduceModal, openReduceModal, handleReducePosition, addModal, openAddModal, handleAddPosition
                 };
             }

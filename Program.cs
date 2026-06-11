@@ -70,6 +70,7 @@ builder.Services.Configure<FormOptions>(options =>
 builder.Services.Configure<BaiduOcrOptions>(builder.Configuration.GetSection("BaiduOcr"));
 builder.Services.AddSingleton<IBaiduOcrService, BaiduOcrService>();
 builder.Services.AddScoped<PortfolioSettlementService>();
+builder.Services.AddScoped<DailyArchiveService>();
 builder.Services.AddScoped<IStockQuoteService, EastmoneyStockQuoteService>();
 builder.Services.AddScoped<StockOcrParserService>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();

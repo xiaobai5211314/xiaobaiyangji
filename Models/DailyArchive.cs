@@ -6,15 +6,18 @@ namespace 小白养基.Models
     public class DailyArchive
     {
         public int Id { get; set; }
-        public string Username { get; set; }
-        public string FundCode { get; set; } // 💡 战术约定："TOTAL" 代表您的总持仓，其余为具体的基金代码
-        public string FundName { get; set; }
+        public string Username { get; set; } = string.Empty;
+        public string FundCode { get; set; } = string.Empty; // 💡 战术约定："TOTAL" 代表您的总持仓，其余为具体的基金代码
+        public string FundName { get; set; } = string.Empty;
         public DateTime RecordDate { get; set; } // 封存日期
         public double Assets { get; set; }       // 当日总资产/市值
         public double DailyProfit { get; set; }  // 当日盈亏金额
         public double DailyRate { get; set; }    // 当日涨跌幅百分比
         public double TotalProfit { get; set; } // 🚀 新增：累计历史盈亏
         public double TotalRate { get; set; }   // 🚀 新增：累计历史收益率
+        public string Source { get; set; } = "unknown"; // official-nav / alipay-snapshot / mixed-final
+        public bool IsFinal { get; set; } = false;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
 
     // 用于接收前端传来的封存数据包；不要直接使用 DailyArchive 实体做请求 DTO，
