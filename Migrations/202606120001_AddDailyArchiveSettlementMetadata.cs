@@ -26,12 +26,13 @@ namespace 小白养基.Migrations
 
         private static void AddColumnIfMissing(MigrationBuilder migrationBuilder, string columnName, string definition)
         {
+            var escapedDefinition = definition.Replace("'", "''", StringComparison.Ordinal);
             migrationBuilder.Sql($@"
 SET @daily_archive_{columnName}_exists := (
     SELECT COUNT(1) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'DailyArchives' AND COLUMN_NAME = '{columnName}'
 );");
-            migrationBuilder.Sql($"SET @daily_archive_{columnName}_sql := IF(@daily_archive_{columnName}_exists = 0, 'ALTER TABLE DailyArchives ADD COLUMN {columnName} {definition}', 'SELECT 1');");
+            migrationBuilder.Sql($"SET @daily_archive_{columnName}_sql := IF(@daily_archive_{columnName}_exists = 0, 'ALTER TABLE DailyArchives ADD COLUMN {columnName} {escapedDefinition}', 'SELECT 1');");
             migrationBuilder.Sql($"PREPARE daily_archive_{columnName}_stmt FROM @daily_archive_{columnName}_sql;");
             migrationBuilder.Sql($"EXECUTE daily_archive_{columnName}_stmt;");
             migrationBuilder.Sql($"DEALLOCATE PREPARE daily_archive_{columnName}_stmt;");
