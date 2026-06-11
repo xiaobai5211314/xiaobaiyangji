@@ -169,18 +169,19 @@ app.UseStaticFiles(new StaticFileOptions
 });
 
 // 全局：所有 /api/fund/* 和 /api/stock/* 持仓相关接口禁用缓存
-app.Use(async (context, next) =>
-{
-    await next();
-    var path = context.Request.Path.Value ?? "";
-    if (path.StartsWith("/api/fund/", StringComparison.OrdinalIgnoreCase)
-        || path.StartsWith("/api/stock/", StringComparison.OrdinalIgnoreCase))
+app.UseWhen(ctx => (ctx.Request.Path.Value ?? "").StartsWith("/api/fund/", StringComparison.OrdinalIgnoreCase)
+                 || (ctx.Request.Path.Value ?? "").StartsWith("/api/stock/", StringComparison.OrdinalIgnoreCase),
+    branch => branch.Use(async (context, next) =>
     {
-        context.Response.Headers[HeaderNames.CacheControl] = "no-store, no-cache, must-revalidate, max-age=0";
-        context.Response.Headers["Pragma"] = "no-cache";
-        context.Response.Headers["Expires"] = "0";
-    }
-});
+        context.Response.OnStarting(() =>
+        {
+            context.Response.Headers[HeaderNames.CacheControl] = "no-store, no-cache, must-revalidate, max-age=0";
+            context.Response.Headers["Pragma"] = "no-cache";
+            context.Response.Headers["Expires"] = "0";
+            return Task.CompletedTask;
+        });
+        await next();
+    }));
 app.MapGet("/api/health", () => Results.Ok(new
 {
     success = true,

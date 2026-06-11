@@ -6236,6 +6236,9 @@ namespace 小白养基.Controllers
         public async Task<IActionResult> GetTodayData([FromQuery] string username, [FromQuery] bool force = false)
         {
             if (string.IsNullOrEmpty(username)) return Unauthorized("请提供用户名");
+            Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0";
+            Response.Headers["Pragma"] = "no-cache";
+            Response.Headers["Expires"] = "0";
 
             try
             {
