@@ -3067,7 +3067,21 @@ namespace 小白养基.Controllers
                 .Where(f => f.Username == username)
                 .ToDictionaryAsync(f => f.FundCode);
 
+            var ocrCodes = items.Where(x => !string.IsNullOrWhiteSpace(x.Code) && x.HoldAmount > 0)
+                .Select(x => x.Code).ToHashSet();
+
+            // 日志：未被 OCR 识别到的持仓完全保留
+            foreach (var kvp in userFundDict)
+            {
+                if (!ocrCodes.Contains(kvp.Key))
+                {
+                    var f = kvp.Value;
+                    Console.WriteLine($"[OCR保留未识别持仓] code={f.FundCode} oldHoldAmount={f.HoldAmount:F2} oldShares={f.HoldShares:F4} oldCost={f.CostAmount:F2} oldLastSettledDate={f.LastSettledDate ?? "null"} oldLastSettledProfit={f.LastSettledProfit:F2}");
+                }
+            }
+
             int imported = 0;
+            string profitDate = ResolveOcrProfitDate();
 
             foreach (var item in items.Where(x => !string.IsNullOrWhiteSpace(x.Code) && x.HoldAmount > 0))
             {
@@ -3099,16 +3113,16 @@ namespace 小白养基.Controllers
                         PendingTradeStatus = item.IsPendingBuy ? "pending_buy" : null,
                         PendingConfirmDate = item.PendingConfirmDate,
                         PendingSource = item.IsPendingBuy ? (string.IsNullOrWhiteSpace(item.PendingSource) ? "ocr" : item.PendingSource) : null,
-                        LastSettledDate = (Math.Abs(item.YesterdayIncome) > 0.001 || Math.Abs(item.HoldingIncome) > 0.001) ? ChinaDateDash() : null,
+                        LastSettledDate = (Math.Abs(item.YesterdayIncome) > 0.001 || Math.Abs(item.HoldingIncome) > 0.001) ? profitDate : null,
                         LastSettledProfit = Math.Round(item.YesterdayIncome, 2),
                         LastSettledRate = Math.Abs(item.YesterdayIncome) > 0.001
                             ? Math.Round(item.YesterdayIncome / Math.Max(0.01, item.HoldAmount - newPendingAmount - item.YesterdayIncome) * 100.0, 4)
-                            : Math.Round(item.HoldingRate, 4),
+                            : 0,  // 修复：YesterdayIncome=0 时 LastSettledRate=0，不用 HoldingRate
                         OcrYesterdayIncome = Math.Round(item.YesterdayIncome, 2),
-                        OcrYesterdayDate = ChinaDateDash(),
+                        OcrYesterdayDate = profitDate,
                         OcrHoldingIncome = Math.Round(item.HoldingIncome, 2),
                         OcrHoldingRate = Math.Round(item.HoldingRate, 2),
-                        OcrSnapshotDate = ChinaDateDash()
+                        OcrSnapshotDate = profitDate
                     };
                     _context.MyFunds.Add(newFund);
                     userFundDict[newFund.FundCode] = newFund;
@@ -3116,6 +3130,57 @@ namespace 小白养基.Controllers
 
                 await UpsertOcrCorrectionAsync(username, item);
                 imported++;
+            }
+
+            // 问题四：OCR 确认后写入 DailyArchives
+            var validItems = items.Where(x => !string.IsNullOrWhiteSpace(x.Code) && x.HoldAmount > 0).ToList();
+            if (validItems.Count > 0)
+            {
+                var archiveDate = DateTime.Parse(profitDate);
+                var archives = new List<DailyArchive>();
+                double totalProfit = 0;
+                double totalBase = 0;
+
+                foreach (var item in validItems)
+                {
+                    double yesterdayIncome = Math.Round(item.YesterdayIncome, 2);
+                    double baseAmount = Math.Max(0.01, item.HoldAmount - yesterdayIncome);
+                    double dailyRate = Math.Round(yesterdayIncome / baseAmount * 100.0, 2);
+
+                    archives.Add(new DailyArchive
+                    {
+                        Username = username,
+                        FundCode = item.Code,
+                        FundName = item.Name ?? item.Code,
+                        RecordDate = archiveDate,
+                        Assets = Math.Round(item.HoldAmount, 2),
+                        DailyProfit = yesterdayIncome,
+                        DailyRate = dailyRate,
+                        TotalProfit = Math.Round(item.HoldingIncome, 2),
+                        TotalRate = Math.Round(item.HoldingRate, 2)
+                    });
+
+                    totalProfit += yesterdayIncome;
+                    totalBase += baseAmount;
+                    Console.WriteLine($"[OCR归档] code={item.Code} date={profitDate} profit={yesterdayIncome:F2} rate={dailyRate:F2}%");
+                }
+
+                // 组合 TOTAL
+                archives.Add(new DailyArchive
+                {
+                    Username = username,
+                    FundCode = "TOTAL",
+                    FundName = "总持仓",
+                    RecordDate = archiveDate,
+                    Assets = Math.Round(validItems.Sum(x => x.HoldAmount), 2),
+                    DailyProfit = Math.Round(totalProfit, 2),
+                    DailyRate = Math.Round(totalBase > 0 ? totalProfit / totalBase * 100.0 : 0, 2),
+                    TotalProfit = 0,  // 会在下次 settle-daily 时更新
+                    TotalRate = 0
+                });
+
+                await UpsertDailyArchivesAsync(username, archiveDate, archives);
+                Console.WriteLine($"[OCR归档完成] date={profitDate} 总收益={totalProfit:F2} 共{archives.Count}条");
             }
 
             return imported;
@@ -3145,11 +3210,28 @@ namespace 小白养基.Controllers
             return Math.Max(0, Math.Round(confirmedAmount, 2));
         }
 
+        /// <summary>
+        /// 解析 OCR 截图对应的真实收益日期。
+        /// 蚂蚁截图里的"昨日收益"对应的是上一个交易日，不是今天。
+        /// 例如 6/11 白天 OCR，截图里的昨日收益 = 6/10 的真实收益。
+        /// </summary>
+        private static string ResolveOcrProfitDate()
+        {
+            var now = ChinaNow();
+            // 如果是交易日且在 15:00 之前，OCR 截图的"昨日收益"= 上一个交易日
+            // 如果是 15:00 之后或非交易日，也取上一个交易日（截图显示的总是已确认的收益）
+            var prev = now.Date.AddDays(-1);
+            while (prev.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+                prev = prev.AddDays(-1);
+            return prev.ToString("yyyy-MM-dd");
+        }
+
         private static void ApplyOcrRowToExistingFund(MyFundConfig exist, OcrImportPreviewItem item)
         {
             Console.WriteLine(
                 $"[OCR校准前] code={exist.FundCode}, oldHoldAmount={exist.HoldAmount:F2}, oldShares={exist.HoldShares:F4}, oldCost={exist.CostAmount:F2}, oldPending={exist.PendingBuyAmount:F2}");
 
+            string profitDate = ResolveOcrProfitDate();  // OCR 截图对应的真实收益日期
             string todayDash = ChinaDateDash();
             double pendingAmount = item.IsPendingBuy ? item.PendingBuyAmount : 0;
             double confirmedAmount = item.ConfirmedAmount > 0
@@ -3163,14 +3245,12 @@ namespace 小白养基.Controllers
 
             if (isFullPending)
             {
-                // 全额待确认：shares/cost 归零，不参与任何收益或市值计算
                 exist.HoldShares = 0;
                 exist.CostAmount = 0;
                 Console.WriteLine($"[OCR全额待确认] code={exist.FundCode}, pending={pendingAmount:F2}, shares→0, cost→0");
             }
             else if (pendingAmount > 0)
             {
-                // 部分待确认：OCR 详情页通常没有份额，不能把旧确认份额覆盖成 0。
                 double confirmedRatio = item.HoldAmount > 0 ? confirmedAmount / item.HoldAmount : 1.0;
                 if (item.HoldShares > 0)
                 {
@@ -3181,7 +3261,6 @@ namespace 小白养基.Controllers
             }
             else
             {
-                // 无待确认：正常更新
                 if (item.CostAmount > 0) exist.CostAmount = Math.Round(item.CostAmount, 2);
                 if (item.HoldShares > 0) exist.HoldShares = Math.Round(item.HoldShares, 6);
             }
@@ -3207,37 +3286,36 @@ namespace 小白养基.Controllers
                     }
                     ClearPendingBuy(exist);
                 }
-                exist.LastSettledDate = null;
-                exist.LastSettledProfit = 0;
-                exist.LastSettledRate = 0;
+                // 注意：不再清零 LastSettled* 字段，避免覆盖已有真实净值
             }
 
-            // 保存 OCR 昨日收益（GetTodayData 优先使用）
+            // 保存 OCR 持仓收益（使用 profitDate 而非 todayDash）
             exist.OcrYesterdayIncome = Math.Round(item.YesterdayIncome, 2);
-            exist.OcrYesterdayDate = todayDash;
+            exist.OcrYesterdayDate = profitDate;
             exist.OcrHoldingIncome = Math.Round(item.HoldingIncome, 2);
             exist.OcrHoldingRate = Math.Round(item.HoldingRate, 2);
-            exist.OcrSnapshotDate = todayDash;
+            exist.OcrSnapshotDate = profitDate;
 
-            // 蚂蚁 OCR 真实值：直接标记为当日已清算，让 GetTodayData 返回 isSettled=true
+            // 蚂蚁 OCR 真实值：用 profitDate 标记已清算
             if (item.HoldAmount > 0 && Math.Abs(item.YesterdayIncome) > 0.001)
             {
                 double confirmedBase = Math.Max(0.01, item.HoldAmount - pendingAmount - item.YesterdayIncome);
-                exist.LastSettledDate = todayDash;
+                exist.LastSettledDate = profitDate;
                 exist.LastSettledProfit = Math.Round(item.YesterdayIncome, 2);
                 exist.LastSettledRate = Math.Round(item.YesterdayIncome / confirmedBase * 100.0, 4);
-                Console.WriteLine($"[OCR蚂蚁清算] code={exist.FundCode}, LastSettledProfit={exist.LastSettledProfit:F2}, LastSettledRate={exist.LastSettledRate:F4}");
+                Console.WriteLine($"[OCR蚂蚁清算] code={exist.FundCode}, date={profitDate}, LastSettledProfit={exist.LastSettledProfit:F2}, LastSettledRate={exist.LastSettledRate:F4}");
             }
-            else if (item.HoldAmount > 0 && Math.Abs(item.HoldingRate) > 0.001 && pendingAmount <= 0)
+            else if (item.HoldAmount > 0 && Math.Abs(item.YesterdayIncome) <= 0.001 && pendingAmount <= 0)
             {
-                // 无昨日收益但有持有收益率：用持有收益率反推（小基金金额为0场景）
-                exist.LastSettledDate = todayDash;
+                // YesterdayIncome=0：真实收益就是 0，不能用 HoldingRate 冒充 LastSettledRate
+                exist.LastSettledDate = profitDate;
                 exist.LastSettledProfit = 0;
-                exist.LastSettledRate = Math.Round(item.HoldingRate, 4);
+                exist.LastSettledRate = 0;
+                Console.WriteLine($"[OCR零收益] code={exist.FundCode}, date={profitDate}, YesterdayIncome=0, LastSettledProfit=0, LastSettledRate=0");
             }
 
             Console.WriteLine(
-                $"[OCR校准后] code={exist.FundCode}, HoldAmount={exist.HoldAmount:F2}, Shares={exist.HoldShares:F4}, Cost={exist.CostAmount:F2}, Pending={exist.PendingBuyAmount:F2}, OcrYesterday={exist.OcrYesterdayIncome:F2}, Status={exist.PendingTradeStatus ?? "null"}");
+                $"[OCR校准后] code={exist.FundCode}, HoldAmount={exist.HoldAmount:F2}, Shares={exist.HoldShares:F4}, Cost={exist.CostAmount:F2}, Pending={exist.PendingBuyAmount:F2}, OcrYesterday={exist.OcrYesterdayIncome:F2}, profitDate={profitDate}");
         }
 
         private async Task UpsertOcrCorrectionAsync(string username, OcrImportPreviewItem item)
