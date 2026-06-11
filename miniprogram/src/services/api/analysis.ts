@@ -86,7 +86,7 @@ export function getInsightsDashboard(username: string) {
 }
 
 export function getArchives(username: string, limit = 120) {
-  return get<ArchiveRow[]>(`/api/fund/get-archives?username=${encodeURIComponent(username)}&limit=${limit}`, {
+  return get<ArchiveRow[]>(`/api/fund/get-archives?username=${encodeURIComponent(username)}&limit=${limit}&_t=${Date.now()}`, {
     loadingText: '读取档案',
     fallbackData: []
   });
