@@ -3137,6 +3137,13 @@ namespace 小白养基.Controllers
             if (validItems.Count > 0)
             {
                 var archiveDate = DateTime.Parse(profitDate);
+                string todayDash = ChinaDateDash();
+                if (profitDate == todayDash)
+                {
+                    Console.WriteLine($"[禁止写入今天] profitDate={profitDate} == today={todayDash}，OCR昨日收益不应写入当天，跳过归档");
+                }
+                else
+                {
                 var archives = new List<DailyArchive>();
                 double totalProfit = 0;
                 double totalBase = 0;
@@ -3162,6 +3169,7 @@ namespace 小白养基.Controllers
 
                     totalProfit += yesterdayIncome;
                     totalBase += baseAmount;
+                    Console.WriteLine($"[OCR写入日历] code={item.Code} recordDate={profitDate} profit={yesterdayIncome:F2} rate={dailyRate:F2}%");
                     Console.WriteLine($"[OCR归档] code={item.Code} date={profitDate} profit={yesterdayIncome:F2} rate={dailyRate:F2}%");
                 }
 
@@ -3181,6 +3189,7 @@ namespace 小白养基.Controllers
 
                 await UpsertDailyArchivesAsync(username, archiveDate, archives);
                 Console.WriteLine($"[OCR归档完成] date={profitDate} 总收益={totalProfit:F2} 共{archives.Count}条");
+                } // end else (profitDate != todayDash)
             }
 
             return imported;
@@ -3218,12 +3227,12 @@ namespace 小白养基.Controllers
         private static string ResolveOcrProfitDate()
         {
             var now = ChinaNow();
-            // 如果是交易日且在 15:00 之前，OCR 截图的"昨日收益"= 上一个交易日
-            // 如果是 15:00 之后或非交易日，也取上一个交易日（截图显示的总是已确认的收益）
             var prev = now.Date.AddDays(-1);
             while (prev.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
                 prev = prev.AddDays(-1);
-            return prev.ToString("yyyy-MM-dd");
+            string result = prev.ToString("yyyy-MM-dd");
+            Console.WriteLine($"[OCR收益日期解析] ocrDate={now:yyyy-MM-dd} profitDate={result}");
+            return result;
         }
 
         private static void ApplyOcrRowToExistingFund(MyFundConfig exist, OcrImportPreviewItem item)
