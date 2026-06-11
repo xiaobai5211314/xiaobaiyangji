@@ -5902,7 +5902,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                 const normalizedAnalysisRecords = computed(() => normalizeAnalysisRecords(analysisRecords.value));
                 const analysisTotalRecords = computed(() => normalizedAnalysisRecords.value.filter(r => r.fundCode === 'TOTAL'));
-                const selectedDayFundRecords = computed(() => normalizedAnalysisRecords.value.filter(r => r.fundCode !== 'TOTAL' && String(r.recordDate || '').slice(0, 10) === selectedAnalysisDate.value).sort((a, b) => Math.abs(Number(b.dailyProfit || 0)) - Math.abs(Number(a.dailyProfit || 0))));
+                const selectedDayFundRecords = computed(() => {
+                    const activeCodes = new Set(activeHoldings.value.map(f => f.code));
+                    const date = selectedAnalysisDate.value;
+                    const all = normalizedAnalysisRecords.value.filter(r => r.fundCode !== 'TOTAL' && String(r.recordDate || '').slice(0, 10) === date);
+                    const filtered = all.filter(r => activeCodes.has(r.fundCode));
+                    console.log('[盈亏日历过滤]', `date=${date} before=${all.length} after=${filtered.length} removed=${all.filter(r => !activeCodes.has(r.fundCode)).map(r => r.fundCode).join(',')}`);
+                    return filtered.sort((a, b) => Math.abs(Number(b.dailyProfit || 0)) - Math.abs(Number(a.dailyProfit || 0)));
+                });
                 const selectedDayTotalProfitRecords = computed(() => activeHoldings.value.map(f => ({
                     fundCode: f.code,
                     fundName: f.name,

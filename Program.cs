@@ -157,12 +157,28 @@ app.UseStaticFiles(new StaticFileOptions
         var path = ctx.File.PhysicalPath ?? string.Empty;
         if (path.EndsWith("index.html", StringComparison.OrdinalIgnoreCase))
         {
-            ctx.Context.Response.Headers[HeaderNames.CacheControl] = "no-cache";
+            ctx.Context.Response.Headers[HeaderNames.CacheControl] = "no-store, no-cache, must-revalidate, max-age=0";
+            ctx.Context.Response.Headers["Pragma"] = "no-cache";
+            ctx.Context.Response.Headers["Expires"] = "0";
             return;
         }
 
         const int durationInSeconds = 60 * 60 * 24 * 7;
         ctx.Context.Response.Headers[HeaderNames.CacheControl] = "public,max-age=" + durationInSeconds;
+    }
+});
+
+// 全局：所有 /api/fund/* 和 /api/stock/* 持仓相关接口禁用缓存
+app.Use(async (context, next) =>
+{
+    await next();
+    var path = context.Request.Path.Value ?? "";
+    if (path.StartsWith("/api/fund/", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith("/api/stock/", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Response.Headers[HeaderNames.CacheControl] = "no-store, no-cache, must-revalidate, max-age=0";
+        context.Response.Headers["Pragma"] = "no-cache";
+        context.Response.Headers["Expires"] = "0";
     }
 });
 app.MapGet("/api/health", () => Results.Ok(new

@@ -185,7 +185,9 @@ export async function request<TResponse = unknown, TData = unknown>(
     method === 'GET' &&
     options.silent !== false &&
     !/[?&]force=true\b/i.test(fullUrl) &&
-    !/[?&]_t=/.test(fullUrl);
+    !/[?&]_t=/.test(fullUrl) &&
+    !/\/api\/fund\//i.test(fullUrl) &&
+    !/\/api\/stock\//i.test(fullUrl);
   const header = {
     Accept: 'application/json',
     ...options.header
