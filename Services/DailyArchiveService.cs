@@ -21,6 +21,12 @@ namespace 小白养基.Services
                || Math.Abs(row.TotalProfit) > 0.001
                || Math.Abs(row.TotalRate) > 0.001;
 
+        public static bool IsAntConfirmedSource(string? source)
+        {
+            var value = (source ?? string.Empty).Trim().ToLowerInvariant();
+            return value.Contains("alipay") || value.Contains("ocr-confirmed");
+        }
+
         private static int SourceRank(string? source)
         {
             var value = (source ?? string.Empty).ToLowerInvariant();
@@ -39,6 +45,8 @@ namespace 小白养基.Services
 
             // 空数据永远不能覆盖已存在的有效档案，TOTAL 同样受保护。
             if (!incomingHasData && oldHasData) return false;
+            // 蚂蚁确认快照是正式金额唯一事实源，净值或估值归档不得覆盖。
+            if (IsAntConfirmedSource(oldRow.Source) && !IsAntConfirmedSource(incoming.Source)) return false;
             if (oldRow.IsFinal && !incoming.IsFinal) return false;
             if (oldRow.IsFinal && incoming.IsFinal && SourceRank(incoming.Source) < SourceRank(oldRow.Source)) return false;
             return true;

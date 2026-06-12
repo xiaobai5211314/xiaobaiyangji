@@ -238,47 +238,19 @@ namespace 小白养基.Services
         {
             double beforeHoldAmount = fund.HoldAmount;
             double baseAmount = GetDailyBaseAmount(fund, settleDate);
-            double pending = GetPendingTradeAmount(fund, settleDate);
-
-            double settledProfit;
-            double newHoldAmount;
-            bool preserveOcrAmount = DateTime.TryParse(fund.OcrSnapshotDate, out var ocrSnapshotDate)
-                && DateTime.TryParse(settleDate, out var navDate)
-                && ocrSnapshotDate.Date >= navDate.Date
-                && fund.HoldAmount > 0;
-
-            if (preserveOcrAmount)
-            {
-                newHoldAmount = Math.Round(beforeHoldAmount, 2);
-                settledProfit = fund.OcrYesterdayDate == settleDate
-                    ? Math.Round(fund.OcrYesterdayIncome, 2)
-                    : Math.Round(exactProfit ?? (baseAmount * actualRate / 100.0), 2);
-            }
-
-            else if (exactAssets.HasValue && exactAssets.Value > 0)
-            {
-                double exactMarketAmount = Math.Round(exactAssets.Value, 2);
-
-                newHoldAmount = Math.Round(exactMarketAmount + pending, 2);
-                settledProfit = Math.Round(exactProfit ?? (exactMarketAmount - baseAmount), 2);
-            }
-            else
-            {
-                settledProfit = Math.Round(exactProfit ?? (baseAmount * (actualRate / 100.0)), 2);
-                newHoldAmount = Math.Round(baseAmount + settledProfit + pending, 2);
-            }
+            double settledProfit = fund.OcrYesterdayDate == settleDate
+                ? Math.Round(fund.OcrYesterdayIncome, 2)
+                : Math.Round(exactProfit ?? (baseAmount * actualRate / 100.0), 2);
 
             Console.WriteLine(
-                $"[夜间清算] code={fund.FundCode}, beforeHoldAmount={beforeHoldAmount:F2}, baseAmount={baseAmount:F2}, pending={pending:F2}, settledProfit={settledProfit:F2}, newHoldAmount={newHoldAmount:F2}");
+                $"[官方净值落库] code={fund.FundCode}, antConfirmedAmount={beforeHoldAmount:F2}, baseAmount={baseAmount:F2}, settledProfit={settledProfit:F2}, exactAssets={exactAssets:F2}; HoldAmount保持蚂蚁确认值");
 
             bool changed = fund.LastSettledDate != settleDate ||
                            Math.Abs(fund.LastSettledRate - actualRate) > 0.0001 ||
-                           Math.Abs(fund.LastSettledProfit - settledProfit) > 0.01 ||
-                           Math.Abs(fund.HoldAmount - newHoldAmount) > 0.01;
+                           Math.Abs(fund.LastSettledProfit - settledProfit) > 0.01;
 
             if (!changed) return false;
 
-            fund.HoldAmount = newHoldAmount;
             fund.LastSettledDate = settleDate;
             fund.LastSettledProfit = settledProfit;
             fund.LastSettledRate = Math.Round(actualRate, 4);
@@ -295,130 +267,10 @@ namespace 小白养基.Services
             return GetEffectiveBaseAmount(fund, settleDate);
         }
 
-        private static double GetRecordRateForToday(FundData? record)
-        {
-            if (record == null) return 0;
-            return Math.Abs(record.ActualRate) > 0.000001 ? record.ActualRate : record.EstimatedRate;
-        }
-
-        private static List<DailyArchive> BuildArchiveRowsFromCurrentHoldings(string username, DateTime date, List<MyFundConfig> funds, List<FundData> todayRecords)
-        {
-            string dateDash = date.ToString("yyyy-MM-dd");
-            var latestRecordDict = todayRecords
-                .Where(r => r.IsOfficial && r.NavDate == dateDash)
-                .GroupBy(r => r.FundCode)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).First());
-
-            var rows = new List<DailyArchive>();
-            double totalCost = 0;
-            double totalDailyProfit = 0;
-            double totalDailyBase = 0;
-            double totalCurrentAssets = 0;
-            double totalHoldingProfit = 0;
-            int expectedActiveCount = 0;
-
-            foreach (var fund in funds)
-            {
-                double pendingBuyAmount = GetActivePendingBuyAmount(fund, dateDash);
-                double confirmedHoldAmount = Math.Max(0, Math.Round(fund.HoldAmount - pendingBuyAmount, 2));
-                if (fund.HoldShares <= 0 || confirmedHoldAmount <= 0.01) continue;
-                expectedActiveCount++;
-
-                latestRecordDict.TryGetValue(fund.FundCode, out var record);
-                bool hasOcrSnapshot = fund.OcrYesterdayDate == dateDash;
-                bool hasSettled = fund.LastSettledDate == dateDash;
-                if (!hasOcrSnapshot && !hasSettled && record == null) continue;
-
-                double cost = Math.Max(0, Math.Round((fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount) - pendingBuyAmount, 2));
-                double baseAmount = GetDailyBaseAmount(fund, dateDash);
-                double dailyRate;
-                double dailyProfit;
-                double currentAssets;
-                double totalProfit;
-                double totalRate;
-                string source;
-
-                if (hasOcrSnapshot)
-                {
-                    dailyProfit = Math.Round(fund.OcrYesterdayIncome, 2);
-                    currentAssets = confirmedHoldAmount;
-                    baseAmount = Math.Max(0, Math.Round(currentAssets - dailyProfit, 4));
-                    dailyRate = baseAmount > 0 ? dailyProfit / baseAmount * 100.0 : 0;
-                    totalProfit = Math.Round(fund.OcrHoldingIncome, 2);
-                    totalRate = Math.Round(fund.OcrHoldingRate, 2);
-                    source = "alipay-snapshot";
-                }
-                else
-                {
-                    dailyRate = hasSettled ? fund.LastSettledRate : GetRecordRateForToday(record);
-                    dailyProfit = hasSettled
-                        ? fund.LastSettledProfit
-                        : Math.Round(baseAmount * dailyRate / 100.0, 2);
-                    currentAssets = hasSettled
-                        ? confirmedHoldAmount
-                        : record?.Nav is > 0 && fund.HoldShares > 0
-                            ? Math.Round(fund.HoldShares * record.Nav.Value, 2)
-                            : Math.Round(baseAmount + dailyProfit, 2);
-                    totalProfit = Math.Round(currentAssets - cost + fund.RealizedProfit, 2);
-                    totalRate = cost > 0 ? totalProfit / cost * 100.0 : 0;
-                    source = "official-nav";
-                }
-
-                rows.Add(new DailyArchive
-                {
-                    Username = username,
-                    FundCode = fund.FundCode,
-                    FundName = fund.FundName,
-                    RecordDate = date,
-                    Assets = Math.Round(currentAssets, 2),
-                    DailyProfit = Math.Round(dailyProfit, 2),
-                    DailyRate = Math.Round(dailyRate, 2),
-                    TotalProfit = Math.Round(totalProfit, 2),
-                    TotalRate = Math.Round(totalRate, 2),
-                    Source = source,
-                    IsFinal = true,
-                    UpdatedAt = DateTime.UtcNow
-                });
-
-                totalCost += cost;
-                totalDailyProfit += dailyProfit;
-                totalDailyBase += baseAmount;
-                totalCurrentAssets += currentAssets;
-                totalHoldingProfit += totalProfit;
-            }
-
-            if (rows.Count == 0) return rows;
-
-            rows.Add(new DailyArchive
-            {
-                Username = username,
-                FundCode = "TOTAL",
-                FundName = "总持仓",
-                RecordDate = date,
-                Assets = Math.Round(totalCurrentAssets, 2),
-                DailyProfit = Math.Round(totalDailyProfit, 2),
-                DailyRate = Math.Round(totalDailyBase > 0 ? totalDailyProfit / totalDailyBase * 100.0 : 0, 2),
-                TotalProfit = Math.Round(totalHoldingProfit, 2),
-                TotalRate = Math.Round(totalCost > 0 ? totalHoldingProfit / totalCost * 100.0 : 0, 2),
-                Source = rows.Count == expectedActiveCount ? "mixed-final" : "partial-final",
-                IsFinal = rows.Count == expectedActiveCount,
-                UpdatedAt = DateTime.UtcNow
-            });
-
-            return rows;
-        }
-
-        private void ClearTodayCacheForUser(string username, string settleDate)
-        {
-            _cache.Remove($"Tactical_TodayData_{username}");
-            _cache.Remove($"Tactical_TodayData_{username}_{settleDate}");
-        }
-
         private async Task SettleTodayNavAsync(DateTime localTime, CancellationToken stoppingToken)
         {
             using var scope = _serviceProvider.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var archiveService = scope.ServiceProvider.GetRequiredService<DailyArchiveService>();
 
             // 0:00~16:59 期间，东方财富最新净值仍是上一个交易日的，必须用上一个交易日
             // 17:00~23:59 期间，当天净值已出，用当天
@@ -428,7 +280,6 @@ namespace 小白养基.Services
             var settleDateDt = DateTime.Parse(settleDate);
             var todayStart = settleDateDt;
             var tomorrowStart = settleDateDt.AddDays(1);
-            var archiveDatesByUser = new Dictionary<string, HashSet<DateTime>>();
 
             var targetFunds = await dbContext.MyFunds
                 .Select(f => f.FundCode)
@@ -545,48 +396,12 @@ namespace 小白养基.Services
                                     exactAssets);
                             }
 
-                            if (!archiveDatesByUser.TryGetValue(holding.Username, out var dates))
-                            {
-                                dates = new HashSet<DateTime>();
-                                archiveDatesByUser[holding.Username] = dates;
-                            }
-                            dates.Add(actualDate);
                         }
                     }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "清算 {Code} 失败", code);
-                }
-            }
-
-            if (archiveDatesByUser.Count > 0)
-            {
-                var affectedUsers = archiveDatesByUser.Keys.ToHashSet();
-
-                // 优化4：批量查询所有受影响用户的基金
-                var allUserFunds = await dbContext.MyFunds
-                    .Where(f => affectedUsers.Contains(f.Username))
-                    .ToListAsync(stoppingToken);
-
-                var userFundsDict = allUserFunds.GroupBy(f => f.Username)
-                    .ToDictionary(g => g.Key, g => g.ToList());
-
-                foreach (var username in affectedUsers)
-                {
-                    if (!userFundsDict.TryGetValue(username, out var userFunds)) continue;
-                    foreach (var archiveDate in archiveDatesByUser[username].OrderBy(x => x))
-                    {
-                        string archiveDateText = archiveDate.ToString("yyyy-MM-dd");
-                        var archiveDateEnd = archiveDate.AddDays(1);
-                        var archiveRecords = todayRecordList
-                            .Where(r => (r.IsOfficial && r.NavDate == archiveDateText)
-                                        || (r.FetchTime >= archiveDate && r.FetchTime < archiveDateEnd))
-                            .ToList();
-                        var rows = BuildArchiveRowsFromCurrentHoldings(username, archiveDate, userFunds, archiveRecords);
-                        await archiveService.UpsertAsync(username, archiveDate, rows, stoppingToken);
-                        ClearTodayCacheForUser(username, archiveDateText);
-                    }
                 }
             }
 

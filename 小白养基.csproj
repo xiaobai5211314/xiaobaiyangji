@@ -18,6 +18,7 @@
 			unpackage\**;
 			.uni\**;
 			.hbuilderx\**;
+			tests\**;
 			*.ts;
 			*.vue;
 			*.tsx;
@@ -44,11 +45,13 @@
 		<Content Remove="node_modules\**" />
 		<Content Remove="dist\**" />
 		<Content Remove="unpackage\**" />
+		<Content Remove="tests\**" />
 		<None Remove="miniprogram\**" />
 		<None Remove="docs\**" />
 		<None Remove="node_modules\**" />
 		<None Remove="dist\**" />
 		<None Remove="unpackage\**" />
+		<None Remove="tests\**" />
 		<TypeScriptCompile Remove="miniprogram\**" />
 		<TypeScriptCompile Remove="**\*.ts" />
 		<TypeScriptCompile Remove="**\*.tsx" />

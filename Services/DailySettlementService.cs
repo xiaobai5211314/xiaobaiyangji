@@ -114,7 +114,7 @@ namespace 小白养基.Services
 
             var allHoldings = await dbContext.MyFunds
                 .AsNoTracking()
-                .Where(f => f.HoldShares > 0)
+                .Where(f => f.HoldAmount > 0)
                 .ToListAsync(stoppingToken);
 
             if (allHoldings.Count == 0)
@@ -172,107 +172,60 @@ namespace 小白养基.Services
 
         private static List<DailyArchive> BuildArchiveRows(string username, DateTime date, List<MyFundConfig> funds, List<FundData> todayRecords, string dateDash)
         {
-            // 日档案只接受可追溯的结算来源；盘中估值不能写成最终盈亏档案。
-            var officialDict = todayRecords
-                .Where(r => r.IsOfficial && r.NavDate == dateDash)
-                .GroupBy(r => r.FundCode)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).First());
-
+            // 正式日档案只接受蚂蚁持仓页确认快照。官方净值和盘中估值只做行情元数据，不反推正式金额。
             var rows = new List<DailyArchive>();
-            double totalCost = 0, totalDailyProfit = 0, totalDailyBase = 0, totalCurrentAssets = 0, totalHoldingProfit = 0;
+            var confirmedMoney = new List<ConfirmedHoldingMoney>();
             int skippedCount = 0;
             int expectedActiveCount = 0;
 
             foreach (var fund in funds)
             {
-                double pendingBuyAmount = GetActivePendingBuyAmount(fund, dateDash);
-                double confirmedHoldAmount = Math.Max(0, Math.Round(fund.HoldAmount - pendingBuyAmount, 2));
-                if (fund.HoldShares <= 0 || confirmedHoldAmount <= 0.01) continue;
+                decimal pendingBuyAmount = PortfolioAccounting.Money(GetActivePendingBuyAmount(fund, dateDash));
+                decimal confirmedHoldAmount = Math.Max(0m, PortfolioAccounting.Money(fund.HoldAmount) - pendingBuyAmount);
+                if (confirmedHoldAmount <= 0.01m) continue;
                 expectedActiveCount++;
 
-                // 判断数据来源
-                bool hasOfficial = officialDict.ContainsKey(fund.FundCode);
-                bool hasLastSettled = fund.LastSettledDate == dateDash;
                 bool hasOcrSnapshot = fund.OcrYesterdayDate == dateDash;
-
-                if (!hasOfficial && !hasLastSettled && !hasOcrSnapshot)
+                if (!hasOcrSnapshot)
                 {
                     skippedCount++;
-                    Console.WriteLine($"[settle-daily] 跳过 {fund.FundCode} {dateDash}：无官方净值、OCR快照或 LastSettledDate");
+                    Console.WriteLine($"[settle-daily] 待确认 {fund.FundCode} {dateDash}：缺少蚂蚁昨日收益快照，不用净值或估值反推");
                     continue;
                 }
 
-                double cost = Math.Max(0, Math.Round((fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount) - pendingBuyAmount, 2));
-                double baseAmount = hasLastSettled
-                    ? Math.Max(0, Math.Round(fund.HoldAmount - pendingBuyAmount - fund.LastSettledProfit, 4))
-                    : Math.Max(0, Math.Round(fund.HoldAmount - pendingBuyAmount, 4));
-
-                double dailyRate, dailyProfit;
-                double currentAssets;
-                double totalProfit;
-                double totalRate;
-                string source;
-
-                if (hasOcrSnapshot)
-                {
-                    dailyProfit = Math.Round(fund.OcrYesterdayIncome, 2);
-                    currentAssets = confirmedHoldAmount;
-                    baseAmount = Math.Max(0, Math.Round(currentAssets - dailyProfit, 4));
-                    dailyRate = baseAmount > 0 ? dailyProfit / baseAmount * 100.0 : 0;
-                    totalProfit = Math.Round(fund.OcrHoldingIncome, 2);
-                    totalRate = Math.Round(fund.OcrHoldingRate, 2);
-                    source = "alipay-snapshot";
-                }
-                else if (hasLastSettled)
-                {
-                    // 优先用 LastSettled（NavSettlementService 已写入的真实结算值）
-                    dailyRate = fund.LastSettledRate;
-                    dailyProfit = fund.LastSettledProfit;
-                    currentAssets = confirmedHoldAmount;
-                    totalProfit = Math.Round(currentAssets - cost + fund.RealizedProfit, 2);
-                    totalRate = cost > 0 ? totalProfit / cost * 100.0 : 0;
-                    source = "official-nav";
-                }
-                else
-                {
-                    var rec = officialDict[fund.FundCode];
-                    dailyRate = rec.ActualRate;
-                    dailyProfit = Math.Round(baseAmount * (dailyRate / 100.0), 2);
-                    currentAssets = rec.Nav is > 0 && fund.HoldShares > 0
-                        ? Math.Round(fund.HoldShares * rec.Nav.Value, 2)
-                        : Math.Round(baseAmount + dailyProfit, 2);
-                    totalProfit = Math.Round(currentAssets - cost + fund.RealizedProfit, 2);
-                    totalRate = cost > 0 ? totalProfit / cost * 100.0 : 0;
-                    source = "official-nav";
-                }
+                decimal dailyProfit = PortfolioAccounting.Money(fund.OcrYesterdayIncome);
+                decimal currentAssets = confirmedHoldAmount;
+                decimal baseAmount = Math.Max(0m, currentAssets - dailyProfit);
+                decimal dailyRate = PortfolioAccounting.Percent(dailyProfit, baseAmount);
+                decimal totalProfit = PortfolioAccounting.Money(fund.OcrHoldingIncome);
+                decimal totalRate = decimal.Round(Convert.ToDecimal(fund.OcrHoldingRate), 2, MidpointRounding.AwayFromZero);
 
                 rows.Add(new DailyArchive
                 {
                     Username = username, FundCode = fund.FundCode, FundName = fund.FundName,
-                    RecordDate = date, Assets = Math.Round(currentAssets, 2),
-                    DailyProfit = Math.Round(dailyProfit, 2), DailyRate = Math.Round(dailyRate, 2),
-                    TotalProfit = Math.Round(totalProfit, 2), TotalRate = Math.Round(totalRate, 2),
-                    Source = source, IsFinal = true, UpdatedAt = DateTime.UtcNow
+                    RecordDate = date, Assets = PortfolioAccounting.ToDouble(currentAssets),
+                    DailyProfit = PortfolioAccounting.ToDouble(dailyProfit), DailyRate = Convert.ToDouble(dailyRate),
+                    TotalProfit = PortfolioAccounting.ToDouble(totalProfit), TotalRate = Convert.ToDouble(totalRate),
+                    Source = "alipay-confirmed", IsFinal = true, UpdatedAt = DateTime.UtcNow
                 });
-
-                totalCost += cost;
-                totalDailyProfit += dailyProfit;
-                totalDailyBase += baseAmount;
-                totalCurrentAssets += currentAssets;
-                totalHoldingProfit += totalProfit;
+                confirmedMoney.Add(new ConfirmedHoldingMoney(currentAssets, dailyProfit, totalProfit));
             }
 
             if (rows.Count == 0) return rows;
 
+            var summary = PortfolioAccounting.Calculate(confirmedMoney, 0m);
+            decimal totalDailyBase = confirmedMoney.Sum(x => x.ConfirmedAmount - x.YesterdayProfit);
+            decimal totalCost = summary.AntConfirmedAmount - summary.AntHoldingProfit;
+
             rows.Add(new DailyArchive
             {
                 Username = username, FundCode = "TOTAL", FundName = "总持仓",
-                RecordDate = date, Assets = Math.Round(totalCurrentAssets, 2),
-                DailyProfit = Math.Round(totalDailyProfit, 2),
-                DailyRate = Math.Round(totalDailyBase > 0 ? totalDailyProfit / totalDailyBase * 100.0 : 0, 2),
-                TotalProfit = Math.Round(totalHoldingProfit, 2),
-                TotalRate = Math.Round(totalCost > 0 ? totalHoldingProfit / totalCost * 100.0 : 0, 2),
-                Source = rows.Count == expectedActiveCount ? "mixed-final" : "partial-final",
+                RecordDate = date, Assets = PortfolioAccounting.ToDouble(summary.AntConfirmedAmount),
+                DailyProfit = PortfolioAccounting.ToDouble(summary.ConfirmedYesterdayProfit),
+                DailyRate = Convert.ToDouble(PortfolioAccounting.Percent(summary.ConfirmedYesterdayProfit, totalDailyBase)),
+                TotalProfit = PortfolioAccounting.ToDouble(summary.AntHoldingProfit),
+                TotalRate = Convert.ToDouble(PortfolioAccounting.Percent(summary.AntHoldingProfit, totalCost)),
+                Source = rows.Count == expectedActiveCount ? "alipay-confirmed-total" : "alipay-confirmed-partial",
                 IsFinal = rows.Count == expectedActiveCount,
                 UpdatedAt = DateTime.UtcNow
             });
