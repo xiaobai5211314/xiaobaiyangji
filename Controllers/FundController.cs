@@ -4577,6 +4577,23 @@ namespace 小白养基.Controllers
                 double? previousArchiveAssets = FindPreviousArchiveAssets(config, archiveHistory, today);
                 double pendingBuyAmount = ResolvePendingBuyAmount(config, todayDash, previousArchiveAssets, asOfDate);
                 var amount = Math.Max(0d, GetDailyBaseAmount(config, todayDash, pendingBuyAmount));
+                DailyArchive? confirmedTodayArchive = null;
+                if (archiveHistory.TryGetValue(config.FundCode, out var fundArchives))
+                {
+                    confirmedTodayArchive = fundArchives
+                        .Where(a => a.RecordDate.Date == today.Date
+                                    && a.IsFinal
+                                    && DailyArchiveService.IsAntConfirmedSource(a.Source))
+                        .OrderByDescending(a => a.UpdatedAt)
+                        .ThenByDescending(a => a.Id)
+                        .FirstOrDefault();
+                    if (confirmedTodayArchive != null)
+                    {
+                        amount = Math.Max(0d, Math.Round(
+                            confirmedTodayArchive.Assets - confirmedTodayArchive.DailyProfit,
+                            2));
+                    }
+                }
                 if (amount <= 0)
                 {
                     continue;
@@ -4594,7 +4611,18 @@ namespace 小白养基.Controllers
                     return new PerformanceFundIntradayPoint(r.FetchTime, Math.Round(rate, 2), null);
                 }));
 
-                if (config.LastSettledDate == todayDash)
+                if (confirmedTodayArchive != null)
+                {
+                    var settledProfit = Math.Round(confirmedTodayArchive.DailyProfit, 2);
+                    var settledRate = amount > 0
+                        ? settledProfit / amount * 100d
+                        : confirmedTodayArchive.DailyRate;
+                    points.Add(new PerformanceFundIntradayPoint(
+                        today.AddHours(15),
+                        Math.Round(settledRate, 2),
+                        settledProfit));
+                }
+                else if (config.LastSettledDate == todayDash)
                 {
                     var settledProfit = config.LastSettledProfit;
                     var settledRate = amount > 0
@@ -6618,6 +6646,8 @@ namespace 小白养基.Controllers
 
                 // 正式金额只读蚂蚁确认 TOTAL；盘中估算单独累计，绝不覆盖正式金额。
                 decimal intradayProfit = 0m, intradayQuotedBase = 0m;
+                decimal todayPerformanceProfit = 0m, todayPerformanceBase = 0m;
+                bool hasTodayEstimate = false, hasTodayConfirmed = false;
                 decimal summaryDisplayAmount = 0m, summaryConfirmedAmount = 0m, summaryPendingBuyAmount = 0m;
                 foreach (var fund in finalResult)
                 {
@@ -6625,7 +6655,17 @@ namespace 小白养基.Controllers
                     summaryDisplayAmount += PortfolioAccounting.Money(fund.rawHoldAmount);
                     summaryConfirmedAmount += PortfolioAccounting.Money(fund.confirmedAmount);
                     summaryPendingBuyAmount += PortfolioAccounting.Money(fund.pendingBuyAmount);
-                    if (string.Equals(fund.profitSource, "estimate", StringComparison.OrdinalIgnoreCase))
+                    bool isEstimate = string.Equals(fund.profitSource, "estimate", StringComparison.OrdinalIgnoreCase);
+                    bool isConfirmedToday = string.Equals(fund.profitSource, "nav_settlement", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(fund.profitSource, "daily_archive", StringComparison.OrdinalIgnoreCase);
+                    if (isEstimate || isConfirmedToday)
+                    {
+                        todayPerformanceProfit += PortfolioAccounting.Money(fund.todayProfit);
+                        todayPerformanceBase += PortfolioAccounting.Money(fund.todayBaseAmount);
+                        hasTodayEstimate |= isEstimate;
+                        hasTodayConfirmed |= isConfirmedToday;
+                    }
+                    if (isEstimate)
                     {
                         intradayProfit += PortfolioAccounting.Money(fund.todayProfit);
                         intradayQuotedBase += PortfolioAccounting.Money(fund.todayBaseAmount);
@@ -6633,12 +6673,28 @@ namespace 小白养基.Controllers
                 }
                 intradayProfit = PortfolioAccounting.Money(intradayProfit);
                 intradayQuotedBase = PortfolioAccounting.Money(intradayQuotedBase);
+                todayPerformanceProfit = PortfolioAccounting.Money(todayPerformanceProfit);
+                todayPerformanceBase = PortfolioAccounting.Money(todayPerformanceBase);
                 bool antConfirmedAvailable = latestAntConfirmedTotal != null;
                 decimal antConfirmedAmount = antConfirmedAvailable ? PortfolioAccounting.Money(latestAntConfirmedTotal!.Assets) : 0m;
                 decimal confirmedYesterdayProfit = antConfirmedAvailable ? PortfolioAccounting.Money(latestAntConfirmedTotal!.DailyProfit) : 0m;
                 decimal antHoldingProfit = antConfirmedAvailable ? PortfolioAccounting.Money(latestAntConfirmedTotal!.TotalProfit) : 0m;
                 decimal antHoldingCost = antConfirmedAvailable ? PortfolioAccounting.HoldingCost(antConfirmedAmount, antHoldingProfit) : 0m;
                 decimal antHoldingRate = antConfirmedAvailable ? PortfolioAccounting.Percent(antHoldingProfit, antHoldingCost) : 0m;
+                bool todayPerformanceAvailable = antConfirmedAvailable && todayPerformanceBase > 0m;
+                decimal todayPerformanceRate = todayPerformanceAvailable
+                    ? PortfolioAccounting.PortfolioTodayEstimateRate(todayPerformanceProfit, antConfirmedAmount)
+                    : 0m;
+                string todayPerformanceStatus = hasTodayEstimate && hasTodayConfirmed ? "mixed"
+                    : hasTodayConfirmed ? "confirmed"
+                    : hasTodayEstimate ? "estimated"
+                    : "unavailable";
+                string todayProfitLabel = todayPerformanceStatus == "confirmed" ? "今日确认收益"
+                    : todayPerformanceStatus == "mixed" ? "今日收益（部分确认）"
+                    : "今日盘中估算";
+                string todayRateLabel = todayPerformanceStatus == "confirmed" ? "今日确认收益率"
+                    : todayPerformanceStatus == "mixed" ? "今日收益率"
+                    : "今日估算收益率";
                 bool intradayAvailable = antConfirmedAvailable && intradayQuotedBase > 0m;
                 decimal intradayRate = intradayAvailable
                     ? PortfolioAccounting.PortfolioTodayEstimateRate(intradayProfit, antConfirmedAmount)
@@ -6654,10 +6710,16 @@ namespace 小白养基.Controllers
                 var summary = new
                 {
                     tradeDate = todayDash,
-                    totalTodayProfit = intradayProfit,
+                    totalTodayProfit = todayPerformanceProfit,
                     totalTodayBaseAmount = antConfirmedAmount,
                     intradayQuotedBaseAmount = intradayQuotedBase,
-                    totalTodayRate = intradayRate,
+                    totalTodayRate = todayPerformanceRate,
+                    todayPerformanceProfit,
+                    todayPerformanceRate,
+                    todayPerformanceAvailable,
+                    todayPerformanceStatus,
+                    todayProfitLabel,
+                    todayRateLabel,
                     totalAssets = antConfirmedAmount,
                     totalProfit = antHoldingProfit,
                     totalRate = antHoldingRate,

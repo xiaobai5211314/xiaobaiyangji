@@ -4325,13 +4325,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     </div>
                     <div class="divider"></div>
                     <div style="text-align: center;">
-                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">🌟 今日盘中估算</div>
-                        <div class="number-display" :style="{ color: privacyMode <= 1 ? (dashboardActiveSummary.intradayEstimateProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 1 ? (dashboardActiveSummary.intradayAvailable ? (dashboardActiveSummary.intradayEstimateProfit >= 0 ? '+' : '') + Number(dashboardActiveSummary.intradayEstimateProfit || 0).toFixed(2) : '--') : '****' }}</div>
+                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">🌟 {{ dashboardActiveSummary.todayProfitLabel }}</div>
+                        <div class="number-display" :style="{ color: privacyMode <= 1 ? (dashboardActiveSummary.todayPerformanceProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 1 ? (dashboardActiveSummary.todayPerformanceAvailable ? (dashboardActiveSummary.todayPerformanceProfit >= 0 ? '+' : '') + Number(dashboardActiveSummary.todayPerformanceProfit || 0).toFixed(2) : '--') : '****' }}</div>
                     </div>
                     <div class="divider"></div>
                     <div style="text-align: center;">
-                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;" title="今日盘中估算盈亏 ÷ 蚂蚁确认金额">🚀 今日估算收益率</div>
-                        <div class="number-display" :style="{ color: privacyMode <= 2 ? (dashboardActiveSummary.intradayEstimateRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 2 ? (dashboardActiveSummary.intradayAvailable ? (dashboardActiveSummary.intradayEstimateRate > 0 ? '+' : '') + Number(dashboardActiveSummary.intradayEstimateRate || 0).toFixed(2) + '%' : '--') : '****' }}</div>
+                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;" title="今日收益 ÷ 蚂蚁确认金额">🚀 {{ dashboardActiveSummary.todayRateLabel }}</div>
+                        <div class="number-display" :style="{ color: privacyMode <= 2 ? (dashboardActiveSummary.todayPerformanceRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 2 ? (dashboardActiveSummary.todayPerformanceAvailable ? (dashboardActiveSummary.todayPerformanceRate > 0 ? '+' : '') + Number(dashboardActiveSummary.todayPerformanceRate || 0).toFixed(2) + '%' : '--') : '****' }}</div>
                     </div>
                     <div class="divider"></div>
                     <div style="text-align: center;">
@@ -4513,11 +4513,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 </span>
                             </div>
                             <div class="metric-item xb-metric--info">
-                                <span class="metric-label">🌟 今日估算</span>
+                                <span class="metric-label">🌟 {{ fund.isSettled ? '今日确认' : '今日估算' }}</span>
                                 <span class="metric-value" :style="{color: privacyMode <= 1 ? (fund.todayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 1 ? (fund.todayProfit >= 0 ? '+' : '') + Number(fund.todayProfit || 0).toFixed(2) : '****' }}</span>
                             </div>
                             <div class="metric-item">
-                                <span class="metric-label">🚀 今日估算率</span>
+                                <span class="metric-label">🚀 {{ fund.isSettled ? '今日确认率' : '今日估算率' }}</span>
                                 <span class="metric-value" :style="{color: privacyMode <= 2 ? (fund.todayRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 2 ? ((fund.todayRate > 0 ? '+' : '') + Number(fund.todayRate || 0).toFixed(2) + '%') : '****' }}</span>
                             </div>
                             <div class="metric-item">
@@ -5238,7 +5238,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
     </script>
     <script>
-        const APP_BUILD_VERSION = '2026-06-06-ocr-pending-blue-screen-fix';
+        const APP_BUILD_VERSION = '2026-06-12-today-confirmed-rate-summary';
         console.log('[小白养基] build:', APP_BUILD_VERSION);
         const { createApp, ref, reactive, onMounted, onUnmounted, nextTick, shallowRef, watch, computed } = Vue;
 
@@ -5509,6 +5509,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     confirmedStatus: 'pending',
                     intradayEstimateProfit: 0,
                     intradayEstimateRate: 0,
+                    todayPerformanceProfit: 0,
+                    todayPerformanceRate: 0,
+                    todayPerformanceAvailable: false,
+                    todayPerformanceStatus: 'unavailable',
+                    todayProfitLabel: '今日盘中估算',
+                    todayRateLabel: '今日估算收益率',
                     intradayEstimatedAssets: 0,
                     estimatedHoldingProfit: 0,
                     intradayAvailable: false
@@ -5535,6 +5541,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         confirmedStatus: nextSummary.confirmedStatus || 'pending',
                         intradayEstimateProfit: round2(nextSummary.intradayEstimateProfit ?? nextSummary.totalTodayProfit ?? 0),
                         intradayEstimateRate: round2(nextSummary.intradayEstimateRate ?? nextSummary.totalTodayRate ?? 0),
+                        todayPerformanceProfit: round2(nextSummary.todayPerformanceProfit ?? nextSummary.totalTodayProfit ?? 0),
+                        todayPerformanceRate: round2(nextSummary.todayPerformanceRate ?? nextSummary.totalTodayRate ?? 0),
+                        todayPerformanceAvailable: nextSummary.todayPerformanceAvailable === true,
+                        todayPerformanceStatus: nextSummary.todayPerformanceStatus || 'unavailable',
+                        todayProfitLabel: nextSummary.todayProfitLabel || '今日盘中估算',
+                        todayRateLabel: nextSummary.todayRateLabel || '今日估算收益率',
                         intradayEstimatedAssets: round2(nextSummary.intradayEstimatedAssets ?? 0),
                         estimatedHoldingProfit: round2(nextSummary.estimatedHoldingProfit ?? nextSummary.totalProfit ?? 0),
                         intradayAvailable: nextSummary.intradayAvailable === true
@@ -7599,8 +7611,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 todayPendingBuyTotal: finiteNumber(apiSummary.totalPendingBuyAmount, 0),
                                 confirmedHoldingTotalAmount: finiteNumber(apiSummary.antConfirmedAmount, 0),
                                 todayProfitBaseTotal: finiteNumber(apiSummary.totalTodayBaseAmount, 0),
-                                totalTodayProfit: finiteNumber(apiSummary.intradayEstimateProfit, 0),
-                                totalTodayRate: finiteNumber(apiSummary.intradayEstimateRate, 0),
+                                totalTodayProfit: finiteNumber(apiSummary.todayPerformanceProfit ?? apiSummary.totalTodayProfit, 0),
+                                totalTodayRate: finiteNumber(apiSummary.todayPerformanceRate ?? apiSummary.totalTodayRate, 0),
                                 totalProfit: finiteNumber(apiSummary.antHoldingProfit, 0),
                                 totalRate: finiteNumber(apiSummary.antHoldingRate ?? apiSummary.totalRate, 0),
                                 totalCost: finiteNumber(apiSummary.antHoldingCost ?? apiSummary.totalHoldingCost, 0),
@@ -7611,6 +7623,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 confirmedStatus: apiSummary.confirmedStatus || 'pending',
                                 intradayEstimateProfit: finiteNumber(apiSummary.intradayEstimateProfit, 0),
                                 intradayEstimateRate: finiteNumber(apiSummary.intradayEstimateRate, 0),
+                                todayPerformanceProfit: finiteNumber(apiSummary.todayPerformanceProfit ?? apiSummary.totalTodayProfit, 0),
+                                todayPerformanceRate: finiteNumber(apiSummary.todayPerformanceRate ?? apiSummary.totalTodayRate, 0),
+                                todayPerformanceAvailable: apiSummary.todayPerformanceAvailable === true,
+                                todayPerformanceStatus: apiSummary.todayPerformanceStatus || 'unavailable',
+                                todayProfitLabel: apiSummary.todayProfitLabel || '今日盘中估算',
+                                todayRateLabel: apiSummary.todayRateLabel || '今日估算收益率',
                                 intradayEstimatedAssets: finiteNumber(apiSummary.intradayEstimatedAssets, 0),
                                 estimatedHoldingProfit: finiteNumber(apiSummary.estimatedHoldingProfit, 0),
                                 intradayAvailable: apiSummary.intradayAvailable === true

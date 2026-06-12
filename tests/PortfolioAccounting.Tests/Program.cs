@@ -38,6 +38,7 @@ Equal(-8.50m, PortfolioAccounting.Percent(-3222.50m, 37916.92m), "fund.huafu.hol
 Equal(-11.23m, PortfolioAccounting.Percent(-4116.80m, 36668.25m), "fund.tianhong.holdingProfitRate");
 Equal(68.66m, PortfolioAccounting.Percent(6.20m, 9.03m), "fund.semiconductor.holdingProfitRate");
 Equal(-66.60m, PortfolioAccounting.Percent(-6.66m, 10.00m), "fund.realEstate.holdingProfitRate");
+Equal(-0.26m, PortfolioAccounting.PortfolioTodayEstimateRate(-211.27m, 81556.13m), "summary.confirmedTodayRate");
 
 var profitDate = PortfolioAccounting.ResolvePreviousWeekday(new DateTime(2026, 6, 12));
 if (profitDate != new DateTime(2026, 6, 11))
@@ -45,4 +46,4 @@ if (profitDate != new DateTime(2026, 6, 11))
     throw new InvalidOperationException($"profitDate: expected 2026-06-11, actual {profitDate:yyyy-MM-dd}");
 }
 
-Console.WriteLine("Portfolio accounting regression passed: 14 assertions.");
+Console.WriteLine("Portfolio accounting regression passed: 15 assertions.");
