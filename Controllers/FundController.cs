@@ -4617,8 +4617,11 @@ namespace 小白养基.Controllers
                     var settledRate = amount > 0
                         ? settledProfit / amount * 100d
                         : confirmedTodayArchive.DailyRate;
+                    var settlementPointTime = points.Count > 0
+                        ? new DateTime(Math.Max(today.AddHours(15).Ticks, points.Max(p => p.Time).Ticks))
+                        : today.AddHours(15);
                     points.Add(new PerformanceFundIntradayPoint(
-                        today.AddHours(15),
+                        settlementPointTime,
                         Math.Round(settledRate, 2),
                         settledProfit));
                 }
@@ -4628,7 +4631,10 @@ namespace 小白养基.Controllers
                     var settledRate = amount > 0
                         ? settledProfit / amount * 100d
                         : config.LastSettledRate;
-                    points.Add(new PerformanceFundIntradayPoint(today.AddHours(15), Math.Round(settledRate, 2), Math.Round(settledProfit, 2)));
+                    var settlementPointTime = points.Count > 0
+                        ? new DateTime(Math.Max(today.AddHours(15).Ticks, points.Max(p => p.Time).Ticks))
+                        : today.AddHours(15);
+                    points.Add(new PerformanceFundIntradayPoint(settlementPointTime, Math.Round(settledRate, 2), Math.Round(settledProfit, 2)));
                 }
 
                 if (points.Count == 0)
