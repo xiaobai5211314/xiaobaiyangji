@@ -4043,23 +4043,13 @@ namespace 小白养基.Controllers
                 .Where(r => r.FetchTime >= dateInfo.EffectiveDateStart && r.FetchTime < dateInfo.EffectiveDateEndExclusive)
                 .ToList();
 
-            var lastRecordDict = recentRecords
-                .Where(r => r.FetchTime < dateInfo.EffectiveDateStart)
-                .GroupBy(r => r.FundCode)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).First());
-
-            var pastActualDict = recentRecords
-                .Where(r => r.ActualRate != 0)
-                .GroupBy(r => r.FundCode)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FetchTime).Take(3).ToList());
-
             var archiveHistoryDict = await LoadRecentFundArchiveHistoryAsync(
                 username,
                 fundCodes,
                 dateInfo.EffectiveDateStart,
                 dateInfo.EffectiveDateEndExclusive);
 
-            var series = BuildTodayPerformanceSeries(myFunds, todayRecords, lastRecordDict, pastActualDict, archiveHistoryDict, today, todayDash, naturalDate);
+            var series = BuildTodayPerformanceSeries(myFunds, todayRecords, archiveHistoryDict, today, todayDash, naturalDate);
             var totalPrincipal = PortfolioAccounting.Money(series.Sum(s => PortfolioAccounting.Money(s.Amount)));
             var timeline = series
                 .SelectMany(s => s.Points.Select(p => p.Time))
@@ -4558,8 +4548,6 @@ namespace 小白养基.Controllers
         private static List<PerformanceFundIntradaySeries> BuildTodayPerformanceSeries(
             List<MyFundConfig> myFunds,
             List<FundData> todayRecords,
-            Dictionary<string, FundData> lastRecordDict,
-            Dictionary<string, List<FundData>> pastActualDict,
             IReadOnlyDictionary<string, List<DailyArchive>> archiveHistory,
             DateTime today,
             string todayDash,
@@ -4580,20 +4568,13 @@ namespace 小白养基.Controllers
                     .Where(r => r.FundCode == config.FundCode)
                     .OrderBy(r => r.FetchTime)
                     .ToList();
-                var past3DaysRecords = pastActualDict.TryGetValue(config.FundCode, out var pastList)
-                    ? pastList
-                    : new List<FundData>();
-
-                var avgDiff = 0d;
-                if (past3DaysRecords.Count > 0)
-                {
-                    avgDiff = past3DaysRecords.Average(r => r.ActualRate - r.EstimatedRate);
-                    avgDiff = Math.Clamp(avgDiff, -0.5, 0.5);
-                }
-
                 var points = new List<PerformanceFundIntradayPoint>();
                 points.AddRange(fundRecords.Select(r =>
-                    new PerformanceFundIntradayPoint(r.FetchTime, Math.Round(r.EstimatedRate + avgDiff, 2), null)));
+                {
+                    // 与 /api/fund/today 使用同一条当前估值口径，不在曲线中额外叠加历史偏差修正。
+                    var rate = Math.Abs(r.ActualRate) > 0.000001 ? r.ActualRate : r.EstimatedRate;
+                    return new PerformanceFundIntradayPoint(r.FetchTime, Math.Round(rate, 2), null);
+                }));
 
                 if (config.LastSettledDate == todayDash)
                 {
