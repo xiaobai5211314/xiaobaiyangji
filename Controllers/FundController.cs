@@ -718,7 +718,8 @@ namespace 小白养基.Controllers
                 decimal baseAmount = Math.Max(0m, currentAssets - dailyProfit);
                 decimal dailyRate = PortfolioAccounting.Percent(dailyProfit, baseAmount);
                 decimal totalProfit = PortfolioAccounting.Money(fund.OcrHoldingIncome);
-                decimal totalRate = decimal.Round(Convert.ToDecimal(fund.OcrHoldingRate), 2, MidpointRounding.AwayFromZero);
+                decimal fundTotalCost = PortfolioAccounting.HoldingCost(currentAssets, totalProfit);
+                decimal totalRate = PortfolioAccounting.Percent(totalProfit, fundTotalCost);
 
                 rows.Add(new DailyArchive
                 {
@@ -3100,7 +3101,9 @@ namespace 小白养基.Controllers
                         DailyProfit = PortfolioAccounting.ToDouble(yesterdayIncome),
                         DailyRate = Convert.ToDouble(dailyRate),
                         TotalProfit = PortfolioAccounting.ToDouble(holdingIncome),
-                        TotalRate = Math.Round(item.HoldingRate, 2, MidpointRounding.AwayFromZero),
+                        TotalRate = Convert.ToDouble(PortfolioAccounting.HoldingProfitRate(
+                            PortfolioAccounting.Money(item.HoldingIncome),
+                            PortfolioAccounting.Money(confirmedAmount))),
                         Source = "alipay-confirmed",
                         IsFinal = true,
                         UpdatedAt = DateTime.UtcNow
@@ -4050,7 +4053,22 @@ namespace 小白养基.Controllers
                 dateInfo.EffectiveDateEndExclusive);
 
             var series = BuildTodayPerformanceSeries(myFunds, todayRecords, archiveHistoryDict, today, todayDash, naturalDate);
-            var totalPrincipal = PortfolioAccounting.Money(series.Sum(s => PortfolioAccounting.Money(s.Amount)));
+            var quotedPrincipal = PortfolioAccounting.Money(series.Sum(s => PortfolioAccounting.Money(s.Amount)));
+            var latestConfirmedTotalCandidates = await _context.DailyArchives
+                .AsNoTracking()
+                .Where(a => a.Username == username
+                            && a.FundCode == "TOTAL"
+                            && a.IsFinal
+                            && a.RecordDate < localTime.Date.AddDays(1))
+                .OrderByDescending(a => a.RecordDate)
+                .ThenByDescending(a => a.UpdatedAt)
+                .ThenByDescending(a => a.Id)
+                .ToListAsync();
+            var latestAntConfirmedTotal = latestConfirmedTotalCandidates
+                .FirstOrDefault(a => DailyArchiveService.IsAntConfirmedSource(a.Source));
+            var totalPrincipal = latestAntConfirmedTotal != null
+                ? PortfolioAccounting.Money(latestAntConfirmedTotal.Assets)
+                : quotedPrincipal;
             var timeline = series
                 .SelectMany(s => s.Points.Select(p => p.Time))
                 .Distinct()
@@ -6398,11 +6416,17 @@ namespace 小白养基.Controllers
                     double totalProfitPreview = hasOcrHoldingSnapshot && !isSoldOut
                         ? Math.Round(config.OcrHoldingIncome, 2)
                         : Math.Round(marketValue - costBasis + displayedProfit, 2);
-                    double existingReturnRateValue = hasOcrHoldingSnapshot && !isSoldOut
-                        ? Math.Round(config.OcrHoldingRate, 2)
-                        : isSoldOut && displayedProfit > 0 && costBasis > 0
-                        ? Math.Round(displayedProfit / costBasis * 100.0, 2)
-                        : (costBasis > 0 ? Math.Round(totalProfitPreview / costBasis * 100.0, 2) : 0);
+                    if (hasOcrHoldingSnapshot && !isSoldOut)
+                    {
+                        costBasis = PortfolioAccounting.ToDouble(PortfolioAccounting.HoldingCost(
+                            PortfolioAccounting.Money(confirmedHoldAmount),
+                            PortfolioAccounting.Money(totalProfitPreview)));
+                    }
+                    double existingReturnRateValue = costBasis > 0
+                        ? Convert.ToDouble(PortfolioAccounting.Percent(
+                            PortfolioAccounting.Money(isSoldOut ? displayedProfit : totalProfitPreview),
+                            PortfolioAccounting.Money(costBasis)))
+                        : 0;
                     double breakEvenRateValue = !isCleared && marketValue > 1 && totalProfitPreview < 0 ? Math.Round(-totalProfitPreview / marketValue * 100.0, 2) : 0;
 
                     DailyArchive? effectiveFundArchive = null;
@@ -6424,9 +6448,13 @@ namespace 小白养基.Controllers
                         todayBaseAmount = Math.Max(0, Math.Round(rawHoldAmount - todayProfit, 2));
                         previousMarketValue = todayBaseAmount;
                         marketValue = rawHoldAmount;
-                        costBasis = Math.Max(0, Math.Round(rawHoldAmount - effectiveFundArchive.TotalProfit, 2));
+                        costBasis = PortfolioAccounting.ToDouble(PortfolioAccounting.HoldingCost(
+                            PortfolioAccounting.Money(rawHoldAmount),
+                            PortfolioAccounting.Money(effectiveFundArchive.TotalProfit)));
                         totalProfitPreview = Math.Round(effectiveFundArchive.TotalProfit, 2);
-                        existingReturnRateValue = Math.Round(effectiveFundArchive.TotalRate, 2);
+                        existingReturnRateValue = Convert.ToDouble(PortfolioAccounting.Percent(
+                            PortfolioAccounting.Money(totalProfitPreview),
+                            PortfolioAccounting.Money(costBasis)));
                         breakEvenRateValue = marketValue > 0 && totalProfitPreview < 0
                             ? Math.Round(-totalProfitPreview / marketValue * 100.0, 2)
                             : 0;
@@ -6589,7 +6617,7 @@ namespace 小白养基.Controllers
                 var finalResult = result.OrderByDescending(x => x.amount).ToList();
 
                 // 正式金额只读蚂蚁确认 TOTAL；盘中估算单独累计，绝不覆盖正式金额。
-                decimal intradayProfit = 0m, intradayBase = 0m;
+                decimal intradayProfit = 0m, intradayQuotedBase = 0m;
                 decimal summaryDisplayAmount = 0m, summaryConfirmedAmount = 0m, summaryPendingBuyAmount = 0m;
                 foreach (var fund in finalResult)
                 {
@@ -6600,20 +6628,20 @@ namespace 小白养基.Controllers
                     if (string.Equals(fund.profitSource, "estimate", StringComparison.OrdinalIgnoreCase))
                     {
                         intradayProfit += PortfolioAccounting.Money(fund.todayProfit);
-                        intradayBase += PortfolioAccounting.Money(fund.todayBaseAmount);
+                        intradayQuotedBase += PortfolioAccounting.Money(fund.todayBaseAmount);
                     }
                 }
                 intradayProfit = PortfolioAccounting.Money(intradayProfit);
-                intradayBase = PortfolioAccounting.Money(intradayBase);
-                bool intradayAvailable = intradayBase > 0m;
-                decimal intradayRate = intradayAvailable ? PortfolioAccounting.Percent(intradayProfit, intradayBase) : 0m;
+                intradayQuotedBase = PortfolioAccounting.Money(intradayQuotedBase);
                 bool antConfirmedAvailable = latestAntConfirmedTotal != null;
                 decimal antConfirmedAmount = antConfirmedAvailable ? PortfolioAccounting.Money(latestAntConfirmedTotal!.Assets) : 0m;
                 decimal confirmedYesterdayProfit = antConfirmedAvailable ? PortfolioAccounting.Money(latestAntConfirmedTotal!.DailyProfit) : 0m;
                 decimal antHoldingProfit = antConfirmedAvailable ? PortfolioAccounting.Money(latestAntConfirmedTotal!.TotalProfit) : 0m;
-                decimal antHoldingCost = antConfirmedAvailable ? Math.Max(0m, antConfirmedAmount - antHoldingProfit) : 0m;
-                decimal antHoldingRate = antConfirmedAvailable
-                    ? decimal.Round(Convert.ToDecimal(latestAntConfirmedTotal!.TotalRate), 2, MidpointRounding.AwayFromZero)
+                decimal antHoldingCost = antConfirmedAvailable ? PortfolioAccounting.HoldingCost(antConfirmedAmount, antHoldingProfit) : 0m;
+                decimal antHoldingRate = antConfirmedAvailable ? PortfolioAccounting.Percent(antHoldingProfit, antHoldingCost) : 0m;
+                bool intradayAvailable = antConfirmedAvailable && intradayQuotedBase > 0m;
+                decimal intradayRate = intradayAvailable
+                    ? PortfolioAccounting.PortfolioTodayEstimateRate(intradayProfit, antConfirmedAmount)
                     : 0m;
                 decimal intradayEstimatedAssets = antConfirmedAvailable && intradayAvailable
                     ? PortfolioAccounting.Money(antConfirmedAmount + intradayProfit)
@@ -6627,7 +6655,8 @@ namespace 小白养基.Controllers
                 {
                     tradeDate = todayDash,
                     totalTodayProfit = intradayProfit,
-                    totalTodayBaseAmount = intradayBase,
+                    totalTodayBaseAmount = antConfirmedAmount,
+                    intradayQuotedBaseAmount = intradayQuotedBase,
                     totalTodayRate = intradayRate,
                     totalAssets = antConfirmedAmount,
                     totalProfit = antHoldingProfit,
@@ -6640,6 +6669,9 @@ namespace 小白养基.Controllers
                     totalHoldingRate = antHoldingRate,
                     antConfirmedAmount,
                     antHoldingProfit,
+                    antHoldingCost,
+                    antHoldingRate,
+                    antHoldingProfitRate = antHoldingRate,
                     confirmedYesterdayProfit,
                     confirmedProfitDate = latestAntConfirmedTotal?.RecordDate.ToString("yyyy-MM-dd"),
                     confirmedStatus = antConfirmedAvailable ? "confirmed" : "pending",
@@ -8875,7 +8907,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                     DailyProfit = PortfolioAccounting.ToDouble(item.Profit),
                     DailyRate = Convert.ToDouble(PortfolioAccounting.Percent(item.Profit, dailyBase)),
                     TotalProfit = PortfolioAccounting.ToDouble(item.HoldingProfit),
-                    TotalRate = Convert.ToDouble(decimal.Round(item.HoldingRate, 2, MidpointRounding.AwayFromZero)),
+                    TotalRate = Convert.ToDouble(PortfolioAccounting.HoldingProfitRate(item.HoldingProfit, item.Assets)),
                     Source = "alipay-manual-backfill",
                     IsFinal = true,
                     UpdatedAt = DateTime.UtcNow

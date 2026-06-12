@@ -4330,7 +4330,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     </div>
                     <div class="divider"></div>
                     <div style="text-align: center;">
-                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">🚀 今日估算收益率</div>
+                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;" title="今日盘中估算盈亏 ÷ 蚂蚁确认金额">🚀 今日估算收益率</div>
                         <div class="number-display" :style="{ color: privacyMode <= 2 ? (dashboardActiveSummary.intradayEstimateRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 2 ? (dashboardActiveSummary.intradayAvailable ? (dashboardActiveSummary.intradayEstimateRate > 0 ? '+' : '') + Number(dashboardActiveSummary.intradayEstimateRate || 0).toFixed(2) + '%' : '--') : '****' }}</div>
                     </div>
                     <div class="divider"></div>
@@ -7602,8 +7602,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 totalTodayProfit: finiteNumber(apiSummary.intradayEstimateProfit, 0),
                                 totalTodayRate: finiteNumber(apiSummary.intradayEstimateRate, 0),
                                 totalProfit: finiteNumber(apiSummary.antHoldingProfit, 0),
-                                totalRate: finiteNumber(apiSummary.totalRate, 0),
-                                totalCost: finiteNumber(apiSummary.totalHoldingCost, 0),
+                                totalRate: finiteNumber(apiSummary.antHoldingRate ?? apiSummary.totalRate, 0),
+                                totalCost: finiteNumber(apiSummary.antHoldingCost ?? apiSummary.totalHoldingCost, 0),
                                 antConfirmedAmount: finiteNumber(apiSummary.antConfirmedAmount, 0),
                                 antHoldingProfit: finiteNumber(apiSummary.antHoldingProfit, 0),
                                 confirmedYesterdayProfit: finiteNumber(apiSummary.confirmedYesterdayProfit, 0),

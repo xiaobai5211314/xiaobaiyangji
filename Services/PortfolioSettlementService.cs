@@ -234,7 +234,7 @@ namespace 小白养基.Services
                     DailyProfit = PortfolioAccounting.ToDouble(dailyProfit),
                     DailyRate = Convert.ToDouble(PortfolioAccounting.Percent(dailyProfit, baseAmount)),
                     TotalProfit = PortfolioAccounting.ToDouble(totalProfit),
-                    TotalRate = Math.Round(fund.OcrHoldingRate, 2, MidpointRounding.AwayFromZero),
+                    TotalRate = Convert.ToDouble(PortfolioAccounting.HoldingProfitRate(totalProfit, confirmedHoldAmount)),
                     Source = "alipay-confirmed",
                     IsFinal = true,
                     UpdatedAt = DateTime.UtcNow

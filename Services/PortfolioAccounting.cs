@@ -9,7 +9,10 @@ namespace 小白养基.Services
         decimal AntConfirmedAmount,
         decimal ConfirmedYesterdayProfit,
         decimal AntHoldingProfit,
+        decimal AntHoldingCost,
+        decimal AntHoldingRate,
         decimal IntradayEstimateProfit,
+        decimal IntradayEstimateRate,
         decimal IntradayEstimatedAssets,
         decimal EstimatedHoldingProfit);
 
@@ -30,6 +33,15 @@ namespace 小白养基.Services
             return decimal.Round(profit / baseAmount * 100m, 2, MidpointRounding.AwayFromZero);
         }
 
+        public static decimal HoldingCost(decimal confirmedAmount, decimal holdingProfit)
+            => Math.Max(0m, Money(confirmedAmount - holdingProfit));
+
+        public static decimal HoldingProfitRate(decimal holdingProfit, decimal confirmedAmount)
+            => Percent(Money(holdingProfit), HoldingCost(confirmedAmount, holdingProfit));
+
+        public static decimal PortfolioTodayEstimateRate(decimal intradayEstimateProfit, decimal antConfirmedAmount)
+            => Percent(Money(intradayEstimateProfit), Money(antConfirmedAmount));
+
         public static DateTime ResolvePreviousWeekday(DateTime chinaDate)
         {
             var previous = chinaDate.Date.AddDays(-1);
@@ -48,13 +60,17 @@ namespace 小白养基.Services
             var confirmedAmount = Money(rows.Sum(x => Money(x.ConfirmedAmount)));
             var yesterdayProfit = Money(rows.Sum(x => Money(x.YesterdayProfit)));
             var holdingProfit = Money(rows.Sum(x => Money(x.HoldingProfit)));
+            var holdingCost = HoldingCost(confirmedAmount, holdingProfit);
             var estimateProfit = Money(intradayEstimateProfit);
 
             return new PortfolioAccountingSummary(
                 confirmedAmount,
                 yesterdayProfit,
                 holdingProfit,
+                holdingCost,
+                Percent(holdingProfit, holdingCost),
                 estimateProfit,
+                PortfolioTodayEstimateRate(estimateProfit, confirmedAmount),
                 Money(confirmedAmount + estimateProfit),
                 Money(holdingProfit + estimateProfit));
         }

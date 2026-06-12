@@ -198,7 +198,8 @@ namespace 小白养基.Services
                 decimal baseAmount = Math.Max(0m, currentAssets - dailyProfit);
                 decimal dailyRate = PortfolioAccounting.Percent(dailyProfit, baseAmount);
                 decimal totalProfit = PortfolioAccounting.Money(fund.OcrHoldingIncome);
-                decimal totalRate = decimal.Round(Convert.ToDecimal(fund.OcrHoldingRate), 2, MidpointRounding.AwayFromZero);
+                decimal fundTotalCost = PortfolioAccounting.HoldingCost(currentAssets, totalProfit);
+                decimal totalRate = PortfolioAccounting.Percent(totalProfit, fundTotalCost);
 
                 rows.Add(new DailyArchive
                 {
