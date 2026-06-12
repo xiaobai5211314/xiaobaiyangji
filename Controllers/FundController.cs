@@ -612,6 +612,7 @@ namespace 小白养基.Controllers
 
         private static object ToArchiveResponse(DailyArchive a)
         {
+            bool isConfirmed = a.IsFinal && DailyArchiveService.IsAntConfirmedSource(a.Source);
             return new
             {
                 id = a.Id,
@@ -625,8 +626,9 @@ namespace 小白养基.Controllers
                 totalRate = a.TotalRate,
                 source = a.Source,
                 isFinal = a.IsFinal,
-                isConfirmed = a.IsFinal && DailyArchiveService.IsAntConfirmedSource(a.Source),
-                settlementStatus = a.IsFinal && DailyArchiveService.IsAntConfirmedSource(a.Source) ? "confirmed" : "pending",
+                isConfirmed,
+                isLegacy = !isConfirmed,
+                settlementStatus = isConfirmed ? "confirmed" : "legacy",
                 updatedAt = a.UpdatedAt
             };
         }
@@ -9094,14 +9096,17 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 .ToListAsync();
 
             var records = rawRecords
-                .Where(a => a.IsFinal && DailyArchiveService.IsAntConfirmedSource(a.Source))
                 .GroupBy(a => new { Date = a.RecordDate.Date, a.FundCode })
                 .Select(g => g
-                    .OrderByDescending(a => a.IsFinal)
+                    // 蚂蚁确认档案优先；若旧日期尚无确认档案，保留历史旧记录供日历回看。
+                    // 旧记录通过响应中的 isLegacy/settlementStatus 明确标记，不冒充确认收益。
+                    .OrderByDescending(a => a.IsFinal && DailyArchiveService.IsAntConfirmedSource(a.Source))
+                    .ThenByDescending(a => a.IsFinal)
                     .ThenByDescending(DailyArchiveService.HasFinancialData)
                     .ThenByDescending(a => a.UpdatedAt)
                     .ThenByDescending(a => a.Id)
                     .First())
+                .Where(DailyArchiveService.HasFinancialData)
                 .OrderByDescending(a => a.RecordDate)
                 .ThenByDescending(a => a.Id)
                 .Take(limit)

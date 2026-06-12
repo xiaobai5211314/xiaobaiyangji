@@ -4656,12 +4656,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             <div v-show="activePage === 'analysis'" class="app-page">
                 <div class="page-topbar glass-panel"><div><div class="page-title">📊 盈亏分析</div><div class="page-subtitle">每日战报、月历、盈利/亏损排行</div></div><div class="analysis-toolbar"><input type="month" v-model="analysisMonth" @change="fetchAnalysis(true)"><select v-model="analysisViewMode"><option value="profit">金额</option><option value="rate">收益率</option></select><button class="btn" @click="refreshAnalysisPage(true)">🔄</button></div></div>
                 <div class="feature-grid">
-                    <div class="glass-panel feature-card"><div class="feature-title">🧾 每日确认战报</div><div class="feature-subtitle">{{ selectedAnalysisDate }} · {{ confirmedDailyBattleReport.summary }}</div><div class="report-line"><span>确认收益</span><strong :style="{color:confirmedDailyBattleReport.profit>=0?'#ff4d4f':'#10b981'}">{{ confirmedDailyBattleReport.profitText }}</strong></div><div class="report-line"><span>贡献核心</span><strong style="color:#ff4d4f;">{{ confirmedDailyBattleReport.bestName }}</strong></div><div class="report-line"><span>风险拖累</span><strong style="color:#10b981;">{{ confirmedDailyBattleReport.worstName }}</strong></div></div>
+                    <div class="glass-panel feature-card"><div class="feature-title">🧾 每日收益战报</div><div class="feature-subtitle">{{ selectedAnalysisDate }} · {{ confirmedDailyBattleReport.summary }}</div><div class="report-line"><span>{{ confirmedDailyBattleReport.profitLabel }}</span><strong :style="{color:confirmedDailyBattleReport.profit>=0?'#ff4d4f':'#10b981'}">{{ confirmedDailyBattleReport.profitText }}</strong></div><div class="report-line"><span>贡献核心</span><strong style="color:#ff4d4f;">{{ confirmedDailyBattleReport.bestName }}</strong></div><div class="report-line"><span>风险拖累</span><strong style="color:#10b981;">{{ confirmedDailyBattleReport.worstName }}</strong></div></div>
                     <div class="glass-panel feature-card"><div class="feature-title">🧭 回本总览</div><div class="feature-subtitle">全部未回本持仓，按回本所需涨幅排序。</div><div class="compact-scroll-list" style="margin-top:8px;max-height:170px;"><div v-if="recoveryWatchList.length===0" class="feature-subtitle" style="padding:10px 0;">当前没有需要回本的持仓。</div><div v-for="fund in recoveryWatchList" :key="'rw-'+fund.code" class="report-line"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;">{{ fund.name }}</span><strong style="color:#fbbf24;">{{ formatFinitePercent(fund.breakEvenRate) }}</strong></div></div></div>
                 </div>
                 <div class="analysis-grid">
                     <div class="glass-panel" style="padding:16px;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;"><div><div class="page-title" style="font-size:18px;">盈亏日历</div><div class="page-subtitle">{{ analysisMonth }} 月累计：<span :style="{color:analysisMonthTotal>=0?'#ff4d4f':'#10b981',fontWeight:'900'}">{{ analysisMonthTotal>=0?'+':'' }}{{ analysisMonthTotal.toFixed(2) }}</span></div></div><button type="button" class="btn btn-primary" @click.prevent.stop="goAnalysisToday">今天</button></div><div class="calendar-grid">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;"><div><div class="page-title" style="font-size:18px;">盈亏日历</div><div class="page-subtitle">{{ analysisMonth }} 月累计：<span :style="{color:analysisMonthTotal>=0?'#ff4d4f':'#10b981',fontWeight:'900'}">{{ analysisMonthTotal>=0?'+':'' }}{{ analysisMonthTotal.toFixed(2) }}</span><span v-if="analysisMonthHasLegacy"> · 含未确认历史档案</span></div></div><button type="button" class="btn btn-primary" @click.prevent.stop="goAnalysisToday">今天</button></div><div class="calendar-grid">
                             <div v-for="w in ['一','二','三','四','五','六','日']" :key="w" class="calendar-week">{{ w }}</div><div v-for="day in analysisCalendarDays" :key="day.key" :class="['calendar-day', day.empty?'empty':'', day.profit>0?'positive':(day.profit<0?'negative':''), selectedAnalysisDate===day.date?'active':'']" @click="!day.empty && (selectedAnalysisDate = day.date)">
                                 <template v-if="!day.empty">
                                     <div class="calendar-date">{{ day.day }}</div>
@@ -5238,7 +5238,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
     </script>
     <script>
-        const APP_BUILD_VERSION = '2026-06-12-today-confirmed-rate-summary';
+        const APP_BUILD_VERSION = '2026-06-12-restore-legacy-profit-calendar';
         console.log('[小白养基] build:', APP_BUILD_VERSION);
         const { createApp, ref, reactive, onMounted, onUnmounted, nextTick, shallowRef, watch, computed } = Vue;
 
@@ -5805,6 +5805,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     return filtered.sort((a, b) => Math.abs(Number(b.dailyProfit || 0)) - Math.abs(Number(a.dailyProfit || 0)));
                 });
                 const selectedDayTotalArchive = computed(() => analysisTotalRecords.value.find(r => String(r.recordDate || '').slice(0, 10) === selectedAnalysisDate.value) || null);
+                const analysisMonthHasLegacy = computed(() => analysisTotalRecords.value.some(r =>
+                    String(r.recordDate || '').slice(0, 7) === analysisMonth.value && !r.isConfirmed));
                 const confirmedDailyBattleReport = computed(() => {
                     const total = selectedDayTotalArchive.value;
                     const rows = selectedDayFundRecords.value;
@@ -5814,7 +5816,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     return {
                         profit,
                         profitText: total ? `${profit >= 0 ? '+' : ''}${profit.toFixed(2)}` : '--',
-                        summary: total ? '来自蚂蚁基金确认档案。' : '当天确认收益待补充。',
+                        profitLabel: total?.isConfirmed ? '确认收益' : (total ? '历史收益' : '确认收益'),
+                        summary: total
+                            ? (total.isConfirmed ? '来自蚂蚁基金确认档案。' : '历史旧档案，来源口径未确认。')
+                            : '当天确认收益待补充。',
                         bestName: best ? `${best.fundName} ${Number(best.dailyProfit || 0) >= 0 ? '+' : ''}${Number(best.dailyProfit || 0).toFixed(2)}` : '暂无',
                         worstName: worst ? `${worst.fundName} ${Number(worst.dailyProfit || 0) >= 0 ? '+' : ''}${Number(worst.dailyProfit || 0).toFixed(2)}` : '暂无'
                     };
@@ -7821,7 +7826,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, isDetailsLoading, expandedSectors, toggleSector,
                     fetchSectorDetails, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices, formatIndexPoint, formatIndexRate, getFundStatusBadgeText, getFundStatusBadgeClass, getRateDisplayMeta,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
-                    analysisMonth, selectedAnalysisDate, analysisViewMode, analysisDetailMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, confirmedDailyBattleReport, analysisProfitTop, analysisLossTop, analysisMonthTotal, fetchAnalysis, refreshAnalysisPage, goAnalysisToday, todayDashStr,
+                    analysisMonth, selectedAnalysisDate, analysisViewMode, analysisDetailMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, confirmedDailyBattleReport, analysisProfitTop, analysisLossTop, analysisMonthTotal, analysisMonthHasLegacy, fetchAnalysis, refreshAnalysisPage, goAnalysisToday, todayDashStr,
                     assetMode, setAssetMode, stockHoldings, stockWatchList, stockSearchKeyword, stockSearchResults, stockOcrLoading, stockOcrPreview, selectedStock, stockKlinePeriod, stockKlinePeriods, stockChartRef, stockChartStatus, triggerStockOcr, handleStockOcrUpload, confirmStockOcr, loadStockDashboard, searchStocks, addStockWatch, openStockHoldingEditor, deleteStockHolding, deleteStockWatch, openStockDetail, switchStockKline, recalculateStockOcrItem, formatOcrNumber, signedOcrNumber, profitColor, dailyBattleReport, confidenceRows, confidenceMap, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, formatFinitePercent, calibrationRows,
                     globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, ocrModal, ocrPreviewTotal, isConfirmingOcrImport,
                     reduceModal, openReduceModal, handleReducePosition, addModal, openAddModal, handleAddPosition
