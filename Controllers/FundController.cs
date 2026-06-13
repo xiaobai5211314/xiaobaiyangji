@@ -613,6 +613,7 @@ namespace 小白养基.Controllers
         private static object ToArchiveResponse(DailyArchive a)
         {
             bool isConfirmed = a.IsFinal && DailyArchiveService.IsAntConfirmedSource(a.Source);
+            bool isOfficialNavPending = !isConfirmed && DailyArchiveService.IsOfficialNavPendingSource(a.Source);
             return new
             {
                 id = a.Id,
@@ -627,8 +628,8 @@ namespace 小白养基.Controllers
                 source = a.Source,
                 isFinal = a.IsFinal,
                 isConfirmed,
-                isLegacy = !isConfirmed,
-                settlementStatus = isConfirmed ? "confirmed" : "legacy",
+                isLegacy = !isConfirmed && !isOfficialNavPending,
+                settlementStatus = isConfirmed ? "confirmed" : isOfficialNavPending ? "pending_nav" : "legacy",
                 updatedAt = a.UpdatedAt
             };
         }
@@ -713,13 +714,18 @@ namespace 小白养基.Controllers
                 expectedActiveCount++;
 
                 bool hasOcrSnapshot = fund.OcrYesterdayDate == dateDash;
-                if (!hasOcrSnapshot) continue;
+                bool hasOfficialSettlement = fund.LastSettledDate == dateDash;
+                if (!hasOcrSnapshot && !hasOfficialSettlement) continue;
 
-                decimal dailyProfit = PortfolioAccounting.Money(fund.OcrYesterdayIncome);
-                decimal currentAssets = confirmedHoldAmount;
+                decimal dailyProfit = PortfolioAccounting.Money(
+                    hasOcrSnapshot ? fund.OcrYesterdayIncome : fund.LastSettledProfit);
+                decimal currentAssets = hasOcrSnapshot
+                    ? confirmedHoldAmount
+                    : Math.Max(0m, confirmedHoldAmount + dailyProfit);
                 decimal baseAmount = Math.Max(0m, currentAssets - dailyProfit);
                 decimal dailyRate = PortfolioAccounting.Percent(dailyProfit, baseAmount);
-                decimal totalProfit = PortfolioAccounting.Money(fund.OcrHoldingIncome);
+                decimal totalProfit = PortfolioAccounting.Money(
+                    hasOcrSnapshot ? fund.OcrHoldingIncome : fund.OcrHoldingIncome + fund.LastSettledProfit);
                 decimal fundTotalCost = PortfolioAccounting.HoldingCost(currentAssets, totalProfit);
                 decimal totalRate = PortfolioAccounting.Percent(totalProfit, fundTotalCost);
 
@@ -734,8 +740,8 @@ namespace 小白养基.Controllers
                     DailyRate = Convert.ToDouble(dailyRate),
                     TotalProfit = PortfolioAccounting.ToDouble(totalProfit),
                     TotalRate = Convert.ToDouble(totalRate),
-                    Source = "alipay-confirmed",
-                    IsFinal = true,
+                    Source = hasOcrSnapshot ? "alipay-confirmed" : "official-nav-pending",
+                    IsFinal = hasOcrSnapshot,
                     UpdatedAt = DateTime.UtcNow
                 });
                 confirmedMoney.Add(new ConfirmedHoldingMoney(currentAssets, dailyProfit, totalProfit));
@@ -746,7 +752,7 @@ namespace 小白养基.Controllers
             var summary = PortfolioAccounting.Calculate(confirmedMoney, 0m);
             decimal totalDailyBase = confirmedMoney.Sum(x => x.ConfirmedAmount - x.YesterdayProfit);
             decimal totalCost = summary.AntConfirmedAmount - summary.AntHoldingProfit;
-            bool totalIsFinal = rows.Count == expectedActiveCount;
+            bool totalIsFinal = rows.Count == expectedActiveCount && rows.All(x => x.IsFinal);
 
             rows.Add(new DailyArchive
             {
@@ -759,7 +765,9 @@ namespace 小白养基.Controllers
                 DailyRate = Convert.ToDouble(PortfolioAccounting.Percent(summary.ConfirmedYesterdayProfit, totalDailyBase)),
                 TotalProfit = PortfolioAccounting.ToDouble(summary.AntHoldingProfit),
                 TotalRate = Convert.ToDouble(PortfolioAccounting.Percent(summary.AntHoldingProfit, totalCost)),
-                Source = totalIsFinal ? "alipay-confirmed-total" : "alipay-confirmed-partial",
+                Source = totalIsFinal
+                    ? "alipay-confirmed-total"
+                    : (rows.Any(x => x.IsFinal) ? "mixed-confirmation-pending-total" : "official-nav-pending-total"),
                 IsFinal = totalIsFinal,
                 UpdatedAt = DateTime.UtcNow
             });

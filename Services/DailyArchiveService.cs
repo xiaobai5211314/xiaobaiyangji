@@ -27,6 +27,13 @@ namespace 小白养基.Services
             return value.Contains("alipay") || value.Contains("ocr-confirmed");
         }
 
+        public static bool IsOfficialNavPendingSource(string? source)
+        {
+            var value = (source ?? string.Empty).Trim().ToLowerInvariant();
+            return value.Contains("official-nav-pending")
+                || value.Contains("mixed-confirmation-pending");
+        }
+
         private static int SourceRank(string? source)
         {
             var value = (source ?? string.Empty).ToLowerInvariant();

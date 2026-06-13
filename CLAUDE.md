@@ -68,7 +68,7 @@ npm run check:pages-order   # 校验 pages[0] 必须是 pages/home/index
 3. MySQL `MarketDataCache` 表（持久化缓存，含 fresh/stale TTL）
 4. 前端内存缓存 + localStorage（GET 请求 60s 缓存，仪表盘数据 1h 缓存）
 
-**后台服务**：`FundScraperService` 每 60 秒抓取东方财富基金估值；`NavSettlementService` 在每天 17:00-02:00 期间每 5 分钟执行一次 T+1 净值结算。
+**后台服务**：`FundScraperService` 每 60 秒抓取东方财富基金估值；`NavSettlementService` 在每天 17:00-02:00 期间每 5 分钟执行一次 T+1 净值结算；`DailySettlementService` 按北京时间归档，蚂蚁 OCR 确认数据写正式档案，缺少 OCR 时用官方净值写 `official-nav-pending` 待确认档案，后续由蚂蚁确认数据覆盖。盘中估值不得进入正式日历。
 
 **OCR 优先录入**：基金和股票模块均有完整的截图导入流程。图片发送至百度 OCR API，`StockOcrParserService` 通过坐标/文本解析提取持仓，用户预览确认后导入。
 
