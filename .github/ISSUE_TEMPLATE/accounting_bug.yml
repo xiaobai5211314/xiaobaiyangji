@@ -1,0 +1,111 @@
+name: 基金金额/收益 Bug
+description: 基金金额、收益、盈亏日历显示异常
+labels: ["needs-triage", "type:bug", "area:fund"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 问题描述
+        请填写蚂蚁 App 和项目显示的对比信息，方便定位口径差异。
+
+  - type: input
+    id: ant-date
+    attributes:
+      label: 蚂蚁截图日期
+      description: 截图中显示的确认日期
+      placeholder: "2026-06-16"
+    validations:
+      required: true
+
+  - type: input
+    id: ant-total
+    attributes:
+      label: 蚂蚁总金额
+      description: 蚂蚁 App 显示的当前持有总金额
+      placeholder: "50000.00"
+    validations:
+      required: true
+
+  - type: input
+    id: ant-daily-profit
+    attributes:
+      label: 蚂蚁昨日收益
+      description: 蚂蚁 App 显示的昨日收益
+      placeholder: "123.45"
+    validations:
+      required: true
+
+  - type: input
+    id: ant-holding-profit
+    attributes:
+      label: 蚂蚁持有收益
+      description: 蚂蚁 App 显示的累计持有收益
+      placeholder: "2345.67"
+    validations:
+      required: true
+
+  - type: input
+    id: proj-total
+    attributes:
+      label: 项目首页显示金额
+      description: 项目首页显示的蚂蚁确认金额
+      placeholder: "50000.00"
+    validations:
+      required: true
+
+  - type: input
+    id: proj-daily-profit
+    attributes:
+      label: 项目首页昨日收益
+      description: 项目首页显示的昨日确认收益
+      placeholder: "123.45"
+    validations:
+      required: true
+
+  - type: input
+    id: proj-calendar
+    attributes:
+      label: 项目盈亏日历金额
+      description: 盈亏日历中对应日期的收益金额
+      placeholder: "123.45"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: page
+    attributes:
+      label: 错误发生页面
+      options:
+        - 首页 summary
+        - 盈亏日历
+        - 基金详情页
+        - 其他
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果
+      description: 你期望看到的正确数字或行为
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 当前错误表现
+      description: 实际看到的错误数字或行为
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准
+      description: 怎样算修复成功？
+      placeholder: |
+        - 首页昨日收益与蚂蚁截图一致
+        - 盈亏日历对应日期收益与蚂蚁截图一致
+    validations:
+      required: false
