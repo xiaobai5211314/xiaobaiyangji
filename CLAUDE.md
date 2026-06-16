@@ -7,7 +7,7 @@
 "小白养基" 是一个基金和股票投资管理应用，包含：
 - **后端**：仓库根目录下的 ASP.NET Core 8.0 Web API (C#)
 - **前端**：`miniprogram/` 目录下的微信小程序，使用 uni-app（Vue 3 + TypeScript + Vite）构建
-- **静态 SPA**：`wwwroot/index.html`，通过又拍云 CDN 分发
+- **静态 SPA**：`wwwroot/index.html`（单文件，~413KB），`wwwroot/v2/`（Vite 构建，代码按页面拆分），通过又拍云 CDN 分发
 
 前后端在同一仓库中，.NET 项目文件显式排除了 `miniprogram/` 目录。
 
@@ -45,14 +45,14 @@ npm run check:pages-order   # 校验 pages[0] 必须是 pages/home/index
 |------|------|
 | `Controllers/` | 7 个 API 控制器：Auth、Fund（~30 个端点）、Stock、UserUiState、ProductInsights、ValuationCalibration、InsightSnapshots |
 | `Models/` | 17 个 EF Core 实体 + `AppDbContext`（通过 Pomelo 连接 MySQL） |
-| `Services/` | 后台服务（FundScraperService、NavSettlementService）、BaiduOcrService、StockOcrParserService、MarketCacheService、StockQuoteService |
+| `Services/` | 后台服务：3 个 HostedService（FundScraperService、NavSettlementService、DailySettlementService）、Scoped 服务（PortfolioSettlementService、DailyArchiveService、MarketCacheService、StockQuoteService、StockOcrParserService）、BaiduOcrService、静态工具 PortfolioAccounting |
 | `Migrations/` | EF Core 数据库迁移 |
 
 ### 前端结构
 | 路径 | 用途 |
 |------|------|
 | `miniprogram/src/pages/` | 7 个页面：home（主仪表盘，~2800 行）、sector、news、analysis、login、profile、index-detail |
-| `miniprogram/src/services/api/` | 6 个类型化 API 客户端模块（fund、stock、auth、uiState、insights、snapshots） |
+| `miniprogram/src/services/api/` | 6 个类型化 API 客户端模块（fund、stock、auth、sector、news、analysis） |
 | `miniprogram/src/services/request.ts` | HTTP 抽象层：类型化 `uni.request()` 封装，含 GET 缓存（60s TTL）、请求去重、降级数据、错误提示去重 |
 | `miniprogram/src/stores/` | Vue 3 响应式 store（无 Vuex/Pinia）：`session.ts`、`theme.ts` |
 | `miniprogram/src/utils/fundMetrics.ts` | 核心客户端业务逻辑：`buildPortfolioMetrics()`、行业分类、置信度评分、敞口分析 |
@@ -86,14 +86,28 @@ npm run check:pages-order   # 校验 pages[0] 必须是 pages/home/index
 
 - `appsettings.json` — 基础配置（连接字符串、日志）
 - `appsettings.Production.json` — 已 gitignore，包含生产环境密钥（MySQL、百度 OCR 密钥、微信 AppId/Secret）
-- `appsettings.example.json` — 配置模板（占位符值）
-- `miniprogram/src/services/config.ts` — API 基础 URL（`https://guzhi.21212121.xyz`）
+- `appsettings.example.json` — 配置模板（含 `ConnectionStrings`、`AllowedOrigins`、`BaiduOcr`、`WeChatMiniProgram`）
+- `miniprogram/src/services/config.ts` — API 基础 URL（`https://guzhi.21212121.xyz`）和 CDN URL（`https://guzhicdn.21212121.xyz`）
 
 ## CI/CD
 
 - **后端部署**：推送 `.cs`/`.csproj`/`appsettings*.json`/`wwwroot/**` 到 `master`/`gpt-two`/`wechatapp` → GitHub Actions 构建，通过 SSH 部署到服务器，健康检查 `/api/health`
-- **前端 CDN 部署**：推送 `wwwroot/index.html` → 上传到又拍云 CDN（`guzhicdn.21212121.xyz`），清除缓存
+- **前端 CDN 部署**：推送 `wwwroot/**` → 上传 `index.html` 和 `wwwroot/v2/` 到又拍云 CDN（`guzhicdn.21212121.xyz`），清除缓存
 - **服务器**：systemd 服务运行在 7084 端口，Nginx 反向代理 `guzhi.21212121.xyz`
+
+## Agent 技能配置
+
+### 问题跟踪器
+
+使用 GitHub Issues（仓库 `xiaobai5211314/xiaobaiyangji`）。详见 `docs/agents/issue-tracker.md`。
+
+### 分类标签
+
+五个标准标签：`needs-triage`、`needs-info`、`ready-for-agent`、`ready-for-human`、`wontfix`。详见 `docs/agents/triage-labels.md`。
+
+### 领域文档
+
+单上下文模式——`CONTEXT.md` + `docs/adr/` 位于仓库根目录。详见 `docs/agents/domain.md`。
 
 ## 重要约定
 
@@ -101,75 +115,73 @@ npm run check:pages-order   # 校验 pages[0] 必须是 pages/home/index
 - 导航使用自定义 `AppTabBar` 组件 + `uni.reLaunch()`（替换页面栈），非原生 tabBar
 - `pages/home/index` 必须是 `pages.json` 中的 `pages[0]`（由 `check:pages-order` 脚本强制校验）
 - 状态管理使用原生 `reactive()` + `computed()`，无 Vuex、无 Pinia
-- 项目未配置测试框架
+- 项目未配置标准测试框架（xUnit/NUnit）；`tests/PortfolioAccounting.Tests/` 是控制台应用，用手动 `throw` 断言测试 PortfolioAccounting 和 DailyArchiveService
 - 项目未配置 ESLint 或 Prettier
 - `project.private.config.json`（微信开发者工具私有配置）已 gitignore，并由 `clean:private-config` 脚本从 dist 中清除
 
 
-# Karpathy Guidelines
+# Karpathy 编码准则
 
-# CLAUDE.md
+将常见 LLM 编码错误降到最低。与项目特定指令合并使用。
 
-Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+**权衡：** 这些准则偏向谨慎而非速度。简单任务请自行判断。
 
-**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+## 1. 先思考再编码
 
-## 1. Think Before Coding
+**不假设。不隐藏困惑。暴露权衡。**
 
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
+实现之前：
+- 明确说明你的假设。不确定时提问。
+- 存在多种解读时，全部呈现——不要默默选一个。
+- 有更简单的方案时，说出来。该推回就推回。
+- 有不清楚的地方，停下来。指出哪里困惑。提问。
 
-Before implementing:
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
+## 2. 简单优先
 
-## 2. Simplicity First
+**能解决问题的最少代码。不投机。**
 
-**Minimum code that solves the problem. Nothing speculative.**
+- 不做超出需求的功能。
+- 不为一次性代码做抽象。
+- 不为未被要求的"灵活性"或"可配置性"写代码。
+- 不为不可能的场景写错误处理。
+- 如果 50 行能解决，不要写 200 行。
 
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
+问自己："高级工程师会觉得这过度复杂了吗？" 如果是，简化。
 
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+## 3. 精准修改
 
-## 3. Surgical Changes
+**只碰必须碰的。只清理自己造成的。**
 
-**Touch only what you must. Clean up only your own mess.**
+编辑已有代码时：
+- 不"顺手改进"相邻代码、注释或格式。
+- 不重构没坏的东西。
+- 匹配已有风格，即使你会写得不同。
+- 发现无关的死代码，提一下——不要删掉。
 
-When editing existing code:
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it - don't delete it.
+你的改动产生孤立代码时：
+- 删除你自己的改动使其变得无用的导入/变量/函数。
+- 不删除已有的死代码，除非被要求。
 
-When your changes create orphans:
-- Remove imports/variables/functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
+检验标准：每一行改动都应该能直接追溯到用户的请求。
 
-The test: Every changed line should trace directly to the user's request.
+## 4. 目标驱动执行
 
-## 4. Goal-Driven Execution
+**定义成功标准。循环直到验证通过。**
 
-**Define success criteria. Loop until verified.**
+将任务转化为可验证的目标：
+- "添加验证" → "为无效输入写测试，然后让它们通过"
+- "修复 bug" → "写一个复现测试，然后让它通过"
+- "重构 X" → "确保重构前后测试都通过"
 
-Transform tasks into verifiable goals:
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
-
-For multi-step tasks, state a brief plan:
+多步任务要列出简要计划：
 ```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
+1. [步骤] → 验证：[检查]
+2. [步骤] → 验证：[检查]
+3. [步骤] → 验证：[检查]
 ```
 
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+强成功标准让你能独立循环。弱标准（"让它跑起来"）需要不断澄清。
 
 ---
 
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+**这些准则有效的标志：** diff 中不必要的改动更少，因过度复杂而重写的次数更少，澄清问题在实现之前提出而非在犯错之后。
