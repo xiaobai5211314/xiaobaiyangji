@@ -34,6 +34,28 @@ namespace 小白养基.Services
                 || value.Contains("mixed-confirmation-pending");
         }
 
+        public static string GetSettlementStatus(DailyArchive row)
+        {
+            if (row.IsFinal && IsAntConfirmedSource(row.Source)) return "confirmed";
+            if (IsOfficialNavPendingSource(row.Source)) return "pending_nav";
+            return "legacy";
+        }
+
+        public static DailyArchive? PickLatestPortfolioSummaryTotal(IEnumerable<DailyArchive> rows)
+        {
+            return rows
+                .Where(HasFinancialData)
+                .Where(x => string.Equals(x.FundCode, "TOTAL", StringComparison.OrdinalIgnoreCase))
+                .Where(x => GetSettlementStatus(x) != "legacy")
+                .OrderByDescending(x => x.RecordDate.Date)
+                .ThenByDescending(x => x.IsFinal && IsAntConfirmedSource(x.Source))
+                .ThenByDescending(x => x.IsFinal)
+                .ThenByDescending(x => HasFinancialData(x))
+                .ThenByDescending(x => x.UpdatedAt)
+                .ThenByDescending(x => x.Id)
+                .FirstOrDefault();
+        }
+
         private static int SourceRank(string? source)
         {
             var value = (source ?? string.Empty).ToLowerInvariant();

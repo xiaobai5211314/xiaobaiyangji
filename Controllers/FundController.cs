@@ -599,9 +599,24 @@ namespace 小白养基.Controllers
         private void ClearTodayCache(string username)
         {
             if (string.IsNullOrWhiteSpace(username)) return;
-            _cache.Remove($"Tactical_TodayData_{username}");
-            _cache.Remove($"Tactical_TodayData_{username}_{ChinaDateDash()}");
-            _cache.Remove($"Tactical_TodayData_{username}_{GetEffectiveFundDate()}");
+            var normalizedUser = username.Trim();
+            foreach (var key in new[]
+            {
+                $"Tactical_TodayData_{normalizedUser}",
+                $"Tactical_TodayData_{normalizedUser}_{ChinaDateDash()}",
+                $"Tactical_TodayData_{normalizedUser}_{GetEffectiveFundDate()}",
+                $"DashboardData_{normalizedUser}",
+                $"FundToday_{normalizedUser}",
+                $"PortfolioSummary_{normalizedUser}",
+                $"CalendarSummary_{normalizedUser}",
+                $"DashboardData_{normalizedUser}_{ChinaDateDash()}",
+                $"FundToday_{normalizedUser}_{ChinaDateDash()}",
+                $"PortfolioSummary_{normalizedUser}_{ChinaDateDash()}",
+                $"CalendarSummary_{normalizedUser}_{ChinaDateDash()}"
+            })
+            {
+                _cache.Remove(key);
+            }
         }
 
 
@@ -613,7 +628,7 @@ namespace 小白养基.Controllers
         private static object ToArchiveResponse(DailyArchive a)
         {
             bool isConfirmed = a.IsFinal && DailyArchiveService.IsAntConfirmedSource(a.Source);
-            bool isOfficialNavPending = !isConfirmed && DailyArchiveService.IsOfficialNavPendingSource(a.Source);
+            string settlementStatus = DailyArchiveService.GetSettlementStatus(a);
             return new
             {
                 id = a.Id,
@@ -628,8 +643,8 @@ namespace 小白养基.Controllers
                 source = a.Source,
                 isFinal = a.IsFinal,
                 isConfirmed,
-                isLegacy = !isConfirmed && !isOfficialNavPending,
-                settlementStatus = isConfirmed ? "confirmed" : isOfficialNavPending ? "pending_nav" : "legacy",
+                isLegacy = settlementStatus == "legacy",
+                settlementStatus,
                 updatedAt = a.UpdatedAt
             };
         }
@@ -4068,16 +4083,14 @@ namespace 小白养基.Controllers
                 .AsNoTracking()
                 .Where(a => a.Username == username
                             && a.FundCode == "TOTAL"
-                            && a.IsFinal
                             && a.RecordDate < localTime.Date.AddDays(1))
                 .OrderByDescending(a => a.RecordDate)
                 .ThenByDescending(a => a.UpdatedAt)
                 .ThenByDescending(a => a.Id)
                 .ToListAsync();
-            var latestAntConfirmedTotal = latestConfirmedTotalCandidates
-                .FirstOrDefault(a => DailyArchiveService.IsAntConfirmedSource(a.Source));
-            var totalPrincipal = latestAntConfirmedTotal != null
-                ? PortfolioAccounting.Money(latestAntConfirmedTotal.Assets)
+            var latestPortfolioTotal = DailyArchiveService.PickLatestPortfolioSummaryTotal(latestConfirmedTotalCandidates);
+            var totalPrincipal = latestPortfolioTotal != null
+                ? PortfolioAccounting.Money(latestPortfolioTotal.Assets)
                 : quotedPrincipal;
             var timeline = series
                 .SelectMany(s => s.Points.Select(p => p.Time))
@@ -6241,14 +6254,12 @@ namespace 小白养基.Controllers
                     .AsNoTracking()
                     .Where(a => a.Username == username
                                 && a.FundCode == "TOTAL"
-                                && a.IsFinal
                                 && a.RecordDate < localTime.Date.AddDays(1))
                     .OrderByDescending(a => a.RecordDate)
                     .ThenByDescending(a => a.UpdatedAt)
                     .ThenByDescending(a => a.Id)
                     .ToListAsync();
-                var latestAntConfirmedTotal = latestConfirmedTotalCandidates
-                    .FirstOrDefault(a => DailyArchiveService.IsAntConfirmedSource(a.Source));
+                var latestPortfolioTotal = DailyArchiveService.PickLatestPortfolioSummaryTotal(latestConfirmedTotalCandidates);
                 var effectiveArchiveByCode = effectiveArchives
                     .Where(a => !string.Equals(a.FundCode, "TOTAL", StringComparison.OrdinalIgnoreCase))
                     .ToDictionary(a => a.FundCode, StringComparer.OrdinalIgnoreCase);
@@ -6691,10 +6702,13 @@ namespace 小白养基.Controllers
                 intradayQuotedBase = PortfolioAccounting.Money(intradayQuotedBase);
                 todayPerformanceProfit = PortfolioAccounting.Money(todayPerformanceProfit);
                 todayPerformanceBase = PortfolioAccounting.Money(todayPerformanceBase);
-                bool antConfirmedAvailable = latestAntConfirmedTotal != null;
-                decimal antConfirmedAmount = antConfirmedAvailable ? PortfolioAccounting.Money(latestAntConfirmedTotal!.Assets) : 0m;
-                decimal confirmedYesterdayProfit = antConfirmedAvailable ? PortfolioAccounting.Money(latestAntConfirmedTotal!.DailyProfit) : 0m;
-                decimal antHoldingProfit = antConfirmedAvailable ? PortfolioAccounting.Money(latestAntConfirmedTotal!.TotalProfit) : 0m;
+                bool antConfirmedAvailable = latestPortfolioTotal != null;
+                string summarySettlementStatus = latestPortfolioTotal == null
+                    ? "pending"
+                    : DailyArchiveService.GetSettlementStatus(latestPortfolioTotal);
+                decimal antConfirmedAmount = antConfirmedAvailable ? PortfolioAccounting.Money(latestPortfolioTotal!.Assets) : 0m;
+                decimal confirmedYesterdayProfit = antConfirmedAvailable ? PortfolioAccounting.Money(latestPortfolioTotal!.DailyProfit) : 0m;
+                decimal antHoldingProfit = antConfirmedAvailable ? PortfolioAccounting.Money(latestPortfolioTotal!.TotalProfit) : 0m;
                 decimal antHoldingCost = antConfirmedAvailable ? PortfolioAccounting.HoldingCost(antConfirmedAmount, antHoldingProfit) : 0m;
                 decimal antHoldingRate = antConfirmedAvailable ? PortfolioAccounting.Percent(antHoldingProfit, antHoldingCost) : 0m;
                 bool todayPerformanceAvailable = antConfirmedAvailable && todayPerformanceBase > 0m;
@@ -6721,7 +6735,11 @@ namespace 小白养基.Controllers
                 decimal estimatedHoldingProfit = antConfirmedAvailable && intradayAvailable
                     ? PortfolioAccounting.Money(antHoldingProfit + intradayProfit)
                     : antHoldingProfit;
-                string summarySource = antConfirmedAvailable ? "alipay-confirmed-total" : "pending-ant-confirmation";
+                bool holdingSnapshotStale = antConfirmedAvailable
+                    && Math.Abs(summaryConfirmedAmount - antConfirmedAmount) > 0.01m;
+                string summarySource = antConfirmedAvailable
+                    ? (latestPortfolioTotal!.Source ?? summarySettlementStatus)
+                    : "pending-ant-confirmation";
 
                 var summary = new
                 {
@@ -6751,8 +6769,11 @@ namespace 小白养基.Controllers
                     antHoldingRate,
                     antHoldingProfitRate = antHoldingRate,
                     confirmedYesterdayProfit,
-                    confirmedProfitDate = latestAntConfirmedTotal?.RecordDate.ToString("yyyy-MM-dd"),
-                    confirmedStatus = antConfirmedAvailable ? "confirmed" : "pending",
+                    confirmedProfitDate = latestPortfolioTotal?.RecordDate.ToString("yyyy-MM-dd"),
+                    confirmedStatus = summarySettlementStatus,
+                    holdingSnapshotStale,
+                    holdingSnapshotStatus = holdingSnapshotStale ? "archive_newer_than_holdings" : "current",
+                    holdingSnapshotMessage = holdingSnapshotStale ? "首页持仓快照待刷新" : "",
                     intradayEstimateProfit = intradayProfit,
                     intradayEstimateRate = intradayRate,
                     intradayEstimatedAssets,

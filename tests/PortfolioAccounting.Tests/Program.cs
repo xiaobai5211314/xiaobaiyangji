@@ -1,4 +1,5 @@
 using 小白养基.Services;
+using 小白养基.Models;
 
 static void Equal(decimal expected, decimal actual, string name)
 {
@@ -40,6 +41,71 @@ Equal(68.66m, PortfolioAccounting.Percent(6.20m, 9.03m), "fund.semiconductor.hol
 Equal(-66.60m, PortfolioAccounting.Percent(-6.66m, 10.00m), "fund.realEstate.holdingProfitRate");
 Equal(-0.26m, PortfolioAccounting.PortfolioTodayEstimateRate(-211.27m, 81556.13m), "summary.confirmedTodayRate");
 
+var june15OcrSummary = PortfolioAccounting.Calculate(
+    new[] { new ConfirmedHoldingMoney(83445.65m, 1889.51m, -6258.55m) },
+    0m);
+Equal(83445.65m, june15OcrSummary.AntConfirmedAmount, "ocr.currentAmount.mustNotSubtractYesterdayIncome");
+Equal(1889.51m, june15OcrSummary.ConfirmedYesterdayProfit, "ocr.yesterdayIncome");
+Equal(-6258.55m, june15OcrSummary.AntHoldingProfit, "ocr.holdingIncome.mustNotSubtractYesterdayIncome");
+
+var selectedLatestTotal = DailyArchiveService.PickLatestPortfolioSummaryTotal(new[]
+{
+    new DailyArchive
+    {
+        FundCode = "TOTAL",
+        RecordDate = new DateTime(2026, 6, 11),
+        Assets = 81556.13,
+        DailyProfit = -1369.78,
+        TotalProfit = -8148.07,
+        Source = "alipay-confirmed-total",
+        IsFinal = true,
+        UpdatedAt = new DateTime(2026, 6, 12, 13, 35, 48)
+    },
+    new DailyArchive
+    {
+        FundCode = "TOTAL",
+        RecordDate = new DateTime(2026, 6, 15),
+        Assets = 83445.65,
+        DailyProfit = 1889.51,
+        TotalProfit = -6258.55,
+        Source = "official-nav-pending-total",
+        IsFinal = false,
+        UpdatedAt = new DateTime(2026, 6, 16, 8, 30, 0)
+    }
+});
+if (selectedLatestTotal?.RecordDate != new DateTime(2026, 6, 15))
+    throw new InvalidOperationException("summary.latestArchive: expected 2026-06-15 to win over older confirmed archive");
+Equal(83445.65m, PortfolioAccounting.Money(selectedLatestTotal.Assets), "summary.latestArchive.assets");
+Equal(1889.51m, PortfolioAccounting.Money(selectedLatestTotal.DailyProfit), "summary.latestArchive.dailyProfit");
+
+var sameDayPreferredConfirmed = DailyArchiveService.PickLatestPortfolioSummaryTotal(new[]
+{
+    new DailyArchive
+    {
+        FundCode = "TOTAL",
+        RecordDate = new DateTime(2026, 6, 15),
+        Assets = 83445.64,
+        DailyProfit = 1889.51,
+        TotalProfit = -6258.56,
+        Source = "official-nav-pending-total",
+        IsFinal = false,
+        UpdatedAt = new DateTime(2026, 6, 16, 8, 30, 0)
+    },
+    new DailyArchive
+    {
+        FundCode = "TOTAL",
+        RecordDate = new DateTime(2026, 6, 15),
+        Assets = 83445.65,
+        DailyProfit = 1889.51,
+        TotalProfit = -6258.55,
+        Source = "alipay-confirmed-total",
+        IsFinal = true,
+        UpdatedAt = new DateTime(2026, 6, 16, 9, 0, 0)
+    }
+});
+if (sameDayPreferredConfirmed == null || !DailyArchiveService.IsAntConfirmedSource(sameDayPreferredConfirmed.Source))
+    throw new InvalidOperationException("summary.sameDay: alipay confirmed archive should win over same-day pending archive");
+
 var pendingNavSummary = PortfolioAccounting.Calculate(new[]
 {
     new ConfirmedHoldingMoney(15.01m, -0.11m, 5.98m),
@@ -62,4 +128,4 @@ if (profitDate != new DateTime(2026, 6, 11))
     throw new InvalidOperationException($"profitDate: expected 2026-06-11, actual {profitDate:yyyy-MM-dd}");
 }
 
-Console.WriteLine("Portfolio accounting regression passed: 19 assertions.");
+Console.WriteLine("Portfolio accounting regression passed.");
