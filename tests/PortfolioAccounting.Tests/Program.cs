@@ -107,6 +107,9 @@ var futurePending = new MyFundConfig
 };
 Equal(0.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(futurePending, "2026-06-18")), "pending.futureTrade.notActiveBeforeTradeDate");
 
+Equal(-1121.92m, PortfolioAccounting.OfficialTodayProfit(88340.36m, -1.27m), "officialTodayProfit.excludesPendingBuy");
+Equal(-105.50m, PortfolioAccounting.OfficialTodayProfit(88340.36m, -1.27m, -105.50m), "officialTodayProfit.prefersExactSettledProfit");
+
 var selectedLatestTotal = DailyArchiveService.PickLatestPortfolioSummaryTotal(new[]
 {
     new DailyArchive

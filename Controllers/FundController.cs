@@ -6393,9 +6393,12 @@ namespace 小白养基.Controllers
 
                     if (dataStatus == "official_today")
                     {
-                        marketValue = Math.Round(rawHoldAmount, 2);
-                        todayProfit = Math.Round(rawHoldAmount - todayBaseAmount, 2);
-                        actualExactProfit = config.LastSettledProfit;
+                        todayProfit = PortfolioAccounting.ToDouble(PortfolioAccounting.OfficialTodayProfit(
+                            PortfolioAccounting.Money(todayBaseAmount),
+                            PortfolioAccounting.Money(todayRate),
+                            config.LastSettledDate == todayDash ? PortfolioAccounting.Money(config.LastSettledProfit) : null));
+                        marketValue = Math.Round(confirmedHoldAmount + pendingBuyAmount, 2);
+                        actualExactProfit = todayProfit;
                     }
                     else if (dataStatus == "estimate_today")
                     {

@@ -42,6 +42,11 @@ namespace 小白养基.Services
         public static decimal PortfolioTodayEstimateRate(decimal intradayEstimateProfit, decimal antConfirmedAmount)
             => Percent(Money(intradayEstimateProfit), Money(antConfirmedAmount));
 
+        public static decimal OfficialTodayProfit(decimal todayBaseAmount, decimal todayRate, decimal? settledProfit = null)
+            => settledProfit.HasValue
+                ? Money(settledProfit.Value)
+                : Money(Money(todayBaseAmount) * todayRate / 100m);
+
         public static DateTime ResolvePreviousWeekday(DateTime chinaDate)
         {
             var previous = chinaDate.Date.AddDays(-1);
