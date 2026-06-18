@@ -155,18 +155,9 @@ namespace 小白养基.Controllers
             string MarketStatus,
             string MarketLabel);
 
-        private static readonly IReadOnlySet<string> AShareClosedDates = new HashSet<string>(StringComparer.Ordinal)
-        {
-            // 可维护的特殊休市日期入口；当前先用周末规则兜底。
-        };
-
-        private static readonly IReadOnlySet<string> HkShareClosedDates = new HashSet<string>(StringComparer.Ordinal)
-        {
-        };
-
-        private static readonly IReadOnlySet<string> UsShareClosedDates = new HashSet<string>(StringComparer.Ordinal)
-        {
-        };
+        private static readonly IReadOnlySet<string> AShareClosedDates = MarketCalendar.AShareClosedDates;
+        private static readonly IReadOnlySet<string> HkShareClosedDates = MarketCalendar.HkShareClosedDates;
+        private static readonly IReadOnlySet<string> UsShareClosedDates = MarketCalendar.UsShareClosedDates;
 
         /// <summary>
         /// 基金有效日期：0:00~9:25 返回上一交易日，9:25 以后返回当天，周末返回上周五。
@@ -289,20 +280,7 @@ namespace 小白养基.Controllers
         }
 
         private static double GetActivePendingBuyAmount(MyFundConfig fund, string settleDate, string? asOfDate = null)
-        {
-            double explicitPending = fund.PendingBuyAmount > 0
-                && IsPendingStatusActive(fund.PendingTradeStatus)
-                && (IsPendingDateEffective(fund.PendingTradeDate, settleDate, asOfDate)
-                    || IsPendingConfirmAfter(fund.PendingConfirmDate, settleDate, asOfDate))
-                ? fund.PendingBuyAmount
-                : 0;
-            double legacyTodayAdd = (fund.LastTradeDate == settleDate
-                    || (!string.IsNullOrWhiteSpace(asOfDate) && fund.LastTradeDate == asOfDate))
-                && fund.LastAddAmount > 0
-                ? fund.LastAddAmount
-                : 0;
-            return Math.Round(Math.Max(explicitPending, legacyTodayAdd), 2);
-        }
+            => PortfolioSettlementService.GetActivePendingBuyAmount(fund, settleDate, asOfDate);
 
         private static bool HasLegacyOcrPendingSignal(MyFundConfig fund, string settleDate, string? asOfDate = null)
         {
@@ -6676,12 +6654,14 @@ namespace 小白养基.Controllers
                 decimal todayPerformanceProfit = 0m, todayPerformanceBase = 0m;
                 bool hasTodayEstimate = false, hasTodayConfirmed = false;
                 decimal summaryDisplayAmount = 0m, summaryConfirmedAmount = 0m, summaryPendingBuyAmount = 0m;
+                decimal summaryHoldingProfit = 0m;
                 foreach (var fund in finalResult)
                 {
                     if (fund.inactiveHolding) continue;
                     summaryDisplayAmount += PortfolioAccounting.Money(fund.rawHoldAmount);
                     summaryConfirmedAmount += PortfolioAccounting.Money(fund.confirmedAmount);
                     summaryPendingBuyAmount += PortfolioAccounting.Money(fund.pendingBuyAmount);
+                    summaryHoldingProfit += PortfolioAccounting.Money(fund.holdingProfit);
                     bool isEstimate = string.Equals(fund.profitSource, "estimate", StringComparison.OrdinalIgnoreCase);
                     bool isConfirmedToday = string.Equals(fund.profitSource, "nav_settlement", StringComparison.OrdinalIgnoreCase)
                         || string.Equals(fund.profitSource, "daily_archive", StringComparison.OrdinalIgnoreCase);
@@ -6702,13 +6682,34 @@ namespace 小白养基.Controllers
                 intradayQuotedBase = PortfolioAccounting.Money(intradayQuotedBase);
                 todayPerformanceProfit = PortfolioAccounting.Money(todayPerformanceProfit);
                 todayPerformanceBase = PortfolioAccounting.Money(todayPerformanceBase);
-                bool antConfirmedAvailable = latestPortfolioTotal != null;
-                string summarySettlementStatus = latestPortfolioTotal == null
+                int activeFundCount = myFunds.Count(f => f.HoldAmount > 0);
+                int freshSnapshotCount = myFunds.Count(f => f.HoldAmount > 0
+                    && IsOcrSnapshotCurrent(f.OcrSnapshotDate, todayDash, naturalDate));
+                bool currentSnapshotComplete = activeFundCount > 0 && freshSnapshotCount == activeFundCount;
+                bool currentSnapshotAvailable = freshSnapshotCount > 0 && summaryConfirmedAmount > 0m;
+                bool useCurrentSnapshotSummary = currentSnapshotAvailable
+                    && (latestPortfolioTotal == null
+                        || currentSnapshotComplete
+                        || Math.Abs(summaryConfirmedAmount - PortfolioAccounting.Money(latestPortfolioTotal.Assets)) > 0.01m);
+
+                bool antConfirmedAvailable = latestPortfolioTotal != null || useCurrentSnapshotSummary;
+                string summarySettlementStatus = useCurrentSnapshotSummary
+                    ? (currentSnapshotComplete ? "confirmed" : "partial")
+                    : latestPortfolioTotal == null
                     ? "pending"
                     : DailyArchiveService.GetSettlementStatus(latestPortfolioTotal);
-                decimal antConfirmedAmount = antConfirmedAvailable ? PortfolioAccounting.Money(latestPortfolioTotal!.Assets) : 0m;
-                decimal confirmedYesterdayProfit = antConfirmedAvailable ? PortfolioAccounting.Money(latestPortfolioTotal!.DailyProfit) : 0m;
-                decimal antHoldingProfit = antConfirmedAvailable ? PortfolioAccounting.Money(latestPortfolioTotal!.TotalProfit) : 0m;
+                decimal currentSnapshotYesterdayProfit = PortfolioAccounting.Money(myFunds
+                    .Where(f => f.HoldAmount > 0 && IsOcrSnapshotCurrent(f.OcrSnapshotDate, todayDash, naturalDate))
+                    .Sum(f => f.OcrYesterdayIncome));
+                decimal antConfirmedAmount = useCurrentSnapshotSummary
+                    ? PortfolioAccounting.Money(summaryConfirmedAmount)
+                    : latestPortfolioTotal != null ? PortfolioAccounting.Money(latestPortfolioTotal.Assets) : 0m;
+                decimal confirmedYesterdayProfit = useCurrentSnapshotSummary
+                    ? currentSnapshotYesterdayProfit
+                    : latestPortfolioTotal != null ? PortfolioAccounting.Money(latestPortfolioTotal.DailyProfit) : 0m;
+                decimal antHoldingProfit = useCurrentSnapshotSummary
+                    ? PortfolioAccounting.Money(summaryHoldingProfit)
+                    : latestPortfolioTotal != null ? PortfolioAccounting.Money(latestPortfolioTotal.TotalProfit) : 0m;
                 decimal antHoldingCost = antConfirmedAvailable ? PortfolioAccounting.HoldingCost(antConfirmedAmount, antHoldingProfit) : 0m;
                 decimal antHoldingRate = antConfirmedAvailable ? PortfolioAccounting.Percent(antHoldingProfit, antHoldingCost) : 0m;
                 bool todayPerformanceAvailable = antConfirmedAvailable && todayPerformanceBase > 0m;
@@ -6736,14 +6737,20 @@ namespace 小白养基.Controllers
                     ? PortfolioAccounting.Money(antHoldingProfit + intradayProfit)
                     : antHoldingProfit;
                 bool holdingSnapshotStale = antConfirmedAvailable
+                    && !useCurrentSnapshotSummary
                     && Math.Abs(summaryConfirmedAmount - antConfirmedAmount) > 0.01m;
-                string summarySource = antConfirmedAvailable
+                string summarySource = useCurrentSnapshotSummary
+                    ? (currentSnapshotComplete ? "current-ocr-snapshot" : "current-ocr-snapshot-partial")
+                    : antConfirmedAvailable
                     ? (latestPortfolioTotal!.Source ?? summarySettlementStatus)
                     : "pending-ant-confirmation";
 
                 var summary = new
                 {
                     tradeDate = todayDash,
+                    accountTotalAmount = PortfolioAccounting.Money(summaryDisplayAmount),
+                    confirmedHoldingTotalAmount = antConfirmedAmount,
+                    todayPendingBuyTotal = PortfolioAccounting.Money(summaryPendingBuyAmount),
                     totalTodayProfit = todayPerformanceProfit,
                     totalTodayBaseAmount = antConfirmedAmount,
                     intradayQuotedBaseAmount = intradayQuotedBase,

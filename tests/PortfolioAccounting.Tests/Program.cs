@@ -48,6 +48,65 @@ Equal(83445.65m, june15OcrSummary.AntConfirmedAmount, "ocr.currentAmount.mustNot
 Equal(1889.51m, june15OcrSummary.ConfirmedYesterdayProfit, "ocr.yesterdayIncome");
 Equal(-6258.55m, june15OcrSummary.AntHoldingProfit, "ocr.holdingIncome.mustNotSubtractYesterdayIncome");
 
+var june18DisplayAmount = 90343.59m;
+var june18PendingBuy = 2000.00m;
+var june18OcrSummary = PortfolioAccounting.Calculate(
+    new[]
+    {
+        new ConfirmedHoldingMoney(35165.81m, -274.80m, -2751.11m),
+        new ConfirmedHoldingMoney(34615.41m - 1000.00m, 69.13m, -4052.83m),
+        new ConfirmedHoldingMoney(20482.35m - 1000.00m, 38.15m, -517.65m),
+        new ConfirmedHoldingMoney(59.75m, -0.12m, -40.25m),
+        new ConfirmedHoldingMoney(17.03m, 0.94m, 8.00m),
+        new ConfirmedHoldingMoney(3.24m, -0.01m, -6.76m)
+    },
+    0m);
+Equal(90343.59m, june18DisplayAmount, "ocr[2026-06-18].platformDisplayAmount");
+Equal(2000.00m, june18PendingBuy, "ocr[2026-06-18].pendingBuy");
+Equal(88343.59m, june18OcrSummary.AntConfirmedAmount, "ocr[2026-06-18].confirmedAmount.excludesPendingBuy");
+Equal(-166.71m, june18OcrSummary.ConfirmedYesterdayProfit, "ocr[2026-06-18].yesterdayIncome");
+Equal(-7360.60m, june18OcrSummary.AntHoldingProfit, "ocr[2026-06-18].holdingIncome");
+Equal(95704.19m, june18OcrSummary.AntHoldingCost, "ocr[2026-06-18].holdingCost.excludesPendingBuy");
+
+var pendingSameDay = new MyFundConfig
+{
+    HoldAmount = 34615.41,
+    PendingBuyAmount = 1000.00,
+    PendingTradeDate = "2026-06-18",
+    PendingTradeStatus = "pending_buy"
+};
+Equal(1000.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(pendingSameDay, "2026-06-18")), "pending.sameDay.active");
+
+var pendingAfterConfirm = new MyFundConfig
+{
+    HoldAmount = 34615.41,
+    PendingBuyAmount = 1000.00,
+    PendingTradeDate = "2026-06-18",
+    PendingConfirmDate = "2026-06-19",
+    PendingTradeStatus = "pending_buy"
+};
+Equal(0.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(pendingAfterConfirm, "2026-06-19")), "pending.confirmDate.notActiveOnConfirmDate");
+Equal(0.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(pendingAfterConfirm, "2026-06-18", "2026-06-19")), "pending.confirmDate.notActiveOnNaturalConfirmDate");
+
+var cancelledPending = new MyFundConfig
+{
+    HoldAmount = 34615.41,
+    PendingBuyAmount = 1000.00,
+    PendingTradeDate = "2026-06-18",
+    PendingTradeStatus = "cancelled"
+};
+Equal(0.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(cancelledPending, "2026-06-18")), "pending.cancelled.notActive");
+
+var futurePending = new MyFundConfig
+{
+    HoldAmount = 34615.41,
+    PendingBuyAmount = 1000.00,
+    PendingTradeDate = "2026-06-19",
+    PendingConfirmDate = "2026-06-20",
+    PendingTradeStatus = "pending_buy"
+};
+Equal(0.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(futurePending, "2026-06-18")), "pending.futureTrade.notActiveBeforeTradeDate");
+
 var selectedLatestTotal = DailyArchiveService.PickLatestPortfolioSummaryTotal(new[]
 {
     new DailyArchive
@@ -127,5 +186,12 @@ if (profitDate != new DateTime(2026, 6, 11))
 {
     throw new InvalidOperationException($"profitDate: expected 2026-06-11, actual {profitDate:yyyy-MM-dd}");
 }
+
+if (MarketCalendar.IsTradingDay(new DateTime(2026, 6, 19)))
+    throw new InvalidOperationException("calendar.cn.duanwu: 2026-06-19 must be A-share closed");
+if (MarketCalendar.GetPreviousTradingDate(new DateTime(2026, 6, 21)) != new DateTime(2026, 6, 18))
+    throw new InvalidOperationException("calendar.cn.previousTradingDate: 2026-06-21 should resolve to 2026-06-18");
+if (MarketCalendar.IsTradingDay(new DateTime(2026, 7, 1), "hk"))
+    throw new InvalidOperationException("calendar.hk.sarDay: 2026-07-01 must be HK closed");
 
 Console.WriteLine("Portfolio accounting regression passed.");

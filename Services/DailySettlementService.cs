@@ -51,7 +51,7 @@ namespace 小白养基.Services
                     now = ChinaNow();
                     // 00:10 和 08:30 补结算上一个交易日，21:30/22:30/23:30 结算当天
                     bool settlePrevious = now.Hour < 17
-                        || now.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+                        || !MarketCalendar.IsTradingDay(now.Date);
 
                     if (settlePrevious)
                     {
@@ -96,12 +96,7 @@ namespace 小白养基.Services
         }
 
         private static DateTime GetPreviousTradeDate(DateTime date)
-        {
-            var d = date.AddDays(-1);
-            while (d.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
-                d = d.AddDays(-1);
-            return d;
-        }
+            => MarketCalendar.GetPreviousTradingDate(date.AddDays(-1));
 
         private async Task SettleForDate(DateTime targetDate, CancellationToken stoppingToken)
         {
@@ -159,17 +154,6 @@ namespace 小白养基.Services
                 dateDash, totalSaved, totalSkipped);
         }
 
-        private static double GetActivePendingBuyAmount(MyFundConfig fund, string settleDate)
-        {
-            double explicitPending = fund.PendingBuyAmount > 0
-                && !string.IsNullOrEmpty(fund.PendingTradeStatus)
-                && !fund.PendingTradeStatus.Equals("confirmed", StringComparison.OrdinalIgnoreCase)
-                && !fund.PendingTradeStatus.Equals("settled", StringComparison.OrdinalIgnoreCase)
-                ? fund.PendingBuyAmount : 0;
-            double legacyTodayAdd = fund.LastTradeDate == settleDate && fund.LastAddAmount > 0 ? fund.LastAddAmount : 0;
-            return Math.Round(Math.Max(explicitPending, legacyTodayAdd), 2);
-        }
-
         private static List<DailyArchive> BuildArchiveRows(string username, DateTime date, List<MyFundConfig> funds, List<FundData> todayRecords, string dateDash)
         {
             // 蚂蚁确认快照是正式口径；缺少快照时允许官方净值生成待确认档案，后续 OCR 会覆盖它。
@@ -181,7 +165,7 @@ namespace 小白养基.Services
 
             foreach (var fund in funds)
             {
-                decimal pendingBuyAmount = PortfolioAccounting.Money(GetActivePendingBuyAmount(fund, dateDash));
+                decimal pendingBuyAmount = PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(fund, dateDash));
                 decimal confirmedHoldAmount = Math.Max(0m, PortfolioAccounting.Money(fund.HoldAmount) - pendingBuyAmount);
                 if (confirmedHoldAmount <= 0.01m) continue;
                 expectedActiveCount++;

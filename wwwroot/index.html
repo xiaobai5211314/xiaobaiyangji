@@ -4318,8 +4318,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     </div>
                     <div class="divider"></div>
                     <div style="text-align: center;">
-                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;" title="来自蚂蚁基金确认持仓快照">💎 蚂蚁确认金额 <span @click="showPrivacyModal = true" style="cursor:pointer">{{ privacyMode === 0 ? '👁️' : '🙈' }}</span></div>
-                        <div class="number-display" style="color: var(--text-main); font-weight: 900;">{{ privacyMode === 0 ? (dashboardActiveSummary.confirmedStatus === 'confirmed' ? '¥ ' + Number(dashboardActiveSummary.antConfirmedAmount || 0).toFixed(2) : '--') : '****' }}</div>
+                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;" title="平台持仓金额，包含买入待确认；下方单独展示待确认金额">💎 账户总金额 <span @click="showPrivacyModal = true" style="cursor:pointer">{{ privacyMode === 0 ? '👁️' : '🙈' }}</span></div>
+                        <div class="number-display" style="color: var(--text-main); font-weight: 900;">{{ privacyMode === 0 ? (dashboardActiveSummary.accountTotalAmount > 0 ? '¥ ' + Number(dashboardActiveSummary.accountTotalAmount || 0).toFixed(2) : '--') : '****' }}</div>
+                        <div v-if="dashboardActiveSummary.todayPendingBuyTotal > 0" style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">确认持仓 {{ privacyMode === 0 ? '¥' + Number(dashboardActiveSummary.antConfirmedAmount || 0).toFixed(2) : '****' }}</div>
                         <div v-if="dashboardActiveSummary.intradayAvailable" style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">盘中估算市值 {{ privacyMode === 0 ? '¥' + Number(dashboardActiveSummary.intradayEstimatedAssets || 0).toFixed(2) : '****' }}</div>
                         <div v-if="dashboardActiveSummary.todayPendingBuyTotal > 0" style="font-size: 11px; color: #fbbf24; margin-top: 3px;" title="待确认买入不参与今日估算">待确认 {{ privacyMode === 0 ? '¥' + Number(dashboardActiveSummary.todayPendingBuyTotal || 0).toFixed(2) : '****' }}</div>
                     </div>
@@ -7620,9 +7621,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const inactiveForSummary = fundsList.value.filter(isClearedFund);
                         if (apiSummary) {
                             applyDashboardActiveSummary(activeForSummary, inactiveForSummary, {
-                                accountTotalAmount: finiteNumber(apiSummary.antConfirmedAmount, 0),
-                                todayPendingBuyTotal: finiteNumber(apiSummary.totalPendingBuyAmount, 0),
-                                confirmedHoldingTotalAmount: finiteNumber(apiSummary.antConfirmedAmount, 0),
+                                accountTotalAmount: finiteNumber(
+                                    apiSummary.accountTotalAmount
+                                    ?? apiSummary.totalDisplayAmount
+                                    ?? ((Number(apiSummary.antConfirmedAmount || 0) || 0) + (Number(apiSummary.totalPendingBuyAmount || 0) || 0)),
+                                    0
+                                ),
+                                todayPendingBuyTotal: finiteNumber(apiSummary.todayPendingBuyTotal ?? apiSummary.totalPendingBuyAmount, 0),
+                                confirmedHoldingTotalAmount: finiteNumber(apiSummary.confirmedHoldingTotalAmount ?? apiSummary.antConfirmedAmount, 0),
                                 todayProfitBaseTotal: finiteNumber(apiSummary.totalTodayBaseAmount, 0),
                                 totalTodayProfit: finiteNumber(apiSummary.todayPerformanceProfit ?? apiSummary.totalTodayProfit, 0),
                                 totalTodayRate: finiteNumber(apiSummary.todayPerformanceRate ?? apiSummary.totalTodayRate, 0),

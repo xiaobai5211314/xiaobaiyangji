@@ -53,47 +53,10 @@ namespace 小白养基.Services
         private static DateTime ChinaNow() => DateTime.UtcNow.AddHours(8);
 
         private static DateTime GetPreviousTradeDate(DateTime date)
-        {
-            var d = date.AddDays(-1);
-            while (d.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
-                d = d.AddDays(-1);
-            return d;
-        }
-
-        private static bool IsPendingStatusActive(string? status)
-        {
-            if (string.IsNullOrWhiteSpace(status)) return false;
-            return !status.Equals("confirmed", StringComparison.OrdinalIgnoreCase)
-                && !status.Equals("settled", StringComparison.OrdinalIgnoreCase)
-                && !status.Equals("cancelled", StringComparison.OrdinalIgnoreCase)
-                && !status.Equals("canceled", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static bool IsPendingDateEffective(string? pendingDate, string settleDate)
-        {
-            if (string.IsNullOrWhiteSpace(pendingDate)) return true;
-            return string.CompareOrdinal(pendingDate, settleDate) <= 0;
-        }
-
-        private static bool IsPendingConfirmAfter(string? confirmDate, string settleDate)
-        {
-            return !string.IsNullOrWhiteSpace(confirmDate)
-                && string.CompareOrdinal(confirmDate, settleDate) > 0;
-        }
+            => MarketCalendar.GetPreviousTradingDate(date.AddDays(-1));
 
         private static double GetActivePendingBuyAmount(MyFundConfig fund, string settleDate)
-        {
-            double explicitPending = fund.PendingBuyAmount > 0
-                && IsPendingStatusActive(fund.PendingTradeStatus)
-                && (IsPendingDateEffective(fund.PendingTradeDate, settleDate)
-                    || IsPendingConfirmAfter(fund.PendingConfirmDate, settleDate))
-                ? fund.PendingBuyAmount
-                : 0;
-            double legacyTodayAdd = fund.LastTradeDate == settleDate && fund.LastAddAmount > 0
-                ? fund.LastAddAmount
-                : 0;
-            return Math.Round(Math.Max(explicitPending, legacyTodayAdd), 2);
-        }
+            => PortfolioSettlementService.GetActivePendingBuyAmount(fund, settleDate);
 
         private static double GetEffectiveBaseAmount(MyFundConfig fund, string settleDate)
         {

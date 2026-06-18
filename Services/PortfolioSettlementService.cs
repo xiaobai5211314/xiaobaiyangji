@@ -24,21 +24,34 @@ namespace 小白养基.Services
             return string.CompareOrdinal(pendingDate, settleDate) <= 0;
         }
 
-        private static bool IsPendingConfirmAfter(string? confirmDate, string settleDate)
+        private static bool IsPendingDateEffective(string? pendingDate, string settleDate, string? asOfDate)
         {
-            return !string.IsNullOrWhiteSpace(confirmDate)
-                && string.CompareOrdinal(confirmDate, settleDate) > 0;
+            if (IsPendingDateEffective(pendingDate, settleDate)) return true;
+            return !string.IsNullOrWhiteSpace(asOfDate)
+                && string.CompareOrdinal(pendingDate, asOfDate) <= 0;
         }
 
-        public static double GetActivePendingBuyAmount(MyFundConfig fund, string settleDate)
+        private static bool IsPendingConfirmReached(string? confirmDate, string settleDate, string? asOfDate = null)
+        {
+            if (string.IsNullOrWhiteSpace(confirmDate)) return false;
+            if (!string.IsNullOrWhiteSpace(asOfDate))
+            {
+                return string.CompareOrdinal(confirmDate, asOfDate) <= 0;
+            }
+            return string.CompareOrdinal(confirmDate, settleDate) <= 0;
+        }
+
+        public static double GetActivePendingBuyAmount(MyFundConfig fund, string settleDate, string? asOfDate = null)
         {
             double explicitPending = fund.PendingBuyAmount > 0
                 && IsPendingStatusActive(fund.PendingTradeStatus)
-                && (IsPendingDateEffective(fund.PendingTradeDate, settleDate)
-                    || IsPendingConfirmAfter(fund.PendingConfirmDate, settleDate))
+                && IsPendingDateEffective(fund.PendingTradeDate, settleDate, asOfDate)
+                && !IsPendingConfirmReached(fund.PendingConfirmDate, settleDate, asOfDate)
                 ? fund.PendingBuyAmount
                 : 0;
-            double legacyTodayAdd = fund.LastTradeDate == settleDate && fund.LastAddAmount > 0
+            double legacyTodayAdd = (fund.LastTradeDate == settleDate
+                    || (!string.IsNullOrWhiteSpace(asOfDate) && fund.LastTradeDate == asOfDate))
+                && fund.LastAddAmount > 0
                 ? fund.LastAddAmount
                 : 0;
             return Math.Round(Math.Max(explicitPending, legacyTodayAdd), 2);
