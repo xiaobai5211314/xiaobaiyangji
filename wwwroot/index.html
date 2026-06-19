@@ -1343,6 +1343,98 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             line-height: 1.5;
         }
 
+        .influencer-posts-panel {
+            margin: 15px;
+            padding: 16px;
+        }
+
+        .influencer-posts-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .influencer-refresh {
+            border: 1px solid var(--card-border);
+            background: var(--card-bg-soft);
+            color: var(--text-main);
+            border-radius: 999px;
+            padding: 7px 12px;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+            .influencer-refresh:disabled {
+                opacity: .55;
+                cursor: not-allowed;
+            }
+
+        .influencer-posts-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .influencer-post-card {
+            border: 1px solid var(--card-border);
+            background: var(--card-bg-soft);
+            border-radius: 16px;
+            padding: 12px;
+        }
+
+        .influencer-post-meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 800;
+            margin-bottom: 8px;
+        }
+
+        .influencer-post-text {
+            color: var(--text-main);
+            font-size: 14px;
+            line-height: 1.65;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .influencer-post-foot {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .influencer-post-stats {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .influencer-post-link {
+            color: #60a5fa;
+            font-size: 12px;
+            font-weight: 900;
+            text-decoration: none;
+        }
+
+        .influencer-empty {
+            color: var(--text-muted);
+            text-align: center;
+            padding: 22px 0 12px;
+            font-weight: 800;
+        }
+
         .performance-card {
             grid-column: 1 / -1;
             min-width: 0;
@@ -4785,6 +4877,39 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 </div>
 
                 <div v-show="assetMode === 'fund' && !isLoading" id="chart-container" class="glass-panel" ref="chartRef"></div>
+
+                <div v-show="assetMode === 'fund' && !isLoading" class="glass-panel influencer-posts-panel">
+                    <div class="influencer-posts-head">
+                        <div>
+                            <div class="feature-title">白毛股神推文</div>
+                            <div class="feature-subtitle">@aleabitoreddit · 仅供个人观察</div>
+                            <div v-if="influencerPostsUpdatedAt" class="feature-subtitle">缓存时间 {{ formatInfluencerPostTime(influencerPostsUpdatedAt) }}</div>
+                        </div>
+                        <button type="button" class="influencer-refresh" :disabled="influencerPostsLoading" @click="loadInfluencerPosts(true)">
+                            {{ influencerPostsLoading ? '同步中' : '刷新' }}
+                        </button>
+                    </div>
+                    <div v-if="influencerPostsLoading" class="influencer-empty">正在读取推文缓存...</div>
+                    <div v-else-if="influencerPostsStatus === 'error' || influencerPostsStatus === 'invalid' || influencerPostsStatus === 'unavailable'" class="influencer-empty">暂时无法获取推文</div>
+                    <div v-else-if="influencerPostsDisplay.length === 0" class="influencer-empty">暂无推文缓存</div>
+                    <div v-else class="influencer-posts-list">
+                        <article v-for="post in influencerPostsDisplay" :key="post.externalId || post.id" class="influencer-post-card">
+                            <div class="influencer-post-meta">
+                                <span>{{ formatInfluencerPostTime(post.createdAt) }}</span>
+                                <span>{{ post.authorName || 'Serenity' }}</span>
+                            </div>
+                            <div class="influencer-post-text">{{ post.text }}</div>
+                            <div class="influencer-post-foot">
+                                <div class="influencer-post-stats">
+                                    <span>赞 {{ formatInfluencerCount(post.likeCount) }}</span>
+                                    <span>转 {{ formatInfluencerCount(post.retweetCount) }}</span>
+                                    <span>回 {{ formatInfluencerCount(post.replyCount) }}</span>
+                                </div>
+                                <a class="influencer-post-link" :href="post.url" target="_blank" rel="noopener noreferrer">原文链接</a>
+                            </div>
+                        </article>
+                    </div>
+                </div>
             </div>
 
             <div v-show="activePage === 'sector'" class="app-page">
@@ -5802,6 +5927,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const totalTodayRate = ref(0);
                 const initialTodayDash = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
                 const dashboardSummaryMeta = ref({ effectiveDate: initialTodayDash, naturalDate: initialTodayDash, marketOpen: true, marketStatus: 'open', summarySource: '' });
+                const influencerPosts = ref([]);
+                const influencerPostsLoading = ref(false);
+                const influencerPostsStatus = ref('idle');
+                const influencerPostsUpdatedAt = ref('');
                 const loginForm = reactive({ username: '', password: '' });
                 const profileForm = reactive({ displayName: '', saving: false });
                 const fundForm = reactive({ code: '', amount: '' });
@@ -5867,6 +5996,52 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     if (raw.includes('指数盘中数据暂不可用')) parts.push('指数盘中数据暂不可用');
                     if (raw.includes('指数数据暂不可用')) parts.push('指数数据暂不可用');
                     return parts.length > 0 ? Array.from(new Set(parts)).join(' · ') : raw;
+                };
+                const influencerPostsDisplay = computed(() => influencerPosts.value
+                    .slice()
+                    .sort((a, b) => Date.parse(b.createdAt || '') - Date.parse(a.createdAt || ''))
+                    .slice(0, 10));
+                const formatInfluencerPostTime = (value) => {
+                    const date = new Date(value || '');
+                    if (Number.isNaN(date.getTime())) return '--';
+                    return date.toLocaleString('zh-CN', {
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false
+                    });
+                };
+                const formatInfluencerCount = (value) => {
+                    const n = Number(value || 0);
+                    if (!Number.isFinite(n) || n <= 0) return '0';
+                    if (n >= 10000) return (n / 10000).toFixed(n >= 100000 ? 0 : 1) + '万';
+                    return String(Math.round(n));
+                };
+                const loadInfluencerPosts = async () => {
+                    if (influencerPostsLoading.value) return;
+                    influencerPostsLoading.value = true;
+                    let timeoutId = null;
+                    try {
+                        const controller = new AbortController();
+                        timeoutId = setTimeout(() => controller.abort(), 12000);
+                        const res = await fetch(API_BASE + '/api/influencer-posts/latest?limit=10&_t=' + Date.now(), {
+                            cache: 'no-store',
+                            signal: controller.signal
+                        });
+                        if (!res.ok) throw new Error('influencer posts http ' + res.status);
+                        const data = await res.json();
+                        const items = Array.isArray(data) ? data : (Array.isArray(data.items) ? data.items : []);
+                        influencerPosts.value = items;
+                        influencerPostsStatus.value = data?.status || (items.length > 0 ? 'ok' : 'empty');
+                        influencerPostsUpdatedAt.value = data?.fetchedAt || '';
+                    } catch (e) {
+                        influencerPostsStatus.value = 'error';
+                        console.warn('[influencer-posts] load failed', e);
+                    } finally {
+                        if (timeoutId) clearTimeout(timeoutId);
+                        influencerPostsLoading.value = false;
+                    }
                 };
                 let isFetchingData = false;
                 let lastDataFetchAt = 0;
@@ -8036,7 +8211,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     if (recoveryModal.code) saveUiState(`recovery_amount_${recoveryModal.code}`, { amount: Number(value || 0) });
                 });
 
-                onMounted(() => { if (currentUser.value) { isLoggedIn.value = true; fetchUserProfile(); initDashboard(); } document.addEventListener('visibilitychange', handleVisibilityChange); window.addEventListener('touchstart', onPullStart, { passive: true }); window.addEventListener('touchmove', onPullMove, { passive: false }); window.addEventListener('touchend', onPullEnd, { passive: true }); });
+                onMounted(() => { loadInfluencerPosts(); if (currentUser.value) { isLoggedIn.value = true; fetchUserProfile(); initDashboard(); } document.addEventListener('visibilitychange', handleVisibilityChange); window.addEventListener('touchstart', onPullStart, { passive: true }); window.addEventListener('touchmove', onPullMove, { passive: false }); window.addEventListener('touchend', onPullEnd, { passive: true }); });
 
                 const todayStr = new Date(new Date().getTime() + 8 * 3600 * 1000).toISOString().split('T')[0];
                 const addModal = reactive({ show: false, code: '', name: '', amount: '', rawDate: todayStr, timeSlot: 'before', currentAmount: 0, currentCost: 0 });
@@ -8059,6 +8234,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     toasts, isLoggedIn, currentUser, userDisplayName, fundsList, activeHoldings, inactiveHoldings, getClearedProfit, chartRef, performanceChartRef, loginForm, profileForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, refreshSectorPage, activePage, switchPage, showProfileModal, userAvatar, smartOcrBusy, smartOcrText,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, dashboardActiveSummary, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
                     performanceCurve, performancePeriod, performanceIndex, performanceLoading, performancePeriods, performanceIndices, selectedPerformanceIndexName, performanceIsToday, showPerformanceAmount, canShowPerformanceAmount, togglePerformanceAmount, performanceMessage, performanceVerdict, performanceExcessClass, fetchPerformanceCurve, renderPerformanceChart, switchPerformancePeriod, formatPerformancePercent, formatPerformanceMoney,
+                    influencerPostsDisplay, influencerPostsLoading, influencerPostsStatus, influencerPostsUpdatedAt, loadInfluencerPosts, formatInfluencerPostTime, formatInfluencerCount,
                     handleLogin, handleRegister, handleLogout, saveUserProfile, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, setOcrPendingMode, confirmOcrImport, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
                     sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, capitalFlowError, isCapitalLoading, fetchCapitalFlow,

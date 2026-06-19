@@ -57,4 +57,10 @@
 		<TypeScriptCompile Remove="**\*.tsx" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<None Update="tools\x_tweets_fetcher\**\*">
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+		</None>
+	</ItemGroup>
+
 </Project>

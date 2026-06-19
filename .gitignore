@@ -367,3 +367,5 @@ project.private.config.json
 miniprogram/dist/**/project.private.config.json
 appsettings.Production.json
 .env
+.secrets/
+*.env.local
