@@ -332,6 +332,14 @@ namespace 小白养基.Controllers
             return 0;
         }
 
+        private static bool IsPendingTradeOrderActive(Models.FundTradeOrder order, string settleDate, string? asOfDate = null)
+        {
+            if (!order.Status.Equals("Pending", StringComparison.OrdinalIgnoreCase)) return false;
+            var confirmDate = order.ConfirmDate ?? order.FirstProfitDate;
+            if (string.IsNullOrWhiteSpace(confirmDate)) return true;
+            return IsPendingConfirmAfter(confirmDate, settleDate, asOfDate);
+        }
+
         private static void MarkPendingBuy(MyFundConfig fund, double amount, string tradeDate, string source, string? confirmDate = null)
         {
             if (amount <= 0) return;
@@ -1139,6 +1147,8 @@ namespace 小白养基.Controllers
             public double Amount { get; set; }
             public string? TradeDate { get; set; }
             public string? TradeTime { get; set; }
+            public string? CutoffDate { get; set; }
+            public string? ConfirmDate { get; set; }
             public string Status { get; set; } = "Pending";
             public string? FirstProfitDate { get; set; }
             public string RawText { get; set; } = "";
@@ -1207,6 +1217,10 @@ namespace 小白养基.Controllers
                     }
                     if (string.IsNullOrWhiteSpace(fundCode)) continue;
 
+                    var tradeTiming = !string.IsNullOrWhiteSpace(item.CutoffDate) && !string.IsNullOrWhiteSpace(item.ConfirmDate)
+                        ? null
+                        : ResolveTradeTimingFromTradeDate(fundName, item.TradeDate ?? ChinaDateDash(), item.TradeTime);
+
                     _context.FundTradeOrders.Add(new Models.FundTradeOrder
                     {
                         Username = username,
@@ -1216,9 +1230,10 @@ namespace 小白养基.Controllers
                         Amount = Math.Round(item.Amount, 2),
                         TradeDate = item.TradeDate,
                         TradeTime = item.TradeTime,
-                        CutoffDate = item.TradeDate, // 简化：默认同一天 15:00 截止
+                        CutoffDate = item.CutoffDate ?? tradeTiming?.TradeDate ?? item.TradeDate,
                         Status = item.Status,
-                        FirstProfitDate = item.FirstProfitDate,
+                        ConfirmDate = item.ConfirmDate ?? tradeTiming?.ConfirmDate ?? item.FirstProfitDate,
+                        FirstProfitDate = item.FirstProfitDate ?? tradeTiming?.FirstProfitDate,
                         Source = "ocr_transaction",
                         RawText = item.RawText,
                         CreatedAt = DateTime.UtcNow,
@@ -1307,13 +1322,13 @@ namespace 小白养基.Controllers
                 else if (Regex.IsMatch(statusRaw, @"交易进行中|买入待确认|待确认|预计.*查看收益", RegexOptions.IgnoreCase))
                 {
                     status = "Pending";
-                    string firstProfit = EstimateFirstProfitDate(fundName, tradeDate);
+                    string firstProfit = EstimateFirstProfitDate(fundName, tradeDate, tradeTime);
                     decisionReason = $"交易进行中，预计{firstProfit}可查看收益";
                 }
                 else
                 {
                     // 无明确状态文字 → 按日期判断
-                    string firstProfit = EstimateFirstProfitDate(fundName, tradeDate);
+                    string firstProfit = EstimateFirstProfitDate(fundName, tradeDate, tradeTime);
                     if (string.CompareOrdinal(firstProfit, ChinaDateDash()) > 0)
                     {
                         status = "Pending";
@@ -1336,7 +1351,8 @@ namespace 小白养基.Controllers
                     fundName = match.fund.Name;
                 }
 
-                string firstProfitDate = EstimateFirstProfitDate(fundName, tradeDate);
+                var tradeTiming = ResolveTradeTimingFromTradeDate(fundName, tradeDate, tradeTime);
+                string firstProfitDate = tradeTiming.FirstProfitDate;
 
                 items.Add(new TransactionPreviewItem
                 {
@@ -1346,6 +1362,8 @@ namespace 小白养基.Controllers
                     Amount = amount,
                     TradeDate = tradeDate,
                     TradeTime = tradeTime,
+                    CutoffDate = tradeTiming.TradeDate,
+                    ConfirmDate = tradeTiming.ConfirmDate,
                     Status = status,
                     FirstProfitDate = firstProfitDate,
                     RawText = m.Value,
@@ -1360,24 +1378,52 @@ namespace 小白养基.Controllers
             return new TransactionPreviewResponse { Items = items, Diagnostics = diagnostics };
         }
 
-        /// <summary>
-        /// 估算首次可查看收益日：T+1（A股）或 T+2（QDII/港股/海外）
-        /// </summary>
-        private static string EstimateFirstProfitDate(string fundName, string tradeDate)
+        private static bool IsAfterFundCutoff(string? tradeTime)
         {
-            if (!DateTime.TryParse(tradeDate, out var dt)) return tradeDate;
-            bool isQDII = fundName.Contains("QDII", StringComparison.OrdinalIgnoreCase)
-                       || fundName.Contains("港股", StringComparison.OrdinalIgnoreCase)
-                       || fundName.Contains("恒生", StringComparison.OrdinalIgnoreCase)
-                       || fundName.Contains("纳斯达克", StringComparison.OrdinalIgnoreCase)
-                       || fundName.Contains("标普", StringComparison.OrdinalIgnoreCase)
-                       || fundName.Contains("海外", StringComparison.OrdinalIgnoreCase);
-            int offset = isQDII ? 2 : 1;
-            var result = dt.AddDays(offset);
-            // 跳过周末
-            while (result.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
-                result = result.AddDays(1);
-            return result.ToString("yyyy-MM-dd");
+            if (string.IsNullOrWhiteSpace(tradeTime)) return false;
+            return TimeSpan.TryParse(tradeTime, out var parsed)
+                && parsed >= new TimeSpan(15, 0, 0);
+        }
+
+        private static FundTradeTimingResult ResolveTradeTimingFromTradeDate(string fundName, string tradeDate, string? tradeTime = null)
+        {
+            var submitDate = DateTime.TryParse(tradeDate, out var parsed) ? parsed : ChinaNow().Date;
+            return FundTradeTiming.Resolve(submitDate, IsAfterFundCutoff(tradeTime), fundName);
+        }
+
+        private static FundTradeTimingResult ResolveTradeTimingFromSubmission(MyFundConfig fund, string? rawDate, string? timeSlot, string? fallbackTradeDate)
+        {
+            if (!string.IsNullOrWhiteSpace(rawDate) && DateTime.TryParse(rawDate, out var submitted))
+            {
+                bool afterCutoff = string.Equals(timeSlot, "after", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(timeSlot, "after15", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(timeSlot, "after_15", StringComparison.OrdinalIgnoreCase);
+                return FundTradeTiming.Resolve(submitted, afterCutoff, fund.FundName);
+            }
+
+            if (!string.IsNullOrWhiteSpace(fallbackTradeDate) && DateTime.TryParse(fallbackTradeDate, out var tradeDate))
+            {
+                var market = FundTradeTiming.DetectMarket(fund.FundName);
+                var confirmTradingDays = FundTradeTiming.ConfirmTradingDays(fund.FundName);
+                var normalizedTradeDate = MarketCalendar.GetNextTradingDate(tradeDate, market);
+                var confirmDate = MarketCalendar.AddTradingDays(normalizedTradeDate, confirmTradingDays, market);
+                return new FundTradeTimingResult(
+                    normalizedTradeDate.ToString("yyyy-MM-dd"),
+                    confirmDate.ToString("yyyy-MM-dd"),
+                    confirmDate.ToString("yyyy-MM-dd"),
+                    market,
+                    confirmTradingDays);
+            }
+
+            return FundTradeTiming.Resolve(ChinaNow().Date, ChinaNow().TimeOfDay >= new TimeSpan(15, 0, 0), fund.FundName);
+        }
+
+        /// <summary>
+        /// 估算首次可查看收益日：普通开放式基金通常 T+1，QDII/FOF 以更长确认周期为准。
+        /// </summary>
+        private static string EstimateFirstProfitDate(string fundName, string tradeDate, string? tradeTime = null)
+        {
+            return ResolveTradeTimingFromTradeDate(fundName, tradeDate, tradeTime).FirstProfitDate;
         }
 
         private async Task<OcrImportPreviewResponse> BuildOcrImportPreviewAsync(string username, IFormFile imageFile)
@@ -1947,10 +1993,13 @@ namespace 小白养基.Controllers
                 else
                 {
                     // 无 OCR 文字证据 → 查询交易流水表
-                    var activeOrders = await _context.FundTradeOrders
+                    var pendingOrderCandidates = await _context.FundTradeOrders
                         .AsNoTracking()
                         .Where(o => o.Username == username && o.FundCode == best.fund.Code && o.Status == "Pending" && o.Direction == "Buy")
                         .ToListAsync();
+                    var activeOrders = pendingOrderCandidates
+                        .Where(o => IsPendingTradeOrderActive(o, settleDate, ChinaDateDash()))
+                        .ToList();
                     double orderPending = activeOrders.Sum(o => o.Amount);
 
                     if (orderPending > 0)
@@ -2340,7 +2389,8 @@ namespace 小白养基.Controllers
             // 保留已有 pending 状态：仅限 manual_add 来源，且本次 OCR 无明确 pending 字段
             double existingPending = existing == null ? 0 : GetActivePendingBuyAmount(existing, settleDate);
             bool isManualSource = !string.IsNullOrWhiteSpace(existing?.PendingSource)
-                && existing.PendingSource.Equals("manual_add", StringComparison.OrdinalIgnoreCase);
+                && (existing.PendingSource.Equals("manual_add", StringComparison.OrdinalIgnoreCase)
+                    || existing.PendingSource.Equals("manual_add_position", StringComparison.OrdinalIgnoreCase));
             if (existingPending > 0 && isManualSource
                 && holdAmount >= existingPending
                 && !HasPendingAmountField(localContext) && !HasPendingAmountField(fullText))
@@ -2666,10 +2716,8 @@ namespace 小白养基.Controllers
 
         private static string EstimatePendingConfirmDate(string fundName)
         {
-            var today = ChinaNow().Date;
-            bool overseas = !string.IsNullOrWhiteSpace(fundName)
-                && Regex.IsMatch(fundName, @"QDII|恒生|港股|海外|全球|美元|纳斯达克|标普|日经", RegexOptions.IgnoreCase);
-            return today.AddDays(overseas ? 3 : 1).ToString("yyyy-MM-dd");
+            var now = ChinaNow();
+            return FundTradeTiming.Resolve(now.Date, now.TimeOfDay >= new TimeSpan(15, 0, 0), fundName).ConfirmDate;
         }
 
         private static bool IsNoiseLine(string text)
@@ -6999,7 +7047,7 @@ namespace 小白养基.Controllers
 
         // 🚀 1. 战术加仓接口：支持日期，仅需金额
         [HttpPost("add-position")]
-        public async Task<IActionResult> AddPosition([FromForm] string username, [FromForm] string code, [FromForm] double addAmount, [FromForm] string tradeDate)
+        public async Task<IActionResult> AddPosition([FromForm] string username, [FromForm] string code, [FromForm] double addAmount, [FromForm] string? tradeDate, [FromForm] string? rawDate, [FromForm] string? timeSlot)
         {
             if (string.IsNullOrEmpty(username)) return Unauthorized("未授权");
             try
@@ -7007,19 +7055,28 @@ namespace 小白养基.Controllers
                 var fund = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && f.FundCode == code);
                 if (fund == null) return BadRequest("未找到基金");
 
-                _portfolioSettlement.AddPosition(fund, addAmount, tradeDate);
+                var timing = ResolveTradeTimingFromSubmission(fund, rawDate, timeSlot, tradeDate);
+                _portfolioSettlement.AddPosition(fund, addAmount, timing.TradeDate, timing.ConfirmDate);
                 _context.MyFunds.Update(fund);
                 await _context.SaveChangesAsync();
                 ClearTodayCache(username);
 
-                return Ok(new { success = true, msg = $"加仓成功！[{tradeDate}] 注入资金: {addAmount:F2} 元" });
+                return Ok(new
+                {
+                    success = true,
+                    msg = $"加仓成功！T日[{timing.TradeDate}]，确认日[{timing.ConfirmDate}]，注入资金: {addAmount:F2} 元",
+                    tradeDate = timing.TradeDate,
+                    confirmDate = timing.ConfirmDate,
+                    firstProfitDate = timing.FirstProfitDate,
+                    market = timing.Market
+                });
             }
             catch (Exception ex) { return StatusCode(500, $"加仓异常: {ex.Message}"); }
         }
 
         // 🚀 2. 战术减仓接口：日期支持，金额可选 (留空则系统自动按份额比例算)
         [HttpPost("reduce-position")]
-        public async Task<IActionResult> ReducePosition([FromForm] string username, [FromForm] string code, [FromForm] double reduceShares, [FromForm] double? reduceAmount, [FromForm] string tradeDate, [FromForm] double? platformCumulativeProfit)
+        public async Task<IActionResult> ReducePosition([FromForm] string username, [FromForm] string code, [FromForm] double reduceShares, [FromForm] double? reduceAmount, [FromForm] string? tradeDate, [FromForm] double? platformCumulativeProfit, [FromForm] string? rawDate, [FromForm] string? timeSlot)
         {
             if (string.IsNullOrEmpty(username)) return Unauthorized("未授权");
             var fund = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && f.FundCode == code);
@@ -7029,9 +7086,10 @@ namespace 小白养基.Controllers
                 fund.PlatformCumulativeProfit = platformCumulativeProfit.Value;
 
             double profit;
+            var timing = ResolveTradeTimingFromSubmission(fund, rawDate, timeSlot, tradeDate);
             try
             {
-                profit = _portfolioSettlement.ReducePosition(fund, reduceShares, reduceAmount, tradeDate);
+                profit = _portfolioSettlement.ReducePosition(fund, reduceShares, reduceAmount, timing.TradeDate, timing.ConfirmDate);
             }
             catch (Exception ex)
             {
@@ -7044,9 +7102,9 @@ namespace 小白养基.Controllers
 
             bool isPending = fund.HoldShares <= 0 && profit == 0 && !(reduceAmount.GetValueOrDefault() > 0);
             string msg = isPending
-                ? $"[{tradeDate}] 减仓已记录，赎回金额待确认。请在蚂蚁财富查看确认金额后，再次减仓并填写实际到手金额。"
-                : $"[{tradeDate}] 减仓完毕！归库利润: {profit:F2} 元";
-            return Ok(new { success = true, msg, pendingRedeem = isPending });
+                ? $"T日[{timing.TradeDate}] 减仓已记录，确认日[{timing.ConfirmDate}]，赎回金额待确认。请在蚂蚁财富查看确认金额后，再次减仓并填写实际到手金额。"
+                : $"T日[{timing.TradeDate}] 减仓完毕！归库利润: {profit:F2} 元";
+            return Ok(new { success = true, msg, pendingRedeem = isPending, tradeDate = timing.TradeDate, confirmDate = timing.ConfirmDate, firstProfitDate = timing.FirstProfitDate, market = timing.Market });
         }
 
         // =========================================================================

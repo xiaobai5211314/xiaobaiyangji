@@ -120,7 +120,7 @@ namespace 小白养基.Services
             return true;
         }
 
-        public void AddPosition(MyFundConfig fund, double addAmount, string tradeDate)
+        public void AddPosition(MyFundConfig fund, double addAmount, string tradeDate, string? confirmDate = null)
         {
             if (addAmount <= 0) throw new ArgumentOutOfRangeException(nameof(addAmount), "加仓金额必须大于 0。");
 
@@ -132,6 +132,7 @@ namespace 小白养基.Services
             fund.PendingTradeTime = ChinaNow().ToString("HH:mm:ss");
             fund.PendingTradeStatus = "pending_buy";
             fund.PendingSource = "manual_add_position";
+            fund.PendingConfirmDate = string.IsNullOrWhiteSpace(confirmDate) ? fund.PendingConfirmDate : confirmDate;
 
             if (fund.LastTradeDate == tradeDate)
             {
@@ -153,7 +154,7 @@ namespace 小白养基.Services
         public static double GetSoldCost(MyFundConfig fund)
             => IsPendingRedeem(fund) ? Math.Abs(fund.LastAddAmount) - PendingMarkerOffset : 0;
 
-        public double ReducePosition(MyFundConfig fund, double reduceShares, double? reduceAmount, string tradeDate)
+        public double ReducePosition(MyFundConfig fund, double reduceShares, double? reduceAmount, string tradeDate, string? confirmDate = null)
         {
             if (reduceShares <= 0) throw new ArgumentOutOfRangeException(nameof(reduceShares), "减仓份额必须大于 0。");
             if (fund.HoldShares <= 0) throw new InvalidOperationException("当前基金未记录有效份额，无法按份额减仓。");
@@ -185,6 +186,12 @@ namespace 小白养基.Services
                     fund.LastTradeDate = tradeDate;
                     fund.LastAddAmount = Math.Round(-confirmedAmount, 2);
                 }
+                fund.PendingSellAmount = 0;
+                if (fund.PendingTradeStatus == "pending_sell")
+                {
+                    fund.PendingTradeStatus = "confirmed";
+                    fund.PendingConfirmDate = string.IsNullOrWhiteSpace(confirmDate) ? fund.PendingConfirmDate : confirmDate;
+                }
                 return Math.Round(profit, 2);
             }
             else
@@ -200,6 +207,7 @@ namespace 小白养基.Services
                     fund.PendingTradeDate = tradeDate;
                     fund.PendingTradeTime = ChinaNow().ToString("HH:mm:ss");
                     fund.PendingTradeStatus = "pending_sell";
+                    fund.PendingConfirmDate = string.IsNullOrWhiteSpace(confirmDate) ? fund.PendingConfirmDate : confirmDate;
                     fund.PendingSource = "manual_reduce_position";
                     fund.CostAmount = 0;
                     fund.HoldAmount = 0;
@@ -210,6 +218,12 @@ namespace 小白养基.Services
                     fund.LastTradeDate = tradeDate;
                     fund.LastAddAmount = Math.Round(-soldCost, 2);
                     fund.HoldAmount = Math.Round(fund.HoldAmount - unitAmount * reduceShares, 2);
+                    fund.PendingSellAmount = Math.Round(soldCost, 2);
+                    fund.PendingTradeDate = tradeDate;
+                    fund.PendingTradeTime = ChinaNow().ToString("HH:mm:ss");
+                    fund.PendingTradeStatus = "pending_sell";
+                    fund.PendingConfirmDate = string.IsNullOrWhiteSpace(confirmDate) ? fund.PendingConfirmDate : confirmDate;
+                    fund.PendingSource = "manual_reduce_position";
                 }
                 // RealizedProfit NOT updated — waiting for confirmed amount
                 return 0;

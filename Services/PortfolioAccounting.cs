@@ -49,12 +49,7 @@ namespace 小白养基.Services
 
         public static DateTime ResolvePreviousWeekday(DateTime chinaDate)
         {
-            var previous = chinaDate.Date.AddDays(-1);
-            while (previous.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
-            {
-                previous = previous.AddDays(-1);
-            }
-            return previous;
+            return MarketCalendar.GetPreviousTradingDate(chinaDate.Date.AddDays(-1));
         }
 
         public static PortfolioAccountingSummary Calculate(

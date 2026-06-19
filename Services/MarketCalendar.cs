@@ -2,7 +2,8 @@ namespace 小白养基.Services
 {
     public static class MarketCalendar
     {
-        // Source: Shanghai Stock Exchange 2026 holiday notice, published 2025-12-22.
+        // Source: Shanghai Stock Exchange 2026 holiday notice, published 2025-12-22:
+        // https://www.sse.com.cn/disclosure/announcement/general/c/c_20251222_10802507.shtml
         public static readonly IReadOnlySet<string> AShareClosedDates = new HashSet<string>(StringComparer.Ordinal)
         {
             "2026-01-01", "2026-01-02", "2026-01-03",
@@ -50,6 +51,28 @@ namespace 小白养基.Services
             while (!IsTradingDay(cursor, market))
             {
                 cursor = cursor.AddDays(-1);
+            }
+            return cursor;
+        }
+
+        public static DateTime GetNextTradingDate(DateTime date, string market = "cn")
+        {
+            var cursor = date.Date;
+            while (!IsTradingDay(cursor, market))
+            {
+                cursor = cursor.AddDays(1);
+            }
+            return cursor;
+        }
+
+        public static DateTime AddTradingDays(DateTime date, int tradingDays, string market = "cn")
+        {
+            if (tradingDays < 0) throw new ArgumentOutOfRangeException(nameof(tradingDays));
+
+            var cursor = GetNextTradingDate(date, market);
+            for (var i = 0; i < tradingDays; i++)
+            {
+                cursor = GetNextTradingDate(cursor.AddDays(1), market);
             }
             return cursor;
         }

@@ -190,11 +190,60 @@ if (profitDate != new DateTime(2026, 6, 11))
     throw new InvalidOperationException($"profitDate: expected 2026-06-11, actual {profitDate:yyyy-MM-dd}");
 }
 
+var holidayProfitDate = PortfolioAccounting.ResolvePreviousWeekday(new DateTime(2026, 6, 22));
+if (holidayProfitDate != new DateTime(2026, 6, 18))
+{
+    throw new InvalidOperationException($"profitDate.holiday: expected 2026-06-18, actual {holidayProfitDate:yyyy-MM-dd}");
+}
+
 if (MarketCalendar.IsTradingDay(new DateTime(2026, 6, 19)))
     throw new InvalidOperationException("calendar.cn.duanwu: 2026-06-19 must be A-share closed");
 if (MarketCalendar.GetPreviousTradingDate(new DateTime(2026, 6, 21)) != new DateTime(2026, 6, 18))
     throw new InvalidOperationException("calendar.cn.previousTradingDate: 2026-06-21 should resolve to 2026-06-18");
+if (MarketCalendar.GetNextTradingDate(new DateTime(2026, 6, 19)) != new DateTime(2026, 6, 22))
+    throw new InvalidOperationException("calendar.cn.nextTradingDate: 2026-06-19 should resolve to 2026-06-22");
 if (MarketCalendar.IsTradingDay(new DateTime(2026, 7, 1), "hk"))
     throw new InvalidOperationException("calendar.hk.sarDay: 2026-07-01 must be HK closed");
+
+var normalBeforeCutoff = FundTradeTiming.Resolve(new DateTime(2026, 6, 18), false, "华富科技动能混合C");
+if (normalBeforeCutoff.TradeDate != "2026-06-18" || normalBeforeCutoff.ConfirmDate != "2026-06-22")
+    throw new InvalidOperationException($"trade.normal.beforeCutoff: expected T=2026-06-18 confirm=2026-06-22, actual T={normalBeforeCutoff.TradeDate} confirm={normalBeforeCutoff.ConfirmDate}");
+
+var normalAfterCutoff = FundTradeTiming.Resolve(new DateTime(2026, 6, 18), true, "华富科技动能混合C");
+if (normalAfterCutoff.TradeDate != "2026-06-22" || normalAfterCutoff.ConfirmDate != "2026-06-23")
+    throw new InvalidOperationException($"trade.normal.afterCutoff: expected T=2026-06-22 confirm=2026-06-23, actual T={normalAfterCutoff.TradeDate} confirm={normalAfterCutoff.ConfirmDate}");
+
+var holidayBeforeCutoff = FundTradeTiming.Resolve(new DateTime(2026, 6, 19), false, "华富科技动能混合C");
+if (holidayBeforeCutoff.TradeDate != "2026-06-22" || holidayBeforeCutoff.ConfirmDate != "2026-06-23")
+    throw new InvalidOperationException($"trade.normal.holiday: expected T=2026-06-22 confirm=2026-06-23, actual T={holidayBeforeCutoff.TradeDate} confirm={holidayBeforeCutoff.ConfirmDate}");
+
+var qdiiBeforeCutoff = FundTradeTiming.Resolve(new DateTime(2026, 6, 18), false, "天弘恒生科技ETF联接(QDII)C");
+if (qdiiBeforeCutoff.TradeDate != "2026-06-18" || qdiiBeforeCutoff.ConfirmDate != "2026-06-23")
+    throw new InvalidOperationException($"trade.qdii.beforeCutoff: expected T=2026-06-18 confirm=2026-06-23, actual T={qdiiBeforeCutoff.TradeDate} confirm={qdiiBeforeCutoff.ConfirmDate}");
+
+var qdiiPending = new MyFundConfig
+{
+    HoldAmount = 34190.04,
+    PendingBuyAmount = 1000.00,
+    PendingTradeDate = qdiiBeforeCutoff.TradeDate,
+    PendingConfirmDate = qdiiBeforeCutoff.ConfirmDate,
+    PendingTradeStatus = "pending_buy"
+};
+Equal(1000.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(qdiiPending, "2026-06-22")), "pending.qdii.beforeConfirm.active");
+Equal(0.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(qdiiPending, "2026-06-23")), "pending.qdii.confirmDate.notActive");
+
+var manualAddFund = new MyFundConfig
+{
+    FundName = "华富科技动能混合C",
+    HoldAmount = 10000,
+    CostAmount = 10000,
+    HoldShares = 10000
+};
+var settlement = new PortfolioSettlementService();
+settlement.AddPosition(manualAddFund, 2000, normalBeforeCutoff.TradeDate, normalBeforeCutoff.ConfirmDate);
+Equal(12000.00m, PortfolioAccounting.Money(manualAddFund.HoldAmount), "manualAdd.displayAmount.includesPending");
+Equal(2000.00m, PortfolioAccounting.Money(manualAddFund.PendingBuyAmount), "manualAdd.pendingAmount");
+if (manualAddFund.PendingConfirmDate != "2026-06-22")
+    throw new InvalidOperationException($"manualAdd.confirmDate: expected 2026-06-22, actual {manualAddFund.PendingConfirmDate}");
 
 Console.WriteLine("Portfolio accounting regression passed.");
