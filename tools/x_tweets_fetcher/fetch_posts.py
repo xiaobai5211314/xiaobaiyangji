@@ -194,6 +194,11 @@ def atomic_write_json(cache_path: Path, payload: dict[str, Any]) -> None:
         raise
 
 
+def prepare_storage(cache_path: Path, db_path: Path) -> None:
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
+
 async def fetch_posts() -> int:
     cookie = read_cookie()
     if cookie is None:
@@ -207,6 +212,7 @@ async def fetch_posts() -> int:
     fetch_limit = env_int("INFLUENCER_POSTS_FETCH_LIMIT", DEFAULT_FETCH_LIMIT, 1, 100)
     db_path = Path(os.getenv("TWSCRAPE_DB_PATH") or str(cache_path.with_name("twscrape-accounts.db")))
 
+    prepare_storage(cache_path, db_path)
     api = API(str(db_path), raise_when_no_account=True)
     await ensure_cookie_account(api, cookie)
 
