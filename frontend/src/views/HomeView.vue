@@ -1,11 +1,10 @@
 <template>
   <div>
-    <!-- 标题 -->
-    <div style="text-align: center; padding: 16px 0 10px;">
-      <h2 style="margin: 0; font-size: 20px; font-weight: 800; background: linear-gradient(135deg, #ff5fa2 0%, #8b5cf6 48%, #38bdf8 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: 1px;">
+    <div class="page-heading">
+      <h2 class="app-title">
         小白养基 v2
       </h2>
-      <div style="font-size: 12px; color: #a8b3cf; margin-top: 4px;">{{ username || '未登录' }} · {{ activeFunds.length }} 支持仓</div>
+      <div class="page-subtitle">{{ username || '未登录' }} · {{ activeFunds.length }} 支持仓</div>
     </div>
 
     <!-- 总览 -->
@@ -14,11 +13,10 @@
     <!-- 收益曲线 -->
     <ProfitChart :points="chartPoints" :index-name="indexName" />
 
-    <!-- 持仓标题 -->
-    <div style="display: flex; justify-content: space-between; align-items: center; margin: 0 0 10px;">
-      <div style="font-size: 16px; font-weight: bold; color: #f8fafc; display: flex; align-items: center; gap: 8px;">
+    <div class="section-heading">
+      <div class="section-title">
         🛡️ 总持仓
-        <span style="font-size: 12px; font-weight: normal; color: #a8b3cf;">(共 {{ activeFunds.length }} 支)</span>
+        <span class="section-count">(共 {{ activeFunds.length }} 支)</span>
       </div>
     </div>
 
@@ -30,12 +28,11 @@
     <!-- 回本幅度榜 -->
     <RecoveryRank :list="recoveryList" />
 
-    <!-- 加载状态 -->
-    <div v-if="loading" style="text-align: center; padding: 60px 0; color: #a8b3cf;">
+    <div v-if="loading" class="state-panel">
       <t-loading size="large" text="加载中..." />
     </div>
 
-    <div v-if="error" style="text-align: center; padding: 20px; color: #ff4d4f; font-size: 13px;">{{ error }}</div>
+    <div v-if="error" class="state-panel state-panel--error">{{ error }}</div>
   </div>
 </template>
 

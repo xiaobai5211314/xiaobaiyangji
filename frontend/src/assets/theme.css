@@ -22,6 +22,19 @@
   --td-radius-default: 10px;
   --td-radius-medium: 14px;
   --td-radius-large: 20px;
+
+  --xb-bg: #080b1b;
+  --xb-surface: rgba(20, 28, 58, 0.84);
+  --xb-surface-strong: rgba(26, 36, 76, 0.9);
+  --xb-border: rgba(174, 201, 255, 0.16);
+  --xb-border-soft: rgba(174, 201, 255, 0.1);
+  --xb-text: #f8fafc;
+  --xb-muted: #a8b3cf;
+  --xb-faint: rgba(248, 250, 252, 0.48);
+  --xb-gain: #ff4d4f;
+  --xb-loss: #10b981;
+  --xb-pending: #fbbf24;
+  --xb-info: #38bdf8;
 }
 
 /* TDesign 组件暗色覆盖 */
@@ -31,7 +44,7 @@
   --td-button-text-color: var(--td-text-color-primary);
 }
 .t-tag { --td-tag-bg-color: rgba(255,255,255,.06); --td-tag-text-color: #a8b3cf; --td-tag-border-color: rgba(255,255,255,.12); }
-.t-card { background: rgba(24,31,68,.88) !important; border: 1px solid rgba(174,201,255,.16) !important; border-radius: 24px !important; box-shadow: 0 18px 46px rgba(2,6,23,.36), 0 0 32px rgba(139,92,246,.14) !important; color: #f8fafc !important; }
+.t-card { background: var(--xb-surface) !important; border: 1px solid var(--xb-border) !important; border-radius: 24px !important; box-shadow: 0 18px 46px rgba(2,6,23,.28) !important; color: #f8fafc !important; }
 .t-dialog { --td-dialog-bg-color: rgba(20,28,58,.96); --td-dialog-border-radius: 18px; }
 .t-tooltip { --td-tooltip-bg-color: rgba(30,41,59,.95); --td-tooltip-text-color: #e2e8f0; }
 
@@ -39,12 +52,11 @@
 html, body {
   margin: 0;
   padding: 0;
-  background-color: #080b1b;
-  background: radial-gradient(circle at 8% -4%, rgba(255,95,162,.30), transparent 30%),
-              radial-gradient(circle at 92% 4%, rgba(56,189,248,.24), transparent 32%),
-              radial-gradient(circle at 22% 42%, rgba(139,92,246,.18), transparent 34%),
-              radial-gradient(circle at 70% 100%, rgba(69,38,160,.28), transparent 46%),
-              linear-gradient(160deg, #070b1a 0%, #111735 40%, #202053 68%, #111827 100%);
+  background-color: var(--xb-bg);
+  background: radial-gradient(circle at 12% -8%, rgba(255,95,162,.16), transparent 30%),
+              radial-gradient(circle at 92% 0%, rgba(56,189,248,.12), transparent 32%),
+              radial-gradient(circle at 50% 100%, rgba(139,92,246,.12), transparent 42%),
+              linear-gradient(160deg, #070b1a 0%, #0d1328 48%, #121a33 100%);
   background-attachment: fixed;
   color: #f8fafc;
   font-family: "Microsoft YaHei", "PingFang SC", -apple-system, BlinkMacSystemFont, sans-serif;
@@ -61,9 +73,9 @@ body::before, body::after {
   z-index: 0;
 }
 body::before {
-  background: radial-gradient(circle at 10% 16%, rgba(255,95,162,.18), transparent 22%),
-              radial-gradient(circle at 93% 22%, rgba(56,189,248,.16), transparent 24%),
-              radial-gradient(circle at 48% 92%, rgba(139,92,246,.14), transparent 32%);
+  background: radial-gradient(circle at 10% 16%, rgba(255,95,162,.08), transparent 22%),
+              radial-gradient(circle at 93% 22%, rgba(56,189,248,.08), transparent 24%),
+              radial-gradient(circle at 48% 92%, rgba(139,92,246,.08), transparent 32%);
   filter: blur(2px);
 }
 body::after {
@@ -75,33 +87,106 @@ body::after {
 #app {
   position: relative;
   z-index: 1;
-  width: min(1440px, calc(100vw - 24px));
+  width: min(1180px, calc(100vw - 24px));
   margin: 0 auto;
   padding: 0 8px 100px;
 }
 
+/* === 页面标题 === */
+.page-heading {
+  text-align: center;
+  padding: 18px 0 12px;
+}
+.app-title {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 900;
+  line-height: 1.15;
+  letter-spacing: .08em;
+  background: linear-gradient(135deg, #ff7ab5 0%, #a78bfa 48%, #67e8f9 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.page-subtitle {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--xb-muted);
+}
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 2px 0 12px;
+}
+.section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--xb-text);
+}
+.section-count {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--xb-muted);
+}
+.state-panel {
+  text-align: center;
+  padding: 56px 0;
+  color: var(--xb-muted);
+}
+.state-panel--error {
+  padding: 20px;
+  color: var(--xb-gain);
+  font-size: 13px;
+}
+
 /* === 玻璃卡片 === */
 .glass-card {
-  background: radial-gradient(circle at 18% 0%, rgba(255,95,162,.16), transparent 34%),
-              radial-gradient(circle at 95% 8%, rgba(56,189,248,.14), transparent 32%),
-              linear-gradient(145deg, rgba(24,31,68,.88), rgba(13,23,48,.82));
-  border: 1px solid rgba(174,201,255,.16);
+  background: radial-gradient(circle at 16% 0%, rgba(255,95,162,.10), transparent 34%),
+              radial-gradient(circle at 100% 4%, rgba(56,189,248,.08), transparent 32%),
+              linear-gradient(145deg, var(--xb-surface), rgba(13,23,48,.84));
+  border: 1px solid var(--xb-border);
   border-radius: 24px;
   padding: 16px;
-  box-shadow: 0 18px 46px rgba(2,6,23,.36), 0 0 32px rgba(139,92,246,.14);
+  box-shadow: 0 16px 42px rgba(2,6,23,.30), inset 0 1px 0 rgba(255,255,255,.04);
 }
 
 .glass-card--hero {
-  background: radial-gradient(circle at 4% 0%, rgba(255,95,162,.22), transparent 32%),
-              radial-gradient(circle at 100% 12%, rgba(56,189,248,.20), transparent 34%),
-              linear-gradient(140deg, rgba(35,30,78,.88), rgba(10,35,66,.82));
+  background: radial-gradient(circle at 4% 0%, rgba(255,95,162,.15), transparent 32%),
+              radial-gradient(circle at 100% 12%, rgba(56,189,248,.12), transparent 34%),
+              linear-gradient(140deg, rgba(35,30,78,.88), rgba(10,35,66,.86));
 }
 
 /* === 数字等宽 === */
 .num {
   font-variant-numeric: tabular-nums;
-  font-family: 'Courier New', monospace;
+  font-family: "DIN Alternate", "Roboto Mono", "Courier New", monospace;
+  letter-spacing: -0.01em;
 }
+
+.value-gain,
+.value-loss,
+.value-pending,
+.value-flat {
+  font-variant-numeric: tabular-nums;
+}
+.value-gain { color: var(--xb-gain); }
+.value-loss { color: var(--xb-loss); }
+.value-pending { color: var(--xb-pending); }
+.value-flat { color: var(--xb-muted); }
+.value-gain::before,
+.value-loss::before,
+.value-pending::before {
+  display: inline-block;
+  margin-right: 2px;
+  font-size: .72em;
+  transform: translateY(-1px);
+}
+.value-gain::before { content: "▲"; }
+.value-loss::before { content: "▼"; }
+.value-pending::before { content: "●"; font-size: .62em; }
 
 /* === 统一标签 === */
 .xb-tag {
@@ -124,24 +209,111 @@ body::after {
 .xb-tag--ghost   { color: #cbd5e1; background: rgba(148,163,184,.14); border-color: rgba(148,163,184,.28); }
 .xb-tag--compact { min-height: 20px; padding: 2px 6px; font-size: 11px; line-height: 1.2; }
 
+/* === 总览卡片 === */
+.portfolio-summary {
+  margin-bottom: 14px;
+  padding: 20px 16px 16px;
+}
+.summary-hero {
+  text-align: center;
+  margin-bottom: 15px;
+}
+.summary-label {
+  font-size: 12px;
+  color: var(--xb-faint);
+  margin-bottom: 6px;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+.summary-amount {
+  font-size: clamp(32px, 8vw, 40px);
+  font-weight: 900;
+  line-height: 1.06;
+  color: var(--xb-text);
+}
+.summary-breakdown {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0 14px;
+}
+.summary-breakdown-item {
+  padding: 9px 10px;
+  border: 1px solid var(--xb-border-soft);
+  border-radius: 14px;
+  background: rgba(4, 10, 28, .20);
+}
+.summary-breakdown-item--pending {
+  border-style: dashed;
+  border-color: rgba(251,191,36,.28);
+  background: rgba(251,191,36,.05);
+}
+.summary-note {
+  margin-top: 10px;
+  color: rgba(248,250,252,.42);
+  font-size: 10px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* === 指标组合 === */
+.metric-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  border: 1px solid var(--xb-border-soft);
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(3, 8, 24, .20);
+}
+.metric-row--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.metric-stack {
+  min-width: 0;
+  padding: 10px;
+}
+.metric-stack + .metric-stack {
+  border-left: 1px solid rgba(255,255,255,.07);
+}
+.metric-label {
+  font-size: 11px;
+  color: var(--xb-muted);
+  margin-bottom: 4px;
+  line-height: 1.25;
+}
+.metric-value {
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+  color: var(--xb-text);
+}
+.metric-value--large {
+  font-size: 18px;
+}
+.metric-stack--pending {
+  border: 1px dashed rgba(251,191,36,.28);
+  border-radius: 12px;
+  background: rgba(251,191,36,.05);
+}
+
 /* === 指标网格 === */
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  background: rgba(0,0,0,.2);
+  gap: 8px;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  text-align: left;
+}
+.metric-cell {
+  min-width: 0;
   padding: 10px;
-  border-radius: 10px;
-  text-align: center;
-}
-.metric-label {
-  font-size: 11px;
-  color: #a8b3cf;
-  margin-bottom: 3px;
-}
-.metric-value {
-  font-weight: bold;
-  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--xb-border-soft);
+  border-radius: 14px;
+  background: rgba(4, 10, 28, .20);
 }
 
 /* === 持仓卡片网格 — 响应式 === */
@@ -157,20 +329,141 @@ body::after {
 
 /* === 基金卡片 === */
 .fund-card {
-  padding: 15px;
+  padding: 15px 15px 14px;
   border-radius: 24px;
   font-size: 13px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   position: relative;
-  transition: transform 0.2s;
+  overflow: hidden;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
   min-height: 0;
 }
+.fund-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: rgba(168,179,207,.35);
+}
+.fund-card--gain::before { background: var(--xb-gain); }
+.fund-card--loss::before { background: var(--xb-loss); }
+.fund-card--flat::before { background: var(--xb-muted); }
 .fund-card:hover {
-  box-shadow: 0 18px 46px rgba(2,6,23,.36), 0 0 40px rgba(255,95,162,.12);
+  transform: translateY(-1px);
+  box-shadow: 0 18px 46px rgba(2,6,23,.34), inset 0 1px 0 rgba(255,255,255,.05);
 }
 .fund-card .metrics-grid { margin-top: auto; }
+.fund-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+.fund-card__title {
+  min-width: 0;
+  flex: 1;
+}
+.fund-card__name {
+  color: var(--xb-text);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fund-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+.fund-code {
+  font-family: "Roboto Mono", "Courier New", monospace;
+  font-size: 11px;
+  color: var(--xb-muted);
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(0,0,0,.18);
+  padding: 2px 7px;
+  border-radius: 8px;
+}
+.card-actions {
+  display: flex;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.card-actions .t-button {
+  min-width: 28px;
+}
+.card-action-button--info {
+  --td-button-bg-color: rgba(56,189,248,.12);
+  --td-button-border-color: rgba(56,189,248,.28);
+  --td-button-text-color: var(--xb-info);
+}
+.card-action-button--warning {
+  --td-button-bg-color: rgba(251,191,36,.12);
+  --td-button-border-color: rgba(251,191,36,.30);
+  --td-button-text-color: var(--xb-pending);
+}
+.fund-status-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-bottom: 2px;
+}
+.fund-rate {
+  font-size: 14px;
+  font-weight: 900;
+}
+.fund-today-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--xb-border-soft);
+  border-radius: 16px;
+  background: rgba(3, 8, 24, .24);
+}
+.fund-today-hero--gain { border-left: 3px solid var(--xb-gain); }
+.fund-today-hero--loss { border-left: 3px solid var(--xb-loss); }
+.fund-today-hero--flat { border-left: 3px solid rgba(168,179,207,.55); }
+.fund-today-title {
+  color: var(--xb-muted);
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+.fund-today-value {
+  font-size: 20px;
+  font-weight: 900;
+}
+.fund-today-rate {
+  font-size: 16px;
+  font-weight: 900;
+  text-align: right;
+}
+.fund-note {
+  color: rgba(248,250,252,.38);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+@media (max-width: 380px) {
+  .summary-breakdown,
+  .metric-row,
+  .metric-row--two,
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+  .metric-stack + .metric-stack {
+    border-left: 0;
+    border-top: 1px solid rgba(255,255,255,.07);
+  }
+}
 
 /* === 底部导航 — 旧版悬浮胶囊 === */
 .bottom-nav {

@@ -1,13 +1,10 @@
 <template>
-  <div class="glass-card fund-card">
-    <!-- 头部：名称 + 按钮 -->
-    <div style="display: flex; justify-content: space-between; align-items: start;">
-      <div style="font-weight: bold; color: #f8fafc; font-size: 15px; max-width: 80%; min-width: 0;">
-        <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ fund.name }}</div>
-        <div style="font-size: 11px; color: #a8b3cf; font-weight: normal; margin-top: 4px; font-family: monospace; background: rgba(0,0,0,.2); padding: 2px 6px; border-radius: 4px; width: fit-content;">
-          {{ fund.code }}
-        </div>
-        <div style="margin-top: 4px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+  <div class="glass-card fund-card" :class="cardToneClass(fund.todayProfit)">
+    <div class="fund-card__header">
+      <div class="fund-card__title">
+        <div class="fund-card__name" :title="fund.name">{{ fund.name }}</div>
+        <div class="fund-card__meta">
+          <span class="fund-code">{{ fund.code }}</span>
           <span v-if="fund.shares > 0" class="xb-tag xb-tag--success xb-tag--compact">份额 {{ Number(fund.shares).toFixed(2) }}</span>
           <span v-if="Number(fund.todayPendingBuyAmount || 0) > 0"
                 class="xb-tag xb-tag--warning xb-tag--compact"
@@ -16,21 +13,20 @@
           </span>
         </div>
       </div>
-      <div style="display: flex; gap: 5px; flex-shrink: 0; align-items: center;">
+      <div class="card-actions">
         <t-tooltip content="查看官方档案">
-          <t-button shape="circle" size="small" variant="outline" style="--td-button-bg-color: rgba(56,189,248,.18); --td-button-border-color: rgba(56,189,248,.3); --td-button-text-color: #38bdf8;">📈</t-button>
+          <t-button class="card-action-button--info" shape="circle" size="small" variant="outline">📈</t-button>
         </t-tooltip>
         <t-tooltip content="回本路径模拟">
-          <t-button shape="circle" size="small" variant="outline" style="--td-button-bg-color: rgba(251,191,36,.18); --td-button-border-color: rgba(251,191,36,.35); --td-button-text-color: #fbbf24;">🧭</t-button>
+          <t-button class="card-action-button--warning" shape="circle" size="small" variant="outline">🧭</t-button>
         </t-tooltip>
       </div>
     </div>
 
-    <!-- 状态行 -->
-    <div style="display: flex; align-items: center; gap: 5px; flex-wrap: wrap; padding-bottom: 6px; border-bottom: 1px dashed rgba(255,255,255,.1);">
-      <span v-if="fund.isHoliday" class="xb-tag xb-tag--ghost" style="font-weight: bold;">☕ 休市</span>
-      <span v-else :style="{ color: fund.todayRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 900, fontSize: '14px' }">
-        {{ fund.todayRate > 0 ? '+' : '' }}{{ Number(fund.todayRate || 0).toFixed(2) }}%
+    <div class="fund-status-row">
+      <span v-if="fund.isHoliday" class="xb-tag xb-tag--ghost xb-tag--compact">☕ 休市</span>
+      <span v-else class="num fund-rate" :class="toneClass(fund.todayRate)">
+        {{ signed(fund.todayRate) }}%
       </span>
       <span v-if="fund.isStaleQuote && !fund.isSettled" class="xb-tag xb-tag--warning">旧估值</span>
       <span v-if="fund.isSettled && (fund.actualRate != null || fund.lastSettledRate != null)"
@@ -47,40 +43,74 @@
       </span>
     </div>
 
-    <!-- 指标区 — 旧版 3x2 网格 -->
-    <div class="metrics-grid">
+    <div class="fund-today-hero" :class="heroToneClass(fund.todayProfit)">
       <div>
+        <div class="fund-today-title">今日收益</div>
+        <div class="num fund-today-value" :class="toneClass(fund.todayProfit)">
+          {{ signed(fund.todayProfit) }}
+        </div>
+      </div>
+      <div class="num fund-today-rate" :class="toneClass(fund.todayRate)">
+        {{ signed(fund.todayRate) }}%
+      </div>
+    </div>
+
+    <div class="metrics-grid">
+      <div class="metric-cell">
         <div class="metric-label">💰 持仓本金</div>
-        <div class="metric-value" :style="{ color: Number(fund.costAmount || 0) > 0 ? '#cbd5e1' : '#eab308' }">
+        <div class="num metric-value" :class="Number(fund.costAmount || 0) > 0 ? '' : 'value-pending'">
           {{ Number(fund.costAmount || 0) > 0 ? formatAmount(fund.costAmount) : '未设置' }}
         </div>
       </div>
-      <div style="background: rgba(16,185,129,.08); border-radius: 4px; padding: 2px;">
-        <div class="metric-label" style="color: #10b981;">💎 今日市值</div>
-        <div class="metric-value" style="color: #f8fafc;">{{ formatAmount(fund.estimatedConfirmedHoldingAmount) }}</div>
+      <div class="metric-cell">
+        <div class="metric-label">💎 确认市值</div>
+        <div class="num metric-value">{{ formatAmount(fund.estimatedConfirmedHoldingAmount) }}</div>
       </div>
-      <div style="background: rgba(56,189,248,.08); border-radius: 4px; padding: 2px;">
-        <div class="metric-label" style="color: #38bdf8;">🌟 今日收益</div>
-        <div class="metric-value" :style="{ color: profitColor(fund.todayProfit) }">{{ signed(fund.todayProfit) }}</div>
+      <div class="metric-cell metric-stack--pending">
+        <div class="metric-label">今日待确认</div>
+        <div class="num metric-value value-pending">{{ formatAmount(fund.todayPendingBuyAmount || 0) }}</div>
       </div>
-      <div>
-        <div class="metric-label">🚀 今日收益率</div>
-        <div class="metric-value" :style="{ color: profitColor(fund.todayRate) }">{{ signed(fund.todayRate) }}%</div>
-      </div>
-      <div>
+      <div class="metric-cell">
         <div class="metric-label">💰 累计盈亏</div>
-        <div class="metric-value" :style="{ color: profitColor(fund.holdingProfit) }">{{ signed(fund.holdingProfit) }}</div>
+        <div class="num metric-value" :class="toneClass(fund.holdingProfit)">{{ signed(fund.holdingProfit) }}</div>
       </div>
-      <div>
+      <div class="metric-cell">
         <div class="metric-label">📈 累计收益率</div>
-        <div class="metric-value" :style="{ color: profitColor(fund.holdingRate) }">{{ signed(fund.holdingRate) }}%</div>
+        <div class="num metric-value" :class="toneClass(fund.holdingRate)">{{ signed(fund.holdingRate) }}%</div>
       </div>
+    </div>
+
+    <div v-if="Number(fund.todayPendingBuyAmount || 0) > 0" class="fund-note">
+      待确认买入只展示金额，不计入今日收益和今日收益率。
     </div>
   </div>
 </template>
 
 <script setup>
-import { formatAmount, signed, profitColor } from '../utils/format.js'
+import { formatAmount, signed } from '../utils/format.js'
+
+const toNumber = (value) => {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : 0
+}
+
+const toneClass = (value) => {
+  const n = toNumber(value)
+  if (n === 0) return 'value-flat'
+  return n > 0 ? 'value-gain' : 'value-loss'
+}
+
+const cardToneClass = (value) => {
+  const n = toNumber(value)
+  if (n === 0) return 'fund-card--flat'
+  return n > 0 ? 'fund-card--gain' : 'fund-card--loss'
+}
+
+const heroToneClass = (value) => {
+  const n = toNumber(value)
+  if (n === 0) return 'fund-today-hero--flat'
+  return n > 0 ? 'fund-today-hero--gain' : 'fund-today-hero--loss'
+}
 
 defineProps({
   fund: { type: Object, required: true }
