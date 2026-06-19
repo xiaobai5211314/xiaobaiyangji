@@ -6463,6 +6463,11 @@ namespace 小白养基.Controllers
                             PortfolioAccounting.Money(isSoldOut ? displayedProfit : totalProfitPreview),
                             PortfolioAccounting.Money(costBasis)))
                         : 0;
+                    if (hasOcrHoldingSnapshot && !isSoldOut && Math.Abs(config.OcrHoldingRate) > 0.001)
+                    {
+                        // 当前 OCR 快照来自平台展示页；个别小额持仓的平台收益率不一定等于市值/收益反推值。
+                        existingReturnRateValue = Math.Round(config.OcrHoldingRate, 2);
+                    }
                     double breakEvenRateValue = !isCleared && marketValue > 1 && totalProfitPreview < 0 ? Math.Round(-totalProfitPreview / marketValue * 100.0, 2) : 0;
 
                     DailyArchive? effectiveFundArchive = null;
