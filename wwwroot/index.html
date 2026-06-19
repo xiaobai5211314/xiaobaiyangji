@@ -598,18 +598,154 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             font-size: 13px;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 10px;
             position: relative;
-            transition: transform 0.2s;
+            overflow: hidden;
+            transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
             min-height: 0;
+        }
+
+        .fund-card--gain {
+            border-left: 3px solid var(--profit-color) !important;
+        }
+
+        .fund-card--loss {
+            border-left: 3px solid var(--loss-color) !important;
+        }
+
+        .fund-card--flat {
+            border-left: 3px solid rgba(148, 163, 184, .45) !important;
         }
 
             .fund-card:hover {
                 background: rgba(236, 72, 153, 0.06);
+                transform: translateY(-1px);
             }
 
         .fund-card .metrics-grid {
             margin-top: auto;
+        }
+
+        .fund-card-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+        }
+
+        .fund-title-block {
+            min-width: 0;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .fund-name-line {
+            font-size: 15px;
+            font-weight: 900;
+            color: var(--text-main);
+            line-height: 1.35;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .fund-code-chip {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 500;
+            font-family: monospace;
+            background: rgba(0,0,0,0.20);
+            padding: 2px 7px;
+            border-radius: 8px;
+            width: fit-content;
+            border: 1px solid rgba(255,255,255,.08);
+        }
+
+        .fund-actions {
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+            align-items: center;
+        }
+
+        .fund-status-line {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px dashed rgba(255,255,255,0.10);
+            padding-bottom: 6px;
+        }
+
+        .fund-status-left {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            min-width: 0;
+        }
+
+        .fund-rate-value {
+            font-family: var(--font-number);
+            font-weight: 900;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .fund-today-hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 10px;
+            align-items: center;
+            padding: 11px 12px;
+            border-radius: 14px;
+            border: 1px solid rgba(174, 201, 255, .12);
+            background: rgba(2, 6, 23, .18);
+        }
+
+        .fund-today-hero--gain {
+            border-left: 3px solid var(--profit-color);
+        }
+
+        .fund-today-hero--loss {
+            border-left: 3px solid var(--loss-color);
+        }
+
+        .fund-today-hero--flat {
+            border-left: 3px solid rgba(148, 163, 184, .45);
+        }
+
+        .fund-today-label {
+            color: var(--text-muted);
+            font-size: 11px;
+            margin-bottom: 2px;
+        }
+
+        .fund-today-profit {
+            font-family: var(--font-number);
+            font-size: 20px;
+            font-weight: 900;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .fund-today-rate {
+            font-family: var(--font-number);
+            font-size: 16px;
+            font-weight: 900;
+            font-variant-numeric: tabular-nums;
+            text-align: right;
+        }
+
+        .metric-item--pending {
+            border: 1px dashed rgba(245,158,11,.32);
+            background: rgba(245,158,11,.06);
+        }
+
+        .fund-note {
+            color: rgba(168, 179, 207, .78);
+            font-size: 10px;
+            line-height: 1.45;
         }
 
         /* 新版状态标签 */
@@ -663,16 +799,19 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         .metrics-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            background: rgba(0, 0, 0, 0.2);
+            gap: 8px;
+            background: rgba(0, 0, 0, 0.16);
             padding: 10px;
-            border-radius: 10px;
-            text-align: center;
+            border-radius: 14px;
+            text-align: left;
         }
 
         .metric-item {
             display: flex;
             flex-direction: column;
+            min-width: 0;
+            padding: 8px;
+            border-radius: 10px;
         }
 
         .metric-label {
@@ -684,6 +823,79 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         .metric-value {
             font-weight: bold;
             font-variant-numeric: tabular-nums; /* 数字等宽对齐 */
+        }
+
+        .value-gain { color: var(--profit-color) !important; }
+        .value-loss { color: var(--loss-color) !important; }
+        .value-pending { color: var(--td-color-warning) !important; }
+        .value-gain::before,
+        .value-loss::before,
+        .value-pending::before {
+            display: inline-block;
+            margin-right: 2px;
+            font-size: .72em;
+            transform: translateY(-1px);
+        }
+        .value-gain::before { content: "▲"; }
+        .value-loss::before { content: "▼"; }
+        .value-pending::before { content: "●"; font-size: .62em; }
+
+        .dashboard-summary {
+            margin: 0 15px 15px;
+            padding: 16px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+            gap: 10px;
+            align-items: stretch;
+        }
+        .dashboard-summary .divider { display: none; }
+        .summary-tile {
+            min-width: 0;
+            padding: 11px 12px;
+            border-radius: 16px;
+            border: 1px solid rgba(174, 201, 255, .12);
+            background: rgba(2, 6, 23, .16);
+            text-align: left;
+        }
+        .summary-tile--hero {
+            grid-column: span 2;
+            background: rgba(255, 255, 255, .06);
+        }
+        .summary-tile--pending {
+            border-style: dashed;
+            border-color: rgba(245, 158, 11, .34);
+            background: rgba(245, 158, 11, .06);
+        }
+        .summary-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 5px;
+            font-weight: 800;
+            letter-spacing: .04em;
+        }
+        .summary-value {
+            font-family: var(--font-number);
+            font-size: 18px;
+            font-weight: 900;
+            color: var(--text-main);
+            font-variant-numeric: tabular-nums;
+            line-height: 1.18;
+        }
+        .summary-tile--hero .summary-value {
+            font-size: clamp(28px, 7vw, 40px);
+            letter-spacing: -.03em;
+        }
+        .summary-sub {
+            margin-top: 4px;
+            color: var(--text-muted);
+            font-size: 11px;
+            line-height: 1.45;
+        }
+        .summary-note {
+            margin-top: 3px;
+            color: rgba(168, 179, 207, .78);
+            font-size: 10px;
+            line-height: 1.45;
         }
 
         /* === Unified Tag System (TDesign-inspired) === */
@@ -4309,47 +4521,47 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     </div>
                 </div>
 
-                <div v-show="assetMode === 'fund'" class="glass-panel total-panel" style="margin: 0 15px 15px 15px; padding: 20px 30px; display: flex; justify-content: space-around; align-items: center; flex-wrap: wrap; row-gap: 15px;">
-                    <div style="text-align: center;">
-                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">⏱️ 系统雷达</div>
-                        <div :style="{ fontSize: '18px', fontWeight: '900', color: isNight ? '#10b981' : '#f59e0b', margin: '5px 0' }">
+                <div v-show="assetMode === 'fund'" class="glass-panel total-panel dashboard-summary">
+                    <div class="summary-tile">
+                        <div class="summary-label">⏱️ 系统雷达</div>
+                        <div class="summary-value" :style="{ color: isNight ? '#10b981' : '#f59e0b' }">
                             {{ isNight ? '🌙 夜间休市' : '☀️ 盘中盯盘' }}
                         </div>
                     </div>
                     <div class="divider"></div>
-                    <div style="text-align: center;">
-                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;" title="平台持仓金额，包含买入待确认；下方单独展示待确认金额">💎 账户总金额 <span @click="showPrivacyModal = true" style="cursor:pointer">{{ privacyMode === 0 ? '👁️' : '🙈' }}</span></div>
-                        <div class="number-display" style="color: var(--text-main); font-weight: 900;">{{ privacyMode === 0 ? (dashboardActiveSummary.accountTotalAmount > 0 ? '¥ ' + Number(dashboardActiveSummary.accountTotalAmount || 0).toFixed(2) : '--') : '****' }}</div>
-                        <div v-if="dashboardActiveSummary.todayPendingBuyTotal > 0" style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">确认持仓 {{ privacyMode === 0 ? '¥' + Number(dashboardActiveSummary.antConfirmedAmount || 0).toFixed(2) : '****' }}</div>
-                        <div v-if="dashboardActiveSummary.intradayAvailable" style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">盘中估算市值 {{ privacyMode === 0 ? '¥' + Number(dashboardActiveSummary.intradayEstimatedAssets || 0).toFixed(2) : '****' }}</div>
-                        <div v-if="dashboardActiveSummary.todayPendingBuyTotal > 0" style="font-size: 11px; color: #fbbf24; margin-top: 3px;" title="待确认买入不参与今日估算">待确认 {{ privacyMode === 0 ? '¥' + Number(dashboardActiveSummary.todayPendingBuyTotal || 0).toFixed(2) : '****' }}</div>
+                    <div class="summary-tile summary-tile--hero">
+                        <div class="summary-label" title="平台持仓金额，包含买入待确认；下方单独展示待确认金额">💎 账户总金额 <span @click="showPrivacyModal = true" style="cursor:pointer">{{ privacyMode === 0 ? '👁️' : '🙈' }}</span></div>
+                        <div class="summary-value">{{ privacyMode === 0 ? (dashboardActiveSummary.accountTotalAmount > 0 ? '¥ ' + Number(dashboardActiveSummary.accountTotalAmount || 0).toFixed(2) : '--') : '****' }}</div>
+                        <div v-if="dashboardActiveSummary.todayPendingBuyTotal > 0" class="summary-sub">确认持仓 {{ privacyMode === 0 ? '¥' + Number(dashboardActiveSummary.antConfirmedAmount || 0).toFixed(2) : '****' }}</div>
+                        <div v-if="dashboardActiveSummary.intradayAvailable" class="summary-sub">盘中估算市值 {{ privacyMode === 0 ? '¥' + Number(dashboardActiveSummary.intradayEstimatedAssets || 0).toFixed(2) : '****' }}</div>
+                        <div v-if="dashboardActiveSummary.todayPendingBuyTotal > 0" class="summary-note value-pending" title="待确认买入不参与今日收益和今日收益率">待确认 {{ privacyMode === 0 ? '¥' + Number(dashboardActiveSummary.todayPendingBuyTotal || 0).toFixed(2) : '****' }}</div>
                     </div>
                     <div class="divider"></div>
-                    <div style="text-align: center;">
-                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">🌟 {{ dashboardActiveSummary.todayProfitLabel }}</div>
-                        <div class="number-display" :style="{ color: privacyMode <= 1 ? (dashboardActiveSummary.todayPerformanceProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 1 ? (dashboardActiveSummary.todayPerformanceAvailable ? (dashboardActiveSummary.todayPerformanceProfit >= 0 ? '+' : '') + Number(dashboardActiveSummary.todayPerformanceProfit || 0).toFixed(2) : '--') : '****' }}</div>
+                    <div class="summary-tile">
+                        <div class="summary-label">🌟 {{ dashboardActiveSummary.todayProfitLabel }}</div>
+                        <div class="summary-value" :class="privacyMode <= 1 ? (dashboardActiveSummary.todayPerformanceProfit > 0 ? 'value-gain' : (dashboardActiveSummary.todayPerformanceProfit < 0 ? 'value-loss' : '')) : ''">{{ privacyMode <= 1 ? (dashboardActiveSummary.todayPerformanceAvailable ? (dashboardActiveSummary.todayPerformanceProfit >= 0 ? '+' : '') + Number(dashboardActiveSummary.todayPerformanceProfit || 0).toFixed(2) : '--') : '****' }}</div>
                     </div>
                     <div class="divider"></div>
-                    <div style="text-align: center;">
-                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;" title="今日收益 ÷ 蚂蚁确认金额">🚀 {{ dashboardActiveSummary.todayRateLabel }}</div>
-                        <div class="number-display" :style="{ color: privacyMode <= 2 ? (dashboardActiveSummary.todayPerformanceRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 2 ? (dashboardActiveSummary.todayPerformanceAvailable ? (dashboardActiveSummary.todayPerformanceRate > 0 ? '+' : '') + Number(dashboardActiveSummary.todayPerformanceRate || 0).toFixed(2) + '%' : '--') : '****' }}</div>
+                    <div class="summary-tile">
+                        <div class="summary-label" title="今日收益 ÷ 确认持仓基准金额">🚀 {{ dashboardActiveSummary.todayRateLabel }}</div>
+                        <div class="summary-value" :class="privacyMode <= 2 ? (dashboardActiveSummary.todayPerformanceRate > 0 ? 'value-gain' : (dashboardActiveSummary.todayPerformanceRate < 0 ? 'value-loss' : '')) : ''">{{ privacyMode <= 2 ? (dashboardActiveSummary.todayPerformanceAvailable ? (dashboardActiveSummary.todayPerformanceRate > 0 ? '+' : '') + Number(dashboardActiveSummary.todayPerformanceRate || 0).toFixed(2) + '%' : '--') : '****' }}</div>
                     </div>
                     <div class="divider"></div>
-                    <div style="text-align: center;">
-                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">📅 昨日确认收益</div>
-                        <div class="number-display" :style="{ color: privacyMode <= 1 ? (dashboardActiveSummary.confirmedYesterdayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 1 ? (dashboardActiveSummary.confirmedStatus === 'confirmed' ? (dashboardActiveSummary.confirmedYesterdayProfit >= 0 ? '+' : '') + Number(dashboardActiveSummary.confirmedYesterdayProfit || 0).toFixed(2) : '--') : '****' }}</div>
-                        <div v-if="dashboardActiveSummary.confirmedProfitDate" style="font-size:11px;color:var(--text-muted);margin-top:3px;">{{ dashboardActiveSummary.confirmedProfitDate }}</div>
+                    <div class="summary-tile">
+                        <div class="summary-label">📅 昨日确认收益</div>
+                        <div class="summary-value" :class="privacyMode <= 1 ? (dashboardActiveSummary.confirmedYesterdayProfit > 0 ? 'value-gain' : (dashboardActiveSummary.confirmedYesterdayProfit < 0 ? 'value-loss' : '')) : ''">{{ privacyMode <= 1 ? (dashboardActiveSummary.confirmedStatus === 'confirmed' ? (dashboardActiveSummary.confirmedYesterdayProfit >= 0 ? '+' : '') + Number(dashboardActiveSummary.confirmedYesterdayProfit || 0).toFixed(2) : '--') : '****' }}</div>
+                        <div v-if="dashboardActiveSummary.confirmedProfitDate" class="summary-sub">{{ dashboardActiveSummary.confirmedProfitDate }}</div>
                     </div>
                     <div class="divider"></div>
-                    <div style="text-align: center;">
-                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">💰 蚂蚁持有收益</div>
-                        <div class="number-display" :style="{ color: privacyMode <= 1 ? (dashboardActiveSummary.antHoldingProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 1 ? (dashboardActiveSummary.confirmedStatus === 'confirmed' ? (dashboardActiveSummary.antHoldingProfit >= 0 ? '+' : '') + Number(dashboardActiveSummary.antHoldingProfit || 0).toFixed(2) : '--') : '****' }}</div>
-                        <div v-if="dashboardActiveSummary.intradayAvailable" style="font-size:11px;color:var(--text-muted);margin-top:3px;">盘中估算累计 {{ privacyMode <= 1 ? (dashboardActiveSummary.estimatedHoldingProfit >= 0 ? '+' : '') + Number(dashboardActiveSummary.estimatedHoldingProfit || 0).toFixed(2) : '****' }}</div>
+                    <div class="summary-tile">
+                        <div class="summary-label">💰 蚂蚁持有收益</div>
+                        <div class="summary-value" :class="privacyMode <= 1 ? (dashboardActiveSummary.antHoldingProfit > 0 ? 'value-gain' : (dashboardActiveSummary.antHoldingProfit < 0 ? 'value-loss' : '')) : ''">{{ privacyMode <= 1 ? (dashboardActiveSummary.confirmedStatus === 'confirmed' ? (dashboardActiveSummary.antHoldingProfit >= 0 ? '+' : '') + Number(dashboardActiveSummary.antHoldingProfit || 0).toFixed(2) : '--') : '****' }}</div>
+                        <div v-if="dashboardActiveSummary.intradayAvailable" class="summary-sub">盘中估算累计 {{ privacyMode <= 1 ? (dashboardActiveSummary.estimatedHoldingProfit >= 0 ? '+' : '') + Number(dashboardActiveSummary.estimatedHoldingProfit || 0).toFixed(2) : '****' }}</div>
                     </div>
                     <div class="divider"></div>
-                    <div style="text-align: center;">
-                        <div style="font-size: 13px; color:var(--text-muted); margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">📈 蚂蚁持有收益率</div>
-                        <div class="number-display" :style="{ color: privacyMode <= 2 ? (dashboardActiveSummary.totalRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1' }">{{ privacyMode <= 2 ? (dashboardActiveSummary.totalRate > 0 ? '+' : '') + Number(dashboardActiveSummary.totalRate || 0).toFixed(2) + '%' : '****' }}</div>
+                    <div class="summary-tile">
+                        <div class="summary-label">📈 蚂蚁持有收益率</div>
+                        <div class="summary-value" :class="privacyMode <= 2 ? (dashboardActiveSummary.totalRate > 0 ? 'value-gain' : (dashboardActiveSummary.totalRate < 0 ? 'value-loss' : '')) : ''">{{ privacyMode <= 2 ? (dashboardActiveSummary.totalRate > 0 ? '+' : '') + Number(dashboardActiveSummary.totalRate || 0).toFixed(2) + '%' : '****' }}</div>
                     </div>
                     <div class="total-archive-entry"></div>
                 </div>
@@ -4447,11 +4659,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 </div>
 
                 <div v-show="assetMode === 'fund'" class="fund-list-container">
-                    <div v-for="fund in activeHoldings" :key="fund.code" class="glass-panel fund-card">
-                        <div style="display: flex; justify-content: space-between; align-items: start;">
-                            <span style="font-weight: bold; color: var(--text-main); font-size: 15px; max-width: 80%; display: flex; flex-direction: column;">
-                                <span>{{ fund.name }}</span>
-                                <span style="font-size:11px; color:var(--text-muted); font-weight: normal; margin-top: 4px; font-family: monospace; background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; width: fit-content;">
+                    <div v-for="fund in activeHoldings" :key="fund.code" :class="['glass-panel','fund-card', Number(fund.todayProfit || 0) > 0 ? 'fund-card--gain' : (Number(fund.todayProfit || 0) < 0 ? 'fund-card--loss' : 'fund-card--flat')]">
+                        <div class="fund-card-head">
+                            <div class="fund-title-block">
+                                <span class="fund-name-line" :title="fund.name">{{ fund.name }}</span>
+                                <span class="fund-code-chip">
                                     {{ fund.code }}
                                 </span>
                                 <div class="fund-share-row"><span v-if="fund.shares > 0" class="xb-tag xb-tag--success xb-tag--compact share-chip">份额 {{ Number(fund.shares).toFixed(2) }}</span><span v-if="fund.pendingBuy || Number(fund.todayPendingBuyAmount || 0) > 0" class="xb-tag xb-tag--warning xb-tag--compact" title="今天买入但未确认份额，不参与今日收益和今日收益率">待确认 {{ privacyMode === 0 ? Number(fund.todayPendingBuyAmount || 0).toFixed(0) : '****' }}</span></div>
@@ -4466,9 +4678,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                         💰 已落袋: {{ fund.displayedProfit > 0 ? '+' : '' }}{{ fund.displayedProfit.toFixed(2) }}
                                     </span>
                                 </div>
-                            </span>
+                            </div>
 
-                            <div style="display: flex; gap: 6px; flex-shrink: 0; align-items: center;">
+                            <div class="fund-actions">
                                 <button @click="fetchHistory(fund.code, fund.name)" class="xb-btn xb-btn--circle xb-btn--info" title="查看官方档案">📈</button>
                                 <button @click="openRecoveryModal(fund)" class="xb-btn xb-btn--circle xb-btn--warning" title="回本路径模拟">🧭</button>
                                 <button @click="openAddModal(fund)" class="xb-btn xb-btn--circle xb-btn--success" title="加仓">➕</button>
@@ -4477,19 +4689,31 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             </div>
                         </div>
 
-                        <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 6px; margin-top: 5px;">
-                            <span style="display: flex; align-items: center; gap: 5px;">
+                        <div class="fund-status-line">
+                            <span class="fund-status-left">
                                 <span :class="['fund-badge', getFundStatusBadgeClass(fund)]">
                                     {{ getFundStatusBadgeText(fund) }}
                                 </span>
 
-                                <span :style="{color: fund.todayRate >= 0 ? '#ff4d4f' : '#10b981', fontWeight: 'bold'}">{{ fund.todayRate > 0 ? '+' : ''}}{{ Number(fund.todayRate || 0).toFixed(2) }}%</span>
+                                <span class="fund-rate-value" :class="Number(fund.todayRate || 0) > 0 ? 'value-gain' : (Number(fund.todayRate || 0) < 0 ? 'value-loss' : '')">{{ fund.todayRate > 0 ? '+' : ''}}{{ Number(fund.todayRate || 0).toFixed(2) }}%</span>
 
                                 <span v-if="fund.calibrationOffset && Math.abs(fund.calibrationOffset) > 0 && !fund.isHoliday && fund.dataStatus !== 'official_today'" class="xb-tag xb-tag--primary">
                                     🤖修正: {{ fund.calibrationOffset > 0 ? '+' : '' }}{{ fund.calibrationOffset }}%
                                 </span>
                             </span>
                             <span v-if="Math.abs(fund.diffRate) > 0.15 && !fund.isHoliday"><span class="radar-badge">🚨 偏离: {{ fund.diffRate }}%</span></span>
+                        </div>
+
+                        <div :class="['fund-today-hero', Number(fund.todayProfit || 0) > 0 ? 'fund-today-hero--gain' : (Number(fund.todayProfit || 0) < 0 ? 'fund-today-hero--loss' : 'fund-today-hero--flat')]">
+                            <div>
+                                <div class="fund-today-label">{{ fund.isSettled ? '今日确认收益' : '今日估算收益' }}</div>
+                                <div class="fund-today-profit" :class="privacyMode <= 1 ? (Number(fund.todayProfit || 0) > 0 ? 'value-gain' : (Number(fund.todayProfit || 0) < 0 ? 'value-loss' : '')) : ''">
+                                    {{ privacyMode <= 1 ? (fund.todayProfit >= 0 ? '+' : '') + Number(fund.todayProfit || 0).toFixed(2) : '****' }}
+                                </div>
+                            </div>
+                            <div class="fund-today-rate" :class="privacyMode <= 2 ? (Number(fund.todayRate || 0) > 0 ? 'value-gain' : (Number(fund.todayRate || 0) < 0 ? 'value-loss' : '')) : ''">
+                                {{ privacyMode <= 2 ? ((fund.todayRate > 0 ? '+' : '') + Number(fund.todayRate || 0).toFixed(2) + '%') : '****' }}
+                            </div>
                         </div>
 
                         <div class="confidence-strip">
@@ -4513,23 +4737,24 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                     {{ privacyMode === 0 ? Number(fund.estimatedConfirmedHoldingAmount || 0).toFixed(2) : '****' }}
                                 </span>
                             </div>
-                            <div class="metric-item xb-metric--info">
-                                <span class="metric-label">🌟 {{ fund.isSettled ? '今日确认' : '今日估算' }}</span>
-                                <span class="metric-value" :style="{color: privacyMode <= 1 ? (fund.todayProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 1 ? (fund.todayProfit >= 0 ? '+' : '') + Number(fund.todayProfit || 0).toFixed(2) : '****' }}</span>
+                            <div class="metric-item metric-item--pending">
+                                <span class="metric-label">今日待确认</span>
+                                <span class="metric-value value-pending">{{ privacyMode === 0 ? Number(fund.todayPendingBuyAmount || 0).toFixed(2) : '****' }}</span>
                             </div>
                             <div class="metric-item">
                                 <span class="metric-label">🚀 {{ fund.isSettled ? '今日确认率' : '今日估算率' }}</span>
-                                <span class="metric-value" :style="{color: privacyMode <= 2 ? (fund.todayRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 2 ? ((fund.todayRate > 0 ? '+' : '') + Number(fund.todayRate || 0).toFixed(2) + '%') : '****' }}</span>
+                                <span class="metric-value" :class="privacyMode <= 2 ? (Number(fund.todayRate || 0) > 0 ? 'value-gain' : (Number(fund.todayRate || 0) < 0 ? 'value-loss' : '')) : ''">{{ privacyMode <= 2 ? ((fund.todayRate > 0 ? '+' : '') + Number(fund.todayRate || 0).toFixed(2) + '%') : '****' }}</span>
                             </div>
                             <div class="metric-item">
                                 <span class="metric-label">💰 累计盈亏</span>
-                                <span class="metric-value" :style="{color: privacyMode <= 1 ? (fund.holdingProfit >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 1 ? (fund.holdingProfit >= 0 ? '+' : '') + Number(fund.holdingProfit || 0).toFixed(2) : '****' }}</span>
+                                <span class="metric-value" :class="privacyMode <= 1 ? (Number(fund.holdingProfit || 0) > 0 ? 'value-gain' : (Number(fund.holdingProfit || 0) < 0 ? 'value-loss' : '')) : ''">{{ privacyMode <= 1 ? (fund.holdingProfit >= 0 ? '+' : '') + Number(fund.holdingProfit || 0).toFixed(2) : '****' }}</span>
                             </div>
                             <div class="metric-item">
                                 <span class="metric-label">📈 累计收益率</span>
-                                <span class="metric-value" :style="{color: privacyMode <= 2 ? (fund.holdingRate >= 0 ? '#ff4d4f' : '#10b981') : '#cbd5e1'}">{{ privacyMode <= 2 ? Number(fund.holdingRate || 0).toFixed(2) + '%' : '****' }}</span>
+                                <span class="metric-value" :class="privacyMode <= 2 ? (Number(fund.holdingRate || 0) > 0 ? 'value-gain' : (Number(fund.holdingRate || 0) < 0 ? 'value-loss' : '')) : ''">{{ privacyMode <= 2 ? Number(fund.holdingRate || 0).toFixed(2) + '%' : '****' }}</span>
                             </div>
                         </div>
+                        <div v-if="fund.pendingBuy || Number(fund.todayPendingBuyAmount || 0) > 0" class="fund-note">待确认买入只展示金额，不参与今日收益和今日收益率。</div>
                     </div>
                     <span v-if="activeHoldings.length === 0 && !isLoading" style="color:var(--text-muted); font-size:13px; width: 100%; text-align: center; padding: 20px;">暂无持仓，请手动添加代码，或点击上方「📷 智能截图导入」自动扫描</span>
                 </div>
