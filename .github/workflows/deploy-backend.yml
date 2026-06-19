@@ -185,6 +185,7 @@ jobs:
             cp -f "$APP_DIR/小白养基.dll" "$APP_DIR/小白养基.dll.bak"
           fi
 
+          rm -rf "$APP_DIR/wwwroot/v2"
           cp -a "$TMP_DIR"/. "$APP_DIR"/
           sync
 

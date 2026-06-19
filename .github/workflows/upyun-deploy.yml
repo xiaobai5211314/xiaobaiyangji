@@ -30,7 +30,7 @@ jobs:
         run: |
           upx login ${{ secrets.UPYUN_SERVICE }} ${{ secrets.UPYUN_OPERATOR }} ${{ secrets.UPYUN_PASSWORD }}
           upx put wwwroot/index.html /index.html
-          upx sync wwwroot/v2 /v2
+          upx rm -a /v2 || true
 
       - name: 刷新又拍云CDN缓存
         run: |
@@ -38,7 +38,7 @@ jobs:
           curl --fail --show-error -X POST "https://purge.upyun.com/purge/" \
             -H "Content-Type: application/json" \
             -u "${{ secrets.UPYUN_OPERATOR }}:${{ secrets.UPYUN_PASSWORD }}" \
-            -d '{"urls":"https://guzhicdn.21212121.xyz/index.html\nhttps://guzhicdn.21212121.xyz/v2/index.html"}'
+            -d '{"urls":"https://guzhicdn.21212121.xyz/index.html"}'
           code=$?
           if [ "$code" -ne 0 ]; then
             echo "::warning::又拍云 CDN 刷新失败，文件已上传；跳过刷新避免阻断前端部署。curl exit code: $code"
