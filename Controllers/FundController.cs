@@ -3142,6 +3142,12 @@ namespace 小白养基.Controllers
                     decimal baseAmount = Math.Max(0.01m, confirmedAmount - yesterdayIncome);
                     decimal dailyRate = PortfolioAccounting.Percent(yesterdayIncome, baseAmount);
 
+                    decimal totalRate = Math.Abs(item.HoldingRate) > 0.0001
+                        ? Convert.ToDecimal(Math.Round(item.HoldingRate, 2))
+                        : PortfolioAccounting.HoldingProfitRate(
+                            PortfolioAccounting.Money(item.HoldingIncome),
+                            PortfolioAccounting.Money(confirmedAmount));
+
                     archives.Add(new DailyArchive
                     {
                         Username = username,
@@ -3152,9 +3158,7 @@ namespace 小白养基.Controllers
                         DailyProfit = PortfolioAccounting.ToDouble(yesterdayIncome),
                         DailyRate = Convert.ToDouble(dailyRate),
                         TotalProfit = PortfolioAccounting.ToDouble(holdingIncome),
-                        TotalRate = Convert.ToDouble(PortfolioAccounting.HoldingProfitRate(
-                            PortfolioAccounting.Money(item.HoldingIncome),
-                            PortfolioAccounting.Money(confirmedAmount))),
+                        TotalRate = Convert.ToDouble(totalRate),
                         Source = "alipay-confirmed",
                         IsFinal = true,
                         UpdatedAt = DateTime.UtcNow
