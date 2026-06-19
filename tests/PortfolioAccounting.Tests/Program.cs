@@ -232,6 +232,18 @@ var qdiiPending = new MyFundConfig
 Equal(1000.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(qdiiPending, "2026-06-22")), "pending.qdii.beforeConfirm.active");
 Equal(0.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(qdiiPending, "2026-06-23")), "pending.qdii.confirmDate.notActive");
 
+var staleLegacyPending = new MyFundConfig
+{
+    HoldAmount = 34190.04,
+    PendingBuyAmount = 1000.00,
+    PendingTradeDate = "2026-06-19",
+    PendingConfirmDate = "2026-06-10",
+    PendingTradeStatus = "pending_buy",
+    LastTradeDate = "2026-06-19",
+    LastAddAmount = 1000.00
+};
+Equal(0.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(staleLegacyPending, "2026-06-18", "2026-06-19")), "pending.legacy.confirmReached.notActive");
+
 var manualAddFund = new MyFundConfig
 {
     FundName = "华富科技动能混合C",

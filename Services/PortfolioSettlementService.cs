@@ -51,6 +51,7 @@ namespace 小白养基.Services
                 : 0;
             double legacyTodayAdd = (fund.LastTradeDate == settleDate
                     || (!string.IsNullOrWhiteSpace(asOfDate) && fund.LastTradeDate == asOfDate))
+                && !IsPendingConfirmReached(fund.PendingConfirmDate, settleDate, asOfDate)
                 && fund.LastAddAmount > 0
                 ? fund.LastAddAmount
                 : 0;
