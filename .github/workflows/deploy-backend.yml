@@ -11,6 +11,7 @@ on:
       - "**/*.csproj"
       - "appsettings*.json"
       - "wwwroot/**"
+      - "tools/x_tweets_fetcher/**"
       - ".github/workflows/deploy-backend.yml"
       - ".github/server/**"
   workflow_dispatch:
@@ -25,7 +26,7 @@ concurrency:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
 
     env:
       SERVER_PORT: ${{ secrets.SERVER_PORT || '22' }}
@@ -33,6 +34,7 @@ jobs:
       SERVICE_NAME: guzhi-assistant.service
       PORT: "7084"
       REMOTE_PACKAGE: /home/deploy/guzhi_release.tar.gz
+      REMOTE_TRANSLATION_CONFIG: /home/deploy/guzhi_translation_secrets.json
       REMOTE_TMP_DIR: /home/deploy/guzhi_release_unpack
       CONTROL_SCRIPT: /usr/local/sbin/guzhi-deploy-control
       NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
@@ -95,6 +97,11 @@ jobs:
             echo "警告：发布目录里没有 小白养基.dll，当前 DLL：$MAIN_DLL"
           fi
 
+          mkdir -p ./publish/tools/x_tweets_fetcher
+          cp -a ./tools/x_tweets_fetcher/. ./publish/tools/x_tweets_fetcher/
+          find ./publish/tools/x_tweets_fetcher -type d -name '__pycache__' -prune -exec rm -rf {} +
+          find ./publish/tools/x_tweets_fetcher -type f \( -name '*.pyc' -o -name '*.db' \) -delete
+
           tar -cf - -C ./publish . | gzip -1 > release.tar.gz
           echo "发布包大小："
           ls -lh release.tar.gz
@@ -108,6 +115,32 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -p "$SERVER_PORT" -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts
 
+      - name: 生成腾讯翻译私有配置包
+        shell: bash
+        env:
+          TENCENT_SECRET_ID: ${{ secrets.TENCENT_TRANSLATE_SECRET_ID }}
+          TENCENT_SECRET_KEY: ${{ secrets.TENCENT_TRANSLATE_SECRET_KEY }}
+        run: |
+          set -Eeuo pipefail
+          if [ -z "$TENCENT_SECRET_ID" ] || [ -z "$TENCENT_SECRET_KEY" ]; then
+            echo "缺少腾讯翻译 GitHub Secrets"
+            exit 1
+          fi
+          umask 077
+          python3 - <<'PY'
+          import json
+          import os
+
+          payload = {
+              "TRANSLATE_TENCENT_SECRET_ID": os.environ["TENCENT_SECRET_ID"],
+              "TRANSLATE_TENCENT_SECRET_KEY": os.environ["TENCENT_SECRET_KEY"],
+          }
+          with open("guzhi_translation_secrets.json", "w", encoding="utf-8") as handle:
+              json.dump(payload, handle)
+          PY
+          chmod 600 guzhi_translation_secrets.json
+          echo "腾讯翻译私有配置包已生成（内容不输出）"
+
       - name: 上传发布包
         shell: bash
         run: |
@@ -116,6 +149,11 @@ jobs:
             -P "$SERVER_PORT" \
             release.tar.gz \
             "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${REMOTE_PACKAGE}"
+          scp -q -i ~/.ssh/deploy_key \
+            -P "$SERVER_PORT" \
+            guzhi_translation_secrets.json \
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${REMOTE_TRANSLATION_CONFIG}"
+          rm -f guzhi_translation_secrets.json
 
       - name: 部署并健康检查
         shell: bash
@@ -131,8 +169,10 @@ jobs:
           SERVICE_NAME="guzhi-assistant.service"
           PORT="7084"
           REMOTE_PACKAGE="/home/deploy/guzhi_release.tar.gz"
+          REMOTE_TRANSLATION_CONFIG="/home/deploy/guzhi_translation_secrets.json"
           TMP_DIR="/home/deploy/guzhi_release_unpack"
           CONTROL_SCRIPT="/usr/local/sbin/guzhi-deploy-control"
+          trap 'rm -f "$REMOTE_TRANSLATION_CONFIG"' EXIT
 
           echo "======= 0. 基础检查 ======="
           whoami
@@ -191,6 +231,46 @@ jobs:
 
           echo "线上 DLL："
           find "$APP_DIR" -maxdepth 1 -name '*.dll' -printf '%f %s bytes\n'
+
+          echo "======= 3.2. 配置并运行推文翻译 sidecar ======="
+          SIDECAR_DIR="$APP_DIR/tools/x_tweets_fetcher"
+          PRIVATE_ENV="$APP_DIR/.secrets/influencer.env"
+          CACHE_PATH="/var/lib/xiaobaiyangji/influencer-posts.json"
+          if [ ! -f "$SIDECAR_DIR/configure_translation_env.py" ]; then
+            echo "缺少 sidecar 私有配置脚本"
+            exit 1
+          fi
+          if [ ! -f "$REMOTE_TRANSLATION_CONFIG" ]; then
+            echo "缺少服务器临时翻译配置包"
+            exit 1
+          fi
+
+          install -d -m 700 "$APP_DIR/.secrets"
+          python3 "$SIDECAR_DIR/configure_translation_env.py" "$PRIVATE_ENV" < "$REMOTE_TRANSLATION_CONFIG"
+          rm -f "$REMOTE_TRANSLATION_CONFIG"
+
+          if [ ! -x "$SIDECAR_DIR/.venv/bin/python" ]; then
+            python3 -m venv "$SIDECAR_DIR/.venv"
+          fi
+          "$SIDECAR_DIR/.venv/bin/pip" install --disable-pip-version-check --quiet -r "$SIDECAR_DIR/requirements.txt"
+          if ! "$SIDECAR_DIR/.venv/bin/python" "$SIDECAR_DIR/fetch_posts.py" >/tmp/guzhi_influencer_sync.log 2>&1; then
+            echo "推文 sidecar 同步失败："
+            tail -n 30 /tmp/guzhi_influencer_sync.log || true
+            exit 1
+          fi
+
+          python3 - "$CACHE_PATH" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              payload = json.load(handle)
+          items = payload.get("items", []) if isinstance(payload, dict) else []
+          translated = sum(1 for item in items[:20] if item.get("translationStatus") == "success" and item.get("translatedText"))
+          print(f"推文翻译缓存验证：items={min(len(items), 20)} translated={translated}")
+          if translated < 1:
+              raise SystemExit("推文缓存没有成功译文")
+          PY
 
           echo "======= 3.5. 数据库迁移 ======="
           APPSETTINGS="$APP_DIR/appsettings.Production.json"

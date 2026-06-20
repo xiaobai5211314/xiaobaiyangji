@@ -15,6 +15,7 @@ from tools.x_tweets_fetcher.fetch_posts import (
     translate_missing_posts,
 )
 from tools.x_tweets_fetcher.export_x_cookie import merge_env_content
+from tools.x_tweets_fetcher.configure_translation_env import update_translation_env
 
 
 class PrepareStorageTests(unittest.TestCase):
@@ -198,6 +199,32 @@ TRANSLATE_TENCENT_SECRET_KEY=test-secret-key
         self.assertIn("TRANSLATE_TENCENT_SECRET_ID=test-secret-id", merged)
         self.assertIn("TRANSLATE_TENCENT_SECRET_KEY=test-secret-key", merged)
         self.assertNotIn("X_COOKIE=old-cookie", merged)
+
+    def test_translation_deploy_preserves_cookie_and_writes_tencent_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            env_path = Path(temp_dir) / "influencer.env"
+            env_path.write_text(
+                "X_COOKIE='auth_token=keep; ct0=keep'\nINFLUENCER_POSTS_MAX_DISPLAY=20\n",
+                encoding="utf-8",
+            )
+
+            update_translation_env(
+                env_path,
+                {
+                    "TRANSLATE_TENCENT_SECRET_ID": "test-secret-id",
+                    "TRANSLATE_TENCENT_SECRET_KEY": "test-secret-key",
+                },
+            )
+
+            content = env_path.read_text(encoding="utf-8")
+            self.assertIn("X_COOKIE='auth_token=keep; ct0=keep'", content)
+            self.assertIn("INFLUENCER_POSTS_MAX_DISPLAY=20", content)
+            self.assertIn("TRANSLATE_PROVIDER='tencent'", content)
+            self.assertIn("TRANSLATE_TARGET_LANG='zh-CN'", content)
+            self.assertIn("TRANSLATE_TENCENT_SOURCE_LANG='en'", content)
+            self.assertIn("TRANSLATE_TENCENT_REGION='ap-guangzhou'", content)
+            self.assertIn("TRANSLATE_TENCENT_SECRET_ID='test-secret-id'", content)
+            self.assertIn("TRANSLATE_TENCENT_SECRET_KEY='test-secret-key'", content)
 
 
 if __name__ == "__main__":

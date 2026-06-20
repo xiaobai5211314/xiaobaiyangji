@@ -104,6 +104,15 @@ TRANSLATE_TENCENT_SECRET_KEY=<new-secret-key>
 
 已在聊天、截图、日志或其他公开位置出现过的密钥必须先禁用并重新创建，禁止继续配置到服务器。腾讯云说明访问密钥由 `SecretId` 与 `SecretKey` 共同组成，并提供禁用、删除等管理操作；具体处置以控制台当前状态为准。依据：[腾讯云访问密钥](https://cloud.tencent.com/document/product/598/40488)。
 
+GitHub Actions 部署使用以下仓库 Secrets，工作流不得输出它们的值：
+
+~~~text
+TENCENT_TRANSLATE_SECRET_ID
+TENCENT_TRANSLATE_SECRET_KEY
+~~~
+
+`.github/workflows/deploy-backend.yml` 会把 sidecar 一并放入发布包，通过临时权限受限的 JSON 文件传到服务器，再由 `configure_translation_env.py` 原子合并到 `.secrets/influencer.env`。合并必须保留现有 `X_COOKIE`，随后部署任务运行一次 sidecar，并要求缓存中至少产生一条成功译文。
+
 也可使用 `custom` provider。它向配置的 endpoint 发送 JSON：
 
 ~~~json
