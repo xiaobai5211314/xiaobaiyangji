@@ -111,7 +111,7 @@ TENCENT_TRANSLATE_SECRET_ID
 TENCENT_TRANSLATE_SECRET_KEY
 ~~~
 
-`.github/workflows/deploy-backend.yml` 会把 sidecar 一并放入发布包，通过临时权限受限的 JSON 文件传到服务器，再由 `configure_translation_env.py` 原子合并到 `.secrets/influencer.env`。合并必须保留现有 `X_COOKIE`，随后部署任务运行一次 sidecar，并要求缓存中至少产生一条成功译文。
+`.github/workflows/deploy-backend.yml` 会把 sidecar 一并放入发布包，并通过临时权限受限的 JSON 文件把仓库 Secrets 传到服务器。后端启动后，`InfluencerPostsSidecarService` 在服务账户权限下调用 `configure_translation_env.py`，将配置原子合并到 `.secrets/influencer.env`，成功后立即删除临时 JSON；合并必须保留现有 `X_COOKIE`。托管服务随后立即同步一次，以后默认每 30 分钟同步一次。部署任务通过 API 检查缓存中至少产生一条成功译文，检查失败则部署失败。
 
 也可使用 `custom` provider。它向配置的 endpoint 发送 JSON：
 
