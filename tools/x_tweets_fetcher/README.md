@@ -35,6 +35,10 @@ TRANSLATE_TARGET_LANG
 TRANSLATE_CACHE_ENABLED
 TRANSLATE_MAX_CHARS_PER_POST
 TRANSLATE_CUSTOM_ENDPOINT
+TRANSLATE_TENCENT_SECRET_ID
+TRANSLATE_TENCENT_SECRET_KEY
+TRANSLATE_TENCENT_SOURCE_LANG
+TRANSLATE_TENCENT_REGION
 ~~~
 
 The default translation provider is `none`; the page then displays the English original. See `docs/deploy/influencer-posts-sidecar.md` for private configuration, Firefox login, timer setup and troubleshooting.

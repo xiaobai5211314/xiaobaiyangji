@@ -70,14 +70,13 @@ server {
 
 ## 一键导出脚本方案
 
-计划脚本名为 `export_x_cookie.py`。本仓库当前未包含该脚本，状态为**待实现/待服务器核实**。实现时必须满足：
+仓库已包含 `tools/x_tweets_fetcher/export_x_cookie.py`。脚本会更新 `X_COOKIE`，并保留同一私有文件中的翻译配置。服务器 Firefox profile 的实际位置仍为**待核实**。当前实现行为如下：
 
-1. 仅在服务器本地运行，从 `/opt/x-login-firefox` 下实际 profile 的 `cookies.sqlite` 读取 X 登录所需的两项 cookie。
-2. Firefox 运行中数据库可能被锁定，脚本先复制数据库到权限受限的临时文件，再只读查询 `moz_cookies`。
-3. 原子写入 `/www/wwwroot/小白养基/.secrets/influencer.env`，目录权限 `700`、文件权限 `600`。
-4. 更新 cookie 时保留文件内其他非 cookie 配置。
-5. 日志只能输出成功/失败、目标文件路径和时间，不得输出 cookie 内容、长度、请求头或翻译密钥。
-6. 找不到 cookie、发现多份 profile 或字段为空时退出失败，不覆盖旧文件。
+1. 在服务器本地停止临时 Firefox 容器，再从 `/opt/x-login-firefox` 下找到 `cookies.sqlite` 并只读查询 X 登录所需的两项 cookie。
+2. 写入 `/www/wwwroot/小白养基/.secrets/influencer.env`，目录权限 `700`、文件权限 `600`。
+3. 更新 cookie 时保留文件内其他非 cookie 配置，包括腾讯云翻译配置。
+4. 日志不输出 cookie 内容、长度、请求头或翻译密钥。
+5. 找不到 cookie 或字段为空时退出失败，不覆盖旧文件。
 
 ## 翻译配置
 
@@ -90,7 +89,22 @@ TRANSLATE_CACHE_ENABLED
 TRANSLATE_MAX_CHARS_PER_POST
 ~~~
 
-第一版可使用 `custom` provider。它向配置的 endpoint 发送 JSON：
+腾讯云机器翻译配置如下，所有值只允许写入服务器本地 `.secrets/influencer.env`：
+
+~~~text
+TRANSLATE_PROVIDER=tencent
+TRANSLATE_TARGET_LANG=zh-CN
+TRANSLATE_TENCENT_SOURCE_LANG=en
+TRANSLATE_TENCENT_REGION=ap-guangzhou
+TRANSLATE_TENCENT_SECRET_ID=<new-secret-id>
+TRANSLATE_TENCENT_SECRET_KEY=<new-secret-key>
+~~~
+
+`TextTranslate` 请求使用 `SecretId` 和 `SecretKey` 完成 TC3-HMAC-SHA256 鉴权；腾讯云账号 `APPID` 不作为本实现的鉴权字段。`SourceText`、`Source`、`Target`、`ProjectId` 是该接口的业务参数，本实现对固定英文推文使用 `Source=en`、`Target=zh`、`ProjectId=0`。依据：[腾讯云 TextTranslate](https://cloud.tencent.com/document/api/551/15619)、[腾讯云公共参数](https://cloud.tencent.com/document/api/551/15615)、[腾讯云访问密钥](https://cloud.tencent.com/document/product/598/40488)。
+
+已在聊天、截图、日志或其他公开位置出现过的密钥必须先禁用并重新创建，禁止继续配置到服务器。腾讯云说明访问密钥由 `SecretId` 与 `SecretKey` 共同组成，并提供禁用、删除等管理操作；具体处置以控制台当前状态为准。依据：[腾讯云访问密钥](https://cloud.tencent.com/document/product/598/40488)。
+
+也可使用 `custom` provider。它向配置的 endpoint 发送 JSON：
 
 ~~~json
 {
@@ -162,8 +176,8 @@ python3 -m json.tool /tmp/influencer-posts-response.json > /dev/null
 | twscrape 报数据库无法打开 | 检查数据库父目录权限和 systemd 运行用户 | 修正目录属主/权限，不把数据库放进 Git |
 | 接口为空列表 | 检查缓存文件是否存在、非空、JSON 有效，再看 service 状态 | 修复 sidecar 后重跑；失败期间保留旧缓存 |
 | 前端没有“推文”tab | 检查部署的 `wwwroot/index.html` 或小程序构建是否来自当前提交 | 重新部署正式入口，不恢复旧 v2 目录 |
-| 翻译为空 | 检查 provider 是否为 `none`、endpoint/model 是否配置 | 无配置时属于预期降级，页面显示英文原文 |
-| 翻译失败 | 检查 sidecar 状态与外部服务可达性，日志不得包含请求头 | 修复 provider；失败不能阻塞抓取缓存 |
+| 翻译为空 | 检查 provider 是否为 `none`；腾讯云模式检查 SecretId、SecretKey、source、region 是否配置，但不得输出值 | 无配置时属于预期降级，页面显示英文原文 |
+| 腾讯云翻译失败 | 检查 `translationStatus`、sidecar 状态和腾讯云错误码；禁止输出请求头或密钥值 | 按腾讯云错误码修复权限、密钥、地域或时间同步问题；失败不能阻塞抓取缓存 |
 
 ## 相关实现
 

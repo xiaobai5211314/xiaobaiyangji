@@ -36,6 +36,9 @@ class TranslationConfig:
     endpoint: str = ""
     api_key: str = ""
     model: str = ""
+    secret_key: str = ""
+    source_lang: str = "en"
+    region: str = "ap-guangzhou"
 
 
 def project_root() -> Path:
@@ -103,7 +106,7 @@ def translation_config_from_env() -> TranslationConfig:
         model = os.environ.get("TRANSLATE_OPENAI_MODEL", "").strip()
     elif provider == "tencent":
         endpoint = "https://tmt.tencentcloudapi.com"
-        api_key = os.environ.get("TRANSLATE_CUSTOM_API_KEY", "").strip()
+        api_key = os.environ.get("TRANSLATE_TENCENT_SECRET_ID", "").strip()
         model = ""
     else:
         endpoint = ""
@@ -118,6 +121,9 @@ def translation_config_from_env() -> TranslationConfig:
         endpoint=endpoint,
         api_key=api_key,
         model=model,
+        secret_key=(os.environ.get("TRANSLATE_TENCENT_SECRET_KEY", "").strip() if provider == "tencent" else ""),
+        source_lang=(os.environ.get("TRANSLATE_TENCENT_SOURCE_LANG", "en").strip() or "en"),
+        region=(os.environ.get("TRANSLATE_TENCENT_REGION", "ap-guangzhou").strip() or "ap-guangzhou"),
     )
 
 
@@ -277,6 +283,15 @@ def http_post_json(url: str, payload: dict[str, object], headers: dict[str, str]
     return result
 
 
+def http_post_json_bytes(url: str, body: bytes, headers: dict[str, str]) -> dict[str, object]:
+    request = urllib_request.Request(url, data=body, headers=headers, method="POST")
+    with urllib_request.urlopen(request, timeout=30, context=ssl.create_default_context()) as response:
+        result = json.loads(response.read().decode("utf-8"))
+    if not isinstance(result, dict):
+        raise ValueError("translation response must be a JSON object")
+    return result
+
+
 def translated_text_from_response(provider: str, response: dict[str, object]) -> str:
     if provider in {"custom", "libretranslate"}:
         return str(response.get("translatedText") or "").strip()
@@ -303,30 +318,49 @@ def _sign_tc3(secret_key: str, date: str, service: str, string_to_sign: str) -> 
     return hmac.new(k_signing, string_to_sign.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
-def _tencent_translate(text: str, config: TranslationConfig) -> str:
-    """调用腾讯云文本翻译 TextTranslate"""
+def _tencent_language_code(value: str, default: str) -> str:
+    normalized = (value or default).strip()
+    aliases = {
+        "en-us": "en",
+        "en-gb": "en",
+        "zh-cn": "zh",
+        "zh-hans": "zh",
+        "zh-tw": "zh-TW",
+        "zh-hant": "zh-TW",
+    }
+    return aliases.get(normalized.lower(), normalized)
 
+
+def build_tencent_request(
+    text: str,
+    config: TranslationConfig,
+    now: datetime | None = None,
+) -> tuple[str, bytes, dict[str, str]]:
     endpoint = "tmt.tencentcloudapi.com"
     service = "tmt"
     action = "TextTranslate"
-    region = "ap-guangzhou"
     version = "2018-03-21"
     algorithm = "TC3-HMAC-SHA256"
 
     secret_id = config.api_key
-    secret_key = os.environ.get("TRANSLATE_TENCENT_SECRET_KEY", "").strip()
+    secret_key = config.secret_key
+    if not secret_id:
+        raise RuntimeError("TRANSLATE_TENCENT_SECRET_ID not set")
     if not secret_key:
         raise RuntimeError("TRANSLATE_TENCENT_SECRET_KEY not set")
 
     payload = json.dumps({
         "SourceText": text,
-        "Source": "auto",
-        "Target": "zh",
+        "Source": _tencent_language_code(config.source_lang, "en"),
+        "Target": _tencent_language_code(config.target_lang, "zh"),
         "ProjectId": 0,
-    })
+    }, ensure_ascii=False, separators=(",", ":"))
 
-    timestamp = int(datetime.now(timezone.utc).timestamp())
-    date = datetime.utcfromtimestamp(timestamp).strftime("%Y-%m-%d")
+    current_time = now or datetime.now(timezone.utc)
+    if current_time.tzinfo is None:
+        current_time = current_time.replace(tzinfo=timezone.utc)
+    timestamp = int(current_time.timestamp())
+    date = datetime.fromtimestamp(timestamp, timezone.utc).strftime("%Y-%m-%d")
 
     # 1. 规范请求串
     http_request_method = "POST"
@@ -364,23 +398,38 @@ def _tencent_translate(text: str, config: TranslationConfig) -> str:
         "X-TC-Action": action,
         "X-TC-Timestamp": str(timestamp),
         "X-TC-Version": version,
-        "X-TC-Region": region,
+        "X-TC-Region": config.region,
     }
 
-    url = f"https://{endpoint}"
-    req = urllib_request.Request(url, data=payload.encode("utf-8"), headers=headers, method="POST")
-    ctx = ssl.create_default_context()
-    resp = urllib_request.urlopen(req, timeout=15, context=ctx)
-    body = json.loads(resp.read().decode("utf-8"))
-    if "Response" in body and "Error" in body["Response"]:
-        raise RuntimeError(f"TMT error: {body['Response']['Error'].get('Message', 'unknown')}")
-    return body["Response"]["TargetText"]
+    return f"https://{endpoint}", payload.encode("utf-8"), headers
+
+
+def _tencent_translate(
+    text: str,
+    config: TranslationConfig,
+    post_json_bytes=http_post_json_bytes,
+) -> str:
+    """调用腾讯云文本翻译 TextTranslate。"""
+    url, payload, headers = build_tencent_request(text, config)
+    body = post_json_bytes(url, payload, headers)
+    response = body.get("Response")
+    if not isinstance(response, dict):
+        raise ValueError("Tencent TMT response is missing Response")
+    error = response.get("Error")
+    if isinstance(error, dict):
+        error_code = str(error.get("Code") or "unknown")
+        raise RuntimeError(f"Tencent TMT request failed: {error_code}")
+    translated = str(response.get("TargetText") or "").strip()
+    if not translated:
+        raise ValueError("Tencent TMT response is missing TargetText")
+    return translated
 
 
 def request_translation(
     text: str,
     config: TranslationConfig,
     post_json=http_post_json,
+    tencent_post_json=http_post_json_bytes,
 ) -> str:
     if config.provider not in ("none", "openai", "tencent") and not config.endpoint:
         raise ValueError("translation endpoint is not configured")
@@ -410,7 +459,7 @@ def request_translation(
             "temperature": 0,
         }
     elif config.provider == "tencent":
-        return _tencent_translate(text, config)
+        return _tencent_translate(text, config, tencent_post_json)
     else:
         raise ValueError("translation provider is not supported")
 
@@ -424,6 +473,7 @@ def translate_missing_posts(
     posts: list[dict[str, Any]],
     config: TranslationConfig,
     post_json=http_post_json,
+    tencent_post_json=http_post_json_bytes,
 ) -> None:
     for item in posts:
         cached_translation = str(item.get("translatedText") or "").strip()
@@ -440,7 +490,9 @@ def translate_missing_posts(
             continue
 
         try:
-            item["translatedText"] = request_translation(text[: config.max_chars], config, post_json)
+            item["translatedText"] = request_translation(
+                text[: config.max_chars], config, post_json, tencent_post_json
+            )
             item["translatedAt"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
             item["translationStatus"] = "success"
         except Exception:
@@ -458,7 +510,9 @@ def translate_missing_posts(
                     continue
                 reply["translationProvider"] = config.provider
                 try:
-                    reply["translatedText"] = request_translation(reply_text[:config.max_chars], config, post_json)
+                    reply["translatedText"] = request_translation(
+                        reply_text[:config.max_chars], config, post_json, tencent_post_json
+                    )
                     reply["translatedAt"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
                     reply["translationStatus"] = "success"
                 except Exception:

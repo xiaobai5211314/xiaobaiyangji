@@ -1,13 +1,20 @@
+import json
 import tempfile
 import unittest
+from datetime import datetime, timezone
+from unittest.mock import patch
 from pathlib import Path
 
 from tools.x_tweets_fetcher.fetch_posts import (
     TranslationConfig,
+    build_tencent_request,
     merge_posts,
     prepare_storage,
+    request_translation,
+    translation_config_from_env,
     translate_missing_posts,
 )
+from tools.x_tweets_fetcher.export_x_cookie import merge_env_content
 
 
 class PrepareStorageTests(unittest.TestCase):
@@ -24,6 +31,72 @@ class PrepareStorageTests(unittest.TestCase):
 
 
 class TranslationCacheTests(unittest.TestCase):
+    def test_tencent_config_uses_dedicated_secret_id_and_secret_key(self) -> None:
+        env = {
+            "TRANSLATE_PROVIDER": "tencent",
+            "TRANSLATE_TENCENT_SECRET_ID": "test-secret-id",
+            "TRANSLATE_TENCENT_SECRET_KEY": "test-secret-key",
+            "TRANSLATE_TENCENT_SOURCE_LANG": "en",
+            "TRANSLATE_TENCENT_REGION": "ap-guangzhou",
+            "TRANSLATE_CUSTOM_API_KEY": "must-not-be-used",
+        }
+
+        with patch.dict("os.environ", env, clear=True):
+            config = translation_config_from_env()
+
+        self.assertEqual("tencent", config.provider)
+        self.assertEqual("test-secret-id", config.api_key)
+        self.assertEqual("test-secret-key", config.secret_key)
+        self.assertEqual("en", config.source_lang)
+        self.assertEqual("ap-guangzhou", config.region)
+
+    def test_tencent_request_uses_documented_text_translate_payload_and_headers(self) -> None:
+        config = TranslationConfig(
+            provider="tencent",
+            target_lang="zh-CN",
+            cache_enabled=True,
+            max_chars=4000,
+            api_key="test-secret-id",
+            secret_key="test-secret-key",
+            source_lang="en-US",
+            region="ap-guangzhou",
+        )
+        now = datetime(2026, 6, 20, 4, 0, 0, tzinfo=timezone.utc)
+
+        url, body, headers = build_tencent_request("hello", config, now)
+
+        self.assertEqual("https://tmt.tencentcloudapi.com", url)
+        self.assertEqual(
+            {"SourceText": "hello", "Source": "en", "Target": "zh", "ProjectId": 0},
+            json.loads(body.decode("utf-8")),
+        )
+        self.assertEqual("TextTranslate", headers["X-TC-Action"])
+        self.assertEqual("2018-03-21", headers["X-TC-Version"])
+        self.assertEqual("ap-guangzhou", headers["X-TC-Region"])
+        self.assertIn("Credential=test-secret-id/", headers["Authorization"])
+        self.assertNotIn("test-secret-key", headers["Authorization"])
+
+    def test_tencent_response_returns_target_text_without_live_network(self) -> None:
+        config = TranslationConfig(
+            provider="tencent",
+            target_lang="zh-CN",
+            cache_enabled=True,
+            max_chars=4000,
+            api_key="test-secret-id",
+            secret_key="test-secret-key",
+        )
+
+        def fake_tencent_post(url: str, body: bytes, headers: dict[str, str]) -> dict[str, object]:
+            return {"Response": {"TargetText": "你好", "RequestId": "test-request-id"}}
+
+        translated = request_translation(
+            "hello",
+            config,
+            tencent_post_json=fake_tencent_post,
+        )
+
+        self.assertEqual("你好", translated)
+
     def test_merge_preserves_successful_cached_translation(self) -> None:
         existing = [{
             "externalId": "123",
@@ -107,6 +180,24 @@ class TranslationCacheTests(unittest.TestCase):
         self.assertEqual("keep me", posts[0]["text"])
         self.assertEqual("", posts[0]["translatedText"])
         self.assertEqual("failed", posts[0]["translationStatus"])
+
+
+class InfluencerEnvTests(unittest.TestCase):
+    def test_cookie_export_preserves_tencent_translation_configuration(self) -> None:
+        existing = """# local configuration
+X_COOKIE=old-cookie
+TRANSLATE_PROVIDER=tencent
+TRANSLATE_TENCENT_SECRET_ID=test-secret-id
+TRANSLATE_TENCENT_SECRET_KEY=test-secret-key
+"""
+
+        merged = merge_env_content(existing, {"X_COOKIE": "auth_token=new; ct0=new"})
+
+        self.assertIn("X_COOKIE='auth_token=new; ct0=new'", merged)
+        self.assertIn("TRANSLATE_PROVIDER=tencent", merged)
+        self.assertIn("TRANSLATE_TENCENT_SECRET_ID=test-secret-id", merged)
+        self.assertIn("TRANSLATE_TENCENT_SECRET_KEY=test-secret-key", merged)
+        self.assertNotIn("X_COOKIE=old-cookie", merged)
 
 
 if __name__ == "__main__":
