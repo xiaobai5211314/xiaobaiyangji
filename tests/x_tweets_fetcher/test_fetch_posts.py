@@ -9,6 +9,7 @@ from tools.x_tweets_fetcher.fetch_posts import (
     TranslationConfig,
     build_tencent_request,
     merge_posts,
+    normalize_reply,
     prepare_storage,
     request_translation,
     translation_config_from_env,
@@ -29,6 +30,25 @@ class PrepareStorageTests(unittest.TestCase):
 
             self.assertTrue(cache_path.parent.is_dir())
             self.assertTrue(db_path.parent.is_dir())
+
+    def test_reply_uses_nullable_translation_timestamp_and_iso_created_at(self) -> None:
+        class User:
+            displayname = "Reply author"
+            username = "reply-author"
+
+        class Reply:
+            id = 456
+            rawContent = "reply text"
+            text = ""
+            date = datetime(2026, 6, 20, 9, 30, tzinfo=timezone.utc)
+            createdAt = None
+            user = User()
+            likeCount = 3
+
+        reply = normalize_reply(Reply(), "aleabitoreddit")
+
+        self.assertIsNone(reply["translatedAt"])
+        self.assertEqual("2026-06-20T09:30:00Z", reply["createdAt"])
 
 
 class TranslationCacheTests(unittest.TestCase):
@@ -127,6 +147,7 @@ class TranslationCacheTests(unittest.TestCase):
         translate_missing_posts(posts, config)
 
         self.assertEqual("", posts[0]["translatedText"])
+        self.assertIsNone(posts[0]["translatedAt"])
         self.assertEqual("none", posts[0]["translationProvider"])
         self.assertEqual("skipped", posts[0]["translationStatus"])
 

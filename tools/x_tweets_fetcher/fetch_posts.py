@@ -181,11 +181,7 @@ def media_urls(tweet: Any) -> list[str]:
 
 def normalize_post(tweet: Any, target_handle: str) -> dict[str, Any]:
     external_id = str(getattr(tweet, "id_str", "") or getattr(tweet, "id", ""))
-    created_at = getattr(tweet, "date", None)
-    if isinstance(created_at, datetime):
-        created_text = created_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-    else:
-        created_text = str(created_at or "")
+    created_text = normalize_datetime(getattr(tweet, "date", None))
 
     user = getattr(tweet, "user", None)
     author_handle = str(getattr(user, "username", "") or target_handle).lstrip("@")
@@ -207,9 +203,36 @@ def normalize_post(tweet: Any, target_handle: str) -> dict[str, Any]:
         "mediaUrls": media_urls(tweet),
         "source": "twscrape",
         "translatedText": "",
-        "translatedAt": "",
+        "translatedAt": None,
         "translationProvider": "none",
         "translationStatus": "skipped",
+    }
+
+
+def normalize_datetime(value: Any) -> str:
+    if isinstance(value, datetime):
+        timestamp = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+        return timestamp.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    return str(value or "")
+
+
+def normalize_reply(tweet: Any, target_handle: str) -> dict[str, Any]:
+    external_id = str(getattr(tweet, "id", "") or getattr(tweet, "id_str", ""))
+    user = getattr(tweet, "user", None)
+    return {
+        "id": external_id,
+        "text": str(getattr(tweet, "rawContent", "") or getattr(tweet, "text", "") or ""),
+        "translatedText": "",
+        "translatedAt": None,
+        "translationProvider": "none",
+        "translationStatus": "skipped",
+        "createdAt": normalize_datetime(
+            getattr(tweet, "date", None) or getattr(tweet, "createdAt", None)
+        ),
+        "authorName": str(getattr(user, "displayname", "") or ""),
+        "authorUsername": str(getattr(user, "username", "") or ""),
+        "likeCount": int(getattr(tweet, "likeCount", 0) or 0),
+        "url": f"https://x.com/{target_handle}/status/{external_id}",
     }
 
 
@@ -481,7 +504,7 @@ def translate_missing_posts(
             continue
 
         item["translatedText"] = ""
-        item["translatedAt"] = ""
+        item["translatedAt"] = None
         item["translationProvider"] = config.provider
 
         text = str(item.get("text") or "").strip()
@@ -508,6 +531,8 @@ def translate_missing_posts(
                 cached_reply = str(reply.get("translatedText") or "").strip()
                 if config.cache_enabled and cached_reply and reply.get("translationStatus") == "success":
                     continue
+                reply["translatedText"] = ""
+                reply["translatedAt"] = None
                 reply["translationProvider"] = config.provider
                 try:
                     reply["translatedText"] = request_translation(
@@ -561,19 +586,7 @@ async def fetch_replies_for_posts(
             replies = []
             for rt in replies_raw:
                 try:
-                    replies.append({
-                        "id": str(getattr(rt, 'id', '')),
-                        "text": str(getattr(rt, 'rawContent', '') or getattr(rt, 'text', '') or ''),
-                        "translatedText": "",
-                        "translatedAt": "",
-                        "translationProvider": "none",
-                        "translationStatus": "skipped",
-                        "createdAt": str(getattr(rt, 'date', '') or getattr(rt, 'createdAt', '')),
-                        "authorName": str(getattr(rt.user, 'displayname', '') if hasattr(rt, 'user') and rt.user else ''),
-                        "authorUsername": str(getattr(rt.user, 'username', '') if hasattr(rt, 'user') and rt.user else ''),
-                        "likeCount": int(getattr(rt, 'likeCount', 0) or 0),
-                        "url": f"https://x.com/{handle}/status/{getattr(rt, 'id', '')}",
-                    })
+                    replies.append(normalize_reply(rt, handle))
                 except Exception:
                     continue
 

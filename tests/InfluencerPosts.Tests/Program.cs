@@ -18,7 +18,18 @@ var json = """
       "translationProvider": "custom",
       "translationStatus": "success",
       "createdAt": "2026-06-20T00:00:00Z",
-      "url": "https://x.com/aleabitoreddit/status/1"
+      "url": "https://x.com/aleabitoreddit/status/1",
+      "replies": [
+        {
+          "id": "2",
+          "text": "Reply",
+          "translatedText": "",
+          "translatedAt": null,
+          "translationProvider": "tencent",
+          "translationStatus": "failed",
+          "createdAt": "2026-06-20T00:02:00Z"
+        }
+      ]
     }
   ]
 }
@@ -31,6 +42,8 @@ var dto = JsonSerializer.Deserialize<InfluencerPostsCacheDocument>(json, new Jso
 var post = dto.Items.Single();
 if (post.TranslatedText != "中文" || post.TranslationProvider != "custom" || post.TranslationStatus != "success")
     throw new InvalidOperationException("translation fields were not deserialized");
+if (post.Replies?.Single().TranslatedAt is not null)
+    throw new InvalidOperationException("nullable reply translation timestamp was not deserialized");
 
 var tempPath = Path.GetTempFileName();
 try
