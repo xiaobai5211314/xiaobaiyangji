@@ -25,6 +25,7 @@ def update_translation_env(env_path: Path, credentials: Mapping[str, str]) -> No
         raise ValueError("missing required Tencent translation credentials")
 
     updates = {
+        "INFLUENCER_POSTS_MAX_DISPLAY": "20",
         "TRANSLATE_PROVIDER": "tencent",
         "TRANSLATE_TARGET_LANG": "zh-CN",
         "TRANSLATE_CACHE_ENABLED": "true",

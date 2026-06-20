@@ -225,7 +225,7 @@ TRANSLATE_TENCENT_SECRET_KEY=test-secret-key
         with tempfile.TemporaryDirectory() as temp_dir:
             env_path = Path(temp_dir) / "influencer.env"
             env_path.write_text(
-                "X_COOKIE='auth_token=keep; ct0=keep'\nINFLUENCER_POSTS_MAX_DISPLAY=20\n",
+                "X_COOKIE='auth_token=keep; ct0=keep'\nINFLUENCER_POSTS_MAX_DISPLAY=10\n",
                 encoding="utf-8",
             )
 
@@ -239,7 +239,8 @@ TRANSLATE_TENCENT_SECRET_KEY=test-secret-key
 
             content = env_path.read_text(encoding="utf-8")
             self.assertIn("X_COOKIE='auth_token=keep; ct0=keep'", content)
-            self.assertIn("INFLUENCER_POSTS_MAX_DISPLAY=20", content)
+            self.assertIn("INFLUENCER_POSTS_MAX_DISPLAY='20'", content)
+            self.assertNotIn("INFLUENCER_POSTS_MAX_DISPLAY=10", content)
             self.assertIn("TRANSLATE_PROVIDER='tencent'", content)
             self.assertIn("TRANSLATE_TARGET_LANG='zh-CN'", content)
             self.assertIn("TRANSLATE_TENCENT_SOURCE_LANG='en'", content)
