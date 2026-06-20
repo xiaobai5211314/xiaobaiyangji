@@ -232,6 +232,11 @@ jobs:
           echo "线上 DLL："
           find "$APP_DIR" -maxdepth 1 -name '*.dll' -printf '%f %s bytes\n'
 
+          echo "======= 3.1. 立即恢复主服务 ======="
+          sudo -n "$CONTROL_SCRIPT" daemon-reload
+          sudo -n "$CONTROL_SCRIPT" enable
+          sudo -n "$CONTROL_SCRIPT" start
+
           echo "======= 3.2. 配置并运行推文翻译 sidecar ======="
           SIDECAR_DIR="$APP_DIR/tools/x_tweets_fetcher"
           PRIVATE_ENV="$APP_DIR/.secrets/influencer.env"
@@ -245,15 +250,18 @@ jobs:
             exit 1
           fi
 
-          install -d -m 700 "$APP_DIR/.secrets"
-          python3 "$SIDECAR_DIR/configure_translation_env.py" "$PRIVATE_ENV" < "$REMOTE_TRANSLATION_CONFIG"
+          if ! sudo -n -u www true >/dev/null 2>&1; then
+            echo "部署账户不能切换到 www，无法安全更新私有配置"
+            exit 1
+          fi
+          sudo -n -u www python3 "$SIDECAR_DIR/configure_translation_env.py" "$PRIVATE_ENV" < "$REMOTE_TRANSLATION_CONFIG"
           rm -f "$REMOTE_TRANSLATION_CONFIG"
 
           if [ ! -x "$SIDECAR_DIR/.venv/bin/python" ]; then
             python3 -m venv "$SIDECAR_DIR/.venv"
           fi
           "$SIDECAR_DIR/.venv/bin/pip" install --disable-pip-version-check --quiet -r "$SIDECAR_DIR/requirements.txt"
-          if ! "$SIDECAR_DIR/.venv/bin/python" "$SIDECAR_DIR/fetch_posts.py" >/tmp/guzhi_influencer_sync.log 2>&1; then
+          if ! sudo -n -u www "$SIDECAR_DIR/.venv/bin/python" "$SIDECAR_DIR/fetch_posts.py" >/tmp/guzhi_influencer_sync.log 2>&1; then
             echo "推文 sidecar 同步失败："
             tail -n 30 /tmp/guzhi_influencer_sync.log || true
             exit 1
