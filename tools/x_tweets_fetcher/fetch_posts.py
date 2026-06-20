@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import asyncio
+import hashlib
+import hmac
 import json
 import os
 import sys
@@ -8,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+import ssl
 from urllib import request as urllib_request
 
 DEFAULT_HANDLE = "aleabitoreddit"
@@ -26,7 +29,7 @@ TRANSLATION_FIELDS = (
 
 @dataclass(frozen=True)
 class TranslationConfig:
-    provider: str
+    provider: str  # "none" | "custom" | "openai" | "libretranslate" | "tencent"
     target_lang: str
     cache_enabled: bool
     max_chars: int
@@ -90,17 +93,17 @@ def translation_config_from_env() -> TranslationConfig:
     cache_enabled = env_bool("TRANSLATE_CACHE_ENABLED", True)
     max_chars = env_int("TRANSLATE_MAX_CHARS_PER_POST", 4000, 1, 20000)
 
-    if provider == "custom":
-        endpoint = (os.getenv("TRANSLATE_CUSTOM_ENDPOINT") or "").strip()
-        api_key = (os.getenv("TRANSLATE_CUSTOM_API_KEY") or "").strip()
+    if provider in ("custom", "libretranslate"):
+        endpoint = os.environ.get("TRANSLATE_CUSTOM_ENDPOINT", "").strip()
+        api_key = os.environ.get("TRANSLATE_CUSTOM_API_KEY", "").strip()
         model = ""
     elif provider == "openai":
-        endpoint = (os.getenv("TRANSLATE_OPENAI_ENDPOINT") or "").strip()
-        api_key = (os.getenv("TRANSLATE_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY") or "").strip()
-        model = (os.getenv("TRANSLATE_OPENAI_MODEL") or "").strip()
-    elif provider == "libretranslate":
-        endpoint = (os.getenv("TRANSLATE_LIBRETRANSLATE_ENDPOINT") or "").strip()
-        api_key = (os.getenv("TRANSLATE_LIBRETRANSLATE_API_KEY") or "").strip()
+        endpoint = os.environ.get("TRANSLATE_OPENAI_ENDPOINT", "").strip()
+        api_key = os.environ.get("TRANSLATE_OPENAI_API_KEY", os.environ.get("OPENAI_API_KEY", "")).strip()
+        model = os.environ.get("TRANSLATE_OPENAI_MODEL", "").strip()
+    elif provider == "tencent":
+        endpoint = "https://tmt.tencentcloudapi.com"
+        api_key = os.environ.get("TRANSLATE_CUSTOM_API_KEY", "").strip()
         model = ""
     else:
         endpoint = ""
@@ -194,6 +197,7 @@ def normalize_post(tweet: Any, target_handle: str) -> dict[str, Any]:
         "retweetCount": int(getattr(tweet, "retweetCount", 0) or 0),
         "replyCount": int(getattr(tweet, "replyCount", 0) or 0),
         "quoteCount": int(getattr(tweet, "quoteCount", 0) or 0),
+        "replies": [],
         "mediaUrls": media_urls(tweet),
         "source": "twscrape",
         "translatedText": "",
@@ -246,6 +250,9 @@ def merge_posts(existing: list[dict[str, Any]], incoming: list[dict[str, Any]], 
             for field in TRANSLATION_FIELDS:
                 if previous.get(field) not in (None, ""):
                     combined[field] = previous[field]
+        # 如果旧推文有 replies 且新推文没有抓到，保留旧的
+        if previous.get("replies") and not item.get("replies"):
+            item["replies"] = previous["replies"]
         merged[external_id] = combined
 
     return sorted(
@@ -286,12 +293,96 @@ def translated_text_from_response(provider: str, response: dict[str, object]) ->
     return ""
 
 
+def _sign_tc3(secret_key: str, date: str, service: str, string_to_sign: str) -> str:
+    """TC3-HMAC-SHA256 签名"""
+    def _hmac_sha256(key, msg):
+        return hmac.new(key, msg.encode("utf-8"), hashlib.sha256).digest()
+    k_date = _hmac_sha256(("TC3" + secret_key).encode("utf-8"), date)
+    k_service = _hmac_sha256(k_date, service)
+    k_signing = _hmac_sha256(k_service, "tc3_request")
+    return hmac.new(k_signing, string_to_sign.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _tencent_translate(text: str, config: TranslationConfig) -> str:
+    """调用腾讯云文本翻译 TextTranslate"""
+
+    endpoint = "tmt.tencentcloudapi.com"
+    service = "tmt"
+    action = "TextTranslate"
+    region = "ap-guangzhou"
+    version = "2018-03-21"
+    algorithm = "TC3-HMAC-SHA256"
+
+    secret_id = config.api_key
+    secret_key = os.environ.get("TRANSLATE_TENCENT_SECRET_KEY", "").strip()
+    if not secret_key:
+        raise RuntimeError("TRANSLATE_TENCENT_SECRET_KEY not set")
+
+    payload = json.dumps({
+        "SourceText": text,
+        "Source": "auto",
+        "Target": "zh",
+        "ProjectId": 0,
+    })
+
+    timestamp = int(datetime.now(timezone.utc).timestamp())
+    date = datetime.utcfromtimestamp(timestamp).strftime("%Y-%m-%d")
+
+    # 1. 规范请求串
+    http_request_method = "POST"
+    canonical_uri = "/"
+    canonical_querystring = ""
+    ct = "application/json; charset=utf-8"
+    canonical_headers = f"content-type:{ct}\nhost:{endpoint}\nx-tc-action:{action.lower()}\n"
+    signed_headers = "content-type;host;x-tc-action"
+    hashed_request_payload = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    canonical_request = (
+        f"{http_request_method}\n{canonical_uri}\n{canonical_querystring}\n"
+        f"{canonical_headers}\n{signed_headers}\n{hashed_request_payload}"
+    )
+
+    # 2. 拼接待签名字符串
+    credential_scope = f"{date}/{service}/tc3_request"
+    hashed_canonical_request = hashlib.sha256(canonical_request.encode("utf-8")).hexdigest()
+    string_to_sign = f"{algorithm}\n{timestamp}\n{credential_scope}\n{hashed_canonical_request}"
+
+    # 3. 计算签名
+    signature = _sign_tc3(secret_key, date, service, string_to_sign)
+
+    # 4. 拼接 Authorization
+    authorization = (
+        f"{algorithm} "
+        f"Credential={secret_id}/{credential_scope}, "
+        f"SignedHeaders={signed_headers}, "
+        f"Signature={signature}"
+    )
+
+    headers = {
+        "Authorization": authorization,
+        "Content-Type": ct,
+        "Host": endpoint,
+        "X-TC-Action": action,
+        "X-TC-Timestamp": str(timestamp),
+        "X-TC-Version": version,
+        "X-TC-Region": region,
+    }
+
+    url = f"https://{endpoint}"
+    req = urllib_request.Request(url, data=payload.encode("utf-8"), headers=headers, method="POST")
+    ctx = ssl.create_default_context()
+    resp = urllib_request.urlopen(req, timeout=15, context=ctx)
+    body = json.loads(resp.read().decode("utf-8"))
+    if "Response" in body and "Error" in body["Response"]:
+        raise RuntimeError(f"TMT error: {body['Response']['Error'].get('Message', 'unknown')}")
+    return body["Response"]["TargetText"]
+
+
 def request_translation(
     text: str,
     config: TranslationConfig,
     post_json=http_post_json,
 ) -> str:
-    if not config.endpoint:
+    if config.provider not in ("none", "openai", "tencent") and not config.endpoint:
         raise ValueError("translation endpoint is not configured")
 
     headers: dict[str, str] = {}
@@ -318,6 +409,8 @@ def request_translation(
             ],
             "temperature": 0,
         }
+    elif config.provider == "tencent":
+        return _tencent_translate(text, config)
     else:
         raise ValueError("translation provider is not supported")
 
@@ -352,6 +445,99 @@ def translate_missing_posts(
             item["translationStatus"] = "success"
         except Exception:
             item["translationStatus"] = "failed"
+
+        # 翻译 replies（如果 provider 不是 none）
+        if config.provider != "none":
+            for reply in item.get("replies", []) or []:
+                reply_text = str(reply.get("text") or "").strip()
+                if not reply_text:
+                    reply["translationStatus"] = "skipped"
+                    continue
+                cached_reply = str(reply.get("translatedText") or "").strip()
+                if config.cache_enabled and cached_reply and reply.get("translationStatus") == "success":
+                    continue
+                reply["translationProvider"] = config.provider
+                try:
+                    reply["translatedText"] = request_translation(reply_text[:config.max_chars], config, post_json)
+                    reply["translatedAt"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                    reply["translationStatus"] = "success"
+                except Exception:
+                    reply["translationStatus"] = "failed"
+
+
+async def fetch_replies_for_posts(
+    posts: list[dict],
+    api,
+    handle: str,
+    max_replies_per_post: int = 5,
+    timeout_seconds: float = 15.0,
+) -> None:
+    """
+    为每条推文抓取最近回复。失败或超时不影响主推文展示。
+    """
+    if not posts:
+        return
+
+    async def fetch_one_reply_chain(post: dict) -> None:
+        try:
+            tweet_id = str(post.get("externalId") or post.get("id") or "").strip()
+            if not tweet_id:
+                return
+
+            # 用 twscrape 搜索该推文的 conversation_id 来获取回复
+            replies_raw = []
+            try:
+                async with asyncio.timeout(timeout_seconds):
+                    # twscrape search 按 conversation_id 查找回复
+                    query = f"conversation_id:{tweet_id}"
+                    async for reply_tweet in api.search(query, limit=max_replies_per_post):
+                        # 跳过原推自身
+                        rid = str(getattr(reply_tweet, 'id', ''))
+                        if rid == tweet_id:
+                            continue
+                        replies_raw.append(reply_tweet)
+                        if len(replies_raw) >= max_replies_per_post:
+                            break
+            except (asyncio.TimeoutError, Exception):
+                pass  # 超时或限流，保留已抓到的
+
+            if not replies_raw:
+                return
+
+            replies = []
+            for rt in replies_raw:
+                try:
+                    replies.append({
+                        "id": str(getattr(rt, 'id', '')),
+                        "text": str(getattr(rt, 'rawContent', '') or getattr(rt, 'text', '') or ''),
+                        "translatedText": "",
+                        "translatedAt": "",
+                        "translationProvider": "none",
+                        "translationStatus": "skipped",
+                        "createdAt": str(getattr(rt, 'date', '') or getattr(rt, 'createdAt', '')),
+                        "authorName": str(getattr(rt.user, 'displayname', '') if hasattr(rt, 'user') and rt.user else ''),
+                        "authorUsername": str(getattr(rt.user, 'username', '') if hasattr(rt, 'user') and rt.user else ''),
+                        "likeCount": int(getattr(rt, 'likeCount', 0) or 0),
+                        "url": f"https://x.com/{handle}/status/{getattr(rt, 'id', '')}",
+                    })
+                except Exception:
+                    continue
+
+            if replies:
+                post["replies"] = replies
+
+        except Exception:
+            pass  # 任何异常都不影响主流程
+
+    # 并发抓取，但限制并发数
+    semaphore = asyncio.Semaphore(3)
+
+    async def limited_fetch(post: dict) -> None:
+        async with semaphore:
+            await fetch_one_reply_chain(post)
+
+    tasks = [limited_fetch(p) for p in posts]
+    await asyncio.gather(*tasks, return_exceptions=True)
 
 
 def atomic_write_json(cache_path: Path, payload: dict[str, Any]) -> None:
@@ -403,6 +589,11 @@ async def fetch_posts() -> int:
 
     existing = load_existing(cache_path)
     items = merge_posts(existing, incoming, max_store)
+    # 抓取评论/回复（仅对前 max_display 条）
+    await fetch_replies_for_posts(
+        items[:max_display], api, handle,
+        max_replies_per_post=5, timeout_seconds=15.0,
+    )
     translate_missing_posts(items[:max_display], translation_config_from_env())
     payload = {
         "targetHandle": handle,

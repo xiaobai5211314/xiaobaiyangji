@@ -18,6 +18,7 @@ export interface InfluencerPost {
   retweetCount?: number;
   replyCount?: number;
   quoteCount?: number;
+  replies?: InfluencerReply[];
   mediaUrls?: string[];
   source?: string;
 }
@@ -27,6 +28,20 @@ export interface InfluencerPostsResponse {
   status?: string;
   fetchedAt?: string;
   items?: InfluencerPost[];
+}
+
+export interface InfluencerReply {
+  id?: string;
+  text: string;
+  translatedText?: string;
+  translatedAt?: string;
+  translationProvider?: string;
+  translationStatus?: TranslationStatus;
+  createdAt?: string;
+  authorName?: string;
+  authorUsername?: string;
+  likeCount?: number;
+  url?: string;
 }
 
 export function getInfluencerPosts(force = false) {

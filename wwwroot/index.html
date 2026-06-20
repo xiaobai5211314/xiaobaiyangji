@@ -1463,6 +1463,15 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             font-weight: 800;
         }
 
+        .influencer-replies-section { margin-top: 10px; border-top: 1px solid var(--card-border); padding-top: 10px; }
+        .influencer-replies-toggle { background: none; border: 1px solid var(--card-border); color: var(--text-muted); border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 800; cursor: pointer; }
+        .influencer-replies-toggle:hover { color: var(--text-main); }
+        .influencer-replies-list { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+        .influencer-reply-card { background: var(--card-bg); border-radius: 12px; padding: 8px 10px; }
+        .influencer-reply-meta { display: flex; justify-content: space-between; gap: 8px; color: var(--text-muted); font-size: 11px; font-weight: 800; margin-bottom: 4px; }
+        .influencer-reply-translation { color: var(--text-main); font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+        .influencer-reply-original { color: var(--text-muted); font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; margin-top: 4px; }
+
         .performance-card {
             grid-column: 1 / -1;
             min-width: 0;
@@ -5024,6 +5033,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             <div v-if="post.translatedText" class="influencer-post-translation">{{ post.translatedText }}</div>
                             <div class="influencer-post-original">{{ post.text }}</div>
                             <span v-if="post.translationStatus === 'failed'" class="influencer-translation-status">翻译失败</span>
+                            <span v-else-if="post.translationStatus === 'skipped' && !post.translatedText" class="influencer-translation-status">未配置翻译</span>
                             <span v-else-if="!post.translatedText" class="influencer-translation-status">待翻译</span>
                             <div class="influencer-post-foot">
                                 <div class="influencer-post-stats">
@@ -5032,6 +5042,23 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                     <span>回 {{ formatInfluencerCount(post.replyCount) }}</span>
                                 </div>
                                 <a class="influencer-post-link" :href="post.url" target="_blank" rel="noopener noreferrer">原文链接</a>
+                            </div>
+                            <div v-if="post.replies && post.replies.length > 0" class="influencer-replies-section">
+                                <button class="influencer-replies-toggle" @click="toggleReplies(post)">
+                                    {{ post._showReplies ? '收起评论' : '展开评论 (' + post.replies.length + ')' }}
+                                </button>
+                                <div v-if="post._showReplies" class="influencer-replies-list">
+                                    <div v-for="reply in post.replies" :key="reply.id" class="influencer-reply-card">
+                                        <div class="influencer-reply-meta">
+                                            <span>{{ reply.authorName || reply.authorUsername || '用户' }}</span>
+                                            <span>{{ formatInfluencerPostTime(reply.createdAt) }}</span>
+                                        </div>
+                                        <div v-if="reply.translatedText" class="influencer-reply-translation">{{ reply.translatedText }}</div>
+                                        <div class="influencer-reply-original">{{ reply.text }}</div>
+                                        <span v-if="reply.translationStatus === 'failed'" class="influencer-translation-status">翻译失败</span>
+                                        <span v-else-if="!reply.translatedText" class="influencer-translation-status">未翻译</span>
+                                    </div>
+                                </div>
                             </div>
                         </article>
                     </div>
@@ -6051,6 +6078,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     if (!Number.isFinite(n) || n <= 0) return '0';
                     if (n >= 10000) return (n / 10000).toFixed(n >= 100000 ? 0 : 1) + '万';
                     return String(Math.round(n));
+                };
+                const toggleReplies = (post) => {
+                    post._showReplies = !post._showReplies;
                 };
                 const loadInfluencerPosts = async () => {
                     if (influencerPostsLoading.value) return;

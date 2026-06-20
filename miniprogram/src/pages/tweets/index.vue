@@ -21,6 +21,7 @@
       <text v-if="post.translatedText" class="translated-text">{{ post.translatedText }}</text>
       <text class="original-text">{{ post.text }}</text>
       <text v-if="post.translationStatus === 'failed'" class="translation-status">翻译失败</text>
+      <text v-else-if="post.translationStatus === 'skipped' && !post.translatedText" class="translation-status">未配置翻译</text>
       <text v-else-if="!post.translatedText" class="translation-status">待翻译</text>
       <view class="tweet-footer">
         <view class="tweet-stats">
@@ -28,7 +29,27 @@
           <text>转 {{ formatCount(post.retweetCount) }}</text>
           <text>回 {{ formatCount(post.replyCount) }}</text>
         </view>
-        <button class="original-link" @tap="openOriginal(post.url)">原文链接</button>
+        <button class="original-link" @tap="openOriginal(post.url)">复制链接</button>
+      </view>
+
+      <!-- 评论/回复区域 -->
+      <view v-if="post.replies && post.replies.length" class="replies-section">
+        <button class="replies-toggle" @tap="toggleReplies(post)">
+          {{ post._showReplies ? '收起评论' : `展开评论 (${post.replies.length})` }}
+        </button>
+        <view v-if="post._showReplies" class="replies-list">
+          <view v-for="reply in post.replies" :key="reply.id || reply.createdAt" class="reply-card">
+            <view class="reply-meta">
+              <text>{{ reply.authorName || reply.authorUsername || '回复者' }}</text>
+              <text>{{ formatTime(reply.createdAt) }}</text>
+            </view>
+            <text v-if="reply.translatedText" class="reply-translation">{{ reply.translatedText }}</text>
+            <text class="reply-original">{{ reply.text }}</text>
+            <text v-if="reply.translationStatus === 'failed'" class="translation-status">翻译失败</text>
+            <text v-else-if="reply.translationStatus === 'skipped' && !reply.translatedText" class="translation-status">未配置翻译</text>
+            <text v-else-if="!reply.translatedText" class="translation-status">待翻译</text>
+          </view>
+        </view>
       </view>
     </view>
 
@@ -95,8 +116,16 @@ function formatCount(value?: number) {
 }
 
 function openOriginal(url: string) {
-  if (!/^https:\/\/(x\.com|twitter\.com)\//i.test(url || '')) return;
-  uni.navigateTo({ url: `/pages/tweets/webview?url=${encodeURIComponent(url)}` });
+  if (!url) return;
+  uni.setClipboardData({
+    data: url,
+    success: () => { uni.showToast({ title: '原文链接已复制', icon: 'none', duration: 1500 }); },
+    fail: () => { uni.showToast({ title: '复制失败', icon: 'none', duration: 1500 }); }
+  });
+}
+
+function toggleReplies(post: any) {
+  post._showReplies = !post._showReplies;
 }
 </script>
 
@@ -201,4 +230,12 @@ function openOriginal(url: string) {
 .original-link {
   color: #60a5fa;
 }
+
+.replies-section { margin-top: 12px; border-top: 2rpx solid rgba(128,128,128,.15); padding-top: 12px; }
+.replies-toggle { background: none; border: 2rpx solid rgba(128,128,128,.2); color: var(--text-muted); border-radius: 999px; padding: 6rpx 16rpx; font-size: 22rpx; font-weight: 800; }
+.replies-list { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.reply-card { background: rgba(128,128,128,.05); border-radius: 12rpx; padding: 12rpx 16rpx; }
+.reply-meta { display: flex; justify-content: space-between; color: var(--text-muted); font-size: 22rpx; font-weight: 800; margin-bottom: 6rpx; }
+.reply-translation { color: var(--text-main); font-size: 26rpx; line-height: 1.6; }
+.reply-original { color: var(--text-muted); font-size: 22rpx; line-height: 1.5; margin-top: 6rpx; white-space: pre-wrap; word-break: break-all; }
 </style>
