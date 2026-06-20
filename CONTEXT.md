@@ -12,8 +12,19 @@
 
 技术栈：
 - 后端：ASP.NET Core 8.0 (C#)，MySQL + Redis
-- 小程序前端：uni-app / Vue 3 / TypeScript
-- 静态 WebApp：`wwwroot/index.html`（单文件）+ `wwwroot/v2/`（Vite 构建）
+- 小程序正式前端：`miniprogram/src/`（uni-app / Vue 3 / TypeScript）
+- WebApp 正式前端：`wwwroot/index.html`（单文件）
+
+`wwwroot/v2/` 已删除且不再使用；`frontend/src/` 不是正式前端入口。前端修改只能落在上述两个正式入口。
+
+## 白毛股神推文
+
+- “推文”是底部导航独立第 5 个板块，与持仓、板块、资讯、盈亏并列，不得放在持仓页底部。
+- 固定目标账号为 `@aleabitoreddit`，列表按 `createdAt` 降序，最多展示最近 20 条。
+- 中文翻译优先显示，英文原文保留；翻译失败或未配置 provider 时继续显示英文原文。
+- 翻译字段和翻译结果随推文写入 JSON 缓存，已有成功译文不得在每次页面打开时重复翻译。
+- sidecar 抓取失败保留旧缓存；缓存缺失、抓取失败或翻译失败不得影响基金首页、收益计算、OCR、`DailyArchive`、盈亏日历或首页 summary。
+- 数据流与敏感信息边界见 `docs/adr/0005-influencer-posts-source-and-cache.md`。
 
 ## 核心领域实体
 

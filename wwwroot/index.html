@@ -1403,6 +1403,34 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             word-break: break-word;
         }
 
+        .influencer-post-translation {
+            color: var(--text-main);
+            font-size: 15px;
+            line-height: 1.7;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .influencer-post-original {
+            margin-top: 9px;
+            color: var(--text-muted);
+            font-size: 12px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .influencer-translation-status {
+            display: inline-flex;
+            margin-top: 8px;
+            padding: 3px 8px;
+            border-radius: 999px;
+            color: #fbbf24;
+            background: rgba(251, 191, 36, .12);
+            font-size: 11px;
+            font-weight: 800;
+        }
+
         .influencer-post-foot {
             display: flex;
             justify-content: space-between;
@@ -2130,7 +2158,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             width: min(560px, calc(100vw - 22px));
             z-index: 900;
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(5, 1fr);
             gap: 6px;
             padding: 7px;
             border-radius: 24px;
@@ -4878,38 +4906,6 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                 <div v-show="assetMode === 'fund' && !isLoading" id="chart-container" class="glass-panel" ref="chartRef"></div>
 
-                <div v-show="assetMode === 'fund' && !isLoading" class="glass-panel influencer-posts-panel">
-                    <div class="influencer-posts-head">
-                        <div>
-                            <div class="feature-title">白毛股神推文</div>
-                            <div class="feature-subtitle">@aleabitoreddit · 仅供个人观察</div>
-                            <div v-if="influencerPostsUpdatedAt" class="feature-subtitle">缓存时间 {{ formatInfluencerPostTime(influencerPostsUpdatedAt) }}</div>
-                        </div>
-                        <button type="button" class="influencer-refresh" :disabled="influencerPostsLoading" @click="loadInfluencerPosts(true)">
-                            {{ influencerPostsLoading ? '同步中' : '刷新' }}
-                        </button>
-                    </div>
-                    <div v-if="influencerPostsLoading" class="influencer-empty">正在读取推文缓存...</div>
-                    <div v-else-if="influencerPostsStatus === 'error' || influencerPostsStatus === 'invalid' || influencerPostsStatus === 'unavailable'" class="influencer-empty">暂时无法获取推文</div>
-                    <div v-else-if="influencerPostsDisplay.length === 0" class="influencer-empty">暂无推文缓存</div>
-                    <div v-else class="influencer-posts-list">
-                        <article v-for="post in influencerPostsDisplay" :key="post.externalId || post.id" class="influencer-post-card">
-                            <div class="influencer-post-meta">
-                                <span>{{ formatInfluencerPostTime(post.createdAt) }}</span>
-                                <span>{{ post.authorName || 'Serenity' }}</span>
-                            </div>
-                            <div class="influencer-post-text">{{ post.text }}</div>
-                            <div class="influencer-post-foot">
-                                <div class="influencer-post-stats">
-                                    <span>赞 {{ formatInfluencerCount(post.likeCount) }}</span>
-                                    <span>转 {{ formatInfluencerCount(post.retweetCount) }}</span>
-                                    <span>回 {{ formatInfluencerCount(post.replyCount) }}</span>
-                                </div>
-                                <a class="influencer-post-link" :href="post.url" target="_blank" rel="noopener noreferrer">原文链接</a>
-                            </div>
-                        </article>
-                    </div>
-                </div>
             </div>
 
             <div v-show="activePage === 'sector'" class="app-page">
@@ -5004,6 +5000,44 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 </div>
             </div>
 
+            <div v-show="activePage === 'tweets'" class="app-page">
+                <div class="page-topbar glass-panel">
+                    <div>
+                        <div class="page-title">🐦 白毛股神推文</div>
+                        <div class="page-subtitle">@aleabitoreddit · 仅供个人观察</div>
+                        <div v-if="influencerPostsUpdatedAt" class="page-subtitle">缓存时间 {{ formatInfluencerPostTime(influencerPostsUpdatedAt) }}</div>
+                    </div>
+                    <button type="button" class="influencer-refresh" :disabled="influencerPostsLoading" @click="loadInfluencerPosts(true)">
+                        {{ influencerPostsLoading ? '同步中' : '刷新' }}
+                    </button>
+                </div>
+                <div class="glass-panel influencer-posts-panel">
+                    <div v-if="influencerPostsLoading && influencerPostsDisplay.length === 0" class="influencer-empty">正在读取推文缓存...</div>
+                    <div v-else-if="influencerPostsStatus === 'error' || influencerPostsStatus === 'invalid' || influencerPostsStatus === 'unavailable'" class="influencer-empty">暂时无法获取推文</div>
+                    <div v-else-if="influencerPostsDisplay.length === 0" class="influencer-empty">暂无推文缓存</div>
+                    <div v-else class="influencer-posts-list">
+                        <article v-for="post in influencerPostsDisplay" :key="post.externalId || post.id" class="influencer-post-card">
+                            <div class="influencer-post-meta">
+                                <span>{{ formatInfluencerPostTime(post.createdAt) }}</span>
+                                <span>{{ post.authorName || 'Serenity' }}</span>
+                            </div>
+                            <div v-if="post.translatedText" class="influencer-post-translation">{{ post.translatedText }}</div>
+                            <div class="influencer-post-original">{{ post.text }}</div>
+                            <span v-if="post.translationStatus === 'failed'" class="influencer-translation-status">翻译失败</span>
+                            <span v-else-if="!post.translatedText" class="influencer-translation-status">待翻译</span>
+                            <div class="influencer-post-foot">
+                                <div class="influencer-post-stats">
+                                    <span>赞 {{ formatInfluencerCount(post.likeCount) }}</span>
+                                    <span>转 {{ formatInfluencerCount(post.retweetCount) }}</span>
+                                    <span>回 {{ formatInfluencerCount(post.replyCount) }}</span>
+                                </div>
+                                <a class="influencer-post-link" :href="post.url" target="_blank" rel="noopener noreferrer">原文链接</a>
+                            </div>
+                        </article>
+                    </div>
+                </div>
+            </div>
+
             <div v-show="activePage === 'analysis'" class="app-page">
                 <div class="page-topbar glass-panel"><div><div class="page-title">📊 盈亏分析</div><div class="page-subtitle">每日战报、月历、盈利/亏损排行</div></div><div class="analysis-toolbar"><input type="month" v-model="analysisMonth" @change="fetchAnalysis(true)"><select v-model="analysisViewMode"><option value="profit">金额</option><option value="rate">收益率</option></select><button class="btn" @click="refreshAnalysisPage(true)">🔄</button></div></div>
                 <div class="feature-grid">
@@ -5076,7 +5110,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 </div>
             </div>
 
-            <div class="bottom-tabbar" v-if="isLoggedIn"><button :class="['bottom-tab', activePage==='home'?'active':'']" @click="switchPage('home')"><span class="tab-icon">🛡️</span><span>持仓</span></button><button :class="['bottom-tab', activePage==='sector'?'active':'']" @click="switchPage('sector')"><span class="tab-icon">📈</span><span>板块</span></button><button :class="['bottom-tab', activePage==='news'?'active':'']" @click="switchPage('news')"><span class="tab-icon">📰</span><span>资讯</span></button><button :class="['bottom-tab', activePage==='analysis'?'active':'']" @click="switchPage('analysis')"><span class="tab-icon">📊</span><span>盈亏</span></button></div>
+            <div class="bottom-tabbar" v-if="isLoggedIn"><button :class="['bottom-tab', activePage==='home'?'active':'']" @click="switchPage('home')"><span class="tab-icon">🛡️</span><span>持仓</span></button><button :class="['bottom-tab', activePage==='sector'?'active':'']" @click="switchPage('sector')"><span class="tab-icon">📈</span><span>板块</span></button><button :class="['bottom-tab', activePage==='news'?'active':'']" @click="switchPage('news')"><span class="tab-icon">📰</span><span>资讯</span></button><button :class="['bottom-tab', activePage==='analysis'?'active':'']" @click="switchPage('analysis')"><span class="tab-icon">📊</span><span>盈亏</span></button><button :class="['bottom-tab', activePage==='tweets'?'active':'']" @click="switchPage('tweets')"><span class="tab-icon">🐦</span><span>推文</span></button></div>
 
             <div v-if="showProfileModal" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); display: flex; justify-content: center; align-items: center; z-index: 5200;" @click.self="showProfileModal = false">
                 <div class="profile-modal-card">
@@ -6000,7 +6034,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const influencerPostsDisplay = computed(() => influencerPosts.value
                     .slice()
                     .sort((a, b) => Date.parse(b.createdAt || '') - Date.parse(a.createdAt || ''))
-                    .slice(0, 10));
+                    .slice(0, 20));
                 const formatInfluencerPostTime = (value) => {
                     const date = new Date(value || '');
                     if (Number.isNaN(date.getTime())) return '--';
@@ -6025,7 +6059,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     try {
                         const controller = new AbortController();
                         timeoutId = setTimeout(() => controller.abort(), 12000);
-                        const res = await fetch(API_BASE + '/api/influencer-posts/latest?limit=10&_t=' + Date.now(), {
+                        const res = await fetch(API_BASE + '/api/influencer-posts/latest?limit=20&_t=' + Date.now(), {
                             cache: 'no-store',
                             signal: controller.signal
                         });
@@ -7855,6 +7889,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     if (page === 'sector') { await fetchSectors(false, false); fetchCapitalFlow(false); }
                     if (page === 'news') fetchNews(newsMode.value, false);
                     if (page === 'analysis') { persistAnalysisPreferences(); await fetchAnalysis(true); }
+                    if (page === 'tweets') await loadInfluencerPosts(false);
                     if (page === 'home') nextTick(() => {
                         safeResizeChart(chartInstance);
                         safeResizeChart(performanceChartInstance);
@@ -8211,7 +8246,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     if (recoveryModal.code) saveUiState(`recovery_amount_${recoveryModal.code}`, { amount: Number(value || 0) });
                 });
 
-                onMounted(() => { loadInfluencerPosts(); if (currentUser.value) { isLoggedIn.value = true; fetchUserProfile(); initDashboard(); } document.addEventListener('visibilitychange', handleVisibilityChange); window.addEventListener('touchstart', onPullStart, { passive: true }); window.addEventListener('touchmove', onPullMove, { passive: false }); window.addEventListener('touchend', onPullEnd, { passive: true }); });
+                onMounted(() => { if (currentUser.value) { isLoggedIn.value = true; fetchUserProfile(); initDashboard(); } document.addEventListener('visibilitychange', handleVisibilityChange); window.addEventListener('touchstart', onPullStart, { passive: true }); window.addEventListener('touchmove', onPullMove, { passive: false }); window.addEventListener('touchend', onPullEnd, { passive: true }); });
 
                 const todayStr = new Date(new Date().getTime() + 8 * 3600 * 1000).toISOString().split('T')[0];
                 const addModal = reactive({ show: false, code: '', name: '', amount: '', rawDate: todayStr, timeSlot: 'before', currentAmount: 0, currentCost: 0 });

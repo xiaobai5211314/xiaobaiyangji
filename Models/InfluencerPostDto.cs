@@ -7,6 +7,10 @@ namespace 小白养基.Models
         public string AuthorName { get; set; } = string.Empty;
         public string AuthorHandle { get; set; } = string.Empty;
         public string Text { get; set; } = string.Empty;
+        public string TranslatedText { get; set; } = string.Empty;
+        public DateTimeOffset? TranslatedAt { get; set; }
+        public string TranslationProvider { get; set; } = "none";
+        public string TranslationStatus { get; set; } = "skipped";
         public DateTimeOffset CreatedAt { get; set; }
         public string Url { get; set; } = string.Empty;
         public long LikeCount { get; set; }

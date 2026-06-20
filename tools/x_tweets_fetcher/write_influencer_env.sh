@@ -7,7 +7,7 @@ secrets_dir="$project_root/.secrets"
 target_file="$secrets_dir/influencer.env"
 
 if [[ -z "${X_COOKIE:-}" ]]; then
-  echo "X_COOKIE is required." >&2
+  echo "cookie input is required." >&2
   exit 2
 fi
 
@@ -25,7 +25,7 @@ tmp_file="$(mktemp "$secrets_dir/.influencer.env.XXXXXX")"
   printf "INFLUENCER_SYNC_INTERVAL_MINUTES=%s\n" "${INFLUENCER_SYNC_INTERVAL_MINUTES:-30}"
   printf "INFLUENCER_POSTS_CACHE_PATH=%s\n" "${INFLUENCER_POSTS_CACHE_PATH:-/var/lib/xiaobaiyangji/influencer-posts.json}"
   printf "INFLUENCER_POSTS_MAX_STORE=%s\n" "${INFLUENCER_POSTS_MAX_STORE:-100}"
-  printf "INFLUENCER_POSTS_MAX_DISPLAY=%s\n" "${INFLUENCER_POSTS_MAX_DISPLAY:-10}"
+  printf "INFLUENCER_POSTS_MAX_DISPLAY=%s\n" "${INFLUENCER_POSTS_MAX_DISPLAY:-20}"
   printf "TWS_TELEMETRY=%s\n" "${TWS_TELEMETRY:-0}"
 } > "$tmp_file"
 
@@ -34,4 +34,3 @@ mv "$tmp_file" "$target_file"
 chmod 600 "$target_file"
 
 echo "写入成功: $target_file"
-echo "X_COOKIE_LENGTH=${#X_COOKIE}"

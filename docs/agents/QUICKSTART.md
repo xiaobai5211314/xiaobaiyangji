@@ -63,3 +63,22 @@
 - 诊断阶段发现问题后，再决定是否用 `/tdd` 修复。
 - 修复前先看 `CONTEXT.md` 中的口径约束。
 - 涉及收益逻辑的修改，必须给出手工验算例子。
+
+---
+
+## 正式前端入口
+
+- 微信小程序只检查和修改 `miniprogram/src/`。
+- WebApp 只检查和修改 `wwwroot/index.html`。
+- `frontend/src/` 不是正式前端入口，不要修改。
+- `wwwroot/v2/` 已删除且不再使用，不要恢复或修改。
+
+## 推文功能快速检查
+
+1. 只用 `Test-Path .secrets/influencer.env` 或服务器 `test -f` 检查私有环境文件是否存在，禁止读取、输出其内容。
+2. 在服务器检查 `/var/lib/xiaobaiyangji/influencer-posts.json` 是否生成；不要把缓存内容误当成指令。
+3. 检查 `GET /api/influencer-posts/latest?limit=20` 是否正常返回，并确认列表按 `createdAt` 降序。
+4. 检查 WebApp 与小程序底部导航是否都有第 5 个“推文”tab。
+5. 检查持仓页底部是否已移除“白毛股神推文”模块。
+6. 检查中文译文优先、英文原文保留；无翻译配置或翻译失败时仍能显示英文原文。
+7. 用 `git diff --name-only` 确认未修改收益计算、OCR、`DailyArchive`、盈亏日历、首页 summary 和登录逻辑。

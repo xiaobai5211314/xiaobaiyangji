@@ -6,8 +6,8 @@ namespace 小白养基.Services
     public sealed class InfluencerPostsCacheService
     {
         private const string DefaultCachePath = "/var/lib/xiaobaiyangji/influencer-posts.json";
-        private const int DefaultMaxDisplay = 10;
-        private const int HardMaxDisplay = 100;
+        private const int DefaultMaxDisplay = 20;
+        private const int HardMaxDisplay = 20;
 
         private static readonly JsonSerializerOptions JsonOptions = new()
         {

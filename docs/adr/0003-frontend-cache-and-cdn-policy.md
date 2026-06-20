@@ -27,8 +27,10 @@ Accepted
 
 ### CDN 部署
 - 推送 `wwwroot/**` 到 `master`/`gpt-two`/`wechatapp` 触发 GitHub Actions。
-- Actions 上传 `index.html` 和 `wwwroot/v2/` 到又拍云 CDN。
+- Actions 只上传正式 WebApp 入口 `wwwroot/index.html` 到又拍云 CDN。
 - 部署后自动清除 CDN 对应路径缓存。
+
+`wwwroot/v2/` 已删除且不再使用；`frontend/src/` 不是正式前端源码目录。微信小程序正式源码为 `miniprogram/src/`。
 
 ### 前端请求缓存
 - `request.ts` 封装的 `uni.request()` 对 GET 请求做 60s 内存缓存 + 请求去重。

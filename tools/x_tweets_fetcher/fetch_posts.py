@@ -4,15 +4,35 @@ import json
 import os
 import sys
 import tempfile
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib import request as urllib_request
 
 DEFAULT_HANDLE = "aleabitoreddit"
 DEFAULT_CACHE_PATH = "/var/lib/xiaobaiyangji/influencer-posts.json"
 DEFAULT_MAX_STORE = 100
 DEFAULT_FETCH_LIMIT = 20
+DEFAULT_MAX_DISPLAY = 20
 ACCOUNT_NAME = "xiaobai_influencer_reader"
+TRANSLATION_FIELDS = (
+    "translatedText",
+    "translatedAt",
+    "translationProvider",
+    "translationStatus",
+)
+
+
+@dataclass(frozen=True)
+class TranslationConfig:
+    provider: str
+    target_lang: str
+    cache_enabled: bool
+    max_chars: int
+    endpoint: str = ""
+    api_key: str = ""
+    model: str = ""
 
 
 def project_root() -> Path:
@@ -57,6 +77,47 @@ def env_int(name: str, default: int, minimum: int = 1, maximum: int = 500) -> in
     return max(minimum, min(maximum, value))
 
 
+def env_bool(name: str, default: bool) -> bool:
+    raw = (os.getenv(name) or "").strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "on"}
+
+
+def translation_config_from_env() -> TranslationConfig:
+    provider = (os.getenv("TRANSLATE_PROVIDER") or "none").strip().lower() or "none"
+    target_lang = (os.getenv("TRANSLATE_TARGET_LANG") or "zh-CN").strip() or "zh-CN"
+    cache_enabled = env_bool("TRANSLATE_CACHE_ENABLED", True)
+    max_chars = env_int("TRANSLATE_MAX_CHARS_PER_POST", 4000, 1, 20000)
+
+    if provider == "custom":
+        endpoint = (os.getenv("TRANSLATE_CUSTOM_ENDPOINT") or "").strip()
+        api_key = (os.getenv("TRANSLATE_CUSTOM_API_KEY") or "").strip()
+        model = ""
+    elif provider == "openai":
+        endpoint = (os.getenv("TRANSLATE_OPENAI_ENDPOINT") or "").strip()
+        api_key = (os.getenv("TRANSLATE_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY") or "").strip()
+        model = (os.getenv("TRANSLATE_OPENAI_MODEL") or "").strip()
+    elif provider == "libretranslate":
+        endpoint = (os.getenv("TRANSLATE_LIBRETRANSLATE_ENDPOINT") or "").strip()
+        api_key = (os.getenv("TRANSLATE_LIBRETRANSLATE_API_KEY") or "").strip()
+        model = ""
+    else:
+        endpoint = ""
+        api_key = ""
+        model = ""
+
+    return TranslationConfig(
+        provider=provider,
+        target_lang=target_lang,
+        cache_enabled=cache_enabled,
+        max_chars=max_chars,
+        endpoint=endpoint,
+        api_key=api_key,
+        model=model,
+    )
+
+
 def cookie_value(cookie: str, name: str) -> str:
     prefix = f"{name}="
     for part in cookie.split(";"):
@@ -69,7 +130,7 @@ def cookie_value(cookie: str, name: str) -> str:
 def read_cookie() -> str | None:
     cookie = (os.getenv("X_COOKIE") or "").strip()
     if not cookie or not cookie_value(cookie, "auth_token") or not cookie_value(cookie, "ct0"):
-        print("X_COOKIE is required and must include auth_token and ct0.", file=sys.stderr)
+        print("cookie configuration is missing or incomplete.", file=sys.stderr)
         return None
     return cookie
 
@@ -135,6 +196,10 @@ def normalize_post(tweet: Any, target_handle: str) -> dict[str, Any]:
         "quoteCount": int(getattr(tweet, "quoteCount", 0) or 0),
         "mediaUrls": media_urls(tweet),
         "source": "twscrape",
+        "translatedText": "",
+        "translatedAt": "",
+        "translationProvider": "none",
+        "translationStatus": "skipped",
     }
 
 
@@ -165,17 +230,128 @@ def load_existing(cache_path: Path) -> list[dict[str, Any]]:
 
 def merge_posts(existing: list[dict[str, Any]], incoming: list[dict[str, Any]], max_store: int) -> list[dict[str, Any]]:
     merged: dict[str, dict[str, Any]] = {}
-    for item in existing + incoming:
+    for item in existing:
         external_id = str(item.get("externalId") or "").strip()
         if not external_id:
             continue
-        merged[external_id] = item
+        merged[external_id] = dict(item)
+
+    for item in incoming:
+        external_id = str(item.get("externalId") or "").strip()
+        if not external_id:
+            continue
+        previous = merged.get(external_id, {})
+        combined = {**previous, **item}
+        if str(previous.get("text") or "") == str(item.get("text") or ""):
+            for field in TRANSLATION_FIELDS:
+                if previous.get(field) not in (None, ""):
+                    combined[field] = previous[field]
+        merged[external_id] = combined
 
     return sorted(
         merged.values(),
         key=lambda item: parse_time(item.get("createdAt")),
         reverse=True,
     )[:max_store]
+
+
+def http_post_json(url: str, payload: dict[str, object], headers: dict[str, str]) -> dict[str, object]:
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    request = urllib_request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": "application/json", "Accept": "application/json", **headers},
+        method="POST",
+    )
+    with urllib_request.urlopen(request, timeout=30) as response:
+        result = json.loads(response.read().decode("utf-8"))
+    if not isinstance(result, dict):
+        raise ValueError("translation response must be a JSON object")
+    return result
+
+
+def translated_text_from_response(provider: str, response: dict[str, object]) -> str:
+    if provider in {"custom", "libretranslate"}:
+        return str(response.get("translatedText") or "").strip()
+
+    if provider == "openai":
+        choices = response.get("choices")
+        if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+            message = choices[0].get("message")
+            if isinstance(message, dict):
+                content = message.get("content")
+                if isinstance(content, str):
+                    return content.strip()
+
+    return ""
+
+
+def request_translation(
+    text: str,
+    config: TranslationConfig,
+    post_json=http_post_json,
+) -> str:
+    if not config.endpoint:
+        raise ValueError("translation endpoint is not configured")
+
+    headers: dict[str, str] = {}
+    if config.api_key:
+        headers["Authorization"] = f"Bearer {config.api_key}"
+
+    if config.provider == "custom":
+        payload: dict[str, object] = {"text": text, "targetLang": config.target_lang}
+    elif config.provider == "libretranslate":
+        payload = {"q": text, "source": "auto", "target": config.target_lang, "format": "text"}
+        if config.api_key:
+            payload["api_key"] = config.api_key
+    elif config.provider == "openai":
+        if not config.model:
+            raise ValueError("translation model is not configured")
+        payload = {
+            "model": config.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": f"Translate the user's text to {config.target_lang}. Return only the translation.",
+                },
+                {"role": "user", "content": text},
+            ],
+            "temperature": 0,
+        }
+    else:
+        raise ValueError("translation provider is not supported")
+
+    translated = translated_text_from_response(config.provider, post_json(config.endpoint, payload, headers))
+    if not translated:
+        raise ValueError("translation response is empty")
+    return translated
+
+
+def translate_missing_posts(
+    posts: list[dict[str, Any]],
+    config: TranslationConfig,
+    post_json=http_post_json,
+) -> None:
+    for item in posts:
+        cached_translation = str(item.get("translatedText") or "").strip()
+        if config.cache_enabled and cached_translation and item.get("translationStatus") == "success":
+            continue
+
+        item["translatedText"] = ""
+        item["translatedAt"] = ""
+        item["translationProvider"] = config.provider
+
+        text = str(item.get("text") or "").strip()
+        if config.provider == "none" or not text:
+            item["translationStatus"] = "skipped"
+            continue
+
+        try:
+            item["translatedText"] = request_translation(text[: config.max_chars], config, post_json)
+            item["translatedAt"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            item["translationStatus"] = "success"
+        except Exception:
+            item["translationStatus"] = "failed"
 
 
 def atomic_write_json(cache_path: Path, payload: dict[str, Any]) -> None:
@@ -210,6 +386,7 @@ async def fetch_posts() -> int:
     cache_path = Path(os.getenv("INFLUENCER_POSTS_CACHE_PATH") or DEFAULT_CACHE_PATH)
     max_store = env_int("INFLUENCER_POSTS_MAX_STORE", DEFAULT_MAX_STORE, 1, 500)
     fetch_limit = env_int("INFLUENCER_POSTS_FETCH_LIMIT", DEFAULT_FETCH_LIMIT, 1, 100)
+    max_display = env_int("INFLUENCER_POSTS_MAX_DISPLAY", DEFAULT_MAX_DISPLAY, 1, 20)
     db_path = Path(os.getenv("TWSCRAPE_DB_PATH") or str(cache_path.with_name("twscrape-accounts.db")))
 
     prepare_storage(cache_path, db_path)
@@ -226,6 +403,7 @@ async def fetch_posts() -> int:
 
     existing = load_existing(cache_path)
     items = merge_posts(existing, incoming, max_store)
+    translate_missing_posts(items[:max_display], translation_config_from_env())
     payload = {
         "targetHandle": handle,
         "fetchedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),

@@ -15,7 +15,7 @@
 <script setup lang="ts">
 import { themeState, themeClass } from '../stores/theme';
 
-type TabKey = 'home' | 'sector' | 'news' | 'analysis';
+type TabKey = 'home' | 'sector' | 'news' | 'analysis' | 'tweets';
 
 defineProps<{
   active: TabKey;
@@ -25,7 +25,8 @@ const tabs: Array<{ key: TabKey; icon: string; label: string }> = [
   { key: 'home', icon: '💼', label: '持仓' },
   { key: 'sector', icon: '🔥', label: '板块' },
   { key: 'news', icon: '📡', label: '资讯' },
-  { key: 'analysis', icon: '📊', label: '盈亏' }
+  { key: 'analysis', icon: '📊', label: '盈亏' },
+  { key: 'tweets', icon: '🐦', label: '推文' }
 ];
 
 function handleTap(key: TabKey) {
@@ -33,7 +34,8 @@ function handleTap(key: TabKey) {
     home: '/pages/home/index',
     sector: '/pages/sector/index',
     news: '/pages/news/index',
-    analysis: '/pages/analysis/index'
+    analysis: '/pages/analysis/index',
+    tweets: '/pages/tweets/index'
   };
   uni.reLaunch({ url: routes[key] });
 }
@@ -46,7 +48,7 @@ function handleTap(key: TabKey) {
 .app-tabbar {
   @include tabbar-shell;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10rpx;
   backdrop-filter: blur(24rpx);
   -webkit-backdrop-filter: blur(24rpx);
