@@ -1,71 +1,40 @@
 # X tweets sidecar
 
-Fetches the latest posts from one fixed X account into a JSON cache consumed by the ASP.NET Core API.
+Fetches the latest posts from one fixed X account into a JSON cache consumed by the ASP.NET Core API. Translation runs in this sidecar and never in the frontend.
 
 ## Scope
 
 - Target handle defaults to `aleabitoreddit`.
-- This script is a sidecar. It must not be imported into the C# application.
-- It writes a standard JSON file, not JSONL.
+- The sidecar writes standard JSON, not JSONL or a database table.
 - Fetch failures preserve the previous cache.
-- Do not commit cookies, tokens, or the generated `twscrape-accounts.db`.
+- Successful cached translations are reused while the source text is unchanged.
+- Do not commit cookies, tokens, private environment files, or the generated twscrape database.
 
-## Install
+## Install and run
 
 ~~~bash
 cd /www/wwwroot/小白养基/tools/x_tweets_fetcher
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
-~~~
-
-## Environment
-
-System environment variables have priority. If they are not present, the sidecar reads:
-
-~~~text
-<project-root>/.secrets/influencer.env
-~~~
-
-Create it with:
-
-~~~bash
-X_COOKIE='auth_token=xxx; ct0=yyy' bash ./write_influencer_env.sh
-~~~
-
-The private env file format is:
-
-~~~bash
-X_COOKIE='auth_token=xxx; ct0=yyy'
-INFLUENCER_TARGET_HANDLE=aleabitoreddit
-INFLUENCER_SYNC_INTERVAL_MINUTES=30
-INFLUENCER_POSTS_CACHE_PATH=/var/lib/xiaobaiyangji/influencer-posts.json
-INFLUENCER_POSTS_MAX_STORE=100
-INFLUENCER_POSTS_MAX_DISPLAY=10
-TWS_TELEMETRY=0
-~~~
-
-Optional:
-
-~~~bash
-export TWSCRAPE_DB_PATH=/var/lib/xiaobaiyangji/twscrape-accounts.db
-~~~
-
-The `TWSCRAPE_DB_PATH` file contains account session data. Keep it private with the same care as `X_COOKIE`.
-
-## Run once
-
-~~~bash
-. .venv/bin/activate
 python fetch_posts.py
 ~~~
 
-## Cron example
+System environment variables have priority. Otherwise the sidecar reads the server-local file at `<project-root>/.secrets/influencer.env`. Never print or copy that file into a command, appsettings, documentation, logs, or Git.
 
-Do not run this more frequently than needed. The first version uses 30 minutes.
+Relevant non-secret settings:
 
-~~~cron
-*/30 * * * * cd /www/wwwroot/小白养基/tools/x_tweets_fetcher && .venv/bin/python fetch_posts.py >> /var/log/xiaobaiyangji-influencer-posts.log 2>&1
+~~~text
+INFLUENCER_TARGET_HANDLE
+INFLUENCER_POSTS_CACHE_PATH
+INFLUENCER_POSTS_MAX_STORE
+INFLUENCER_POSTS_MAX_DISPLAY
+TWSCRAPE_DB_PATH
+TRANSLATE_PROVIDER
+TRANSLATE_TARGET_LANG
+TRANSLATE_CACHE_ENABLED
+TRANSLATE_MAX_CHARS_PER_POST
+TRANSLATE_CUSTOM_ENDPOINT
 ~~~
 
-Keep the real cookie only in <project-root>/.secrets/influencer.env or system environment variables.
+The default translation provider is `none`; the page then displays the English original. See `docs/deploy/influencer-posts-sidecar.md` for private configuration, Firefox login, timer setup and troubleshooting.

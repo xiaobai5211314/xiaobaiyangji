@@ -6,8 +6,10 @@
 
 "小白养基" 是一个基金和股票投资管理应用，包含：
 - **后端**：仓库根目录下的 ASP.NET Core 8.0 Web API (C#)
-- **前端**：`miniprogram/` 目录下的微信小程序，使用 uni-app（Vue 3 + TypeScript + Vite）构建
-- **静态 SPA**：`wwwroot/index.html`（单文件，~413KB），`wwwroot/v2/`（Vite 构建，代码按页面拆分），通过又拍云 CDN 分发
+- **微信小程序**：正式源码仅为 `miniprogram/src/`，使用 uni-app（Vue 3 + TypeScript + Vite）构建
+- **WebApp**：正式源码仅为 `wwwroot/index.html`（单文件），通过又拍云 CDN 分发
+
+`wwwroot/v2/` 已删除且不再使用；`frontend/src/` 不是正式前端源码目录。Agent 修改前端时只能检查和修改 `miniprogram/src/`、`wwwroot/index.html`，不得恢复 `wwwroot/v2/`，不得把 `frontend/src/` 当作正式入口。
 
 前后端在同一仓库中，.NET 项目文件显式排除了 `miniprogram/` 目录。
 
@@ -29,7 +31,7 @@ dotnet ef database update               # 应用迁移
 docker compose -f docker-compose.local.yml up -d
 ```
 
-### 前端（在 `miniprogram/` 目录执行）
+### 微信小程序（在 `miniprogram/` 目录执行）
 ```
 npm run dev:mp-weixin       # 微信开发者工具开发构建
 npm run build:mp-weixin     # 生产构建
@@ -43,20 +45,21 @@ npm run check:pages-order   # 校验 pages[0] 必须是 pages/home/index
 ### 后端结构
 | 目录 | 用途 |
 |------|------|
-| `Controllers/` | 7 个 API 控制器：Auth、Fund（~30 个端点）、Stock、UserUiState、ProductInsights、ValuationCalibration、InsightSnapshots |
-| `Models/` | 17 个 EF Core 实体 + `AppDbContext`（通过 Pomelo 连接 MySQL） |
-| `Services/` | 后台服务：3 个 HostedService（FundScraperService、NavSettlementService、DailySettlementService）、Scoped 服务（PortfolioSettlementService、DailyArchiveService、MarketCacheService、StockQuoteService、StockOcrParserService）、BaiduOcrService、静态工具 PortfolioAccounting |
+| `Controllers/` | ASP.NET Core API 控制器，包括 Auth、Fund、Stock、InfluencerPosts 等接口 |
+| `Models/` | EF Core 实体、API DTO 与 `AppDbContext`（通过 Pomelo 连接 MySQL） |
+| `Services/` | HostedService、基金/股票/OCR/归档服务以及推文缓存只读服务 |
 | `Migrations/` | EF Core 数据库迁移 |
 
 ### 前端结构
 | 路径 | 用途 |
 |------|------|
-| `miniprogram/src/pages/` | 7 个页面：home（主仪表盘，~2800 行）、sector、news、analysis、login、profile、index-detail |
-| `miniprogram/src/services/api/` | 6 个类型化 API 客户端模块（fund、stock、auth、sector、news、analysis） |
+| `miniprogram/src/pages/` | 微信小程序正式页面源码，包括 home、sector、news、analysis、tweets 等页面 |
+| `miniprogram/src/services/api/` | 微信小程序类型化 API 客户端模块 |
 | `miniprogram/src/services/request.ts` | HTTP 抽象层：类型化 `uni.request()` 封装，含 GET 缓存（60s TTL）、请求去重、降级数据、错误提示去重 |
 | `miniprogram/src/stores/` | Vue 3 响应式 store（无 Vuex/Pinia）：`session.ts`、`theme.ts` |
 | `miniprogram/src/utils/fundMetrics.ts` | 核心客户端业务逻辑：`buildPortfolioMetrics()`、行业分类、置信度评分、敞口分析 |
 | `miniprogram/src/styles/` | SCSS 设计系统，含 4 套 CSS 自定义属性主题（neon/vivid/light/warm） |
+| `wwwroot/index.html` | WebApp 唯一正式源码与入口 |
 
 ### 关键架构模式
 
@@ -92,7 +95,7 @@ npm run check:pages-order   # 校验 pages[0] 必须是 pages/home/index
 ## CI/CD
 
 - **后端部署**：推送 `.cs`/`.csproj`/`appsettings*.json`/`wwwroot/**` 到 `master`/`gpt-two`/`wechatapp` → GitHub Actions 构建，通过 SSH 部署到服务器，健康检查 `/api/health`
-- **前端 CDN 部署**：推送 `wwwroot/**` → 上传 `index.html` 和 `wwwroot/v2/` 到又拍云 CDN（`guzhicdn.21212121.xyz`），清除缓存
+- **WebApp CDN 部署**：推送 `wwwroot/**` → 上传 `wwwroot/index.html` 到又拍云 CDN（`guzhicdn.21212121.xyz`），清除缓存
 - **服务器**：systemd 服务运行在 7084 端口，Nginx 反向代理 `guzhi.21212121.xyz`
 
 ## Agent 技能配置
@@ -122,13 +125,23 @@ npm run check:pages-order   # 校验 pages[0] 必须是 pages/home/index
 
 ## 重要约定
 
-- 前端页面统一使用 `<script setup lang="ts">` + Vue 3 Composition API
+- 小程序页面使用 `<script setup lang="ts">` + Vue 3 Composition API；单文件 WebApp 继续使用 `wwwroot/index.html` 内现有 Vue 写法
 - 导航使用自定义 `AppTabBar` 组件 + `uni.reLaunch()`（替换页面栈），非原生 tabBar
+- 正式前端只有 `miniprogram/src/` 和 `wwwroot/index.html`；`frontend/src/` 不是正式入口，`wwwroot/v2/` 已删除且禁止恢复
+- 底部导航固定为 5 个板块：持仓、板块、资讯、盈亏、推文；“白毛股神推文”必须位于独立“推文”页，不得放在持仓页底部
 - `pages/home/index` 必须是 `pages.json` 中的 `pages[0]`（由 `check:pages-order` 脚本强制校验）
 - 状态管理使用原生 `reactive()` + `computed()`，无 Vuex、无 Pinia
 - 项目未配置标准测试框架（xUnit/NUnit）；`tests/PortfolioAccounting.Tests/` 是控制台应用，用手动 `throw` 断言测试 PortfolioAccounting 和 DailyArchiveService
 - 项目未配置 ESLint 或 Prettier
 - `project.private.config.json`（微信开发者工具私有配置）已 gitignore，并由 `clean:private-config` 脚本从 dist 中清除
+
+## 推文 sidecar 与敏感信息
+
+- 固定目标账号为 `@aleabitoreddit`；sidecar 将推文写入 JSON 缓存，ASP.NET Core API 只读缓存，前端不得直连 X 或外部翻译服务。
+- 服务器私有环境文件仅允许位于 `/www/wwwroot/小白养基/.secrets/influencer.env`，并由 `.gitignore` 排除。
+- 禁止读取、打印、提交该私有环境文件内容；禁止把 cookie 或翻译服务密钥写入 `appsettings.json`、`appsettings.example.json`、文档、日志或 GitHub。
+- 抓取或翻译失败只能降级为旧缓存或英文原文，不得影响基金首页、收益计算、OCR、`DailyArchive` 或首页 summary。
+- 部署与排障见 `docs/deploy/influencer-posts-sidecar.md`；架构决策见 `docs/adr/0005-influencer-posts-source-and-cache.md`。
 
 
 # Karpathy 编码准则

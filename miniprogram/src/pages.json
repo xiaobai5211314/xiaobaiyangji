@@ -29,6 +29,19 @@
       }
     },
     {
+      "path": "pages/tweets/index",
+      "style": {
+        "navigationBarTitleText": "推文",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
+      "path": "pages/tweets/webview",
+      "style": {
+        "navigationBarTitleText": "X 原文"
+      }
+    },
+    {
       "path": "pages/login/index",
       "style": {
         "navigationBarTitleText": "登录"

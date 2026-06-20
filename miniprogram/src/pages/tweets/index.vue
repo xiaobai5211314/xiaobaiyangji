@@ -1,0 +1,204 @@
+<template>
+  <view :class="['page-shell', 'tweets-page', themeClass]">
+    <view class="page-header">
+      <view>
+        <text class="page-title">白毛股神推文</text>
+        <text class="page-subtitle">@aleabitoreddit · 仅供个人观察</text>
+        <text v-if="payload.fetchedAt" class="page-subtitle">缓存时间 {{ formatTime(payload.fetchedAt) }}</text>
+      </view>
+      <button class="refresh-button" :disabled="loading" @tap="loadData(true)">{{ loading ? '同步中' : '刷新' }}</button>
+    </view>
+
+    <view v-if="loading && posts.length === 0" class="glass-card empty-card">正在读取推文缓存...</view>
+    <view v-else-if="payload.status === 'unavailable' || payload.status === 'invalid'" class="glass-card empty-card" @tap="loadData(true)">暂时无法获取推文，点击重试</view>
+    <view v-else-if="posts.length === 0" class="glass-card empty-card" @tap="loadData(true)">暂无推文缓存，点击刷新</view>
+
+    <view v-for="post in posts" :key="post.externalId || post.id" class="glass-card tweet-card">
+      <view class="tweet-meta">
+        <text>{{ formatTime(post.createdAt) }}</text>
+        <text>{{ post.authorName || 'Serenity' }}</text>
+      </view>
+      <text v-if="post.translatedText" class="translated-text">{{ post.translatedText }}</text>
+      <text class="original-text">{{ post.text }}</text>
+      <text v-if="post.translationStatus === 'failed'" class="translation-status">翻译失败</text>
+      <text v-else-if="!post.translatedText" class="translation-status">待翻译</text>
+      <view class="tweet-footer">
+        <view class="tweet-stats">
+          <text>赞 {{ formatCount(post.likeCount) }}</text>
+          <text>转 {{ formatCount(post.retweetCount) }}</text>
+          <text>回 {{ formatCount(post.replyCount) }}</text>
+        </view>
+        <button class="original-link" @tap="openOriginal(post.url)">原文链接</button>
+      </view>
+    </view>
+
+    <view class="safe-tabbar-space" />
+    <AppTabBar active="tweets" />
+  </view>
+</template>
+
+<script setup lang="ts">
+import { computed, ref } from 'vue';
+import { onPullDownRefresh, onShow } from '@dcloudio/uni-app';
+import AppTabBar from '../../components/AppTabBar.vue';
+import { getInfluencerPosts, type InfluencerPostsResponse } from '../../services/api/influencer';
+import { loadTheme, themeClass } from '../../stores/theme';
+
+const loading = ref(false);
+const payload = ref<InfluencerPostsResponse>({ status: 'idle', items: [] });
+
+const posts = computed(() => (Array.isArray(payload.value.items) ? payload.value.items : [])
+  .slice()
+  .sort((left, right) => Date.parse(right.createdAt || '') - Date.parse(left.createdAt || ''))
+  .slice(0, 20));
+
+onShow(() => {
+  loadTheme();
+  loadData(false).catch((error) => console.warn('[tweets:load]', error));
+});
+
+onPullDownRefresh(async () => {
+  try {
+    await loadData(true);
+  } finally {
+    uni.stopPullDownRefresh();
+  }
+});
+
+async function loadData(force: boolean) {
+  if (loading.value) return;
+  loading.value = true;
+  try {
+    payload.value = await getInfluencerPosts(force);
+  } finally {
+    loading.value = false;
+  }
+}
+
+function formatTime(value?: string) {
+  const date = new Date(value || '');
+  if (Number.isNaN(date.getTime())) return '--';
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+}
+
+function formatCount(value?: number) {
+  const count = Number(value || 0);
+  if (!Number.isFinite(count) || count <= 0) return '0';
+  if (count >= 10000) return `${(count / 10000).toFixed(count >= 100000 ? 0 : 1)}万`;
+  return String(Math.round(count));
+}
+
+function openOriginal(url: string) {
+  if (!/^https:\/\/(x\.com|twitter\.com)\//i.test(url || '')) return;
+  uni.navigateTo({ url: `/pages/tweets/webview?url=${encodeURIComponent(url)}` });
+}
+</script>
+
+<style lang="scss" scoped>
+@import '../../styles/variables.scss';
+@import '../../styles/mixins.scss';
+
+.tweets-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+  padding-top: 34rpx;
+}
+
+.refresh-button,
+.original-link {
+  min-width: 112rpx;
+  height: 64rpx;
+  padding: 0 22rpx;
+  border-radius: 999rpx;
+  color: var(--text-secondary);
+  background: var(--control-bg);
+  border: 1rpx solid var(--border-color);
+  font-size: 22rpx;
+  font-weight: 900;
+}
+
+.refresh-button::after,
+.original-link::after {
+  border: none;
+}
+
+.refresh-button[disabled] {
+  opacity: 0.55;
+}
+
+.tweet-card {
+  padding: 28rpx;
+}
+
+.tweet-meta,
+.tweet-footer,
+.tweet-stats {
+  display: flex;
+  align-items: center;
+}
+
+.tweet-meta,
+.tweet-footer {
+  justify-content: space-between;
+  gap: 18rpx;
+}
+
+.tweet-meta,
+.tweet-stats {
+  color: var(--text-muted);
+  font-size: 22rpx;
+  font-weight: 800;
+}
+
+.translated-text,
+.original-text {
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.translated-text {
+  margin-top: 18rpx;
+  color: var(--text-primary);
+  font-size: 29rpx;
+  line-height: 1.65;
+}
+
+.original-text {
+  margin-top: 16rpx;
+  color: var(--text-muted);
+  font-size: 22rpx;
+  line-height: 1.55;
+}
+
+.translation-status {
+  display: inline-block;
+  margin-top: 14rpx;
+  padding: 6rpx 14rpx;
+  border-radius: 999rpx;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
+  font-size: 20rpx;
+  font-weight: 900;
+}
+
+.tweet-footer {
+  margin-top: 20rpx;
+}
+
+.tweet-stats {
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.original-link {
+  color: #60a5fa;
+}
+</style>
