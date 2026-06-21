@@ -21,6 +21,7 @@ export interface InfluencerPost {
   replies?: InfluencerReply[];
   mediaUrls?: string[];
   source?: string;
+  _showReplies?: boolean;
 }
 
 export interface InfluencerPostsResponse {

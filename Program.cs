@@ -132,6 +132,7 @@ builder.Services.AddControllers()
 builder.Services.AddHostedService<FundScraperService>();
 builder.Services.AddHostedService<NavSettlementService>();
 builder.Services.AddHostedService<DailySettlementService>();
+builder.Services.AddHostedService<InfluencerPostsSidecarService>();
 
 var app = builder.Build();
 

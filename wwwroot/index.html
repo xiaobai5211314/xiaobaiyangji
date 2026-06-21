@@ -1449,11 +1449,37 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             font-weight: 800;
         }
 
+        .influencer-stat-button {
+            border: 0;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            padding: 0;
+            cursor: pointer;
+        }
+
+            .influencer-stat-button:hover,
+            .influencer-stat-button:focus-visible {
+                color: #60a5fa;
+                outline: none;
+            }
+
+        .influencer-post-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
         .influencer-post-link {
+            border: 0;
+            background: transparent;
             color: #60a5fa;
             font-size: 12px;
             font-weight: 900;
             text-decoration: none;
+            cursor: pointer;
+            padding: 0;
         }
 
         .influencer-empty {
@@ -1471,6 +1497,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         .influencer-reply-meta { display: flex; justify-content: space-between; gap: 8px; color: var(--text-muted); font-size: 11px; font-weight: 800; margin-bottom: 4px; }
         .influencer-reply-translation { color: var(--text-main); font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
         .influencer-reply-original { color: var(--text-muted); font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; margin-top: 4px; }
+        .influencer-detail-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+        .influencer-back { border: 1px solid var(--card-border); background: var(--card-bg-soft); color: var(--text-main); border-radius: 999px; padding: 7px 12px; font-size: 12px; font-weight: 900; cursor: pointer; }
+        .influencer-detail-title { color: var(--text-main); font-size: 14px; font-weight: 900; }
+        .influencer-detail-card { margin-bottom: 12px; }
+        .influencer-detail-replies { border-top: 1px solid var(--card-border); padding-top: 12px; }
+        .influencer-replies-title { color: var(--text-main); font-size: 14px; font-weight: 900; margin-bottom: 8px; }
+        .influencer-reply-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 6px; color: var(--text-muted); font-size: 11px; font-weight: 800; }
 
         .performance-card {
             grid-column: 1 / -1;
@@ -5020,7 +5053,52 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         {{ influencerPostsLoading ? '同步中' : '刷新' }}
                     </button>
                 </div>
-                <div class="glass-panel influencer-posts-panel">
+                <div v-if="selectedInfluencerPost" class="glass-panel influencer-posts-panel">
+                    <div class="influencer-detail-toolbar">
+                        <button type="button" class="influencer-back" @click="closeInfluencerPostDetail">← 返回前20条</button>
+                        <div class="influencer-detail-title">回复 {{ selectedInfluencerReplies.length }} 条</div>
+                    </div>
+                    <article class="influencer-post-card influencer-detail-card">
+                        <div class="influencer-post-meta">
+                            <span>{{ formatInfluencerPostTime(selectedInfluencerPost.createdAt) }}</span>
+                            <span>{{ selectedInfluencerPost.authorName || 'Serenity' }}</span>
+                        </div>
+                        <div v-if="selectedInfluencerPost.translatedText" class="influencer-post-translation">{{ selectedInfluencerPost.translatedText }}</div>
+                        <div class="influencer-post-original">{{ selectedInfluencerPost.text }}</div>
+                        <span v-if="selectedInfluencerPost.translationStatus === 'failed'" class="influencer-translation-status">翻译失败</span>
+                        <span v-else-if="selectedInfluencerPost.translationStatus === 'skipped' && !selectedInfluencerPost.translatedText" class="influencer-translation-status">未配置翻译</span>
+                        <span v-else-if="!selectedInfluencerPost.translatedText" class="influencer-translation-status">待翻译</span>
+                        <div class="influencer-post-foot">
+                            <div class="influencer-post-stats">
+                                <span>赞 {{ formatInfluencerCount(selectedInfluencerPost.likeCount) }}</span>
+                                <span>转 {{ formatInfluencerCount(selectedInfluencerPost.retweetCount) }}</span>
+                                <span>回 {{ formatInfluencerCount(selectedInfluencerPost.replyCount) }}</span>
+                            </div>
+                            <button type="button" class="influencer-post-link" @click="openInfluencerSource(selectedInfluencerPost)">原文链接</button>
+                        </div>
+                    </article>
+                    <section class="influencer-detail-replies">
+                        <div class="influencer-replies-title">翻译回复与原文</div>
+                        <div v-if="selectedInfluencerReplies.length === 0" class="influencer-empty">这条推文暂无已缓存回复</div>
+                        <div v-else class="influencer-replies-list">
+                            <article v-for="reply in selectedInfluencerReplies" :key="reply.id || reply.url || reply.text" class="influencer-reply-card">
+                                <div class="influencer-reply-meta">
+                                    <span>{{ reply.authorName || reply.authorUsername || '用户' }}</span>
+                                    <span>{{ formatInfluencerPostTime(reply.createdAt) }}</span>
+                                </div>
+                                <div v-if="reply.translatedText" class="influencer-reply-translation">{{ reply.translatedText }}</div>
+                                <div class="influencer-reply-original">{{ reply.text }}</div>
+                                <span v-if="reply.translationStatus === 'failed'" class="influencer-translation-status">翻译失败</span>
+                                <span v-else-if="!reply.translatedText" class="influencer-translation-status">未翻译</span>
+                                <div class="influencer-reply-foot">
+                                    <span>赞 {{ formatInfluencerCount(reply.likeCount) }}</span>
+                                    <button v-if="reply.url" type="button" class="influencer-post-link" @click="openInfluencerSource(reply)">回复原文</button>
+                                </div>
+                            </article>
+                        </div>
+                    </section>
+                </div>
+                <div v-else class="glass-panel influencer-posts-panel">
                     <div v-if="influencerPostsLoading && influencerPostsDisplay.length === 0" class="influencer-empty">正在读取推文缓存...</div>
                     <div v-else-if="influencerPostsStatus === 'error' || influencerPostsStatus === 'invalid' || influencerPostsStatus === 'unavailable'" class="influencer-empty">暂时无法获取推文</div>
                     <div v-else-if="influencerPostsDisplay.length === 0" class="influencer-empty">暂无推文缓存</div>
@@ -5039,26 +5117,19 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 <div class="influencer-post-stats">
                                     <span>赞 {{ formatInfluencerCount(post.likeCount) }}</span>
                                     <span>转 {{ formatInfluencerCount(post.retweetCount) }}</span>
-                                    <span>回 {{ formatInfluencerCount(post.replyCount) }}</span>
+                                    <button type="button" class="influencer-stat-button" @click="openInfluencerPostDetail(post)">回 {{ formatInfluencerCount(post.replyCount) }}</button>
                                 </div>
-                                <a class="influencer-post-link" :href="post.url" target="_blank" rel="noopener noreferrer">原文链接</a>
+                                <div class="influencer-post-actions">
+                                    <button v-if="getInfluencerReplyCount(post) > 0" type="button" class="influencer-replies-toggle" @click="openInfluencerPostDetail(post)">
+                                        查看回复 ({{ getInfluencerReplyCount(post) }})
+                                    </button>
+                                    <button type="button" class="influencer-post-link" @click="openInfluencerSource(post)">原文链接</button>
+                                </div>
                             </div>
-                            <div v-if="post.replies && post.replies.length > 0" class="influencer-replies-section">
-                                <button class="influencer-replies-toggle" @click="toggleReplies(post)">
-                                    {{ post._showReplies ? '收起评论' : '展开评论 (' + post.replies.length + ')' }}
+                            <div v-if="getInfluencerReplyCount(post) === 0 && Number(post.replyCount || 0) > 0" class="influencer-replies-section">
+                                <button type="button" class="influencer-replies-toggle" @click="openInfluencerPostDetail(post)">
+                                    暂无缓存回复 · 点击查看详情
                                 </button>
-                                <div v-if="post._showReplies" class="influencer-replies-list">
-                                    <div v-for="reply in post.replies" :key="reply.id" class="influencer-reply-card">
-                                        <div class="influencer-reply-meta">
-                                            <span>{{ reply.authorName || reply.authorUsername || '用户' }}</span>
-                                            <span>{{ formatInfluencerPostTime(reply.createdAt) }}</span>
-                                        </div>
-                                        <div v-if="reply.translatedText" class="influencer-reply-translation">{{ reply.translatedText }}</div>
-                                        <div class="influencer-reply-original">{{ reply.text }}</div>
-                                        <span v-if="reply.translationStatus === 'failed'" class="influencer-translation-status">翻译失败</span>
-                                        <span v-else-if="!reply.translatedText" class="influencer-translation-status">未翻译</span>
-                                    </div>
-                                </div>
                             </div>
                         </article>
                     </div>
@@ -5992,6 +6063,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const influencerPostsLoading = ref(false);
                 const influencerPostsStatus = ref('idle');
                 const influencerPostsUpdatedAt = ref('');
+                const selectedInfluencerPostKey = ref('');
                 const loginForm = reactive({ username: '', password: '' });
                 const profileForm = reactive({ displayName: '', saving: false });
                 const fundForm = reactive({ code: '', amount: '' });
@@ -6062,6 +6134,16 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     .slice()
                     .sort((a, b) => Date.parse(b.createdAt || '') - Date.parse(a.createdAt || ''))
                     .slice(0, 20));
+                const influencerPostKey = (post) => String(post?.externalId || post?.id || '');
+                const selectedInfluencerPost = computed(() => {
+                    const key = selectedInfluencerPostKey.value;
+                    if (!key) return null;
+                    return influencerPostsDisplay.value.find(post => influencerPostKey(post) === key) || null;
+                });
+                const selectedInfluencerReplies = computed(() => {
+                    const replies = selectedInfluencerPost.value?.replies;
+                    return Array.isArray(replies) ? replies.filter(Boolean) : [];
+                });
                 const formatInfluencerPostTime = (value) => {
                     const date = new Date(value || '');
                     if (Number.isNaN(date.getTime())) return '--';
@@ -6079,8 +6161,38 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     if (n >= 10000) return (n / 10000).toFixed(n >= 100000 ? 0 : 1) + '万';
                     return String(Math.round(n));
                 };
-                const toggleReplies = (post) => {
-                    post._showReplies = !post._showReplies;
+                const getInfluencerReplyCount = (post) => Array.isArray(post?.replies) ? post.replies.length : 0;
+                const openInfluencerPostDetail = (post) => {
+                    const key = influencerPostKey(post);
+                    if (!key) return;
+                    selectedInfluencerPostKey.value = key;
+                    nextTick(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+                };
+                const closeInfluencerPostDetail = () => {
+                    selectedInfluencerPostKey.value = '';
+                    nextTick(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+                };
+                const normalizeInfluencerUrl = (value) => {
+                    const raw = String(value || '').trim();
+                    if (!raw) return '';
+                    if (/^https?:\/\//i.test(raw)) return raw;
+                    if (/^(x\.com|twitter\.com)\//i.test(raw)) return 'https://' + raw;
+                    return '';
+                };
+                const openInfluencerSource = (item) => {
+                    const url = normalizeInfluencerUrl(item?.url);
+                    if (!url) {
+                        showToast('原文链接缺失', 'error');
+                        return;
+                    }
+                    try {
+                        const opened = window.open(url, '_blank');
+                        if (opened) {
+                            try { opened.opener = null; } catch (e) { }
+                            return;
+                        }
+                    } catch (e) { }
+                    window.location.assign(url);
                 };
                 const loadInfluencerPosts = async () => {
                     if (influencerPostsLoading.value) return;
@@ -6097,6 +6209,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const data = await res.json();
                         const items = Array.isArray(data) ? data : (Array.isArray(data.items) ? data.items : []);
                         influencerPosts.value = items;
+                        if (selectedInfluencerPostKey.value && !items.some(item => influencerPostKey(item) === selectedInfluencerPostKey.value)) {
+                            selectedInfluencerPostKey.value = '';
+                        }
                         influencerPostsStatus.value = data?.status || (items.length > 0 ? 'ok' : 'empty');
                         influencerPostsUpdatedAt.value = data?.fetchedAt || '';
                     } catch (e) {
@@ -8299,7 +8414,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     toasts, isLoggedIn, currentUser, userDisplayName, fundsList, activeHoldings, inactiveHoldings, getClearedProfit, chartRef, performanceChartRef, loginForm, profileForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, refreshSectorPage, activePage, switchPage, showProfileModal, userAvatar, smartOcrBusy, smartOcrText,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, dashboardActiveSummary, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
                     performanceCurve, performancePeriod, performanceIndex, performanceLoading, performancePeriods, performanceIndices, selectedPerformanceIndexName, performanceIsToday, showPerformanceAmount, canShowPerformanceAmount, togglePerformanceAmount, performanceMessage, performanceVerdict, performanceExcessClass, fetchPerformanceCurve, renderPerformanceChart, switchPerformancePeriod, formatPerformancePercent, formatPerformanceMoney,
-                    influencerPostsDisplay, influencerPostsLoading, influencerPostsStatus, influencerPostsUpdatedAt, loadInfluencerPosts, formatInfluencerPostTime, formatInfluencerCount,
+                    influencerPostsDisplay, selectedInfluencerPost, selectedInfluencerReplies, influencerPostsLoading, influencerPostsStatus, influencerPostsUpdatedAt, loadInfluencerPosts, formatInfluencerPostTime, formatInfluencerCount, getInfluencerReplyCount, openInfluencerPostDetail, closeInfluencerPostDetail, openInfluencerSource,
                     handleLogin, handleRegister, handleLogout, saveUserProfile, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, setOcrPendingMode, confirmOcrImport, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
                     sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, capitalFlowError, isCapitalLoading, fetchCapitalFlow,

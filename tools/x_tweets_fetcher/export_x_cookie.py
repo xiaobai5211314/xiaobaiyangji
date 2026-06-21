@@ -14,6 +14,30 @@ SECRETS_DIR = Path("/www/wwwroot/小白养基/.secrets")
 ENV_FILE = SECRETS_DIR / "influencer.env"
 FIREFOX_PROFILE_GLOB = "/opt/x-login-firefox/**/cookies.sqlite"
 
+
+def quote_env_value(value):
+    if "'" in value:
+        raise ValueError("environment value contains an unsupported quote")
+    return f"'{value}'"
+
+
+def merge_env_content(existing, updates):
+    """替换指定配置项，同时保留翻译密钥等其他私有配置。"""
+    pending = dict(updates)
+    merged = []
+    for raw_line in existing.splitlines():
+        stripped = raw_line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            key = stripped.split("=", 1)[0].strip()
+            if key in pending:
+                merged.append(f"{key}={quote_env_value(str(pending.pop(key)))}")
+                continue
+        merged.append(raw_line)
+
+    for key, value in pending.items():
+        merged.append(f"{key}={quote_env_value(str(value))}")
+    return "\n".join(merged).rstrip() + "\n"
+
 def find_cookies_db():
     for p in sorted(Path("/opt/x-login-firefox").rglob("cookies.sqlite")):
         if p.is_file():
@@ -52,15 +76,14 @@ def main():
         sys.exit(1)
 
     x_cookie = f"auth_token={auth_token}; ct0={ct0}"
-    print(f"[export_x_cookie] 已提取 X_COOKIE，长度: {len(x_cookie)}")
+    print("[export_x_cookie] 已提取 X_COOKIE")
 
     # 写入 .secrets/influencer.env
     SECRETS_DIR.mkdir(parents=True, exist_ok=True)
     os.chmod(SECRETS_DIR, stat.S_IRWXU)  # 700
 
-    env_content = f"""# influencer.env — 白毛股神推文 X cookie 配置
-# 自动生成于 export_x_cookie.py，请勿手动编辑
-X_COOKIE={x_cookie}
+    default_env = """# influencer.env — 白毛股神推文私有配置
+X_COOKIE=
 INFLUENCER_TARGET_HANDLE=aleabitoreddit
 INFLUENCER_SYNC_INTERVAL_MINUTES=30
 INFLUENCER_POSTS_CACHE_PATH=/var/lib/xiaobaiyangji/influencer-posts.json
@@ -68,8 +91,10 @@ INFLUENCER_POSTS_MAX_STORE=100
 INFLUENCER_POSTS_MAX_DISPLAY=10
 TWS_TELEMETRY=0
 """
+    existing = ENV_FILE.read_text(encoding="utf-8") if ENV_FILE.exists() else default_env
+    env_content = merge_env_content(existing, {"X_COOKIE": x_cookie})
 
-    ENV_FILE.write_text(env_content)
+    ENV_FILE.write_text(env_content, encoding="utf-8")
     os.chmod(ENV_FILE, stat.S_IRUSR | stat.S_IWUSR)  # 600
 
     print(f"[export_x_cookie] 已写入: {ENV_FILE}")
