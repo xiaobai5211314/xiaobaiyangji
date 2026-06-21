@@ -6,8 +6,9 @@ Fetches the latest posts from one fixed X account into a JSON cache consumed by 
 
 - Target handle defaults to `aleabitoreddit`.
 - The sidecar writes standard JSON, not JSONL or a database table.
+- For the displayed range, the sidecar also caches recent replies so the WebApp can show translated replies and the original reply text in the tweet detail view.
 - Fetch failures preserve the previous cache.
-- Successful cached translations are reused while the source text is unchanged.
+- Successful cached translations are reused while the source text is unchanged; uncached replies are still translated even when the parent post translation is already cached.
 - Do not commit cookies, tokens, private environment files, or the generated twscrape database.
 
 ## Install and run

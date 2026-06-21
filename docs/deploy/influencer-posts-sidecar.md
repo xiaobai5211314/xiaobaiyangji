@@ -113,6 +113,8 @@ TENCENT_TRANSLATE_SECRET_KEY
 
 `.github/workflows/deploy-backend.yml` 会把 sidecar 一并放入发布包，并通过临时权限受限的 JSON 文件把仓库 Secrets 传到服务器。后端启动后，`InfluencerPostsSidecarService` 在服务账户权限下调用 `configure_translation_env.py`，将配置原子合并到 `.secrets/influencer.env`，成功后立即删除临时 JSON；合并必须保留现有 `X_COOKIE`，并把页面处理上限设为 20 条。托管服务随后立即同步一次，以后默认每 30 分钟同步一次。部署任务通过 API 检查缓存中至少产生一条成功译文，检查失败则部署失败。
 
+sidecar 会在前 20 条展示范围内抓取最近回复，并把回复译文、原文和原文链接写入同一 JSON 缓存。父推文已有成功缓存译文时，仍会继续处理未翻译的回复，避免评论详情页出现可翻译但未翻译的回复。
+
 也可使用 `custom` provider。它向配置的 endpoint 发送 JSON：
 
 ~~~json
@@ -174,7 +176,7 @@ curl --fail --silent 'http://127.0.0.1:7084/api/influencer-posts/latest?limit=20
 python3 -m json.tool /tmp/influencer-posts-response.json > /dev/null
 ~~~
 
-页面验收：底部导航出现第 5 个“推文”tab；持仓页底部没有推文模块；推文页显示缓存时间、最多 20 条、中文译文优先、英文原文和原文链接。
+页面验收：底部导航出现第 5 个“推文”tab；持仓页底部没有推文模块；推文页显示缓存时间、最多 20 条、中文译文优先、英文原文和原文链接；点击“回”或“查看回复”进入详情页，详情页显示推文与回复的译文、原文，推文原文链接和回复原文链接均可点击打开。
 
 ## 常见故障
 
@@ -185,6 +187,8 @@ python3 -m json.tool /tmp/influencer-posts-response.json > /dev/null
 | twscrape 报数据库无法打开 | 检查数据库父目录权限和 systemd 运行用户 | 修正目录属主/权限，不把数据库放进 Git |
 | 接口为空列表 | 检查缓存文件是否存在、非空、JSON 有效，再看 service 状态 | 修复 sidecar 后重跑；失败期间保留旧缓存 |
 | 前端没有“推文”tab | 检查部署的 `wwwroot/index.html` 或小程序构建是否来自当前提交 | 重新部署正式入口，不恢复旧 v2 目录 |
+| 点击原文链接无反应 | 检查部署的 `wwwroot/index.html` 是否包含按钮式打开逻辑；在内嵌 WebView 中同时检查弹窗拦截和同页跳转兜底 | 重新部署 WebApp 正式入口后清 CDN 缓存 |
+| 回复详情为空 | 检查 JSON 缓存中对应推文是否有 `replies` 数组；抓取失败或限流时旧缓存仍可无回复 | 等下一次 sidecar 同步或修复 X 登录/cookie 后重跑 |
 | 翻译为空 | 检查 provider 是否为 `none`；腾讯云模式检查 SecretId、SecretKey、source、region 是否配置，但不得输出值 | 无配置时属于预期降级，页面显示英文原文 |
 | 腾讯云翻译失败 | 检查 `translationStatus`、sidecar 状态和腾讯云错误码；禁止输出请求头或密钥值 | 按腾讯云错误码修复权限、密钥、地域或时间同步问题；失败不能阻塞抓取缓存 |
 

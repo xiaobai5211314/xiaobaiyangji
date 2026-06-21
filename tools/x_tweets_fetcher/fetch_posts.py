@@ -498,9 +498,34 @@ def translate_missing_posts(
     post_json=http_post_json,
     tencent_post_json=http_post_json_bytes,
 ) -> None:
+    def translate_missing_replies(item: dict[str, Any]) -> None:
+        if config.provider == "none":
+            return
+
+        for reply in item.get("replies", []) or []:
+            reply_text = str(reply.get("text") or "").strip()
+            if not reply_text:
+                reply["translationStatus"] = "skipped"
+                continue
+            cached_reply = str(reply.get("translatedText") or "").strip()
+            if config.cache_enabled and cached_reply and reply.get("translationStatus") == "success":
+                continue
+            reply["translatedText"] = ""
+            reply["translatedAt"] = None
+            reply["translationProvider"] = config.provider
+            try:
+                reply["translatedText"] = request_translation(
+                    reply_text[: config.max_chars], config, post_json, tencent_post_json
+                )
+                reply["translatedAt"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                reply["translationStatus"] = "success"
+            except Exception:
+                reply["translationStatus"] = "failed"
+
     for item in posts:
         cached_translation = str(item.get("translatedText") or "").strip()
         if config.cache_enabled and cached_translation and item.get("translationStatus") == "success":
+            translate_missing_replies(item)
             continue
 
         item["translatedText"] = ""
@@ -510,6 +535,7 @@ def translate_missing_posts(
         text = str(item.get("text") or "").strip()
         if config.provider == "none" or not text:
             item["translationStatus"] = "skipped"
+            translate_missing_replies(item)
             continue
 
         try:
@@ -521,27 +547,7 @@ def translate_missing_posts(
         except Exception:
             item["translationStatus"] = "failed"
 
-        # 翻译 replies（如果 provider 不是 none）
-        if config.provider != "none":
-            for reply in item.get("replies", []) or []:
-                reply_text = str(reply.get("text") or "").strip()
-                if not reply_text:
-                    reply["translationStatus"] = "skipped"
-                    continue
-                cached_reply = str(reply.get("translatedText") or "").strip()
-                if config.cache_enabled and cached_reply and reply.get("translationStatus") == "success":
-                    continue
-                reply["translatedText"] = ""
-                reply["translatedAt"] = None
-                reply["translationProvider"] = config.provider
-                try:
-                    reply["translatedText"] = request_translation(
-                        reply_text[:config.max_chars], config, post_json, tencent_post_json
-                    )
-                    reply["translatedAt"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-                    reply["translationStatus"] = "success"
-                except Exception:
-                    reply["translationStatus"] = "failed"
+        translate_missing_replies(item)
 
 
 async def fetch_replies_for_posts(

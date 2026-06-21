@@ -184,6 +184,48 @@ class TranslationCacheTests(unittest.TestCase):
         self.assertEqual("success", posts[0]["translationStatus"])
         self.assertEqual("缓存译文", posts[1]["translatedText"])
 
+    def test_cached_post_still_translates_uncached_replies(self) -> None:
+        posts = [
+            {
+                "externalId": "456",
+                "text": "cached",
+                "translatedText": "缓存译文",
+                "translatedAt": "2026-06-19T08:01:00Z",
+                "translationProvider": "custom",
+                "translationStatus": "success",
+                "replies": [
+                    {
+                        "id": "reply-1",
+                        "text": "reply",
+                        "translatedText": "",
+                        "translatedAt": None,
+                        "translationProvider": "none",
+                        "translationStatus": "skipped",
+                    }
+                ],
+            }
+        ]
+        config = TranslationConfig(
+            provider="custom",
+            target_lang="zh-CN",
+            cache_enabled=True,
+            max_chars=4000,
+            endpoint="https://translator.invalid/translate",
+            api_key="test-only",
+        )
+        requests: list[dict[str, object]] = []
+
+        def fake_post(url: str, payload: dict[str, object], headers: dict[str, str]) -> dict[str, object]:
+            requests.append({"url": url, "payload": payload, "headers": headers})
+            return {"translatedText": "回复译文"}
+
+        translate_missing_posts(posts, config, fake_post)
+
+        self.assertEqual(1, len(requests))
+        self.assertEqual("缓存译文", posts[0]["translatedText"])
+        self.assertEqual("回复译文", posts[0]["replies"][0]["translatedText"])
+        self.assertEqual("success", posts[0]["replies"][0]["translationStatus"])
+
     def test_translation_failure_keeps_original_text(self) -> None:
         posts = [{"externalId": "123", "text": "keep me"}]
         config = TranslationConfig(

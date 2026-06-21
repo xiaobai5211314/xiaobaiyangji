@@ -14,12 +14,13 @@ Accepted
 
 1. 当前个人自用链路使用 `twscrape` 和已登录 cookie 抓取固定账号，不由前端直接访问 X。
 2. cookie 只允许保存在服务器 `/www/wwwroot/小白养基/.secrets/influencer.env`，不得进入 appsettings、日志、文档、Git 或前端。
-3. sidecar 把推文写入 `/var/lib/xiaobaiyangji/influencer-posts.json`，不为该功能新增数据库表或 migration。
+3. sidecar 把推文和已抓取回复写入 `/var/lib/xiaobaiyangji/influencer-posts.json`，不为该功能新增数据库表或 migration。
 4. ASP.NET Core 的 `GET /api/influencer-posts/latest` 只读 JSON 缓存，按 `createdAt` 降序并最多返回 20 条。
 5. 前端只调用后端接口；正式入口为 `wwwroot/index.html` 和 `miniprogram/src/`。
-6. 翻译在 sidecar 完成。缓存字段为 `translatedText`、`translatedAt`、`translationProvider`、`translationStatus`。
-7. 已有成功译文在原文未变化且启用翻译缓存时直接复用；翻译未配置或失败时保留英文原文。
-8. 抓取失败不覆盖旧缓存；翻译失败不阻止新推文缓存落盘。
+6. 翻译在 sidecar 完成。推文和回复的缓存字段均使用 `translatedText`、`translatedAt`、`translationProvider`、`translationStatus`。
+7. 已有成功译文在原文未变化且启用翻译缓存时直接复用；父推文译文命中缓存时，未翻译的回复仍继续翻译；翻译未配置或失败时保留英文原文。
+8. WebApp 的“回”和“查看回复”进入详情视图，详情视图展示推文与回复的译文、原文和原文链接。
+9. 抓取失败不覆盖旧缓存；翻译失败不阻止新推文缓存落盘。
 
 ## 隔离边界
 
