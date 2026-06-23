@@ -38,7 +38,24 @@
 | `FundTradeOrder` | 基金交易订单 |
 | `StockHolding` | 股票持仓 |
 | `StockWatchItem` | 股票自选 |
+| `StockOcrImportBatch` | 股票 OCR 批量导入批次 |
+| `StockOcrImportItem` | 股票 OCR 批量导入明细 |
+| `FundValuationCalibration` | 盘后校准样本：真实净值涨跌幅 vs 盘中估算涨跌幅误差，含滚动修正值 |
+| `OcrCorrection` | OCR 基金名称修正映射（OCR 名称 → 正确基金代码/名称） |
+| `UserInsightSnapshot` | 产品化面板快照（战报、回本榜、赛道暴露等），可跨设备同步 |
+| `UserUiState` | 用户 UI 偏好持久化（隐私模式、盈亏页视图、回本模拟默认金额等） |
 | `User` | 用户，认证通过 `username` 参数（无 JWT） |
+
+## 关键服务层
+
+| 服务 | 说明 |
+|------|------|
+| `PortfolioAccounting` | 收益汇总计算核心：确认持仓金额、昨日收益、持有收益/率、盘中估算收益/率等，所有金额精度为 2 位小数四舍五入 |
+| `PortfolioSettlementService` | 持仓结算：处理待确认买入的生效日期判断和状态流转 |
+| `MarketCalendar` | A 股 + 港股休市日历（硬编码年度数据），控制结算和估值抓取在交易日执行 |
+| `DailySettlementService` | 按北京时间归档：蚂蚁 OCR 确认 → 正式档案；缺少 OCR → 官方净值 pending 档案 |
+| `FundScraperService` | 每 60 秒抓取东方财富基金盘中估值 |
+| `NavSettlementService` | 17:00-02:00 期间每 5 分钟执行 T+1 净值结算 |
 
 ## 基金金额口径强约束
 
