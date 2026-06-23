@@ -200,6 +200,10 @@ def normalize_post(tweet: Any, target_handle: str) -> dict[str, Any]:
         "replyCount": int(getattr(tweet, "replyCount", 0) or 0),
         "quoteCount": int(getattr(tweet, "quoteCount", 0) or 0),
         "replies": [],
+        "replyFetchStatus": "pending",
+        "replyFetchMessage": "",
+        "replyFetchedAt": None,
+        "replyFetchCount": 0,
         "mediaUrls": media_urls(tweet),
         "source": "twscrape",
         "translatedText": "",
@@ -279,9 +283,13 @@ def merge_posts(existing: list[dict[str, Any]], incoming: list[dict[str, Any]], 
             for field in TRANSLATION_FIELDS:
                 if previous.get(field) not in (None, ""):
                     combined[field] = previous[field]
-        # 如果旧推文有 replies 且新推文没有抓到，保留旧的
-        if previous.get("replies") and not item.get("replies"):
-            item["replies"] = previous["replies"]
+        # 如果旧推文有 replies 且新推文没有抓到，保留旧的。
+        # 注意必须写回 combined；item 在上面已经被展开过，写 item 不会影响最终结果。
+        if previous.get("replies") and not combined.get("replies"):
+            combined["replies"] = previous["replies"]
+            combined["replyFetchStatus"] = "cached"
+            combined["replyFetchMessage"] = "本次未抓到新回复，沿用旧回复缓存。"
+            combined["replyFetchCount"] = len(previous["replies"])
         merged[external_id] = combined
 
     return sorted(
@@ -563,10 +571,18 @@ async def fetch_replies_for_posts(
     if not posts:
         return
 
+    def set_reply_fetch_status(post: dict, status: str, message: str, count=None) -> None:
+        cached_count = len(post.get("replies") or [])
+        post["replyFetchStatus"] = status
+        post["replyFetchMessage"] = message
+        post["replyFetchCount"] = cached_count if count is None else count
+        post["replyFetchedAt"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
     async def fetch_one_reply_chain(post: dict) -> None:
         try:
             tweet_id = str(post.get("externalId") or post.get("id") or "").strip()
             if not tweet_id:
+                set_reply_fetch_status(post, "skipped", "缺少推文 ID，无法抓取回复。", 0)
                 return
 
             # 用 twscrape 搜索该推文的 conversation_id 来获取回复
@@ -583,10 +599,33 @@ async def fetch_replies_for_posts(
                         replies_raw.append(reply_tweet)
                         if len(replies_raw) >= max_replies_per_post:
                             break
-            except (asyncio.TimeoutError, Exception):
-                pass  # 超时或限流，保留已抓到的
+            except asyncio.TimeoutError:
+                if post.get("replies"):
+                    set_reply_fetch_status(post, "cached", "本次抓取回复超时，沿用旧回复缓存。")
+                else:
+                    set_reply_fetch_status(post, "timeout", "本次抓取回复超时，暂无可展示的回复缓存。", 0)
+                return
+            except Exception as exc:
+                safe_error = exc.__class__.__name__
+                if post.get("replies"):
+                    set_reply_fetch_status(post, "cached", f"本次抓取回复失败（{safe_error}），沿用旧回复缓存。")
+                else:
+                    set_reply_fetch_status(post, "failed", f"本次抓取回复失败（{safe_error}），暂无可展示的回复缓存。", 0)
+                return
 
             if not replies_raw:
+                reported_count = int(post.get("replyCount") or 0)
+                if post.get("replies"):
+                    set_reply_fetch_status(post, "cached", "本次未抓到新回复，沿用旧回复缓存。")
+                elif reported_count > 0:
+                    set_reply_fetch_status(
+                        post,
+                        "empty",
+                        f"X 显示有 {reported_count} 条回复，但本次 conversation_id 搜索未抓到可缓存内容。",
+                        0,
+                    )
+                else:
+                    set_reply_fetch_status(post, "none", "X 未报告回复，暂无可展示的回复缓存。", 0)
                 return
 
             replies = []
@@ -598,9 +637,12 @@ async def fetch_replies_for_posts(
 
             if replies:
                 post["replies"] = replies
+                set_reply_fetch_status(post, "success", f"已缓存 {len(replies)} 条回复。", len(replies))
+            else:
+                set_reply_fetch_status(post, "empty", "搜索返回了回复候选，但没有成功格式化为可展示回复。", 0)
 
         except Exception:
-            pass  # 任何异常都不影响主流程
+            set_reply_fetch_status(post, "failed", "回复抓取出现未预期异常，主推文缓存已保留。", len(post.get("replies") or []))
 
     # 并发抓取，但限制并发数
     semaphore = asyncio.Semaphore(3)

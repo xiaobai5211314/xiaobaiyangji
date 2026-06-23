@@ -19,6 +19,10 @@ namespace 小白养基.Models
         public long QuoteCount { get; set; }
         public List<string> MediaUrls { get; set; } = new();
         public List<InfluencerReplyDto>? Replies { get; set; }
+        public string ReplyFetchStatus { get; set; } = "pending";
+        public string ReplyFetchMessage { get; set; } = string.Empty;
+        public DateTimeOffset? ReplyFetchedAt { get; set; }
+        public int ReplyFetchCount { get; set; }
         public string Source { get; set; } = "twscrape";
     }
 

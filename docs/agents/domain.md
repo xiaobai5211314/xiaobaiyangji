@@ -15,4 +15,5 @@
 
 ## 当前状态
 
-`CONTEXT.md` 和 `docs/adr/` 尚未创建。应在记录第一个架构决策或需要正式定义领域术语时创建。
+- `CONTEXT.md` — ✅ 已创建，位于仓库根目录
+- `docs/adr/` — ✅ 已创建，现有 ADR：0001-source-of-truth、0002-daily-archive、0003-frontend-cache、0004-ocr-import、0005-influencer-posts

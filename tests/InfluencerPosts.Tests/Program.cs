@@ -19,6 +19,10 @@ var json = """
       "translationStatus": "success",
       "createdAt": "2026-06-20T00:00:00Z",
       "url": "https://x.com/aleabitoreddit/status/1",
+      "replyFetchStatus": "empty",
+      "replyFetchMessage": "X 显示有回复，但本次未抓到缓存。",
+      "replyFetchedAt": "2026-06-20T00:03:00Z",
+      "replyFetchCount": 0,
       "replies": [
         {
           "id": "2",
@@ -42,6 +46,8 @@ var dto = JsonSerializer.Deserialize<InfluencerPostsCacheDocument>(json, new Jso
 var post = dto.Items.Single();
 if (post.TranslatedText != "中文" || post.TranslationProvider != "custom" || post.TranslationStatus != "success")
     throw new InvalidOperationException("translation fields were not deserialized");
+if (post.ReplyFetchStatus != "empty" || post.ReplyFetchCount != 0 || post.ReplyFetchedAt is null)
+    throw new InvalidOperationException("reply fetch diagnostic fields were not deserialized");
 if (post.Replies?.Single().TranslatedAt is not null)
     throw new InvalidOperationException("nullable reply translation timestamp was not deserialized");
 

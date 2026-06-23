@@ -5056,7 +5056,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 <div v-if="selectedInfluencerPost" class="glass-panel influencer-posts-panel">
                     <div class="influencer-detail-toolbar">
                         <button type="button" class="influencer-back" @click="closeInfluencerPostDetail">← 返回前20条</button>
-                        <div class="influencer-detail-title">回复 {{ selectedInfluencerReplies.length }} 条</div>
+                        <div class="influencer-detail-title">缓存回复 {{ selectedInfluencerReplies.length }} / X回复 {{ formatInfluencerCount(selectedInfluencerPost.replyCount) }}</div>
                     </div>
                     <article class="influencer-post-card influencer-detail-card">
                         <div class="influencer-post-meta">
@@ -5079,7 +5079,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     </article>
                     <section class="influencer-detail-replies">
                         <div class="influencer-replies-title">翻译回复与原文</div>
-                        <div v-if="selectedInfluencerReplies.length === 0" class="influencer-empty">这条推文暂无已缓存回复</div>
+                        <div v-if="selectedInfluencerReplies.length === 0" class="influencer-empty">{{ getInfluencerReplyFetchMessage(selectedInfluencerPost) }}</div>
                         <div v-else class="influencer-replies-list">
                             <article v-for="reply in selectedInfluencerReplies" :key="reply.id || reply.url || reply.text" class="influencer-reply-card">
                                 <div class="influencer-reply-meta">
@@ -5128,7 +5128,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             </div>
                             <div v-if="getInfluencerReplyCount(post) === 0 && Number(post.replyCount || 0) > 0" class="influencer-replies-section">
                                 <button type="button" class="influencer-replies-toggle" @click="openInfluencerPostDetail(post)">
-                                    暂无缓存回复 · 点击查看详情
+                                    {{ getInfluencerReplyFetchShortText(post) }}
                                 </button>
                             </div>
                         </article>
@@ -6162,6 +6162,22 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     return String(Math.round(n));
                 };
                 const getInfluencerReplyCount = (post) => Array.isArray(post?.replies) ? post.replies.length : 0;
+                const getInfluencerReplyFetchMessage = (post) => {
+                    const cached = getInfluencerReplyCount(post);
+                    const total = Number(post?.replyCount || 0);
+                    if (cached > 0) return post?.replyFetchMessage || ('已缓存 ' + cached + ' 条回复。');
+                    if (post?.replyFetchMessage) return post.replyFetchMessage;
+                    if (total > 0) return 'X 显示有 ' + formatInfluencerCount(total) + ' 条回复，但当前缓存还没有抓到内容。可点原文链接查看。';
+                    return '这条推文暂无已缓存回复。';
+                };
+                const getInfluencerReplyFetchShortText = (post) => {
+                    const total = Number(post?.replyCount || 0);
+                    if (post?.replyFetchStatus === 'timeout') return '回复抓取超时 · 点击查看详情';
+                    if (post?.replyFetchStatus === 'failed') return '回复抓取失败 · 点击查看详情';
+                    if (post?.replyFetchStatus === 'cached') return '沿用旧回复缓存 · 点击查看详情';
+                    if (total > 0) return 'X有' + formatInfluencerCount(total) + '条回复 · 缓存未抓到';
+                    return '暂无缓存回复 · 点击查看详情';
+                };
                 const openInfluencerPostDetail = (post) => {
                     const key = influencerPostKey(post);
                     if (!key) return;
@@ -8414,7 +8430,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     toasts, isLoggedIn, currentUser, userDisplayName, fundsList, activeHoldings, inactiveHoldings, getClearedProfit, chartRef, performanceChartRef, loginForm, profileForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, refreshSectorPage, activePage, switchPage, showProfileModal, userAvatar, smartOcrBusy, smartOcrText,
                     totalPrincipal, totalProfit, totalRate, totalTodayProfit, dashboardActiveSummary, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
                     performanceCurve, performancePeriod, performanceIndex, performanceLoading, performancePeriods, performanceIndices, selectedPerformanceIndexName, performanceIsToday, showPerformanceAmount, canShowPerformanceAmount, togglePerformanceAmount, performanceMessage, performanceVerdict, performanceExcessClass, fetchPerformanceCurve, renderPerformanceChart, switchPerformancePeriod, formatPerformancePercent, formatPerformanceMoney,
-                    influencerPostsDisplay, selectedInfluencerPost, selectedInfluencerReplies, influencerPostsLoading, influencerPostsStatus, influencerPostsUpdatedAt, loadInfluencerPosts, formatInfluencerPostTime, formatInfluencerCount, getInfluencerReplyCount, openInfluencerPostDetail, closeInfluencerPostDetail, openInfluencerSource,
+                    influencerPostsDisplay, selectedInfluencerPost, selectedInfluencerReplies, influencerPostsLoading, influencerPostsStatus, influencerPostsUpdatedAt, loadInfluencerPosts, formatInfluencerPostTime, formatInfluencerCount, getInfluencerReplyCount, getInfluencerReplyFetchMessage, getInfluencerReplyFetchShortText, openInfluencerPostDetail, closeInfluencerPostDetail, openInfluencerSource,
                     handleLogin, handleRegister, handleLogout, saveUserProfile, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, setOcrPendingMode, confirmOcrImport, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
                     sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, capitalFlowError, isCapitalLoading, fetchCapitalFlow,

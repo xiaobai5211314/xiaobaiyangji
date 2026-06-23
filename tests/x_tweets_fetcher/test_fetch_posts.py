@@ -1,4 +1,5 @@
 import json
+import asyncio
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -12,6 +13,7 @@ from tools.x_tweets_fetcher.fetch_posts import (
     normalize_reply,
     prepare_storage,
     request_translation,
+    fetch_replies_for_posts,
     translation_config_from_env,
     translate_missing_posts,
 )
@@ -139,6 +141,44 @@ class TranslationCacheTests(unittest.TestCase):
         self.assertEqual("same text", merged[0]["text"])
         self.assertEqual("已有译文", merged[0]["translatedText"])
         self.assertEqual("success", merged[0]["translationStatus"])
+
+    def test_merge_preserves_cached_replies_when_new_fetch_returns_empty_list(self) -> None:
+        existing = [{
+            "externalId": "123",
+            "text": "same text",
+            "createdAt": "2026-06-19T08:00:00Z",
+            "replies": [{"id": "reply-1", "text": "cached reply"}],
+            "replyFetchStatus": "success",
+        }]
+        incoming = [{
+            "externalId": "123",
+            "text": "same text",
+            "createdAt": "2026-06-19T08:00:00Z",
+            "replies": [],
+        }]
+
+        merged = merge_posts(existing, incoming, 20)
+
+        self.assertEqual([{"id": "reply-1", "text": "cached reply"}], merged[0]["replies"])
+        self.assertEqual("cached", merged[0]["replyFetchStatus"])
+
+    def test_reply_fetch_records_empty_status_when_reply_count_exists_but_search_returns_none(self) -> None:
+        class EmptySearchApi:
+            async def search(self, query: str, limit: int):
+                if False:
+                    yield query
+
+        posts = [{
+            "externalId": "123",
+            "replyCount": 5,
+            "replies": [],
+        }]
+
+        asyncio.run(fetch_replies_for_posts(posts, EmptySearchApi(), "aleabitoreddit", timeout_seconds=1.0))
+
+        self.assertEqual("empty", posts[0]["replyFetchStatus"])
+        self.assertEqual(0, posts[0]["replyFetchCount"])
+        self.assertIn("未抓到", posts[0]["replyFetchMessage"])
 
     def test_none_provider_marks_untranslated_post_skipped(self) -> None:
         posts = [{"externalId": "123", "text": "hello"}]

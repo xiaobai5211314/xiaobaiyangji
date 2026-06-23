@@ -130,6 +130,7 @@ npm run check:pages-order   # 校验 pages[0] 必须是 pages/home/index
 - 正式前端只有 `miniprogram/src/` 和 `wwwroot/index.html`；`frontend/src/` 不是正式入口，`wwwroot/v2/` 已删除且禁止恢复
 - 底部导航固定为 5 个板块：持仓、板块、资讯、盈亏、推文；“白毛股神推文”必须位于独立“推文”页，不得放在持仓页底部
 - WebApp 推文页的“回”和“查看回复”进入详情视图；详情视图必须保留推文与回复的中文译文、英文原文，并让原文链接可点击打开
+- X 的总回复数 `replyCount` 与本地缓存回复数 `replies.length` 不是同一个字段；当 `replyCount > 0` 但 `replies` 为空时，页面必须显示 `replyFetchStatus` / `replyFetchMessage` 诊断原因。
 - `pages/home/index` 必须是 `pages.json` 中的 `pages[0]`（由 `check:pages-order` 脚本强制校验）
 - 状态管理使用原生 `reactive()` + `computed()`，无 Vuex、无 Pinia
 - 项目未配置标准测试框架（xUnit/NUnit）；`tests/PortfolioAccounting.Tests/` 是控制台应用，用手动 `throw` 断言测试 PortfolioAccounting 和 DailyArchiveService
@@ -138,7 +139,7 @@ npm run check:pages-order   # 校验 pages[0] 必须是 pages/home/index
 
 ## 推文 sidecar 与敏感信息
 
-- 固定目标账号为 `@aleabitoreddit`；sidecar 将推文和已抓取回复写入 JSON 缓存，ASP.NET Core API 只读缓存，前端不得直连 X 或外部翻译服务。
+- 固定目标账号为 `@aleabitoreddit`；sidecar 将推文、已抓取回复和回复抓取诊断字段写入 JSON 缓存，ASP.NET Core API 只读缓存，前端不得直连 X 或外部翻译服务。
 - 服务器私有环境文件仅允许位于 `/www/wwwroot/小白养基/.secrets/influencer.env`，并由 `.gitignore` 排除。
 - 禁止读取、打印、提交该私有环境文件内容；禁止把 cookie 或翻译服务密钥写入 `appsettings.json`、`appsettings.example.json`、文档、日志或 GitHub。
 - 抓取或翻译失败只能降级为旧缓存或英文原文，不得影响基金首页、收益计算、OCR、`DailyArchive` 或首页 summary。
