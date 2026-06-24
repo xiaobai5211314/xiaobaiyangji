@@ -63,6 +63,23 @@ namespace 小白养基.Services
             return Money(snapshotDisplayAmount);
         }
 
+        public static bool IsOcrSnapshotFreshForArchive(
+            string? snapshotDate,
+            string? confirmedProfitDate,
+            DateTime? archiveRecordDate)
+        {
+            if (!DateTime.TryParse(snapshotDate, out var capturedAt)) return false;
+            if (!archiveRecordDate.HasValue) return true;
+
+            if (DateTime.TryParse(confirmedProfitDate, out var confirmedAt)
+                && confirmedAt.Date >= archiveRecordDate.Value.Date)
+            {
+                return true;
+            }
+
+            return capturedAt.Date > archiveRecordDate.Value.Date;
+        }
+
         public static DateTime ResolvePreviousWeekday(DateTime chinaDate)
         {
             return MarketCalendar.GetPreviousTradingDate(chinaDate.Date.AddDays(-1));

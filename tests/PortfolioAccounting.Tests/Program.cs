@@ -140,6 +140,13 @@ Equal(
         antConfirmedAvailable: true),
     "summary.accountTotalAmount.includesPendingBuyAfterArchiveRollForward");
 
+var staleSnapshotWins = PortfolioAccounting.IsOcrSnapshotFreshForArchive(
+    "2026-06-24",
+    "2026-06-23",
+    new DateTime(2026, 6, 24));
+if (staleSnapshotWins)
+    throw new InvalidOperationException("summary.snapshotFreshness: OCR confirmed for 2026-06-23 must not override 2026-06-24 archive");
+
 var selectedLatestTotal = DailyArchiveService.PickLatestPortfolioSummaryTotal(new[]
 {
     new DailyArchive

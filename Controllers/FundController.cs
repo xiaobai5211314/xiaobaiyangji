@@ -6293,9 +6293,11 @@ namespace 小白养基.Controllers
                 var effectiveArchiveByCode = effectiveArchives
                     .Where(a => !string.Equals(a.FundCode, "TOTAL", StringComparison.OrdinalIgnoreCase))
                     .ToDictionary(a => a.FundCode, StringComparer.OrdinalIgnoreCase);
-                bool hasFreshOcrSnapshot = myFunds.Any(f =>
-                    IsOcrSnapshotCurrent(f.OcrYesterdayDate, todayDash, naturalDate)
-                    || IsOcrSnapshotCurrent(f.OcrSnapshotDate, todayDash, naturalDate));
+                bool hasFreshOcrSnapshot = myFunds.Any(f => f.HoldAmount > 0
+                    && PortfolioAccounting.IsOcrSnapshotFreshForArchive(
+                        f.OcrSnapshotDate,
+                        f.OcrYesterdayDate,
+                        effectiveArchiveTotal?.RecordDate));
                 bool useEffectiveArchive = !dateInfo.MarketOpen
                     && effectiveArchiveTotal != null
                     && !hasFreshOcrSnapshot;
@@ -6392,9 +6394,13 @@ namespace 小白养基.Controllers
                     double confirmedHoldAmount = Math.Max(0, Math.Round(rawHoldAmount - pendingBuyAmount, 2));
                     double todayBaseAmount = GetDailyBaseAmount(config, todayDash, pendingBuyAmount);
 
-                    bool hasLatestOcrAmount = DateTime.TryParse(config.OcrSnapshotDate, out var ocrSnapshotDate)
-                        && (!DateTime.TryParse(latestOfficialRecord?.NavDate, out var latestOfficialDate)
-                            || ocrSnapshotDate.Date >= latestOfficialDate.Date);
+                    DateTime? latestOfficialDate = DateTime.TryParse(latestOfficialRecord?.NavDate, out var parsedLatestOfficialDate)
+                        ? parsedLatestOfficialDate.Date
+                        : null;
+                    bool hasLatestOcrAmount = PortfolioAccounting.IsOcrSnapshotFreshForArchive(
+                        config.OcrSnapshotDate,
+                        config.OcrYesterdayDate,
+                        latestOfficialDate);
                     double officialMarketValue = latestOfficialRecord?.Nav is > 0 && config.HoldShares > 0
                         ? Math.Round(config.HoldShares * latestOfficialRecord.Nav.Value, 2)
                         : 0;
@@ -6744,7 +6750,10 @@ namespace 小白养基.Controllers
                 todayPerformanceBase = PortfolioAccounting.Money(todayPerformanceBase);
                 int activeFundCount = myFunds.Count(f => f.HoldAmount > 0);
                 int freshSnapshotCount = myFunds.Count(f => f.HoldAmount > 0
-                    && IsOcrSnapshotCurrent(f.OcrSnapshotDate, todayDash, naturalDate));
+                    && PortfolioAccounting.IsOcrSnapshotFreshForArchive(
+                        f.OcrSnapshotDate,
+                        f.OcrYesterdayDate,
+                        latestPortfolioTotal?.RecordDate));
                 bool currentSnapshotComplete = activeFundCount > 0 && freshSnapshotCount == activeFundCount;
                 bool currentSnapshotAvailable = freshSnapshotCount > 0 && summaryConfirmedAmount > 0m;
                 bool useCurrentSnapshotSummary = currentSnapshotAvailable
@@ -6759,7 +6768,11 @@ namespace 小白养基.Controllers
                     ? "pending"
                     : DailyArchiveService.GetSettlementStatus(latestPortfolioTotal);
                 decimal currentSnapshotYesterdayProfit = PortfolioAccounting.Money(myFunds
-                    .Where(f => f.HoldAmount > 0 && IsOcrSnapshotCurrent(f.OcrSnapshotDate, todayDash, naturalDate))
+                    .Where(f => f.HoldAmount > 0
+                        && PortfolioAccounting.IsOcrSnapshotFreshForArchive(
+                            f.OcrSnapshotDate,
+                            f.OcrYesterdayDate,
+                            latestPortfolioTotal?.RecordDate))
                     .Sum(f => f.OcrYesterdayIncome));
                 decimal antConfirmedAmount = useCurrentSnapshotSummary
                     ? PortfolioAccounting.Money(summaryConfirmedAmount)
