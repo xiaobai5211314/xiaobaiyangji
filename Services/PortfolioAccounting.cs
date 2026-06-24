@@ -47,6 +47,22 @@ namespace 小白养基.Services
                 ? Money(settledProfit.Value)
                 : Money(Money(todayBaseAmount) * todayRate / 100m);
 
+        public static decimal ResolveAccountTotalAmount(
+            decimal snapshotDisplayAmount,
+            decimal confirmedAmount,
+            decimal pendingBuyAmount,
+            bool useCurrentSnapshotSummary,
+            bool antConfirmedAvailable)
+        {
+            if (useCurrentSnapshotSummary)
+                return Money(snapshotDisplayAmount);
+
+            if (antConfirmedAvailable)
+                return Money(Money(confirmedAmount) + Money(pendingBuyAmount));
+
+            return Money(snapshotDisplayAmount);
+        }
+
         public static DateTime ResolvePreviousWeekday(DateTime chinaDate)
         {
             return MarketCalendar.GetPreviousTradingDate(chinaDate.Date.AddDays(-1));

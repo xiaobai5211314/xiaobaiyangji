@@ -6804,11 +6804,17 @@ namespace 小白养基.Controllers
                     : antConfirmedAvailable
                     ? (latestPortfolioTotal!.Source ?? summarySettlementStatus)
                     : "pending-ant-confirmation";
+                decimal accountTotalAmount = PortfolioAccounting.ResolveAccountTotalAmount(
+                    snapshotDisplayAmount: summaryDisplayAmount,
+                    confirmedAmount: antConfirmedAmount,
+                    pendingBuyAmount: summaryPendingBuyAmount,
+                    useCurrentSnapshotSummary,
+                    antConfirmedAvailable);
 
                 var summary = new
                 {
                     tradeDate = todayDash,
-                    accountTotalAmount = PortfolioAccounting.Money(summaryDisplayAmount),
+                    accountTotalAmount,
                     confirmedHoldingTotalAmount = antConfirmedAmount,
                     todayPendingBuyTotal = PortfolioAccounting.Money(summaryPendingBuyAmount),
                     totalTodayProfit = todayPerformanceProfit,
@@ -6824,7 +6830,7 @@ namespace 小白养基.Controllers
                     totalAssets = antConfirmedAmount,
                     totalProfit = antHoldingProfit,
                     totalRate = antHoldingRate,
-                    totalDisplayAmount = PortfolioAccounting.Money(summaryDisplayAmount),
+                    totalDisplayAmount = accountTotalAmount,
                     totalConfirmedAmount = antConfirmedAmount,
                     totalPendingBuyAmount = PortfolioAccounting.Money(summaryPendingBuyAmount),
                     totalHoldingIncome = antHoldingProfit,

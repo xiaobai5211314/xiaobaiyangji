@@ -110,6 +110,36 @@ Equal(0.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendi
 Equal(-1121.92m, PortfolioAccounting.OfficialTodayProfit(88340.36m, -1.27m), "officialTodayProfit.excludesPendingBuy");
 Equal(-105.50m, PortfolioAccounting.OfficialTodayProfit(88340.36m, -1.27m, -105.50m), "officialTodayProfit.prefersExactSettledProfit");
 
+Equal(
+    88868.91m,
+    PortfolioAccounting.ResolveAccountTotalAmount(
+        snapshotDisplayAmount: 90850.95m,
+        confirmedAmount: 88868.91m,
+        pendingBuyAmount: 0m,
+        useCurrentSnapshotSummary: false,
+        antConfirmedAvailable: true),
+    "summary.accountTotalAmount.rollsForwardWhenNavConfirmedWithoutFreshOcr");
+
+Equal(
+    90850.95m,
+    PortfolioAccounting.ResolveAccountTotalAmount(
+        snapshotDisplayAmount: 90850.95m,
+        confirmedAmount: 88868.91m,
+        pendingBuyAmount: 0m,
+        useCurrentSnapshotSummary: true,
+        antConfirmedAvailable: true),
+    "summary.accountTotalAmount.prefersFreshOcrSnapshot");
+
+Equal(
+    90850.95m,
+    PortfolioAccounting.ResolveAccountTotalAmount(
+        snapshotDisplayAmount: 90000.00m,
+        confirmedAmount: 88868.91m,
+        pendingBuyAmount: 1982.04m,
+        useCurrentSnapshotSummary: false,
+        antConfirmedAvailable: true),
+    "summary.accountTotalAmount.includesPendingBuyAfterArchiveRollForward");
+
 var selectedLatestTotal = DailyArchiveService.PickLatestPortfolioSummaryTotal(new[]
 {
     new DailyArchive
