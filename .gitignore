@@ -369,3 +369,17 @@ appsettings.Production.json
 .env
 .secrets/
 *.env.local
+
+# 敏感信息（安全审查补录）
+.codex-remote-attachments/
+influencer.env
+X_COOKIE
+auth_token
+ct0
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+id_ecdsa*
+server.json
+ssh_服务器.json
