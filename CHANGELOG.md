@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2026-06-27
+
+- 修正服务器 `DailyArchives` 数据库 2026 年 6 月盈亏数据（用户 dabai521），对齐蚂蚁基金标准：06-03、06-17、06-23 的 `DailyProfit` 已修正，月累计从 -10931.58 更正为 -10934.17。
+- 小程序盈亏日历 `.day-profit` 样式修复：去掉 `transform: scale(0.86)`，缩小字号至 14rpx，添加 `overflow: visible`，防止圆圈内金额被截断。
+- `.gitignore` 新增 `.codegraph/`。
+
 ## 2026-06-26
 
 - 修复基金首页总持仓在官方净值确认后仍停留在旧 OCR 金额的问题。
