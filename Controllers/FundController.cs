@@ -566,16 +566,25 @@ namespace 小白养基.Controllers
             double settledProfit = fund.OcrYesterdayDate == settleDate
                 ? Math.Round(fund.OcrYesterdayIncome, 2)
                 : Math.Round(exactProfit ?? (baseAmount * actualRate / 100.0), 2);
+            double activePendingBuyAmount = GetActivePendingBuyAmount(fund, settleDate);
+            double settledDisplayAmount = PortfolioAccounting.ToDouble(
+                PortfolioAccounting.ResolveSettledDisplayAmount(
+                    Convert.ToDecimal(baseAmount),
+                    Convert.ToDecimal(settledProfit),
+                    Convert.ToDecimal(activePendingBuyAmount),
+                    exactAssets.HasValue ? Convert.ToDecimal(exactAssets.Value) : null));
 
             Console.WriteLine(
-                $"[官方净值落库] code={fund.FundCode}, antConfirmedAmount={beforeHoldAmount:F2}, baseAmount={baseAmount:F2}, settledProfit={settledProfit:F2}, exactAssets={exactAssets:F2}; HoldAmount保持蚂蚁确认值");
+                $"[官方净值落库] code={fund.FundCode}, beforeHoldAmount={beforeHoldAmount:F2}, baseAmount={baseAmount:F2}, settledProfit={settledProfit:F2}, exactAssets={exactAssets:F2}, nextHoldAmount={settledDisplayAmount:F2}; HoldAmount随净值滚动");
 
             bool changed = fund.LastSettledDate != settleDate ||
                            Math.Abs(fund.LastSettledRate - actualRate) > 0.0001 ||
-                           Math.Abs(fund.LastSettledProfit - settledProfit) > 0.01;
+                           Math.Abs(fund.LastSettledProfit - settledProfit) > 0.01 ||
+                           Math.Abs(fund.HoldAmount - settledDisplayAmount) > 0.01;
 
             if (!changed) return false;
 
+            fund.HoldAmount = settledDisplayAmount;
             fund.LastSettledDate = settleDate;
             fund.LastSettledProfit = settledProfit;
             fund.LastSettledRate = Math.Round(actualRate, 4);
@@ -720,13 +729,16 @@ namespace 小白养基.Controllers
 
                 decimal dailyProfit = PortfolioAccounting.Money(
                     hasOcrSnapshot ? fund.OcrYesterdayIncome : fund.LastSettledProfit);
-                decimal currentAssets = hasOcrSnapshot
-                    ? confirmedHoldAmount
-                    : Math.Max(0m, confirmedHoldAmount + dailyProfit);
+                decimal currentAssets = confirmedHoldAmount;
                 decimal baseAmount = Math.Max(0m, currentAssets - dailyProfit);
                 decimal dailyRate = PortfolioAccounting.Percent(dailyProfit, baseAmount);
-                decimal totalProfit = PortfolioAccounting.Money(
-                    hasOcrSnapshot ? fund.OcrHoldingIncome : fund.OcrHoldingIncome + fund.LastSettledProfit);
+                decimal totalProfit = hasOcrSnapshot
+                    ? PortfolioAccounting.Money(fund.OcrHoldingIncome)
+                    : PortfolioAccounting.ResolveOfficialHoldingProfit(
+                        currentAssets,
+                        PortfolioAccounting.Money(fund.CostAmount),
+                        PortfolioAccounting.Money(fund.RealizedProfit),
+                        PortfolioAccounting.Money(fund.OcrHoldingIncome));
                 decimal fundTotalCost = PortfolioAccounting.HoldingCost(currentAssets, totalProfit);
                 decimal totalRate = PortfolioAccounting.Percent(totalProfit, fundTotalCost);
 
@@ -6455,13 +6467,21 @@ namespace 小白养基.Controllers
                             PortfolioAccounting.Money(todayBaseAmount),
                             PortfolioAccounting.Money(todayRate),
                             config.LastSettledDate == todayDash ? PortfolioAccounting.Money(config.LastSettledProfit) : null));
-                        marketValue = Math.Round(confirmedHoldAmount + pendingBuyAmount, 2);
+                        double settledConfirmedAmount = officialMarketValue > 0
+                            ? officialMarketValue
+                            : Math.Max(0, Math.Round(todayBaseAmount + todayProfit, 2));
+                        marketValue = Math.Round(settledConfirmedAmount + pendingBuyAmount, 2);
+                        rawHoldAmount = marketValue;
+                        confirmedHoldAmount = settledConfirmedAmount;
                         actualExactProfit = todayProfit;
                     }
                     else if (dataStatus == "estimate_today")
                     {
                         todayProfit = Math.Round(todayBaseAmount * todayRate / 100.0, 2);
-                        marketValue = Math.Round(settledMarketValue + todayProfit, 2);
+                        double estimatedConfirmedAmount = Math.Max(0, Math.Round(settledMarketValue + todayProfit, 2));
+                        marketValue = Math.Round(estimatedConfirmedAmount + pendingBuyAmount, 2);
+                        rawHoldAmount = marketValue;
+                        confirmedHoldAmount = estimatedConfirmedAmount;
                     }
                     else
                     {
@@ -6715,10 +6735,11 @@ namespace 小白养基.Controllers
 
                 var finalResult = result.OrderByDescending(x => x.amount).ToList();
 
-                // 正式金额只读蚂蚁确认 TOTAL；盘中估算单独累计，绝不覆盖正式金额。
+                // 当前展示金额可随官方净值/盘中估值滚动；正式历史仍只写 DailyArchive。
                 decimal intradayProfit = 0m, intradayQuotedBase = 0m;
                 decimal todayPerformanceProfit = 0m, todayPerformanceBase = 0m;
                 bool hasTodayEstimate = false, hasTodayConfirmed = false;
+                bool hasLiveMarketAmount = false;
                 decimal summaryDisplayAmount = 0m, summaryConfirmedAmount = 0m, summaryPendingBuyAmount = 0m;
                 decimal summaryHoldingProfit = 0m;
                 foreach (var fund in finalResult)
@@ -6737,6 +6758,7 @@ namespace 小白养基.Controllers
                         todayPerformanceBase += PortfolioAccounting.Money(fund.todayBaseAmount);
                         hasTodayEstimate |= isEstimate;
                         hasTodayConfirmed |= isConfirmedToday;
+                        hasLiveMarketAmount = true;
                     }
                     if (isEstimate)
                     {
@@ -6817,12 +6839,14 @@ namespace 小白养基.Controllers
                     : antConfirmedAvailable
                     ? (latestPortfolioTotal!.Source ?? summarySettlementStatus)
                     : "pending-ant-confirmation";
-                decimal accountTotalAmount = PortfolioAccounting.ResolveAccountTotalAmount(
-                    snapshotDisplayAmount: summaryDisplayAmount,
-                    confirmedAmount: antConfirmedAmount,
-                    pendingBuyAmount: summaryPendingBuyAmount,
-                    useCurrentSnapshotSummary,
-                    antConfirmedAvailable);
+                decimal accountTotalAmount = hasLiveMarketAmount && summaryDisplayAmount > 0m
+                    ? PortfolioAccounting.Money(summaryDisplayAmount)
+                    : PortfolioAccounting.ResolveAccountTotalAmount(
+                        snapshotDisplayAmount: summaryDisplayAmount,
+                        confirmedAmount: antConfirmedAmount,
+                        pendingBuyAmount: summaryPendingBuyAmount,
+                        useCurrentSnapshotSummary,
+                        antConfirmedAvailable);
 
                 var summary = new
                 {

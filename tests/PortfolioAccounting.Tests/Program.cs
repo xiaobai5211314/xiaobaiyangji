@@ -140,6 +140,32 @@ Equal(
         antConfirmedAvailable: true),
     "summary.accountTotalAmount.includesPendingBuyAfterArchiveRollForward");
 
+Equal(
+    88251.52m,
+    PortfolioAccounting.ResolveSettledDisplayAmount(
+        baseAmount: 89739.09m,
+        settledProfit: -1487.57m,
+        activePendingBuyAmount: 0m),
+    "settlement.displayAmount.rollsFromOcrSnapshotAfterNavConfirmed");
+
+Equal(
+    85357.84m,
+    PortfolioAccounting.ResolveSettledDisplayAmount(
+        baseAmount: 88251.52m,
+        settledProfit: -2893.68m,
+        activePendingBuyAmount: 0m,
+        exactConfirmedAssets: 85357.84m),
+    "settlement.displayAmount.usesExactNavAssetsOnNextDay");
+
+Equal(
+    -6970.44m,
+    PortfolioAccounting.ResolveOfficialHoldingProfit(
+        currentAssets: 31697.81m,
+        costAmount: 38668.25m,
+        realizedProfit: 0m,
+        fallbackHoldingProfit: -5360.08m),
+    "settlement.holdingProfit.recomputesFromCurrentAssetsAndCost");
+
 var staleSnapshotWins = PortfolioAccounting.IsOcrSnapshotFreshForArchive(
     "2026-06-24",
     "2026-06-23",

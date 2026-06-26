@@ -63,6 +63,33 @@ namespace 小白养基.Services
             return Money(snapshotDisplayAmount);
         }
 
+        public static decimal ResolveSettledDisplayAmount(
+            decimal baseAmount,
+            decimal settledProfit,
+            decimal activePendingBuyAmount,
+            decimal? exactConfirmedAssets = null)
+        {
+            var confirmedAssets = exactConfirmedAssets.HasValue && exactConfirmedAssets.Value > 0m
+                ? Money(exactConfirmedAssets.Value)
+                : Money(Money(baseAmount) + Money(settledProfit));
+
+            return Money(Math.Max(0m, confirmedAssets) + Math.Max(0m, Money(activePendingBuyAmount)));
+        }
+
+        public static decimal ResolveOfficialHoldingProfit(
+            decimal currentAssets,
+            decimal costAmount,
+            decimal realizedProfit = 0m,
+            decimal fallbackHoldingProfit = 0m)
+        {
+            var assets = Money(currentAssets);
+            var cost = Money(costAmount);
+            if (cost > 0m)
+                return Money(assets - cost + Money(realizedProfit));
+
+            return Money(fallbackHoldingProfit);
+        }
+
         public static bool IsOcrSnapshotFreshForArchive(
             string? snapshotDate,
             string? confirmedProfitDate,

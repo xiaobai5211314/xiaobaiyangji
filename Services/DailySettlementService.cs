@@ -181,13 +181,16 @@ namespace 小白养基.Services
 
                 decimal dailyProfit = PortfolioAccounting.Money(
                     hasOcrSnapshot ? fund.OcrYesterdayIncome : fund.LastSettledProfit);
-                decimal currentAssets = hasOcrSnapshot
-                    ? confirmedHoldAmount
-                    : Math.Max(0m, confirmedHoldAmount + dailyProfit);
+                decimal currentAssets = confirmedHoldAmount;
                 decimal baseAmount = Math.Max(0m, currentAssets - dailyProfit);
                 decimal dailyRate = PortfolioAccounting.Percent(dailyProfit, baseAmount);
-                decimal totalProfit = PortfolioAccounting.Money(
-                    hasOcrSnapshot ? fund.OcrHoldingIncome : fund.OcrHoldingIncome + fund.LastSettledProfit);
+                decimal totalProfit = hasOcrSnapshot
+                    ? PortfolioAccounting.Money(fund.OcrHoldingIncome)
+                    : PortfolioAccounting.ResolveOfficialHoldingProfit(
+                        currentAssets,
+                        PortfolioAccounting.Money(fund.CostAmount),
+                        PortfolioAccounting.Money(fund.RealizedProfit),
+                        PortfolioAccounting.Money(fund.OcrHoldingIncome));
                 decimal fundTotalCost = PortfolioAccounting.HoldingCost(currentAssets, totalProfit);
                 decimal totalRate = PortfolioAccounting.Percent(totalProfit, fundTotalCost);
 

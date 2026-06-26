@@ -204,16 +204,25 @@ namespace 小白养基.Services
             double settledProfit = fund.OcrYesterdayDate == settleDate
                 ? Math.Round(fund.OcrYesterdayIncome, 2)
                 : Math.Round(exactProfit ?? (baseAmount * actualRate / 100.0), 2);
+            double activePendingBuyAmount = GetActivePendingBuyAmount(fund, settleDate);
+            double settledDisplayAmount = PortfolioAccounting.ToDouble(
+                PortfolioAccounting.ResolveSettledDisplayAmount(
+                    Convert.ToDecimal(baseAmount),
+                    Convert.ToDecimal(settledProfit),
+                    Convert.ToDecimal(activePendingBuyAmount),
+                    exactAssets.HasValue ? Convert.ToDecimal(exactAssets.Value) : null));
 
             Console.WriteLine(
-                $"[官方净值落库] code={fund.FundCode}, antConfirmedAmount={beforeHoldAmount:F2}, baseAmount={baseAmount:F2}, settledProfit={settledProfit:F2}, exactAssets={exactAssets:F2}; HoldAmount保持蚂蚁确认值");
+                $"[官方净值落库] code={fund.FundCode}, beforeHoldAmount={beforeHoldAmount:F2}, baseAmount={baseAmount:F2}, settledProfit={settledProfit:F2}, exactAssets={exactAssets:F2}, nextHoldAmount={settledDisplayAmount:F2}; HoldAmount随净值滚动");
 
             bool changed = fund.LastSettledDate != settleDate ||
                            Math.Abs(fund.LastSettledRate - actualRate) > 0.0001 ||
-                           Math.Abs(fund.LastSettledProfit - settledProfit) > 0.01;
+                           Math.Abs(fund.LastSettledProfit - settledProfit) > 0.01 ||
+                           Math.Abs(fund.HoldAmount - settledDisplayAmount) > 0.01;
 
             if (!changed) return false;
 
+            fund.HoldAmount = settledDisplayAmount;
             fund.LastSettledDate = settleDate;
             fund.LastSettledProfit = settledProfit;
             fund.LastSettledRate = Math.Round(actualRate, 4);
