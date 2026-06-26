@@ -651,9 +651,10 @@ function profitClass(value: number | null) {
 }
 
 .day-profit {
-  margin-top: 6rpx;
-  font-size: 17rpx;
-  transform: scale(0.86);
+  margin-top: 4rpx;
+  font-size: 14rpx;
+  line-height: 1.2;
+  overflow: visible;
 }
 
 .top-grid {
