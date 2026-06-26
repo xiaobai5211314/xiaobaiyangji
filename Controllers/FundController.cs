@@ -6280,10 +6280,12 @@ namespace 小白养基.Controllers
                     .ToListAsync();
 
                 var effectiveArchives = effectiveArchiveCandidates
-                    .Where(a => a.IsFinal && DailyArchiveService.IsAntConfirmedSource(a.Source))
+                    .Where(DailyArchiveService.HasFinancialData)
+                    .Where(a => DailyArchiveService.GetSettlementStatus(a) != "legacy")
                     .GroupBy(a => a.FundCode, StringComparer.OrdinalIgnoreCase)
                     .Select(group => group
-                        .OrderByDescending(a => a.IsFinal)
+                        .OrderByDescending(a => a.IsFinal && DailyArchiveService.IsAntConfirmedSource(a.Source))
+                        .ThenByDescending(a => a.IsFinal)
                         .ThenByDescending(DailyArchiveService.HasFinancialData)
                         .ThenByDescending(a => a.UpdatedAt)
                         .ThenByDescending(a => a.Id)
