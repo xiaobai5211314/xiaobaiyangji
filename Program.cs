@@ -151,6 +151,7 @@ app.Use(async (context, next) =>
         path.StartsWith("/api/auth/register", StringComparison.OrdinalIgnoreCase) ||
         path.StartsWith("/api/auth/wechat-login", StringComparison.OrdinalIgnoreCase) ||
         path.StartsWith("/api/health", StringComparison.OrdinalIgnoreCase) ||
+        path.StartsWith("/api/influencer-posts/latest", StringComparison.OrdinalIgnoreCase) ||
         !path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase);
 
     if (!isPublic)
