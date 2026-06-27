@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from './config';
+import { getToken } from '../stores/session';
 
 export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
@@ -188,10 +189,12 @@ export async function request<TResponse = unknown, TData = unknown>(
     !/[?&]_t=/.test(fullUrl) &&
     !/\/api\/fund\//i.test(fullUrl) &&
     !/\/api\/stock\//i.test(fullUrl);
-  const header = {
+  const token = getToken();
+  const header: Record<string, string> = {
     Accept: 'application/json',
     ...options.header
   };
+  if (token) header['Authorization'] = `Bearer ${token}`;
 
   if (canUseCache) {
     const cached = getCache.get(cacheKey);

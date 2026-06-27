@@ -11,6 +11,7 @@ export interface LoginResponse {
   displayName?: string;
   username?: string;
   userName?: string;
+  token?: string;
   user?: {
     displayName?: string;
     username?: string;

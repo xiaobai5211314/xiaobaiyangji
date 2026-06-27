@@ -151,9 +151,9 @@ async function wechatOneTapLogin() {
       username,
       displayName: pickDisplayName(result, username),
       avatarDataUrl: pickAvatar(result),
-      loginTime: Date.now()
+      loginTime: Date.now(),
+      token: result.token
     });
-
     form.password = '';
     uni.reLaunch({ url: '/pages/home/index' });
   } catch (error) {
@@ -179,7 +179,8 @@ async function submit() {
       username,
       displayName: pickDisplayName(result, username),
       avatarDataUrl: pickAvatar(result),
-      loginTime: Date.now()
+      loginTime: Date.now(),
+      token: result.token
     });
     form.password = '';
     uni.reLaunch({ url: '/pages/home/index' });

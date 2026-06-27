@@ -4,6 +4,7 @@ import { getStorage, removeStorage, setStorage } from '../utils/storage';
 const USERNAME_KEY = 'fund_username';
 const AVATAR_KEY = 'fund_avatar';
 const SESSION_KEY = 'fund_session';
+const TOKEN_KEY = 'fund_token';
 
 export interface SessionState {
   username: string;
@@ -27,6 +28,7 @@ export interface SessionPayload {
   avatarDataUrl?: string;
   avatarUrl?: string;
   loginTime?: number;
+  token?: string;
 }
 
 export const isLoggedInRef = computed(() => Boolean(sessionState.username));
@@ -65,7 +67,16 @@ export function saveSession(payload: SessionPayload) {
   setStorage(SESSION_KEY, next);
   setStorage(USERNAME_KEY, next.username);
   setStorage(AVATAR_KEY, next.avatarDataUrl || next.avatarUrl || '');
+  if (payload.token) setStorage(TOKEN_KEY, payload.token);
   return next;
+}
+
+export function getToken(): string {
+  return getStorage<string>(TOKEN_KEY, '');
+}
+
+export function setToken(token: string) {
+  setStorage(TOKEN_KEY, token);
 }
 
 export function loadSession() {
@@ -108,4 +119,5 @@ export function clearSession() {
   removeStorage(SESSION_KEY);
   removeStorage(USERNAME_KEY);
   removeStorage(AVATAR_KEY);
+  removeStorage(TOKEN_KEY);
 }

@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
 using 小白养基.Models;
+using 小白养基.Services;
 
 namespace 小白养基.Controllers
 {
@@ -17,17 +18,20 @@ namespace 小白养基.Controllers
         private readonly IPasswordHasher<User> _passwordHasher;
         private readonly IConfiguration _configuration;
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly TokenService _tokenService;
 
         public AuthController(
             AppDbContext context,
             IPasswordHasher<User> passwordHasher,
             IConfiguration configuration,
-            IHttpClientFactory httpClientFactory)
+            IHttpClientFactory httpClientFactory,
+            TokenService tokenService)
         {
             _context = context;
             _passwordHasher = passwordHasher;
             _configuration = configuration;
             _httpClientFactory = httpClientFactory;
+            _tokenService = tokenService;
         }
 
         private static string LegacySha256Hash(string password)
@@ -59,7 +63,8 @@ namespace 小白养基.Controllers
 
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
-            return Ok(new { success = true, username });
+            var token = _tokenService.GenerateToken(username);
+            return Ok(new { success = true, username, token });
         }
 
         [HttpPost("login")]
@@ -97,12 +102,14 @@ namespace 小白养基.Controllers
                 user.LastLoginAt = DateTime.Now;
                 await _context.SaveChangesAsync();
 
+                var token = _tokenService.GenerateToken(user.Username);
                 return Ok(new
                 {
                     success = true,
                     username = user.Username,
                     displayName = user.Nickname ?? user.Username,
-                    avatarDataUrl = user.AvatarDataUrl ?? string.Empty
+                    avatarDataUrl = user.AvatarDataUrl ?? string.Empty,
+                    token
                 });
             }
             catch (Exception ex)
@@ -196,12 +203,14 @@ namespace 小白养基.Controllers
 
             await _context.SaveChangesAsync();
 
+            var token = _tokenService.GenerateToken(user.Username);
             return Ok(new
             {
                 success = true,
                 username = user.Username,
                 displayName = user.Nickname ?? user.Username,
-                avatarDataUrl = user.AvatarDataUrl ?? string.Empty
+                avatarDataUrl = user.AvatarDataUrl ?? string.Empty,
+                token
             });
         }
 

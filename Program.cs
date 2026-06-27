@@ -124,6 +124,7 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     options.SyncTimeout = 1500;
     return ConnectionMultiplexer.Connect(options);
 });
+builder.Services.AddSingleton<TokenService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddControllers()
     .AddJsonOptions(opt =>
@@ -138,6 +139,43 @@ var app = builder.Build();
 
 app.UseCors("ConfiguredOrigins");
 app.UseResponseCompression();
+
+// ── JWT 认证中间件 ──
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value ?? "";
+    bool isPublic =
+        path == "/" ||
+        path.StartsWith("/index.html", StringComparison.OrdinalIgnoreCase) ||
+        path.StartsWith("/api/auth/login", StringComparison.OrdinalIgnoreCase) ||
+        path.StartsWith("/api/auth/register", StringComparison.OrdinalIgnoreCase) ||
+        path.StartsWith("/api/auth/wechat-login", StringComparison.OrdinalIgnoreCase) ||
+        path.StartsWith("/api/health", StringComparison.OrdinalIgnoreCase) ||
+        !path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase);
+
+    if (!isPublic)
+    {
+        var authHeader = context.Request.Headers.Authorization.ToString();
+        var token = authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+            ? authHeader[7..]
+            : context.Request.Headers["X-Auth-Token"].ToString();
+
+        var tokenService = context.RequestServices.GetRequiredService<TokenService>();
+        var username = tokenService.ValidateToken(token);
+
+        if (username == null)
+        {
+            context.Response.StatusCode = 401;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync("{\"success\":false,\"message\":\"未登录或 token 已过期\"}");
+            return;
+        }
+
+        context.Items["Username"] = username;
+    }
+
+    await next();
+});
 
 using (var scope = app.Services.CreateScope())
 {
