@@ -386,3 +386,4 @@ id_ecdsa*
 server.json
 ssh_服务器.json
 publish_output/
+wwwroot/v2/
