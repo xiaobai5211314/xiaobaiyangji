@@ -2,6 +2,12 @@
 
 ## 2026-06-27
 
+- 新增 JWT 认证：所有 `/api/` 端点必须携带有效 token，未登录返回 401。
+- `TokenService`：HMAC-SHA256 签名，token 有效期 720 小时。
+- 登录/注册/微信登录接口返回 `token` 字段。
+- 小程序：`request.ts` 自动附加 `Authorization: Bearer` header，登录后 token 持久化到本地存储。
+- WebApp：新增 `LoginView.vue` 登录页，路由导航守卫，未登录自动跳转；401 时清除本地 token 并跳转登录。
+- 公开端点（不受认证保护）：`/api/auth/login`、`/api/auth/register`、`/api/auth/wechat-login`、`/api/health`。
 - 修正服务器 `DailyArchives` 数据库 2026 年 6 月盈亏数据（用户 dabai521），对齐蚂蚁基金标准：06-03、06-17、06-23 的 `DailyProfit` 已修正，月累计从 -10931.58 更正为 -10934.17。
 - 小程序盈亏日历 `.day-profit` 样式修复：去掉 `transform: scale(0.86)`，缩小字号至 14rpx，添加 `overflow: visible`，防止圆圈内金额被截断。
 - `.gitignore` 新增 `.codegraph/`。
