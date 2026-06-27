@@ -172,6 +172,18 @@ app.Use(async (context, next) =>
             return;
         }
 
+        // 防止用 A 的 token 访问 B 的数据
+        var reqUsername = context.Request.Query["username"].FirstOrDefault()
+            ?? context.Request.Form?["username"];
+        if (!string.IsNullOrWhiteSpace(reqUsername)
+            && !string.Equals(reqUsername, username, StringComparison.OrdinalIgnoreCase))
+        {
+            context.Response.StatusCode = 403;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync("{\"success\":false,\"message\":\"无权访问其他用户数据\"}");
+            return;
+        }
+
         context.Items["Username"] = username;
     }
 
