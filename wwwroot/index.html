@@ -5723,6 +5723,28 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
     <script>
         const APP_BUILD_VERSION = '2026-06-13-pending-nav-profit-calendar';
         console.log('[小白养基] build:', APP_BUILD_VERSION);
+        // --- Auth token interceptor ---
+        (function() {
+            var _origFetch = window.fetch;
+            window.fetch = function(url, opts) {
+                if (typeof url === 'string' && url.indexOf('/api/') !== -1) {
+                    var t = localStorage.getItem('fund_token') || '';
+                    if (t) {
+                        opts = opts || {};
+                        opts.headers = Object.assign({}, opts.headers || {}, { 'Authorization': 'Bearer ' + t });
+                    }
+                }
+                return _origFetch.apply(this, [url, opts]).then(function(res) {
+                    if (res.status === 401 && typeof url === 'string' && url.indexOf('/api/') !== -1 && url.indexOf('/api/auth/') === -1) {
+                        localStorage.removeItem('fund_token');
+                        localStorage.removeItem('fund_username');
+                        location.reload();
+                    }
+                    return res;
+                });
+            };
+        })();
+        // --- End auth interceptor ---
         const { createApp, ref, reactive, onMounted, onUnmounted, nextTick, shallowRef, watch, computed } = Vue;
 
         createApp({
@@ -5733,7 +5755,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const API_BASE_DEFAULT = 'https://guzhi.21212121.xyz';
                 const API_BASE = API_BASE_DEFAULT;
 
-                const apiFetch = async (path, options = {}) => fetch(API_BASE + path, options);
+                const _xb_token = () => localStorage.getItem('fund_token') || '';
+                const apiFetch = async (path, options = {}) => {
+                    const h = Object.assign({}, options.headers || {});
+                    const t = _xb_token();
+                    if (t) h['Authorization'] = 'Bearer ' + t;
+                    return fetch(API_BASE + path, Object.assign({}, options, { headers: h }));
+                };
 
                 const apiFetchJsonWithTimeout = async (path, options = {}, timeoutMs = 45000) => {
                     const controller = new AbortController();
@@ -7315,6 +7343,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             const displayName = data.displayName || data.nickname || username;
                             localStorage.setItem('fund_username', username);
                             localStorage.setItem('fund_display_name', displayName);
+                            if (data.token) localStorage.setItem('fund_token', data.token);
                             currentUser.value = username;
                             userDisplayName.value = displayName;
                             profileForm.displayName = displayName;
@@ -7330,7 +7359,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     } catch (error) { showToast(error.message || "🌐 登录失败", "error"); }
                 };
 
-                const handleLogout = () => { localStorage.removeItem('fund_username'); showProfileModal.value = false; location.reload(); };
+                const handleLogout = () => { localStorage.removeItem('fund_username'); localStorage.removeItem('fund_token'); showProfileModal.value = false; location.reload(); };
                 const triggerUpload = () => { document.getElementById('ocrInput').click(); };
                 const triggerAvatarUpload = () => { document.getElementById('avatarInput')?.click(); };
                 const saveUserProfile = async () => {
