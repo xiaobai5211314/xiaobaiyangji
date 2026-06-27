@@ -173,8 +173,12 @@ app.Use(async (context, next) =>
         }
 
         // 防止用 A 的 token 访问 B 的数据
-        var reqUsername = context.Request.Query["username"].FirstOrDefault()
-            ?? context.Request.Form?["username"];
+        var reqUsername = context.Request.Query["username"].FirstOrDefault();
+        if (reqUsername == null && HttpMethods.IsPost(context.Request.Method)
+            && context.Request.HasFormContentType)
+        {
+            reqUsername = context.Request.Form["username"];
+        }
         if (!string.IsNullOrWhiteSpace(reqUsername)
             && !string.Equals(reqUsername, username, StringComparison.OrdinalIgnoreCase))
         {
