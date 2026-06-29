@@ -859,7 +859,30 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
         .summary-tile--hero {
             grid-column: span 2;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 10px;
+            align-items: center;
             background: rgba(255, 255, 255, .06);
+        }
+        .summary-hero-main {
+            min-width: 0;
+        }
+        .summary-radar-inline {
+            min-width: 96px;
+            padding: 10px 11px;
+            border-radius: 14px;
+            border: 1px solid rgba(174, 201, 255, .12);
+            background: rgba(2, 6, 23, .18);
+        }
+        .summary-radar-inline .summary-label {
+            margin-bottom: 4px;
+            font-size: 11px;
+            white-space: nowrap;
+        }
+        .summary-radar-inline .summary-value {
+            font-size: 17px;
+            white-space: nowrap;
         }
         .summary-tile--pending {
             border-style: dashed;
@@ -883,7 +906,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
         .summary-tile--hero .summary-value {
             font-size: clamp(28px, 7vw, 40px);
-            letter-spacing: -.03em;
+            letter-spacing: 0;
         }
         .summary-sub {
             margin-top: 4px;
@@ -4684,19 +4707,20 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 </div>
 
                 <div v-show="assetMode === 'fund'" class="glass-panel total-panel dashboard-summary">
-                    <div class="summary-tile">
-                        <div class="summary-label">⏱️ 系统雷达</div>
-                        <div class="summary-value" :style="{ color: isNight ? '#10b981' : '#f59e0b' }">
-                            {{ isNight ? '🌙 夜间休市' : '☀️ 盘中盯盘' }}
-                        </div>
-                    </div>
-                    <div class="divider"></div>
                     <div class="summary-tile summary-tile--hero">
-                        <div class="summary-label" title="平台持仓金额，包含买入待确认；下方单独展示待确认金额">💎 账户总金额 <span @click="showPrivacyModal = true" style="cursor:pointer">{{ privacyMode === 0 ? '👁️' : '🙈' }}</span></div>
-                        <div class="summary-value">{{ privacyMode === 0 ? (dashboardActiveSummary.accountTotalAmount > 0 ? '¥ ' + Number(dashboardActiveSummary.accountTotalAmount || 0).toFixed(2) : '--') : '****' }}</div>
-                        <div v-if="dashboardActiveSummary.todayPendingBuyTotal > 0" class="summary-sub">确认持仓 {{ privacyMode === 0 ? '¥' + Number(dashboardActiveSummary.antConfirmedAmount || 0).toFixed(2) : '****' }}</div>
-                        <div v-if="dashboardActiveSummary.intradayAvailable" class="summary-sub">盘中估算市值 {{ privacyMode === 0 ? '¥' + Number(dashboardActiveSummary.intradayEstimatedAssets || 0).toFixed(2) : '****' }}</div>
-                        <div v-if="dashboardActiveSummary.todayPendingBuyTotal > 0" class="summary-note value-pending" title="待确认买入不参与今日收益和今日收益率">待确认 {{ privacyMode === 0 ? '¥' + Number(dashboardActiveSummary.todayPendingBuyTotal || 0).toFixed(2) : '****' }}</div>
+                        <div class="summary-hero-main">
+                            <div class="summary-label" title="平台持仓金额，包含买入待确认；下方单独展示待确认金额">💎 账户总金额 <span @click="showPrivacyModal = true" style="cursor:pointer">{{ privacyMode === 0 ? '👁️' : '🙈' }}</span></div>
+                            <div class="summary-value">{{ privacyMode === 0 ? (dashboardActiveSummary.accountTotalAmount > 0 ? '¥ ' + Number(dashboardActiveSummary.accountTotalAmount || 0).toFixed(2) : '--') : '****' }}</div>
+                            <div v-if="dashboardActiveSummary.todayPendingBuyTotal > 0" class="summary-sub">确认持仓 {{ privacyMode === 0 ? '¥' + Number(dashboardActiveSummary.antConfirmedAmount || 0).toFixed(2) : '****' }}</div>
+                            <div v-if="dashboardActiveSummary.intradayAvailable" class="summary-sub">盘中估算市值 {{ privacyMode === 0 ? '¥' + Number(dashboardActiveSummary.intradayEstimatedAssets || 0).toFixed(2) : '****' }}</div>
+                            <div v-if="dashboardActiveSummary.todayPendingBuyTotal > 0" class="summary-note value-pending" title="待确认买入不参与今日收益和今日收益率">待确认 {{ privacyMode === 0 ? '¥' + Number(dashboardActiveSummary.todayPendingBuyTotal || 0).toFixed(2) : '****' }}</div>
+                        </div>
+                        <div class="summary-radar-inline">
+                            <div class="summary-label">⏱️ 系统雷达</div>
+                            <div class="summary-value" :style="{ color: isNight ? '#10b981' : '#f59e0b' }">
+                                {{ isNight ? '🌙 夜间休市' : '☀️ 盘中盯盘' }}
+                            </div>
+                        </div>
                     </div>
                     <div class="divider"></div>
                     <div class="summary-tile">
@@ -4717,7 +4741,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     <div class="divider"></div>
                     <div class="summary-tile">
                         <div class="summary-label">💰 蚂蚁持有收益</div>
-                        <div class="summary-value" :class="privacyMode <= 1 ? (dashboardActiveSummary.antHoldingProfit > 0 ? 'value-gain' : (dashboardActiveSummary.antHoldingProfit < 0 ? 'value-loss' : '')) : ''">{{ privacyMode <= 1 ? (dashboardActiveSummary.confirmedStatus === 'confirmed' ? (dashboardActiveSummary.antHoldingProfit >= 0 ? '+' : '') + Number(dashboardActiveSummary.antHoldingProfit || 0).toFixed(2) : '--') : '****' }}</div>
+                        <div class="summary-value" :class="privacyMode <= 1 ? (dashboardActiveSummary.antHoldingProfit > 0 ? 'value-gain' : (dashboardActiveSummary.antHoldingProfit < 0 ? 'value-loss' : '')) : ''">{{ privacyMode <= 1 ? (dashboardActiveSummary.antHoldingProfitAvailable ? (dashboardActiveSummary.antHoldingProfit >= 0 ? '+' : '') + Number(dashboardActiveSummary.antHoldingProfit || 0).toFixed(2) : '--') : '****' }}</div>
                         <div v-if="dashboardActiveSummary.intradayAvailable" class="summary-sub">盘中估算累计 {{ privacyMode <= 1 ? (dashboardActiveSummary.estimatedHoldingProfit >= 0 ? '+' : '') + Number(dashboardActiveSummary.estimatedHoldingProfit || 0).toFixed(2) : '****' }}</div>
                     </div>
                     <div class="divider"></div>
@@ -6015,6 +6039,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     totalCost: 0,
                     antConfirmedAmount: 0,
                     antHoldingProfit: 0,
+                    antHoldingProfitAvailable: false,
                     confirmedYesterdayProfit: 0,
                     confirmedProfitDate: '',
                     confirmedStatus: 'pending',
@@ -6047,6 +6072,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         totalCost: round2(nextSummary.totalCost ?? 0),
                         antConfirmedAmount: round2(nextSummary.antConfirmedAmount ?? nextSummary.confirmedHoldingTotalAmount ?? 0),
                         antHoldingProfit: round2(nextSummary.antHoldingProfit ?? nextSummary.totalProfit ?? 0),
+                        antHoldingProfitAvailable: nextSummary.antHoldingProfitAvailable === true,
                         confirmedYesterdayProfit: round2(nextSummary.confirmedYesterdayProfit ?? 0),
                         confirmedProfitDate: nextSummary.confirmedProfitDate || '',
                         confirmedStatus: nextSummary.confirmedStatus || 'pending',
@@ -8229,6 +8255,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const activeForSummary = fundsList.value.filter(isActiveHoldingFund);
                         const inactiveForSummary = fundsList.value.filter(isClearedFund);
                         if (apiSummary) {
+                            const apiHoldingProfit = apiSummary.antHoldingProfit ?? apiSummary.totalHoldingIncome ?? apiSummary.totalProfit;
+                            const apiHoldingRate = apiSummary.antHoldingRate ?? apiSummary.totalHoldingRate ?? apiSummary.totalRate;
                             applyDashboardActiveSummary(activeForSummary, inactiveForSummary, {
                                 accountTotalAmount: finiteNumber(
                                     apiSummary.accountTotalAmount
@@ -8241,11 +8269,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 todayProfitBaseTotal: finiteNumber(apiSummary.totalTodayBaseAmount, 0),
                                 totalTodayProfit: finiteNumber(apiSummary.todayPerformanceProfit ?? apiSummary.totalTodayProfit, 0),
                                 totalTodayRate: finiteNumber(apiSummary.todayPerformanceRate ?? apiSummary.totalTodayRate, 0),
-                                totalProfit: finiteNumber(apiSummary.antHoldingProfit, 0),
-                                totalRate: finiteNumber(apiSummary.antHoldingRate ?? apiSummary.totalRate, 0),
+                                totalProfit: finiteNumber(apiHoldingProfit, 0),
+                                totalRate: finiteNumber(apiHoldingRate, 0),
                                 totalCost: finiteNumber(apiSummary.antHoldingCost ?? apiSummary.totalHoldingCost, 0),
                                 antConfirmedAmount: finiteNumber(apiSummary.antConfirmedAmount, 0),
-                                antHoldingProfit: finiteNumber(apiSummary.antHoldingProfit, 0),
+                                antHoldingProfit: finiteNumber(apiHoldingProfit, 0),
+                                antHoldingProfitAvailable: Number.isFinite(Number(apiHoldingProfit)),
                                 confirmedYesterdayProfit: finiteNumber(apiSummary.confirmedYesterdayProfit, 0),
                                 confirmedProfitDate: apiSummary.confirmedProfitDate || '',
                                 confirmedStatus: apiSummary.confirmedStatus || 'pending',
