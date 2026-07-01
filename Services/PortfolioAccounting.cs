@@ -69,9 +69,10 @@ namespace 小白养基.Services
             decimal activePendingBuyAmount,
             decimal? exactConfirmedAssets = null)
         {
-            var confirmedAssets = exactConfirmedAssets.HasValue && exactConfirmedAssets.Value > 0m
-                ? Money(exactConfirmedAssets.Value)
-                : Money(Money(baseAmount) + Money(settledProfit));
+            // Official NAV settlement should roll the displayed amount from the prior
+            // platform amount plus the rounded confirmed profit. Using shares * NAV
+            // directly can introduce 0.01-level drift from auto-calibrated shares.
+            var confirmedAssets = Money(Money(baseAmount) + Money(settledProfit));
 
             return Money(Math.Max(0m, confirmedAssets) + Math.Max(0m, Money(activePendingBuyAmount)));
         }

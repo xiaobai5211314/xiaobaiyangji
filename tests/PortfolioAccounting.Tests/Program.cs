@@ -155,7 +155,16 @@ Equal(
         settledProfit: -2893.68m,
         activePendingBuyAmount: 0m,
         exactConfirmedAssets: 85357.84m),
-    "settlement.displayAmount.usesExactNavAssetsOnNextDay");
+    "settlement.displayAmount.rollsFromRoundedProfitOnNextDay");
+
+Equal(
+    33198.62m,
+    PortfolioAccounting.ResolveSettledDisplayAmount(
+        baseAmount: 33220.53m,
+        settledProfit: -21.91m,
+        activePendingBuyAmount: 0m,
+        exactConfirmedAssets: 33198.63m),
+    "settlement.displayAmount.prefersRoundedProfitRollForwardOverShareNavPennyDrift");
 
 Equal(
     -6970.44m,

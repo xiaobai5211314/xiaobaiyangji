@@ -218,7 +218,7 @@ namespace 小白养基.Services
             bool changed = fund.LastSettledDate != settleDate ||
                            Math.Abs(fund.LastSettledRate - actualRate) > 0.0001 ||
                            Math.Abs(fund.LastSettledProfit - settledProfit) > 0.01 ||
-                           Math.Abs(fund.HoldAmount - settledDisplayAmount) > 0.01;
+                           Math.Abs(fund.HoldAmount - settledDisplayAmount) > 0.004;
 
             if (!changed) return false;
 
