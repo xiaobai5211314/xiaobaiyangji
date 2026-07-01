@@ -4734,9 +4734,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     </div>
                     <div class="divider"></div>
                     <div class="summary-tile">
-                        <div class="summary-label">📅 昨日确认收益</div>
-                        <div class="summary-value" :class="privacyMode <= 1 ? (dashboardActiveSummary.confirmedYesterdayProfit > 0 ? 'value-gain' : (dashboardActiveSummary.confirmedYesterdayProfit < 0 ? 'value-loss' : '')) : ''">{{ privacyMode <= 1 ? (dashboardActiveSummary.confirmedStatus === 'confirmed' ? (dashboardActiveSummary.confirmedYesterdayProfit >= 0 ? '+' : '') + Number(dashboardActiveSummary.confirmedYesterdayProfit || 0).toFixed(2) : '--') : '****' }}</div>
-                        <div v-if="dashboardActiveSummary.confirmedProfitDate" class="summary-sub">{{ dashboardActiveSummary.confirmedProfitDate }}</div>
+                        <div class="summary-label">📅 {{ dashboardActiveSummary.yesterdayProfitLabel }}</div>
+                        <div class="summary-value" :class="privacyMode <= 1 && dashboardActiveSummary.yesterdayProfitAvailable ? (dashboardActiveSummary.confirmedYesterdayProfit > 0 ? 'value-gain' : (dashboardActiveSummary.confirmedYesterdayProfit < 0 ? 'value-loss' : '')) : ''">{{ privacyMode <= 1 ? (dashboardActiveSummary.yesterdayProfitAvailable ? (dashboardActiveSummary.confirmedYesterdayProfit >= 0 ? '+' : '') + Number(dashboardActiveSummary.confirmedYesterdayProfit || 0).toFixed(2) : '--') : '****' }}</div>
+                        <div v-if="dashboardActiveSummary.confirmedProfitDate" class="summary-sub">{{ dashboardActiveSummary.confirmedProfitDate }}<span v-if="dashboardActiveSummary.yesterdayProfitNote"> · {{ dashboardActiveSummary.yesterdayProfitNote }}</span></div>
                     </div>
                     <div class="divider"></div>
                     <div class="summary-tile">
@@ -6043,6 +6043,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     confirmedYesterdayProfit: 0,
                     confirmedProfitDate: '',
                     confirmedStatus: 'pending',
+                    yesterdayProfitAvailable: false,
+                    yesterdayProfitLabel: '昨日确认收益',
+                    yesterdayProfitNote: '',
                     intradayEstimateProfit: 0,
                     intradayEstimateRate: 0,
                     todayPerformanceProfit: 0,
@@ -6056,8 +6059,22 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     intradayAvailable: false
                 });
                 const dashboardActiveSummary = ref(createEmptyDashboardSummary());
+                const getYesterdayProfitLabel = (status) => {
+                    if (status === 'confirmed') return '昨日确认收益';
+                    if (status === 'partial') return '昨日部分确认收益';
+                    if (status === 'pending_nav') return '昨日待确认收益';
+                    if (status === 'legacy') return '昨日收益';
+                    return '昨日确认收益';
+                };
+                const getYesterdayProfitNote = (status) => {
+                    if (status === 'partial') return '部分确认';
+                    if (status === 'pending_nav') return '待确认';
+                    if (status === 'legacy') return '旧档案';
+                    return '';
+                };
                 const applyDashboardActiveSummary = (activeFunds = [], inactiveFunds = [], summary = null) => {
                     const nextSummary = summary || createEmptyDashboardSummary();
+                    const yesterdayStatus = nextSummary.confirmedStatus || 'pending';
                     dashboardActiveSummary.value = {
                         activeFunds: [...activeFunds],
                         inactiveFunds: [...inactiveFunds],
@@ -6075,7 +6092,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         antHoldingProfitAvailable: nextSummary.antHoldingProfitAvailable === true,
                         confirmedYesterdayProfit: round2(nextSummary.confirmedYesterdayProfit ?? 0),
                         confirmedProfitDate: nextSummary.confirmedProfitDate || '',
-                        confirmedStatus: nextSummary.confirmedStatus || 'pending',
+                        confirmedStatus: yesterdayStatus,
+                        yesterdayProfitAvailable: nextSummary.yesterdayProfitAvailable === true
+                            || (yesterdayStatus === 'confirmed' && Number.isFinite(Number(nextSummary.confirmedYesterdayProfit))),
+                        yesterdayProfitLabel: nextSummary.yesterdayProfitLabel || getYesterdayProfitLabel(yesterdayStatus),
+                        yesterdayProfitNote: nextSummary.yesterdayProfitNote || getYesterdayProfitNote(yesterdayStatus),
                         intradayEstimateProfit: round2(nextSummary.intradayEstimateProfit ?? nextSummary.totalTodayProfit ?? 0),
                         intradayEstimateRate: round2(nextSummary.intradayEstimateRate ?? nextSummary.totalTodayRate ?? 0),
                         todayPerformanceProfit: round2(nextSummary.todayPerformanceProfit ?? nextSummary.totalTodayProfit ?? 0),
@@ -8257,6 +8278,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         if (apiSummary) {
                             const apiHoldingProfit = apiSummary.antHoldingProfit ?? apiSummary.totalHoldingIncome ?? apiSummary.totalProfit;
                             const apiHoldingRate = apiSummary.antHoldingRate ?? apiSummary.totalHoldingRate ?? apiSummary.totalRate;
+                            const apiConfirmedStatus = apiSummary.confirmedStatus || 'pending';
+                            const apiYesterdayProfit = apiSummary.confirmedYesterdayProfit;
+                            const apiYesterdayProfitAvailable = Number.isFinite(Number(apiYesterdayProfit))
+                                && (apiConfirmedStatus !== 'pending' || !!apiSummary.confirmedProfitDate);
                             applyDashboardActiveSummary(activeForSummary, inactiveForSummary, {
                                 accountTotalAmount: finiteNumber(
                                     apiSummary.accountTotalAmount
@@ -8277,7 +8302,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 antHoldingProfitAvailable: Number.isFinite(Number(apiHoldingProfit)),
                                 confirmedYesterdayProfit: finiteNumber(apiSummary.confirmedYesterdayProfit, 0),
                                 confirmedProfitDate: apiSummary.confirmedProfitDate || '',
-                                confirmedStatus: apiSummary.confirmedStatus || 'pending',
+                                confirmedStatus: apiConfirmedStatus,
+                                yesterdayProfitAvailable: apiYesterdayProfitAvailable,
+                                yesterdayProfitLabel: getYesterdayProfitLabel(apiConfirmedStatus),
+                                yesterdayProfitNote: getYesterdayProfitNote(apiConfirmedStatus),
                                 intradayEstimateProfit: finiteNumber(apiSummary.intradayEstimateProfit, 0),
                                 intradayEstimateRate: finiteNumber(apiSummary.intradayEstimateRate, 0),
                                 todayPerformanceProfit: finiteNumber(apiSummary.todayPerformanceProfit ?? apiSummary.totalTodayProfit, 0),

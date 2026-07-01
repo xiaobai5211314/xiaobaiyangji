@@ -84,14 +84,26 @@ namespace 小白养基.Services
         private static void CopyValues(DailyArchive target, DailyArchive source)
         {
             target.FundName = string.IsNullOrWhiteSpace(source.FundName) ? target.FundName : source.FundName;
-            target.Assets = Math.Round(source.Assets, 2);
-            target.DailyProfit = Math.Round(source.DailyProfit, 2);
-            target.DailyRate = Math.Round(source.DailyRate, 2);
-            target.TotalProfit = Math.Round(source.TotalProfit, 2);
-            target.TotalRate = Math.Round(source.TotalRate, 2);
+            target.Assets = RoundMoney(source.Assets);
+            target.DailyProfit = RoundMoney(source.DailyProfit);
+            target.DailyRate = RoundMoney(source.DailyRate);
+            target.TotalProfit = RoundMoney(source.TotalProfit);
+            target.TotalRate = RoundMoney(source.TotalRate);
             target.Source = string.IsNullOrWhiteSpace(source.Source) ? "unknown" : source.Source;
             target.IsFinal = source.IsFinal;
             target.UpdatedAt = DateTime.UtcNow;
+        }
+
+        private static double RoundMoney(double value)
+            => Convert.ToDouble(decimal.Round(Convert.ToDecimal(value), 2, MidpointRounding.AwayFromZero));
+
+        private static void NormalizeValues(DailyArchive row)
+        {
+            row.Assets = RoundMoney(row.Assets);
+            row.DailyProfit = RoundMoney(row.DailyProfit);
+            row.DailyRate = RoundMoney(row.DailyRate);
+            row.TotalProfit = RoundMoney(row.TotalProfit);
+            row.TotalRate = RoundMoney(row.TotalRate);
         }
 
         public async Task<int> UpsertAsync(
@@ -148,6 +160,7 @@ namespace 小白养基.Services
                     item.Username = username;
                     item.RecordDate = dayStart;
                     item.Source = string.IsNullOrWhiteSpace(item.Source) ? "unknown" : item.Source;
+                    NormalizeValues(item);
                     item.UpdatedAt = DateTime.UtcNow;
 
                     if (existingByCode.TryGetValue(item.FundCode, out var oldRow))

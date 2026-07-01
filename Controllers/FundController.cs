@@ -2049,6 +2049,8 @@ namespace 小白养基.Controllers
                     warning = "买入待确认，不参与今日收益";
                 else if (clearedOldPending)
                     warning = $"本次OCR无pending证据，清除旧遗留pending {existingPendingCheck:F2}元";
+                else if (calcMethod.Contains("净值校准", StringComparison.OrdinalIgnoreCase))
+                    warning = "份额由净值自动反推，已用于后续估值；当天金额/收益仍以蚂蚁OCR为准";
                 else
                     warning = holdShares > 0 ? "" : "未能推算份额";
 
@@ -3092,7 +3094,7 @@ namespace 小白养基.Controllers
                         FundName = item.Name,
                         HoldAmount = Math.Round(item.HoldAmount, 2),
                         CostAmount = newFundFullPending ? 0 : ResolveOcrConfirmedCost(item, newPendingAmount, newConfirmedAmount, 0),
-                        HoldShares = newFundFullPending ? 0 : Math.Round(item.HoldShares, 6),
+                        HoldShares = newFundFullPending || !HasOcrCalculatedShares(item) ? 0 : Math.Round(item.HoldShares, 6),
                         LastTradeDate = item.IsPendingBuy ? ChinaDateDash() : null,
                         LastAddAmount = item.IsPendingBuy ? newPendingAmount : 0,
                         PendingBuyAmount = item.IsPendingBuy ? newPendingAmount : 0,
@@ -3234,6 +3236,9 @@ namespace 小白养基.Controllers
             return Math.Max(0, Math.Round(confirmedAmount, 2));
         }
 
+        private static bool HasOcrCalculatedShares(OcrImportPreviewItem item)
+            => item.HoldShares > 0;
+
         /// <summary>
         /// 解析 OCR 截图对应的真实收益日期。
         /// 蚂蚁截图里的"昨日收益"对应的是上一个交易日，不是今天。
@@ -3274,17 +3279,17 @@ namespace 小白养基.Controllers
             else if (pendingAmount > 0)
             {
                 double confirmedRatio = item.HoldAmount > 0 ? confirmedAmount / item.HoldAmount : 1.0;
-                if (item.HoldShares > 0)
+                if (HasOcrCalculatedShares(item))
                 {
                     exist.HoldShares = Math.Round(item.HoldShares * confirmedRatio, 6);
                 }
                 exist.CostAmount = ResolveOcrConfirmedCost(item, pendingAmount, confirmedAmount, exist.CostAmount);
-                Console.WriteLine($"[OCR部分待确认] code={exist.FundCode}, pending={pendingAmount:F2}, confirmed={confirmedAmount:F2}, ratio={confirmedRatio:F4}, shares={exist.HoldShares:F4}");
+                Console.WriteLine($"[OCR部分待确认] code={exist.FundCode}, pending={pendingAmount:F2}, confirmed={confirmedAmount:F2}, ratio={confirmedRatio:F4}, shares={exist.HoldShares:F4}, calculatedShares={HasOcrCalculatedShares(item)}");
             }
             else
             {
                 if (item.CostAmount > 0) exist.CostAmount = Math.Round(item.CostAmount, 2);
-                if (item.HoldShares > 0) exist.HoldShares = Math.Round(item.HoldShares, 6);
+                if (HasOcrCalculatedShares(item)) exist.HoldShares = Math.Round(item.HoldShares, 6);
             }
 
             // 设置/清除 pending 状态
@@ -6469,9 +6474,11 @@ namespace 小白养基.Controllers
                             PortfolioAccounting.Money(todayBaseAmount),
                             PortfolioAccounting.Money(todayRate),
                             config.LastSettledDate == todayDash ? PortfolioAccounting.Money(config.LastSettledProfit) : null));
-                        double settledConfirmedAmount = officialMarketValue > 0
-                            ? officialMarketValue
-                            : Math.Max(0, Math.Round(todayBaseAmount + todayProfit, 2));
+                        double settledConfirmedAmount = hasLatestOcrAmount && confirmedHoldAmount > 0
+                            ? confirmedHoldAmount
+                            : officialMarketValue > 0
+                                ? officialMarketValue
+                                : Math.Max(0, Math.Round(todayBaseAmount + todayProfit, 2));
                         marketValue = Math.Round(settledConfirmedAmount + pendingBuyAmount, 2);
                         rawHoldAmount = marketValue;
                         confirmedHoldAmount = settledConfirmedAmount;
@@ -6506,7 +6513,7 @@ namespace 小白养基.Controllers
                     if (config.HoldShares <= 0 && pendingRedeem && soldCost > 0)
                         costBasis = soldCost;
 
-                    bool isSoldOut = config.HoldShares <= 0 && !pendingBuy;
+                    bool isSoldOut = config.HoldShares <= 0 && rawHoldAmount <= 0.01 && !pendingBuy;
                     bool isCleared = isSoldOut;
 
                     double displayedProfit;
