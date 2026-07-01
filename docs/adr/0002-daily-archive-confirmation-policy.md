@@ -20,12 +20,14 @@ Accepted
 3. **盘中估值禁止入正式档案**：盘中估值（`FundValuationEstimate`）只能用于临时展示，绝对不得写入 `DailyArchive`。
 4. **TOTAL 汇总行**：`FundCode = 'TOTAL'` 的汇总行是首页"昨日确认收益"的优先读取来源。
 5. **买入待确认禁止入正式档案**：买入待确认金额未形成份额前，只能进入当前展示和 pending 字段，不得进入 `DailyArchive.Assets`。
+6. **入库精度标准化**：写入或覆盖 `DailyArchive` 时，金额和收益率字段统一标准化为 2 位小数。盈亏日历展示必须以数据库 `DailyArchive` 行为准，不能在前端用持仓实时字段重新拼日历金额。
 
 ## 影响
 
 - `DailySettlementService` 的写入流程：先查蚂蚁确认 → 有则写正式档案 → 无则用官方净值写 pending → 后续蚂蚁数据覆盖 pending。
 - `NavSettlementService` 在 17:00-02:00 期间每 5 分钟执行结算，但只处理官方净值，不处理盘中估值；净值确认后同步滚动 `MyFundConfig.HoldAmount`，供首页当前金额继续展示。
 - 盈亏日历页面读取 `DailyArchive` 展示历史收益，不会出现盘中估值数据。
+- 蚂蚁 OCR 确认写入日历时，单基金行和 `TOTAL` 行都应来自同一批 OCR 确认数据；若 OCR 金额与自动反推份额存在分位差，以 OCR 金额入库。
 
 ## 验收规则
 
@@ -34,3 +36,4 @@ Accepted
 - 盘中估值不会出现在 `DailyArchive` 表的任何行中。
 - 蚂蚁确认数据到达后，对应的 pending 档案被覆盖为正式数据。
 - 连续多日没有 OCR 时，每日 `official-nav-pending` 的 `Assets` 以上一有效资产加当日确认收益滚动，持有收益按当前资产与成本重算。
+- 同一交易日存在蚂蚁 OCR 确认后，盈亏日历的单日收益、累计收益和 `TOTAL` 汇总应与 `DailyArchive` 数据库行一致。
