@@ -31,35 +31,31 @@ function todayParts(now) {
     dash: `${year}-${month}-${day}`
   };
 }
-function pickLastRate(fund, slashDate, dashDate, now) {
-  const data = Array.isArray(fund.data) ? fund.data : [];
-  const last = data[data.length - 1];
-  if (!last)
-    return { rate: 0, isHoliday: true };
-  const lastTime = String(last[0] || "");
-  const lastRate = numberOrZero(last[1]);
-  const hasTodayDate = lastTime.includes(slashDate) || lastTime.includes(dashDate);
-  const isPast935 = now.getHours() > 9 || now.getHours() === 9 && now.getMinutes() >= 35;
-  if (hasTodayDate && !(isPast935 && data.length <= 2)) {
-    return { rate: lastRate, isHoliday: false };
-  }
-  return { rate: 0, isHoliday: true };
-}
 function deriveRateState(fund, now, slashDate, dashDate) {
+  const ds = fund.dataStatus || "";
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const isWeekend = now.getDay() === 0 || now.getDay() === 6;
-  if (fund.isSettled) {
+  if (ds === "official_today") {
     return {
-      rate: numberOrZero(fund.actualRate ?? fund.lastSettledRate ?? fund.currentRate),
-      isHoliday: false,
+      rate: numberOrZero(fund.todayRate ?? fund.actualRate ?? fund.lastSettledRate),
+      isHoliday: fund.marketOpen === false,
       isSettled: true
     };
+  }
+  if (ds === "estimate_today") {
+    return {
+      rate: numberOrZero(fund.todayRate),
+      isHoliday: false,
+      isSettled: false
+    };
+  }
+  if (fund.marketOpen === false) {
+    return { rate: 0, isHoliday: true, isSettled: false };
   }
   if (isWeekend || currentMinutes < 565) {
     return { rate: 0, isHoliday: true, isSettled: false };
   }
-  const lastRate = pickLastRate(fund, slashDate, dashDate, now);
-  return { rate: lastRate.rate, isHoliday: lastRate.isHoliday, isSettled: false };
+  return { rate: numberOrZero(fund.todayRate), isHoliday: false, isSettled: false };
 }
 function classifyFundSector(fund) {
   const text = `${fund.name || ""} ${fund.code || ""}`.toUpperCase();
@@ -139,41 +135,35 @@ function buildDailyReport(funds, totalTodayProfit, exposure) {
   };
 }
 function buildPortfolioMetrics(rawFunds, now = /* @__PURE__ */ new Date()) {
-  const { slash, dash } = todayParts(now);
+  const { dash } = todayParts(now);
   let totalPrincipal = 0;
   let totalPrincipalForRate = 0;
   let totalCost = 0;
   let totalTodayProfit = 0;
   const funds = rawFunds.map((fund, index) => {
-    const rateState = deriveRateState(fund, now, slash, dash);
-    const isUnconfirmed = Boolean(fund.lastTradeDate && String(fund.lastTradeDate) >= dash);
-    const todayAddAmount = isUnconfirmed ? numberOrZero(fund.lastAddAmount) : 0;
-    const isAlreadySettled = fund.lastSettledDate === dash;
-    const currentAmount = numberOrZero(fund.amount);
-    let todayProfitValue = 0;
-    let todayAmountValue = currentAmount;
-    let currentRateValue = rateState.rate;
-    if (isAlreadySettled) {
-      todayProfitValue = numberOrZero(fund.lastSettledProfit);
-      todayAmountValue = currentAmount;
-      currentRateValue = numberOrZero(fund.lastSettledRate) || currentRateValue;
-    } else if (rateState.isSettled && fund.actualExactProfit !== null && fund.actualExactProfit !== void 0) {
-      todayProfitValue = numberOrZero(fund.actualExactProfit);
-      todayAmountValue = currentAmount + todayProfitValue;
-    } else {
-      const baseAmount = currentAmount - todayAddAmount;
-      todayProfitValue = baseAmount * (currentRateValue / 100);
-      todayAmountValue = currentAmount + todayProfitValue;
-    }
+    const fundDash = fund.effectiveDate || dash;
+    const rateState = deriveRateState(fund, now, fundDash.split("-").join("/"));
+    const pendingBuyAmount = Math.max(0, numberOrZero(fund.pendingBuyAmount));
+    const pendingBuyValue = Boolean(fund.pendingBuy) || pendingBuyAmount > 0;
+    const ds = fund.dataStatus || "";
+    const isAlreadySettled = ds === "official_today";
+    const rawDisplayAmount = Math.max(0, finiteNumber(fund.rawHoldAmount) ?? numberOrZero(fund.amount));
+    const currentAmount = Math.max(0, finiteNumber(fund.confirmedAmount) ?? Math.max(0, rawDisplayAmount - pendingBuyAmount));
+    const apiBaseAmount = finiteNumber(fund.todayBaseAmount);
+    const todayBaseAmount = apiBaseAmount !== null ? Math.max(0, apiBaseAmount) : currentAmount;
+    let todayProfitValue = numberOrZero(fund.todayProfit);
+    let todayAmountValue = numberOrZero(fund.marketValue) || todayBaseAmount + todayProfitValue;
+    let currentRateValue = numberOrZero(fund.todayRate);
     const realizedProfitValue = numberOrZero(fund.realizedProfit);
-    const costValue = finiteNumber(fund.cost);
+    const costValue = finiteNumber(fund.confirmedCost) ?? finiteNumber(fund.cost);
     const validCost = costValue !== null && costValue > 0 ? costValue : null;
-    const floatProfit = validCost ? todayAmountValue - validCost : 0;
-    const estimatedProfitValue = floatProfit + realizedProfitValue;
+    const apiHoldingProfit = finiteNumber(fund.holdingProfit) ?? finiteNumber(fund.holdingIncome) ?? finiteNumber(fund.estimatedProfit);
+    const estimatedProfitValue = apiHoldingProfit ?? 0;
     const breakEvenRateValue = validCost && validCost > todayAmountValue && todayAmountValue > 0 ? (validCost / todayAmountValue - 1) * 100 : 0;
-    const existingReturnRateValue = validCost ? estimatedProfitValue / validCost * 100 : 0;
-    const rateBaseForToday = isAlreadySettled ? currentAmount - todayProfitValue - todayAddAmount : currentAmount - todayAddAmount;
-    totalPrincipal += currentAmount;
+    const apiExistingReturnRate = finiteNumber(fund.holdingRate) ?? finiteNumber(fund.existingReturnRate);
+    const existingReturnRateValue = apiExistingReturnRate ?? 0;
+    const rateBaseForToday = todayBaseAmount;
+    totalPrincipal += rawDisplayAmount;
     totalPrincipalForRate += rateBaseForToday;
     totalCost += validCost || currentAmount;
     totalTodayProfit += Number.isNaN(todayProfitValue) ? 0 : todayProfitValue;
@@ -183,6 +173,13 @@ function buildPortfolioMetrics(rawFunds, now = /* @__PURE__ */ new Date()) {
       currentRate: round(currentRateValue),
       currentRateValue: round(currentRateValue),
       rawCurrentRate: finiteNumber(fund.rawCurrentRate) ?? round(currentRateValue),
+      amount: round(rawDisplayAmount),
+      confirmedAmount: round(currentAmount),
+      pendingBuy: pendingBuyValue,
+      pendingBuyAmount: round(pendingBuyAmount),
+      confirmedAmountValue: round(currentAmount),
+      pendingBuyAmountValue: round(pendingBuyAmount),
+      pendingBuyValue,
       todayProfit: round(todayProfitValue),
       todayProfitValue: round(todayProfitValue),
       todayAmount: round(todayAmountValue),
@@ -198,9 +195,9 @@ function buildPortfolioMetrics(rawFunds, now = /* @__PURE__ */ new Date()) {
       realizedProfitValue: round(realizedProfitValue),
       isHoliday: rateState.isHoliday,
       isHolidayValue: rateState.isHoliday,
-      isSettledValue: rateState.isSettled || isAlreadySettled,
-      statusLabel: rateState.isHoliday ? "休市" : rateState.isSettled || isAlreadySettled ? "净值参考" : "盘中参考",
-      trendLabel: rateState.isHoliday ? "休市沿用" : rateState.isSettled || isAlreadySettled ? "真" : "估",
+      isSettledValue: isAlreadySettled,
+      statusLabel: fund.marketOpen === false ? "休市" : pendingBuyValue ? "买入待确认" : ds === "official_today" ? "净值确认" : ds === "estimate_today" ? "盘中估值" : ds === "stale_official" ? "旧值" : "等待净值",
+      trendLabel: rateState.isHoliday ? "休市沿用" : ds === "official_today" ? "真" : ds === "estimate_today" ? "估" : "等待",
       confidenceView: { score: 0, level: "", reason: "", tone: "medium" }
     };
     view.confidenceView = buildConfidence(view);

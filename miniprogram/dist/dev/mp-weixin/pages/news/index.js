@@ -74,13 +74,13 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         a: common_vendor.t(updatedAtText.value),
         b: common_vendor.t(activeItems.value.length),
         c: common_vendor.n(mode.value === "global" ? "active" : ""),
-        d: common_vendor.o(($event) => mode.value = "global", "ae"),
+        d: common_vendor.o(($event) => mode.value = "global", "e1"),
         e: common_vendor.n(mode.value === "holding" ? "active" : ""),
-        f: common_vendor.o(($event) => mode.value = "holding", "94"),
+        f: common_vendor.o(($event) => mode.value = "holding", "15"),
         g: activeItems.value.length === 0 && !loading.value
       }, activeItems.value.length === 0 && !loading.value ? {
         h: common_vendor.t(mode.value === "holding" && !common_vendor.unref(stores_session.sessionState).username ? "登录后可同步你的个人持仓记录。" : "暂无资讯数据，点击重试或下拉刷新"),
-        i: common_vendor.o(($event) => loadData(true), "56")
+        i: common_vendor.o(($event) => loadData(true), "3e")
       } : {}, {
         j: common_vendor.f(activeItems.value, (item, itemIndex, i0) => {
           return common_vendor.e({

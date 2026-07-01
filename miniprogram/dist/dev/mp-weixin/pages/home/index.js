@@ -1,5 +1,6 @@
 "use strict";
 const common_vendor = require("../../common/vendor.js");
+const services_request = require("../../services/request.js");
 const services_api_auth = require("../../services/api/auth.js");
 const services_api_fund = require("../../services/api/fund.js");
 const services_api_stock = require("../../services/api/stock.js");
@@ -32,6 +33,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
     const ocrConfirming = common_vendor.ref(false);
     const ocrPreviewVisible = common_vendor.ref(false);
     const ocrItems = common_vendor.ref([]);
+    const ocrProfitUpdateState = common_vendor.ref("");
     const ocrDiagnostics = common_vendor.ref([]);
     const privacyMode = common_vendor.ref(normalizePrivacyMode(utils_storage.getStorage(PRIVACY_KEY, 2)));
     const stockLoading = common_vendor.ref(false);
@@ -67,6 +69,8 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
     const fundLoadedAt = common_vendor.ref(0);
     const stockLoadedAt = common_vendor.ref(0);
     const profileLoadedAt = common_vendor.ref(0);
+    const dashboardStale = common_vendor.ref(false);
+    const dashboardUpdatedAt = common_vendor.ref("");
     const expandedTrendKeys = common_vendor.ref({});
     const metrics = common_vendor.computed(() => utils_fundMetrics.buildPortfolioMetrics(rawFunds.value));
     const funds = common_vendor.computed(() => metrics.value.funds);
@@ -82,7 +86,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
       () => [...funds.value].sort((a, b) => a.confidenceView.score - b.confidenceView.score).slice(0, 4)
     );
     const headerCountText = common_vendor.computed(
-      () => assetMode.value === "stock" ? `${stockHoldings.value.length} 持有 · ${stockWatchList.value.length} 自选` : `${funds.value.length} 只基金`
+      () => !stores_session.sessionState.username ? "待登录" : assetMode.value === "stock" ? `${stockHoldings.value.length} 持有 · ${stockWatchList.value.length} 自选` : `${funds.value.length} 只基金`
     );
     const ocrButtonText = common_vendor.computed(() => {
       if (ocrBusy.value)
@@ -164,17 +168,38 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
       if (!stores_session.sessionState.username) {
         rawFunds.value = [];
         fundLoadedAt.value = 0;
+        dashboardStale.value = false;
+        dashboardUpdatedAt.value = "";
         return;
       }
       if (!force && rawFunds.value.length > 0 && Date.now() - fundLoadedAt.value < FUND_PAGE_CACHE_TTL)
         return;
+      const cacheKey = `dashboard_cache_${stores_session.sessionState.username}_v1`;
+      if (!force && rawFunds.value.length === 0) {
+        const cached = services_request.getLocalStorageCache(cacheKey);
+        if (cached && Array.isArray(cached) && cached.length > 0) {
+          rawFunds.value = cached;
+          dashboardStale.value = true;
+          dashboardUpdatedAt.value = "使用缓存";
+        }
+      }
       loading.value = true;
       try {
-        const data = await services_api_fund.getTodayFunds(stores_session.sessionState.username, force);
+        const hasCachedData = rawFunds.value.length > 0;
+        const data = await services_api_fund.getTodayFunds(stores_session.sessionState.username, force, hasCachedData);
         const items = Array.isArray(data) ? data : [];
         logFundTodayAudit(items);
         rawFunds.value = items;
         fundLoadedAt.value = Date.now();
+        dashboardStale.value = false;
+        dashboardUpdatedAt.value = "";
+        services_request.setLocalStorageCache(cacheKey, items, 36e5);
+      } catch (error) {
+        console.warn("[dashboard] load failed, keeping cached data:", error);
+        if (rawFunds.value.length > 0) {
+          dashboardStale.value = true;
+          dashboardUpdatedAt.value = "使用上次数据";
+        }
       } finally {
         loading.value = false;
       }
@@ -910,6 +935,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         }
         ocrItems.value = Array.isArray(result.items) ? result.items : [];
         ocrDiagnostics.value = Array.isArray(result.diagnostics) ? result.diagnostics : [];
+        ocrProfitUpdateState.value = String(result.profitUpdateState || "");
         ocrPreviewVisible.value = true;
         common_vendor.index.showToast({ title: `识别到 ${ocrItems.value.length} 条基金`, icon: "none" });
       } catch (error) {
@@ -934,6 +960,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         }
         common_vendor.index.showToast({ title: result.message || "导入成功", icon: "none" });
         closeOcrPreview();
+        services_request.clearGetCache("/api/fund/today");
         await loadFunds(true);
       } catch (error) {
         console.warn("[fund:ocr-confirm]", error);
@@ -990,6 +1017,34 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
     function ocrNumber(item, camelKey, pascalKey) {
       return utils_fundMetrics.moneyDash(ocrPick(item, camelKey, pascalKey), false);
     }
+    function ocrParticipatesTodayText(item) {
+      const value = ocrPick(item, "participatesToday", "ParticipatesToday");
+      return value === false ? "否" : "是";
+    }
+    function setOcrPendingMode(item, pending) {
+      const holdAmount = Math.max(0, Number(ocrPick(item, "holdAmount", "HoldAmount") || 0));
+      if (!pending) {
+        item.isPendingBuy = false;
+        item.isSuspiciousPendingBuy = false;
+        item.pendingBuyAmount = 0;
+        item.pendingSource = "none";
+        item.pendingReason = "用户手动设为已确认持仓";
+        item.confirmedAmount = holdAmount;
+        item.todayBaseAmount = holdAmount;
+        item.participatesToday = true;
+        item.warning = "";
+        return;
+      }
+      item.isPendingBuy = true;
+      item.isSuspiciousPendingBuy = false;
+      item.pendingBuyAmount = holdAmount;
+      item.pendingSource = "manual";
+      item.pendingReason = "用户手动标记买入待确认";
+      item.confirmedAmount = 0;
+      item.todayBaseAmount = 0;
+      item.participatesToday = false;
+      item.warning = "买入待确认，不参与今日收益";
+    }
     function ocrItemKey(item, index) {
       return `${ocrText(item, "code", "Code") || ocrText(item, "name", "Name") || "ocr"}-${index}`;
     }
@@ -1004,47 +1059,55 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
     return (_ctx, _cache) => {
       return common_vendor.e({
         a: common_vendor.t(headerCountText.value),
-        b: common_vendor.t(ocrButtonText.value),
-        c: ocrBusy.value,
-        d: common_vendor.o(handleSmartOcr, "05"),
-        e: common_vendor.unref(stores_session.sessionState).username && avatarUrl.value
-      }, common_vendor.unref(stores_session.sessionState).username && avatarUrl.value ? {
-        f: avatarUrl.value
-      } : common_vendor.unref(stores_session.sessionState).username ? {
-        h: common_vendor.t(avatarText.value)
+        b: dashboardStale.value && !loading.value
+      }, dashboardStale.value && !loading.value ? {
+        c: common_vendor.t(dashboardUpdatedAt.value)
       } : {}, {
-        g: common_vendor.unref(stores_session.sessionState).username,
-        i: common_vendor.t(accountEntryTitle.value),
-        j: common_vendor.t(accountEntrySubtitle.value),
-        k: common_vendor.n(common_vendor.unref(stores_session.sessionState).username ? "logged-in" : "guest"),
-        l: common_vendor.o(openProfile, "fd"),
-        m: common_vendor.t(privacyLabel.value),
-        n: common_vendor.o(togglePrivacyMode, "59"),
-        o: common_vendor.n(assetMode.value === "fund" ? "active" : ""),
-        p: common_vendor.o(($event) => setAssetMode("fund"), "cb"),
-        q: common_vendor.n(assetMode.value === "stock" ? "active" : ""),
-        r: common_vendor.o(($event) => setAssetMode("stock"), "1d"),
-        s: assetMode.value === "fund"
+        d: common_vendor.t(ocrButtonText.value),
+        e: ocrBusy.value,
+        f: common_vendor.o(handleSmartOcr, "bf"),
+        g: common_vendor.unref(stores_session.sessionState).username && avatarUrl.value
+      }, common_vendor.unref(stores_session.sessionState).username && avatarUrl.value ? {
+        h: avatarUrl.value
+      } : common_vendor.unref(stores_session.sessionState).username ? {
+        j: common_vendor.t(avatarText.value)
+      } : {}, {
+        i: common_vendor.unref(stores_session.sessionState).username,
+        k: common_vendor.t(accountEntryTitle.value),
+        l: common_vendor.t(accountEntrySubtitle.value),
+        m: common_vendor.n(common_vendor.unref(stores_session.sessionState).username ? "logged-in" : "guest"),
+        n: common_vendor.o(openProfile, "76"),
+        o: common_vendor.t(privacyLabel.value),
+        p: common_vendor.o(togglePrivacyMode, "7c"),
+        q: common_vendor.n(assetMode.value === "fund" ? "active" : ""),
+        r: common_vendor.o(($event) => setAssetMode("fund"), "7b"),
+        s: common_vendor.n(assetMode.value === "stock" ? "active" : ""),
+        t: common_vendor.o(($event) => setAssetMode("stock"), "e8"),
+        v: assetMode.value === "fund"
       }, assetMode.value === "fund" ? common_vendor.e({
-        t: common_vendor.t(funds.value.length),
-        v: common_vendor.t(displayMoney(metrics.value.totalAssets, 0, false)),
-        w: common_vendor.t(displayMoney(metrics.value.totalCost, 0, false)),
-        x: common_vendor.t(displayMoney(metrics.value.totalPrincipal, 0, false)),
-        y: common_vendor.t(displayMoney(metrics.value.totalTodayProfit, 1, true)),
-        z: common_vendor.n(common_vendor.unref(utils_format.profitClass)(metrics.value.totalTodayProfit)),
-        A: common_vendor.t(displayPercent(metrics.value.totalTodayRate, 2)),
-        B: common_vendor.n(common_vendor.unref(utils_format.profitClass)(metrics.value.totalTodayRate)),
-        C: common_vendor.t(displayMoney(metrics.value.totalProfit, 1, true)),
-        D: common_vendor.n(common_vendor.unref(utils_format.profitClass)(metrics.value.totalProfit)),
-        E: common_vendor.t(displayPercent(metrics.value.totalRate, 2)),
-        F: common_vendor.n(common_vendor.unref(utils_format.profitClass)(metrics.value.totalRate)),
-        G: common_vendor.t(metrics.value.dailyBattleReport.summary),
-        H: common_vendor.t(common_vendor.unref(utils_fundMetrics.maskByPrivacy)(metrics.value.dailyBattleReport.todayProfitText, privacyMode.value, 1)),
-        I: common_vendor.n(common_vendor.unref(utils_format.profitClass)(metrics.value.totalTodayProfit)),
-        J: common_vendor.t(metrics.value.dailyBattleReport.bestName),
-        K: common_vendor.t(metrics.value.dailyBattleReport.worstName),
-        L: common_vendor.t(metrics.value.dailyBattleReport.actionHint),
-        M: common_vendor.f(confidenceRows.value, (item, k0, i0) => {
+        w: !common_vendor.unref(stores_session.sessionState).username
+      }, !common_vendor.unref(stores_session.sessionState).username ? {
+        x: common_vendor.o(navigateToLogin, "4b")
+      } : loading.value && funds.value.length === 0 ? {} : common_vendor.e({
+        z: common_vendor.t(funds.value.length),
+        A: common_vendor.t(displayMoney(metrics.value.totalAssets, 0, false)),
+        B: common_vendor.t(displayMoney(metrics.value.totalCost, 0, false)),
+        C: common_vendor.t(displayMoney(metrics.value.totalPrincipal, 0, false)),
+        D: common_vendor.t(displayMoney(metrics.value.totalTodayProfit, 1, true)),
+        E: common_vendor.n(common_vendor.unref(utils_format.profitClass)(metrics.value.totalTodayProfit)),
+        F: common_vendor.t(displayPercent(metrics.value.totalTodayRate, 2)),
+        G: common_vendor.n(common_vendor.unref(utils_format.profitClass)(metrics.value.totalTodayRate)),
+        H: common_vendor.t(displayMoney(metrics.value.totalProfit, 1, true)),
+        I: common_vendor.n(common_vendor.unref(utils_format.profitClass)(metrics.value.totalProfit)),
+        J: common_vendor.t(displayPercent(metrics.value.totalRate, 2)),
+        K: common_vendor.n(common_vendor.unref(utils_format.profitClass)(metrics.value.totalRate)),
+        L: common_vendor.t(metrics.value.dailyBattleReport.summary),
+        M: common_vendor.t(common_vendor.unref(utils_fundMetrics.maskByPrivacy)(metrics.value.dailyBattleReport.todayProfitText, privacyMode.value, 1)),
+        N: common_vendor.n(common_vendor.unref(utils_format.profitClass)(metrics.value.totalTodayProfit)),
+        O: common_vendor.t(metrics.value.dailyBattleReport.bestName),
+        P: common_vendor.t(metrics.value.dailyBattleReport.worstName),
+        Q: common_vendor.t(metrics.value.dailyBattleReport.actionHint),
+        R: common_vendor.f(confidenceRows.value, (item, k0, i0) => {
           return {
             a: common_vendor.t(item.name || item.code),
             b: common_vendor.t(item.confidenceView.reason),
@@ -1053,31 +1116,31 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
             e: `conf-${item.viewKey}`
           };
         }),
-        N: metrics.value.profitTop.length === 0
+        S: metrics.value.profitTop.length === 0
       }, metrics.value.profitTop.length === 0 ? {} : {}, {
-        O: common_vendor.f(metrics.value.profitTop, (fund, k0, i0) => {
+        T: common_vendor.f(metrics.value.profitTop, (fund, k0, i0) => {
           return {
             a: common_vendor.t(fund.name || fund.code),
             b: common_vendor.t(displayMoney(fund.estimatedProfitValue, 1, true)),
             c: `profit-${fund.viewKey}`
           };
         }),
-        P: metrics.value.lossTop.length === 0
+        U: metrics.value.lossTop.length === 0
       }, metrics.value.lossTop.length === 0 ? {} : {}, {
-        Q: common_vendor.f(metrics.value.lossTop, (fund, k0, i0) => {
+        V: common_vendor.f(metrics.value.lossTop, (fund, k0, i0) => {
           return {
             a: common_vendor.t(fund.name || fund.code),
             b: common_vendor.t(displayMoney(fund.estimatedProfitValue, 1, true)),
             c: `loss-${fund.viewKey}`
           };
         }),
-        R: common_vendor.t(funds.value.length),
-        S: funds.value.length === 0 && !loading.value
+        W: common_vendor.t(funds.value.length),
+        X: funds.value.length === 0 && !loading.value
       }, funds.value.length === 0 && !loading.value ? {
-        T: common_vendor.t(common_vendor.unref(stores_session.sessionState).username ? "暂无持仓数据，可使用智能截图导入基金" : "暂无个人持仓数据。登录后可同步你的个人持仓记录。"),
-        U: common_vendor.o(($event) => common_vendor.unref(stores_session.sessionState).username && loadFunds(true), "ed")
+        Y: common_vendor.t(common_vendor.unref(stores_session.sessionState).username ? "暂无持仓数据，可使用智能截图导入基金" : "暂无个人持仓数据。登录后可同步你的个人持仓记录。"),
+        Z: common_vendor.o(($event) => common_vendor.unref(stores_session.sessionState).username && loadFunds(true), "cf")
       } : {}, {
-        V: common_vendor.f(funds.value, (fund, fundIndex, i0) => {
+        aa: common_vendor.f(funds.value, (fund, fundIndex, i0) => {
           return common_vendor.e({
             a: common_vendor.t(fund.name || "未命名基金"),
             b: common_vendor.t(fund.code || "待更新"),
@@ -1090,105 +1153,133 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
             h: common_vendor.t(signedPlainPercent(fund.calibrationOffset || 0)),
             i: common_vendor.t(fund.calibrationNote || "滚动误差校准")
           } : {}, {
-            j: common_vendor.t(trendPointCount(fund)),
-            k: shouldRenderFundTrend(fund, fundIndex)
+            j: fund.pendingBuyValue || fund.pendingBuyAmountValue > 0
+          }, fund.pendingBuyValue || fund.pendingBuyAmountValue > 0 ? {
+            k: common_vendor.t(privacyMode.value === 0 && fund.pendingBuyAmountValue > 0 ? displayMoney(fund.pendingBuyAmountValue, 0, false) + " · " : "")
+          } : {}, {
+            l: common_vendor.t(trendPointCount(fund)),
+            m: shouldRenderFundTrend(fund, fundIndex)
           }, shouldRenderFundTrend(fund, fundIndex) ? {
-            l: "2c5296db-0-" + i0,
-            m: common_vendor.p({
+            n: "2c5296db-0-" + i0,
+            o: common_vendor.p({
               ["canvas-id"]: fundTrendCanvasId(fund),
               points: todayTrendPoints(fund),
               tone: fund.currentRateValue >= 0 ? "profit" : "loss",
               ["empty-text"]: "暂无估值走势数据"
             })
           } : {
-            n: common_vendor.o(($event) => expandFundTrend(fund), fund.viewKey)
+            p: common_vendor.o(($event) => expandFundTrend(fund), fund.viewKey)
           }, {
-            o: common_vendor.t(fundNavLabel(fund)),
-            p: common_vendor.t(fundNavText(fund)),
-            q: fundDeviationText(fund) !== "--"
+            q: common_vendor.t(fundNavLabel(fund)),
+            r: common_vendor.t(fundNavText(fund)),
+            s: fundDeviationText(fund) !== "--"
           }, fundDeviationText(fund) !== "--" ? {
-            r: common_vendor.t(fundDeviationText(fund)),
-            s: common_vendor.n(common_vendor.unref(utils_format.profitClass)(fundDeviationValue(fund)))
+            t: common_vendor.t(fundDeviationText(fund)),
+            v: common_vendor.n(common_vendor.unref(utils_format.profitClass)(fundDeviationValue(fund)))
           } : {
-            t: common_vendor.t(fund.trendLabel)
+            w: common_vendor.t(fund.trendLabel)
           }, {
-            v: common_vendor.t(displayFundCost(fund)),
-            w: common_vendor.t(displayMoney(fund.todayAmountValue, 0, false)),
-            x: common_vendor.t(displayMoney(fund.todayProfitValue, 1, true)),
-            y: common_vendor.n(common_vendor.unref(utils_format.profitClass)(fund.todayProfitValue)),
-            z: common_vendor.t(displayPercent(fund.currentRateValue, 2)),
-            A: common_vendor.n(common_vendor.unref(utils_format.profitClass)(fund.currentRateValue)),
-            B: common_vendor.t(displayMoney(fund.estimatedProfitValue, 1, true)),
-            C: common_vendor.n(common_vendor.unref(utils_format.profitClass)(fund.estimatedProfitValue)),
-            D: common_vendor.t(displayPercent(fund.existingReturnRateValue, 2)),
-            E: common_vendor.n(common_vendor.unref(utils_format.profitClass)(fund.existingReturnRateValue)),
-            F: common_vendor.t(numericOrDash(fund.shares, 2)),
-            G: common_vendor.t(fund.confidenceView.reason),
-            H: common_vendor.o(($event) => openFundHistory(fund), fund.viewKey),
-            I: common_vendor.t(fund.confidenceView.level),
-            J: common_vendor.t(fund.confidenceView.score),
-            K: common_vendor.n(confidenceToneClass(fund.confidenceView.tone)),
-            L: fund.viewKey
+            x: common_vendor.t(displayFundCost(fund)),
+            y: common_vendor.t(displayMoney(fund.todayAmountValue, 0, false)),
+            z: common_vendor.t(displayMoney(fund.todayProfitValue, 1, true)),
+            A: common_vendor.n(common_vendor.unref(utils_format.profitClass)(fund.todayProfitValue)),
+            B: common_vendor.t(displayPercent(fund.currentRateValue, 2)),
+            C: common_vendor.n(common_vendor.unref(utils_format.profitClass)(fund.currentRateValue)),
+            D: common_vendor.t(displayMoney(fund.estimatedProfitValue, 1, true)),
+            E: common_vendor.n(common_vendor.unref(utils_format.profitClass)(fund.estimatedProfitValue)),
+            F: common_vendor.t(displayPercent(fund.existingReturnRateValue, 2)),
+            G: common_vendor.n(common_vendor.unref(utils_format.profitClass)(fund.existingReturnRateValue)),
+            H: common_vendor.t(numericOrDash(fund.shares, 2)),
+            I: common_vendor.t(fund.confidenceView.reason),
+            J: common_vendor.o(($event) => openFundHistory(fund), fund.viewKey),
+            K: common_vendor.t(fund.confidenceView.level),
+            L: common_vendor.t(fund.confidenceView.score),
+            M: common_vendor.n(confidenceToneClass(fund.confidenceView.tone)),
+            N: fund.viewKey
           });
-        }),
-        W: ocrPreviewVisible.value
+        })
+      }), {
+        y: loading.value && funds.value.length === 0,
+        ab: ocrPreviewVisible.value
       }, ocrPreviewVisible.value ? common_vendor.e({
-        X: common_vendor.o(closeOcrPreview, "de"),
-        Y: ocrItems.value.length === 0
+        ac: common_vendor.o(closeOcrPreview, "dd"),
+        ad: ocrItems.value.length === 0
       }, ocrItems.value.length === 0 ? {} : {}, {
-        Z: common_vendor.f(ocrItems.value, (item, index, i0) => {
+        ae: ocrProfitUpdateState.value && ocrProfitUpdateState.value !== "UNKNOWN"
+      }, ocrProfitUpdateState.value && ocrProfitUpdateState.value !== "UNKNOWN" ? {
+        af: common_vendor.t(ocrProfitUpdateState.value === "UPDATED" ? "收益已更新" : "收益未更新"),
+        ag: common_vendor.n(ocrProfitUpdateState.value === "UPDATED" ? "updated" : "not-updated")
+      } : {}, {
+        ah: common_vendor.f(ocrItems.value, (item, index, i0) => {
           return common_vendor.e({
             a: common_vendor.t(ocrText(item, "name", "Name") || ocrText(item, "ocrName", "OcrName") || "待匹配基金"),
             b: common_vendor.t(ocrText(item, "code", "Code") || "待核对"),
             c: common_vendor.t(ocrNumber(item, "holdAmount", "HoldAmount")),
-            d: common_vendor.t(ocrNumber(item, "costAmount", "CostAmount")),
-            e: common_vendor.t(ocrNumber(item, "holdingIncome", "HoldingIncome")),
-            f: common_vendor.t(ocrNumber(item, "yesterdayIncome", "YesterdayIncome")),
-            g: common_vendor.t(common_vendor.unref(utils_fundMetrics.percentDash)(ocrPick(item, "holdingRate", "HoldingRate"))),
-            h: common_vendor.t(numericOrDash(ocrPick(item, "matchScore", "MatchScore"), 0)),
-            i: ocrText(item, "warning", "Warning")
+            d: common_vendor.t(ocrNumber(item, "confirmedAmount", "ConfirmedAmount")),
+            e: common_vendor.t(ocrNumber(item, "pendingBuyAmount", "PendingBuyAmount")),
+            f: common_vendor.t(ocrParticipatesTodayText(item)),
+            g: common_vendor.t(ocrNumber(item, "costAmount", "CostAmount")),
+            h: common_vendor.t(ocrNumber(item, "holdingIncome", "HoldingIncome")),
+            i: common_vendor.t(ocrNumber(item, "yesterdayIncome", "YesterdayIncome")),
+            j: common_vendor.t(common_vendor.unref(utils_fundMetrics.percentDash)(ocrPick(item, "holdingRate", "HoldingRate"))),
+            k: common_vendor.t(numericOrDash(ocrPick(item, "matchScore", "MatchScore"), 0)),
+            l: ocrText(item, "warning", "Warning")
           }, ocrText(item, "warning", "Warning") ? {
-            j: common_vendor.t(ocrText(item, "warning", "Warning"))
+            m: common_vendor.t(ocrText(item, "warning", "Warning"))
           } : {}, {
-            k: ocrItemKey(item, index)
+            n: ocrText(item, "pendingReason", "PendingReason")
+          }, ocrText(item, "pendingReason", "PendingReason") ? common_vendor.e({
+            o: common_vendor.t(ocrText(item, "pendingSource", "PendingSource") || "none"),
+            p: common_vendor.t(ocrText(item, "pendingReason", "PendingReason")),
+            q: ocrText(item, "pendingEvidence", "PendingEvidence")
+          }, ocrText(item, "pendingEvidence", "PendingEvidence") ? {
+            r: common_vendor.t(ocrText(item, "pendingEvidence", "PendingEvidence"))
+          } : {}) : {}, {
+            s: ocrText(item, "profitUpdateState", "ProfitUpdateState") && ocrText(item, "profitUpdateState", "ProfitUpdateState") !== "UNKNOWN"
+          }, ocrText(item, "profitUpdateState", "ProfitUpdateState") && ocrText(item, "profitUpdateState", "ProfitUpdateState") !== "UNKNOWN" ? {
+            t: common_vendor.t(ocrText(item, "profitUpdateState", "ProfitUpdateState") === "UPDATED" ? "已更新" : "未更新")
+          } : {}, {
+            v: common_vendor.o(($event) => setOcrPendingMode(item, false), ocrItemKey(item, index)),
+            w: common_vendor.o(($event) => setOcrPendingMode(item, true), ocrItemKey(item, index)),
+            x: ocrItemKey(item, index)
           });
         }),
-        aa: ocrDiagnostics.value.length
+        ai: ocrDiagnostics.value.length
       }, ocrDiagnostics.value.length ? {
-        ab: common_vendor.f(ocrDiagnostics.value, (line, index, i0) => {
+        aj: common_vendor.f(ocrDiagnostics.value, (line, index, i0) => {
           return {
             a: common_vendor.t(line),
             b: `diag-${index}`
           };
         })
       } : {}, {
-        ac: common_vendor.o(closeOcrPreview, "99"),
-        ad: common_vendor.t(ocrConfirming.value ? "导入中..." : "保存导入"),
-        ae: ocrConfirming.value || ocrItems.value.length === 0,
-        af: common_vendor.o(confirmOcrImport, "0f"),
-        ag: common_vendor.o(closeOcrPreview, "66")
+        ak: common_vendor.o(closeOcrPreview, "f8"),
+        al: common_vendor.t(ocrConfirming.value ? "导入中..." : "保存导入"),
+        am: ocrConfirming.value || ocrItems.value.length === 0,
+        an: common_vendor.o(confirmOcrImport, "18"),
+        ao: common_vendor.o(closeOcrPreview, "6e")
       }) : {}, {
-        ah: historyModal.value.show
+        ap: historyModal.value.show
       }, historyModal.value.show ? common_vendor.e({
-        ai: common_vendor.t(historyModal.value.name),
-        aj: common_vendor.o(closeFundHistory, "d0"),
-        ak: historyModal.value.loading
+        aq: common_vendor.t(historyModal.value.name),
+        ar: common_vendor.o(closeFundHistory, "ac"),
+        as: historyModal.value.loading
       }, historyModal.value.loading ? {} : common_vendor.e({
-        al: common_vendor.t(historyRows.value.length),
-        am: common_vendor.p({
+        at: common_vendor.t(historyRows.value.length),
+        av: common_vendor.p({
           ["canvas-id"]: "fund-history-profit",
           points: historyProfitPoints.value,
           tone: historyProfitTone.value
         }),
-        an: common_vendor.t(historyRows.value.length),
-        ao: common_vendor.p({
+        aw: common_vendor.t(historyRows.value.length),
+        ax: common_vendor.p({
           ["canvas-id"]: "fund-history-rate",
           points: historyRatePoints.value,
           tone: "neutral"
         }),
-        ap: historyRows.value.length === 0
+        ay: historyRows.value.length === 0
       }, historyRows.value.length === 0 ? {} : {}, {
-        aq: common_vendor.f(historyRows.value.slice(0, 80), (row, index, i0) => {
+        az: common_vendor.f(historyRows.value.slice(0, 80), (row, index, i0) => {
           return {
             a: common_vendor.t(formatDate(row.recordDate)),
             b: common_vendor.t(archiveMoney(row.assets)),
@@ -1201,18 +1292,18 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
           };
         })
       }), {
-        ar: common_vendor.o(closeFundHistory, "cb")
+        aA: common_vendor.o(closeFundHistory, "07")
       }) : {}) : common_vendor.e({
-        as: common_vendor.t(stockUpdatedAt.value || "待刷新"),
-        at: common_vendor.o(handleStockSearch, "16"),
-        av: stockSearchKeyword.value,
-        aw: common_vendor.o(($event) => stockSearchKeyword.value = $event.detail.value, "38"),
-        ax: common_vendor.t(stockSearchLoading.value ? "查询中" : "查询"),
-        ay: stockSearchLoading.value,
-        az: common_vendor.o(handleStockSearch, "7e"),
-        aA: stockSearchResults.value.length
+        aB: common_vendor.t(stockUpdatedAt.value || "待刷新"),
+        aC: common_vendor.o(handleStockSearch, "05"),
+        aD: stockSearchKeyword.value,
+        aE: common_vendor.o(($event) => stockSearchKeyword.value = $event.detail.value, "c3"),
+        aF: common_vendor.t(stockSearchLoading.value ? "查询中" : "查询"),
+        aG: stockSearchLoading.value,
+        aH: common_vendor.o(handleStockSearch, "2e"),
+        aI: stockSearchResults.value.length
       }, stockSearchResults.value.length ? {
-        aB: common_vendor.f(stockSearchResults.value, (item, k0, i0) => {
+        aJ: common_vendor.f(stockSearchResults.value, (item, k0, i0) => {
           return {
             a: common_vendor.t(stockName(item)),
             b: common_vendor.t(stockCode(item)),
@@ -1227,15 +1318,15 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
           };
         })
       } : {}, {
-        aC: selectedStock.value.code
+        aK: selectedStock.value.code
       }, selectedStock.value.code ? {
-        aD: common_vendor.t(selectedStock.value.name || selectedStock.value.code),
-        aE: common_vendor.t(selectedStock.value.code),
-        aF: common_vendor.t(selectedStock.value.market || "--"),
-        aG: common_vendor.t(stockPriceText(selectedStock.value)),
-        aH: common_vendor.t(stockRateText(selectedStock.value)),
-        aI: common_vendor.n(common_vendor.unref(utils_format.profitClass)(stockRate(selectedStock.value))),
-        aJ: common_vendor.f(stockKlinePeriods, (period, k0, i0) => {
+        aL: common_vendor.t(selectedStock.value.name || selectedStock.value.code),
+        aM: common_vendor.t(selectedStock.value.code),
+        aN: common_vendor.t(selectedStock.value.market || "--"),
+        aO: common_vendor.t(stockPriceText(selectedStock.value)),
+        aP: common_vendor.t(stockRateText(selectedStock.value)),
+        aQ: common_vendor.n(common_vendor.unref(utils_format.profitClass)(stockRate(selectedStock.value))),
+        aR: common_vendor.f(stockKlinePeriods, (period, k0, i0) => {
           return {
             a: common_vendor.t(period.label),
             b: period.value,
@@ -1243,18 +1334,18 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
             d: common_vendor.o(($event) => switchStockKline(period.value), period.value)
           };
         }),
-        aK: common_vendor.t(stockKlineRows.value.length),
-        aL: common_vendor.p({
+        aS: common_vendor.t(stockKlineRows.value.length),
+        aT: common_vendor.p({
           ["canvas-id"]: `stock-${selectedStock.value.code}-${stockKlinePeriod.value}`,
           points: stockKlinePoints.value,
           tone: stockRate(selectedStock.value) >= 0 ? "profit" : "loss",
           ["empty-text"]: "暂无走势数据"
         })
       } : {}, {
-        aM: common_vendor.t(stockHoldings.value.length),
-        aN: stockHoldings.value.length === 0
+        aU: common_vendor.t(stockHoldings.value.length),
+        aV: stockHoldings.value.length === 0
       }, stockHoldings.value.length === 0 ? {} : {}, {
-        aO: common_vendor.f(stockHoldings.value, (item, k0, i0) => {
+        aW: common_vendor.f(stockHoldings.value, (item, k0, i0) => {
           return {
             a: common_vendor.t(stockName(item)),
             b: common_vendor.t(stockCode(item)),
@@ -1274,10 +1365,10 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
             p: stockItemKey(item, "holding")
           };
         }),
-        aP: common_vendor.t(stockWatchList.value.length),
-        aQ: stockWatchList.value.length === 0
+        aX: common_vendor.t(stockWatchList.value.length),
+        aY: stockWatchList.value.length === 0
       }, stockWatchList.value.length === 0 ? {} : {}, {
-        aR: common_vendor.f(stockWatchList.value, (item, k0, i0) => {
+        aZ: common_vendor.f(stockWatchList.value, (item, k0, i0) => {
           return {
             a: common_vendor.t(stockName(item)),
             b: common_vendor.t(stockCode(item)),
@@ -1291,12 +1382,12 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
             j: stockItemKey(item, "watch")
           };
         }),
-        aS: stockOcrPreviewVisible.value
+        ba: stockOcrPreviewVisible.value
       }, stockOcrPreviewVisible.value ? common_vendor.e({
-        aT: common_vendor.o(closeStockOcrPreview, "84"),
-        aU: stockOcrItems.value.length === 0
+        bb: common_vendor.o(closeStockOcrPreview, "5b"),
+        bc: stockOcrItems.value.length === 0
       }, stockOcrItems.value.length === 0 ? {} : {}, {
-        aV: common_vendor.f(stockOcrItems.value, (item, index, i0) => {
+        bd: common_vendor.f(stockOcrItems.value, (item, index, i0) => {
           return common_vendor.e({
             a: common_vendor.t(item.stockName || item.recognizedName || "待匹配股票"),
             b: common_vendor.t(item.stockCode || "待核对"),
@@ -1319,39 +1410,39 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
             q: stockOcrItemKey(item, index)
           });
         }),
-        aW: stockOcrActionLabels,
-        aX: stockOcrDiagnostics.value.length
+        be: stockOcrActionLabels,
+        bf: stockOcrDiagnostics.value.length
       }, stockOcrDiagnostics.value.length ? {
-        aY: common_vendor.f(stockOcrDiagnostics.value, (line, index, i0) => {
+        bg: common_vendor.f(stockOcrDiagnostics.value, (line, index, i0) => {
           return {
             a: common_vendor.t(line),
             b: `stock-diag-${index}`
           };
         })
       } : {}, {
-        aZ: common_vendor.o(closeStockOcrPreview, "fa"),
-        ba: common_vendor.t(stockOcrConfirming.value ? "导入中..." : "保存导入"),
-        bb: stockOcrConfirming.value || stockOcrItems.value.length === 0,
-        bc: common_vendor.o(confirmStockOcrImport, "dd"),
-        bd: common_vendor.o(closeStockOcrPreview, "51")
+        bh: common_vendor.o(closeStockOcrPreview, "d7"),
+        bi: common_vendor.t(stockOcrConfirming.value ? "导入中..." : "保存导入"),
+        bj: stockOcrConfirming.value || stockOcrItems.value.length === 0,
+        bk: common_vendor.o(confirmStockOcrImport, "61"),
+        bl: common_vendor.o(closeStockOcrPreview, "f9")
       }) : {}, {
-        be: holdingEditor.value.show
+        bm: holdingEditor.value.show
       }, holdingEditor.value.show ? {
-        bf: common_vendor.t(holdingEditor.value.name),
-        bg: common_vendor.t(holdingEditor.value.code),
-        bh: common_vendor.o(closeHoldingEditor, "dc"),
-        bi: holdingEditor.value.shares,
-        bj: common_vendor.o(($event) => holdingEditor.value.shares = $event.detail.value, "73"),
-        bk: holdingEditor.value.costPrice,
-        bl: common_vendor.o(($event) => holdingEditor.value.costPrice = $event.detail.value, "85"),
-        bm: common_vendor.o(closeHoldingEditor, "d6"),
-        bn: common_vendor.o(submitHoldingEditor, "f5"),
-        bo: common_vendor.o(closeHoldingEditor, "c8")
+        bn: common_vendor.t(holdingEditor.value.name),
+        bo: common_vendor.t(holdingEditor.value.code),
+        bp: common_vendor.o(closeHoldingEditor, "75"),
+        bq: holdingEditor.value.shares,
+        br: common_vendor.o(($event) => holdingEditor.value.shares = $event.detail.value, "c9"),
+        bs: holdingEditor.value.costPrice,
+        bt: common_vendor.o(($event) => holdingEditor.value.costPrice = $event.detail.value, "87"),
+        bv: common_vendor.o(closeHoldingEditor, "d5"),
+        bw: common_vendor.o(submitHoldingEditor, "ef"),
+        bx: common_vendor.o(closeHoldingEditor, "07")
       } : {}), {
-        bp: common_vendor.p({
+        by: common_vendor.p({
           active: "home"
         }),
-        bq: common_vendor.n(common_vendor.unref(stores_theme.themeClass))
+        bz: common_vendor.n(common_vendor.unref(stores_theme.themeClass))
       });
     };
   }

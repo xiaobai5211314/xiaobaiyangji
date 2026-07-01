@@ -4,6 +4,15 @@
   gap: 30rpx;
   padding-top: 34rpx;
 }
+.stale-indicator.data-v-4c2bd136 {
+  text-align: center;
+  padding: 8rpx 0;
+}
+.stale-text.data-v-4c2bd136 {
+  font-size: 22rpx;
+  color: rgba(255, 200, 60, 0.8);
+  letter-spacing: 1rpx;
+}
 .hero-card.data-v-4c2bd136,
 .board-card.data-v-4c2bd136,
 .index-card.data-v-4c2bd136 {
@@ -32,7 +41,7 @@
   padding: 26rpx;
   border-radius: 38rpx;
   border: 1rpx solid rgba(255, 255, 255, 0.1);
-  background: radial-gradient(circle at 14% 0%, rgba(255, 107, 107, 0.08), transparent 30%), radial-gradient(circle at 86% 4%, rgba(79, 110, 247, 0.08), transparent 30%), rgba(18, 28, 56, 0.7);
+  background: radial-gradient(circle at 14% 0%, rgba(244, 114, 182, 0.08), transparent 30%), radial-gradient(circle at 86% 4%, rgba(139, 92, 246, 0.08), transparent 30%), rgba(18, 28, 56, 0.7);
   box-shadow: 0 18rpx 48rpx rgba(3, 7, 18, 0.2);
 }
 .hero-title.data-v-4c2bd136 {

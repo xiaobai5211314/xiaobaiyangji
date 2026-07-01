@@ -8,6 +8,8 @@ if (!Math) {
   "./pages/sector/index.js";
   "./pages/news/index.js";
   "./pages/analysis/index.js";
+  "./pages/tweets/index.js";
+  "./pages/tweets/webview.js";
   "./pages/login/index.js";
   "./pages/profile/index.js";
   "./pages/index-detail/index.js";

@@ -2,11 +2,19 @@
 const common_vendor = require("../../common/vendor.js");
 const services_config = require("../config.js");
 const services_request = require("../request.js");
-function getTodayFunds(username, force = false) {
-  const query = `username=${encodeURIComponent(username)}${force ? "&force=true" : ""}`;
+function getTodayFunds(username, force = false, silent = false) {
+  const bustParam = force ? `&_t=${Date.now()}` : "";
+  const query = `username=${encodeURIComponent(username)}${bustParam}`;
   return services_request.get(`/api/fund/today?${query}`, {
     loadingText: "读取持仓",
+    silent,
     fallbackData: []
+  }).then((raw) => {
+    if (Array.isArray(raw))
+      return raw;
+    if (raw && typeof raw === "object" && "funds" in raw)
+      return raw.funds;
+    return [];
   });
 }
 function getFundArchives(username, fundCode, limit = 365) {

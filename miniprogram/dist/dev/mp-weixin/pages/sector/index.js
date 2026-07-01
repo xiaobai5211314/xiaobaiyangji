@@ -3,6 +3,7 @@ const common_vendor = require("../../common/vendor.js");
 const services_api_sector = require("../../services/api/sector.js");
 const utils_format = require("../../utils/format.js");
 const stores_theme = require("../../stores/theme.js");
+const services_request = require("../../services/request.js");
 var define_import_meta_env_default = {};
 if (!Math) {
   AppTabBar();
@@ -17,6 +18,8 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
     const flowPayload = common_vendor.ref({});
     const indices = common_vendor.ref([]);
     const loadedAt = common_vendor.ref(0);
+    const isStaleData = common_vendor.ref(false);
+    const staleUpdatedAt = common_vendor.ref("");
     const DEBUG_FIELD_AUDIT = (define_import_meta_env_default == null ? void 0 : define_import_meta_env_default.VITE_DEBUG_MARKET_INDEX) === "true";
     const allSectors = common_vendor.computed(() => sectorPayload.value.all || []);
     const topList = common_vendor.computed(() => {
@@ -77,27 +80,54 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
       const hasPageData = allSectors.value.length > 0 || flowRows.value.length > 0 || indices.value.length > 0;
       if (!force && hasPageData && Date.now() - loadedAt.value < PAGE_CACHE_TTL)
         return;
+      if (!force && !hasPageData) {
+        const cachedSectors = services_request.getLocalStorageCache("sector_radar_cache");
+        const cachedFlow = services_request.getLocalStorageCache("capital_flow_cache");
+        const cachedIndices = services_request.getLocalStorageCache("global_indices_cache");
+        if (cachedSectors || cachedFlow || cachedIndices) {
+          if (cachedSectors)
+            sectorPayload.value = cachedSectors;
+          if (cachedFlow)
+            flowPayload.value = cachedFlow;
+          if (cachedIndices)
+            indices.value = cachedIndices;
+          isStaleData.value = true;
+          staleUpdatedAt.value = "使用缓存";
+        }
+      }
       loading.value = true;
       try {
+        const hasCachedData = allSectors.value.length > 0 || flowRows.value.length > 0 || indices.value.length > 0;
         const [sectorsResult, flowResult, indicesResult] = await Promise.allSettled([
-          services_api_sector.getSectors(force),
-          services_api_sector.getCapitalFlow(force, 100),
-          services_api_sector.getGlobalIndices(force)
+          services_api_sector.getSectors(force, hasCachedData),
+          services_api_sector.getCapitalFlow(force, 100, hasCachedData),
+          services_api_sector.getGlobalIndices(force, hasCachedData)
         ]);
+        let anySuccess = false;
         if (sectorsResult.status === "fulfilled") {
           sectorPayload.value = sectorsResult.value || {};
+          services_request.setLocalStorageCache("sector_radar_cache", sectorsResult.value, 36e5);
+          anySuccess = true;
         } else {
           console.warn("[sector:sectors]", sectorsResult.reason);
         }
         if (flowResult.status === "fulfilled") {
           flowPayload.value = flowResult.value || {};
+          services_request.setLocalStorageCache("capital_flow_cache", flowResult.value, 36e5);
+          anySuccess = true;
         } else {
           console.warn("[sector:capital-flow]", flowResult.reason);
         }
         if (indicesResult.status === "fulfilled") {
           indices.value = Array.isArray(indicesResult.value) ? indicesResult.value : [];
+          services_request.setLocalStorageCache("global_indices_cache", indices.value, 36e5);
+          anySuccess = true;
         } else {
           console.warn("[sector:global-indices]", indicesResult.reason);
+        }
+        if (anySuccess) {
+          isStaleData.value = false;
+          staleUpdatedAt.value = "";
         }
         loadedAt.value = Date.now();
         logGlobalIndicesAudit(indices.value);
@@ -274,14 +304,16 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
       return common_vendor.e({
         a: common_vendor.t(updatedAtText.value),
         b: common_vendor.t(sectorCount.value),
-        c: common_vendor.t(((_a = topList.value[0]) == null ? void 0 : _a.name) || "暂无板块数据"),
-        d: common_vendor.t(sectorPayload.value.source || "板块基金池 · 实时估值均值"),
-        e: common_vendor.t(signedOptionalPercent((_b = topList.value[0]) == null ? void 0 : _b.rate)),
-        f: common_vendor.n(common_vendor.unref(utils_format.optionalProfitClass)((_c = topList.value[0]) == null ? void 0 : _c.rate)),
-        g: common_vendor.t(topList.value.length),
-        h: topList.value.length === 0
+        c: isStaleData.value && !loading.value
+      }, isStaleData.value && !loading.value ? {} : {}, {
+        d: common_vendor.t(((_a = topList.value[0]) == null ? void 0 : _a.name) || "暂无板块数据"),
+        e: common_vendor.t(sectorPayload.value.source || "板块基金池 · 实时估值均值"),
+        f: common_vendor.t(signedOptionalPercent((_b = topList.value[0]) == null ? void 0 : _b.rate)),
+        g: common_vendor.n(common_vendor.unref(utils_format.optionalProfitClass)((_c = topList.value[0]) == null ? void 0 : _c.rate)),
+        h: common_vendor.t(topList.value.length),
+        i: topList.value.length === 0
       }, topList.value.length === 0 ? {} : {}, {
-        i: common_vendor.f(topList.value.slice(0, 8), (item, index, i0) => {
+        j: common_vendor.f(topList.value.slice(0, 8), (item, index, i0) => {
           return {
             a: common_vendor.t(index + 1),
             b: common_vendor.t(item.name || "未知板块"),
@@ -291,10 +323,10 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
             f: sectorKey(item, index, "top")
           };
         }),
-        j: common_vendor.t(bottomList.value.length),
-        k: bottomList.value.length === 0
+        k: common_vendor.t(bottomList.value.length),
+        l: bottomList.value.length === 0
       }, bottomList.value.length === 0 ? {} : {}, {
-        l: common_vendor.f(bottomList.value.slice(0, 8), (item, index, i0) => {
+        m: common_vendor.f(bottomList.value.slice(0, 8), (item, index, i0) => {
           return {
             a: common_vendor.t(index + 1),
             b: common_vendor.t(item.name || "未知板块"),
@@ -304,10 +336,10 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
             f: sectorKey(item, index, "bottom")
           };
         }),
-        m: common_vendor.t(flowPayload.value.updatedAt || ""),
-        n: inflowList.value.length === 0
+        n: common_vendor.t(flowPayload.value.updatedAt || ""),
+        o: inflowList.value.length === 0
       }, inflowList.value.length === 0 ? {} : {}, {
-        o: common_vendor.f(inflowList.value.slice(0, 8), (item, index, i0) => {
+        p: common_vendor.f(inflowList.value.slice(0, 8), (item, index, i0) => {
           return {
             a: common_vendor.t(index + 1),
             b: common_vendor.t(item.name || "未知行业"),
@@ -319,10 +351,10 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
             h: flowKey(item, index, "in")
           };
         }),
-        p: common_vendor.t(flowPayload.value.source || ""),
-        q: outflowList.value.length === 0
+        q: common_vendor.t(flowPayload.value.source || ""),
+        r: outflowList.value.length === 0
       }, outflowList.value.length === 0 ? {} : {}, {
-        r: common_vendor.f(outflowList.value.slice(0, 8), (item, index, i0) => {
+        s: common_vendor.f(outflowList.value.slice(0, 8), (item, index, i0) => {
           return {
             a: common_vendor.t(index + 1),
             b: common_vendor.t(item.name || "未知行业"),
@@ -334,11 +366,11 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
             h: flowKey(item, index, "out")
           };
         }),
-        s: visibleIndices.value.length === 0 && !loading.value
+        t: visibleIndices.value.length === 0 && !loading.value
       }, visibleIndices.value.length === 0 && !loading.value ? {
-        t: common_vendor.o(($event) => loadData(true), "8d")
+        v: common_vendor.o(($event) => loadData(true), "f4")
       } : {}, {
-        v: common_vendor.f(indexGroups.value, (group, k0, i0) => {
+        w: common_vendor.f(indexGroups.value, (group, k0, i0) => {
           return {
             a: common_vendor.t(group.title),
             b: common_vendor.f(group.items, (item, index, i1) => {
@@ -362,10 +394,10 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
             c: group.key
           };
         }),
-        w: common_vendor.p({
+        x: common_vendor.p({
           active: "sector"
         }),
-        x: common_vendor.n(common_vendor.unref(stores_theme.themeClass))
+        y: common_vendor.n(common_vendor.unref(stores_theme.themeClass))
       });
     };
   }

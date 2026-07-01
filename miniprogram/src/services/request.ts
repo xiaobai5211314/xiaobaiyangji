@@ -1,5 +1,5 @@
 import { getApiBaseUrl } from './config';
-import { getToken } from '../stores/session';
+import { clearSession, getToken } from '../stores/session';
 
 export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
@@ -51,6 +51,8 @@ const getCache = new Map<string, { expiresAt: number; data: unknown }>();
 const inFlightGets = new Map<string, Promise<unknown>>();
 const recentErrorToasts = new Map<string, number>();
 const ERROR_TOAST_DEDUP_MS = 60000;
+const LOGIN_PAGE = '/pages/login/index';
+let loginRedirectTimer: ReturnType<typeof setTimeout> | null = null;
 
 function normalizePath(path: string) {
   return path.startsWith('/') ? path : `/${path}`;
@@ -151,6 +153,47 @@ function showDedupedToast(message: string, duration = 2200) {
   }
 }
 
+function isAuthEntryRequest(path: string) {
+  return /^\/api\/auth\/(login|register|wechat-login)\b/i.test(path);
+}
+
+function isLoginPageActive() {
+  try {
+    const pages = getCurrentPages();
+    const current = pages[pages.length - 1];
+    return current?.route === 'pages/login/index';
+  } catch {
+    return false;
+  }
+}
+
+function redirectToLoginOnce() {
+  if (loginRedirectTimer || isLoginPageActive()) return;
+
+  loginRedirectTimer = setTimeout(() => {
+    loginRedirectTimer = null;
+    uni.reLaunch({
+      url: LOGIN_PAGE,
+      fail: () => uni.redirectTo({ url: LOGIN_PAGE })
+    });
+  }, 500);
+}
+
+function handleUnauthorized(message: string, showErrorToast: boolean, normalizedPath: string) {
+  const loginMessage = message && !/^请求失败/.test(message) ? message : '未登录或登录已过期';
+  clearSession();
+  getCache.clear();
+  inFlightGets.clear();
+
+  if (showErrorToast) {
+    showDedupedToast(loginMessage, 2600);
+  }
+  if (!isAuthEntryRequest(normalizedPath)) {
+    redirectToLoginOnce();
+  }
+  return loginMessage;
+}
+
 export function getLocalStorageCache<T>(key: string): T | null {
   try {
     const raw = uni.getStorageSync(key);
@@ -243,6 +286,10 @@ export async function request<TResponse = unknown, TData = unknown>(
     if (statusCode < 200 || statusCode >= 300) {
       const message = extractErrorMessage(result.data, `请求失败：${statusCode}`);
       console.warn('[request:error]', { method, fullUrl, statusCode, message, data: result.data });
+      if (statusCode === 401 && !isAuthEntryRequest(normalizedPath)) {
+        const loginMessage = handleUnauthorized(message, showErrorToast, normalizedPath);
+        throw new ApiRequestError(loginMessage, statusCode, result.data);
+      }
       const fallback = resolveFallback<TResponse>(options);
       if (fallback.hasFallback) {
         if (showErrorToast) {

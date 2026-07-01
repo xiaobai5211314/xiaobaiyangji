@@ -11,14 +11,16 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
       { key: "home", icon: "💼", label: "持仓" },
       { key: "sector", icon: "🔥", label: "板块" },
       { key: "news", icon: "📡", label: "资讯" },
-      { key: "analysis", icon: "📊", label: "盈亏" }
+      { key: "analysis", icon: "📊", label: "盈亏" },
+      { key: "tweets", icon: "🐦", label: "推文" }
     ];
     function handleTap(key) {
       const routes = {
         home: "/pages/home/index",
         sector: "/pages/sector/index",
         news: "/pages/news/index",
-        analysis: "/pages/analysis/index"
+        analysis: "/pages/analysis/index",
+        tweets: "/pages/tweets/index"
       };
       common_vendor.index.reLaunch({ url: routes[key] });
     }

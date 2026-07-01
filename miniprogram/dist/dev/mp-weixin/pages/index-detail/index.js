@@ -197,7 +197,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
     return (_ctx, _cache) => {
       return common_vendor.e({
         a: common_vendor.t(displayIndexName(currentIndex.value) || "指数详情"),
-        b: common_vendor.o(goBack, "0c"),
+        b: common_vendor.o(goBack, "eb"),
         c: !currentIndex.value.name && !loading.value
       }, !currentIndex.value.name && !loading.value ? {} : common_vendor.e({
         d: common_vendor.t(indexPointText(currentIndex.value)),

@@ -48,7 +48,7 @@
   color: var(--button-primary-text);
   font-size: 58rpx;
   font-weight: 900;
-  background: linear-gradient(135deg, #4f6ef7, #7c5cfc);
+  background: linear-gradient(135deg, #ec4899, #f472b6);
 }
 .profile-name.data-v-f97f9319 {
   max-width: 100%;

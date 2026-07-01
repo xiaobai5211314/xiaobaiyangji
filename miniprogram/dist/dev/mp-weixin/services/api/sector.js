@@ -75,22 +75,25 @@ const CAPITAL_FLOW_EXCLUDED_NAME_KEYWORDS = [
   "破净"
 ];
 const DEBUG_MARKET_INDEX = (define_import_meta_env_default == null ? void 0 : define_import_meta_env_default.VITE_DEBUG_MARKET_INDEX) === "true";
-function getSectors(force = false) {
+function getSectors(force = false, silent = false) {
   return services_request.get(`/api/fund/sectors${force ? "?force=true" : ""}`, {
     loadingText: "读取板块",
+    silent,
     fallbackData: { top: [], bottom: [], all: [] }
   });
 }
-function getCapitalFlow(force = false, limit = 30) {
+function getCapitalFlow(force = false, limit = 30, silent = false) {
   const query = `limit=${limit}${force ? "&force=true" : ""}`;
   return services_request.get(`/api/fund/capital-flow?${query}`, {
     loadingText: "读取资金",
+    silent,
     fallbackData: { rows: [], inflow: [], outflow: [] }
   }).then(normalizeCapitalFlowResponse);
 }
-function getGlobalIndices(force = false) {
+function getGlobalIndices(force = false, silent = false) {
   return services_request.get(`/api/fund/global-indices${force ? "?force=true" : ""}`, {
     loadingText: "读取大盘",
+    silent,
     fallbackData: []
   }).then((payload) => {
     if (DEBUG_MARKET_INDEX)

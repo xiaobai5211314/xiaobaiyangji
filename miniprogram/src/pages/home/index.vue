@@ -42,6 +42,18 @@
     </view>
 
     <view v-if="assetMode === 'fund'" class="mode-pane">
+    <view v-if="!sessionState.username" class="glass-card auth-card" @tap="navigateToLogin">
+      <text class="auth-title">登录后同步持仓</text>
+      <text class="auth-subtitle">当前登录态已失效，重新登录后会读取你的基金持仓和收益。</text>
+      <button class="auth-action">去登录</button>
+    </view>
+
+    <view v-else-if="loading && funds.length === 0" class="glass-card portfolio-loading-card">
+      <text class="auth-title">正在读取持仓</text>
+      <text class="auth-subtitle">请稍等，数据回来前不会用 0 元持仓占位。</text>
+    </view>
+
+    <template v-else>
     <view class="glass-card hero-card">
       <view class="hero-top">
         <view>
@@ -257,6 +269,7 @@
         </text>
       </view>
     </view>
+    </template>
 
     <view v-if="ocrPreviewVisible" class="modal-mask" @tap.self="closeOcrPreview">
       <view class="ocr-modal glass-card">
@@ -765,9 +778,11 @@ const confidenceRows = computed(() =>
   [...funds.value].sort((a, b) => a.confidenceView.score - b.confidenceView.score).slice(0, 4)
 );
 const headerCountText = computed(() =>
-  assetMode.value === 'stock'
-    ? `${stockHoldings.value.length} 持有 · ${stockWatchList.value.length} 自选`
-    : `${funds.value.length} 只基金`
+  !sessionState.username
+    ? '待登录'
+    : assetMode.value === 'stock'
+      ? `${stockHoldings.value.length} 持有 · ${stockWatchList.value.length} 自选`
+      : `${funds.value.length} 只基金`
 );
 const ocrButtonText = computed(() => {
   if (ocrBusy.value) return assetMode.value === 'stock' ? '股票解析中...' : '基金解析中...';
@@ -1876,8 +1891,9 @@ function getErrorMessage(error: unknown, fallback: string) {
   align-items: center;
   justify-content: space-between;
   padding: 20rpx;
-  background: var(--card-bg);
-  border-color: var(--border-color);
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(15, 23, 42, 0.08);
+  box-shadow: 0 14rpx 40rpx rgba(15, 23, 42, 0.06);
 }
 
 .user-panel {
@@ -1898,15 +1914,15 @@ function getErrorMessage(error: unknown, fallback: string) {
   align-items: center;
   justify-content: center;
   gap: 12rpx;
-  color: var(--text-primary);
-  background: var(--control-bg);
-  border: 1rpx solid var(--border-color);
+  color: #0f172a;
+  background: #f8fafc;
+  border: 1rpx solid rgba(15, 23, 42, 0.08);
 }
 
 .account-button.guest {
-  color: var(--button-primary-text);
-  background: var(--button-primary-bg);
-  box-shadow: 0 14rpx 32rpx rgba(139, 92, 246, 0.14);
+  color: #ffffff;
+  background: #2563eb;
+  box-shadow: 0 14rpx 32rpx rgba(37, 99, 235, 0.18);
 }
 
 .avatar-img,
@@ -1952,7 +1968,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 .account-subtitle {
   margin-top: 5rpx;
-  color: var(--text-muted);
+  color: #64748b;
   font-size: 18rpx;
   line-height: 1.1;
 }
@@ -1965,9 +1981,9 @@ function getErrorMessage(error: unknown, fallback: string) {
 .secondary-action,
 .modal-close {
   border-radius: 999rpx;
-  color: var(--text-secondary);
-  background: var(--control-bg);
-  border: 1rpx solid var(--border-color);
+  color: #475569;
+  background: #f8fafc;
+  border: 1rpx solid rgba(15, 23, 42, 0.08);
 }
 
 .action-buttons {
@@ -1980,7 +1996,9 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 .ocr-button {
-  @include primary-gradient;
+  color: #ffffff;
+  background: #2563eb;
+  box-shadow: 0 14rpx 34rpx rgba(37, 99, 235, 0.18);
   min-height: 80rpx;
   border-radius: 999rpx;
   font-size: 24rpx;
@@ -2001,24 +2019,26 @@ function getErrorMessage(error: unknown, fallback: string) {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12rpx;
   padding: 12rpx;
-  border-radius: 999rpx;
+  border-radius: 36rpx;
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(15, 23, 42, 0.08);
 }
 
 .asset-switch-btn {
   min-height: 72rpx;
-  border-radius: 999rpx;
-  color: var(--text-muted);
-  background: transparent;
-  border: 1rpx solid transparent;
+  border-radius: 28rpx;
+  color: #475569;
+  background: #f8fafc;
+  border: 1rpx solid rgba(15, 23, 42, 0.06);
   font-size: 26rpx;
   font-weight: 900;
   line-height: 72rpx;
 }
 
 .asset-switch-btn.active {
-  color: var(--text-primary);
-  background: $rainbow-gradient;
-  box-shadow: 0 16rpx 42rpx rgba(139, 92, 246, 0.2);
+  color: #ffffff;
+  background: #2563eb;
+  box-shadow: 0 14rpx 34rpx rgba(37, 99, 235, 0.18);
 }
 
 .notice-card {
@@ -2034,13 +2054,48 @@ function getErrorMessage(error: unknown, fallback: string) {
   gap: 30rpx;
 }
 
+.auth-card,
+.portfolio-loading-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  padding: 40rpx;
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.97);
+  border-color: rgba(15, 23, 42, 0.08);
+  box-shadow: 0 16rpx 44rpx rgba(15, 23, 42, 0.06);
+}
+
+.auth-title {
+  color: #0f172a;
+  font-size: 32rpx;
+  font-weight: 900;
+}
+
+.auth-subtitle {
+  color: #64748b;
+  font-size: 24rpx;
+  line-height: 1.55;
+}
+
+.auth-action {
+  width: 180rpx;
+  height: 64rpx;
+  margin: 8rpx 0 0;
+  border-radius: 999rpx;
+  color: #ffffff;
+  background: #2563eb;
+  font-size: 24rpx;
+  font-weight: 900;
+  line-height: 64rpx;
+}
+
 .hero-card {
   padding: 38rpx;
-  background:
-    radial-gradient(circle at 18% 0%, rgba(255, 95, 162, 0.22), transparent 34%),
-    radial-gradient(circle at 86% 4%, rgba(56, 189, 248, 0.18), transparent 34%),
-    linear-gradient(135deg, rgba(14, 25, 50, 0.9), rgba(35, 42, 91, 0.68));
-  box-shadow: 0 24rpx 64rpx rgba(3, 7, 18, 0.2), 0 0 34rpx rgba(139, 92, 246, 0.11);
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.97);
+  border-color: rgba(15, 23, 42, 0.08);
+  box-shadow: 0 18rpx 52rpx rgba(15, 23, 42, 0.07);
 }
 
 .hero-top,
@@ -2088,10 +2143,8 @@ function getErrorMessage(error: unknown, fallback: string) {
   box-sizing: border-box;
   padding: 20rpx;
   border-radius: 34rpx;
-  background:
-    radial-gradient(circle at 22% 0%, rgba(255, 95, 162, 0.06), transparent 32%),
-    rgba(12, 20, 39, 0.34);
-  border: 1rpx solid rgba(191, 219, 254, 0.1);
+  background: #f8fafc;
+  border: 1rpx solid rgba(15, 23, 42, 0.07);
 }
 
 .glow-cell {
@@ -2099,7 +2152,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 .metric-label {
-  color: var(--text-muted);
+  color: #64748b;
   font-size: 22rpx;
 }
 
@@ -2107,13 +2160,60 @@ function getErrorMessage(error: unknown, fallback: string) {
   display: inline-flex;
   max-width: 100%;
   margin-top: 10rpx;
-  color: var(--text-primary);
+  color: #0f172a;
   font-size: 30rpx;
   font-weight: 900;
   white-space: nowrap;
   word-break: keep-all;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.metric-value.profit-text {
+  color: #dc2626;
+}
+
+.metric-value.loss-text {
+  color: #059669;
+}
+
+.home-page.theme-vivid .hero-card,
+.home-page .hero-card {
+  color: #0f172a !important;
+  background: rgba(255, 255, 255, 0.97) !important;
+  border-color: rgba(15, 23, 42, 0.08) !important;
+}
+
+.home-page.theme-vivid .hero-card .muted-text,
+.home-page.theme-vivid .hero-card .hero-sub,
+.home-page.theme-vivid .hero-card .metric-label,
+.home-page .hero-card .muted-text,
+.home-page .hero-card .hero-sub,
+.home-page .hero-card .metric-label {
+  color: #64748b !important;
+}
+
+.home-page.theme-vivid .hero-card .hero-money,
+.home-page.theme-vivid .hero-card .metric-value,
+.home-page .hero-card .hero-money,
+.home-page .hero-card .metric-value {
+  color: #0f172a !important;
+}
+
+.home-page.theme-vivid .hero-card .profit-text,
+.home-page .hero-card .profit-text {
+  color: #dc2626 !important;
+}
+
+.home-page.theme-vivid .hero-card .loss-text,
+.home-page .hero-card .loss-text {
+  color: #059669 !important;
+}
+
+.home-page.theme-vivid .summary-cell,
+.home-page .summary-cell {
+  background: #f8fafc !important;
+  border-color: rgba(15, 23, 42, 0.07) !important;
 }
 
 .nav-value {
@@ -2259,11 +2359,10 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 .fund-card {
-  background:
-    linear-gradient(90deg, rgba(255, 95, 162, 0.5), rgba(139, 92, 246, 0.45), rgba(56, 189, 248, 0.42)) top left / 100% 6rpx no-repeat,
-    radial-gradient(circle at 14% 0%, rgba(255, 95, 162, 0.12), transparent 34%),
-    radial-gradient(circle at 92% 8%, rgba(56, 189, 248, 0.12), transparent 34%),
-    linear-gradient(145deg, rgba(34, 49, 86, 0.58), rgba(17, 27, 52, 0.46));
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.97);
+  border-color: rgba(15, 23, 42, 0.08);
+  box-shadow: 0 14rpx 42rpx rgba(15, 23, 42, 0.06);
 }
 
 .fund-title {
@@ -2272,7 +2371,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 .fund-name {
   display: block;
-  color: var(--text-primary);
+  color: #0f172a;
   font-size: 31rpx;
   font-weight: 900;
   overflow: hidden;
@@ -2283,7 +2382,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 .fund-code {
   display: block;
   margin-top: 8rpx;
-  color: var(--text-muted);
+  color: #64748b;
   font-size: 22rpx;
 }
 
@@ -2372,10 +2471,8 @@ function getErrorMessage(error: unknown, fallback: string) {
   margin-top: 22rpx;
   padding: 18rpx;
   border-radius: 32rpx;
-  background:
-    radial-gradient(circle at 20% 0%, rgba(255, 95, 162, 0.08), transparent 30%),
-    rgba(12, 20, 39, 0.28);
-  border: 1rpx solid rgba(191, 219, 254, 0.1);
+  background: #f8fafc;
+  border: 1rpx solid rgba(15, 23, 42, 0.07);
 }
 
 .trend-head {
@@ -2384,12 +2481,12 @@ function getErrorMessage(error: unknown, fallback: string) {
   justify-content: space-between;
   gap: 16rpx;
   margin-bottom: 12rpx;
-  color: var(--text-muted);
+  color: #64748b;
   font-size: 22rpx;
 }
 
 .trend-head text:first-child {
-  color: var(--text-secondary);
+  color: #0f172a;
   font-weight: 900;
 }
 

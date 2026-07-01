@@ -275,9 +275,9 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         c: isGuest.value
       }, isGuest.value ? {} : {}, {
         d: common_vendor.n(viewMode.value === "amount" ? "active" : ""),
-        e: common_vendor.o(($event) => setViewMode("amount"), "1e"),
+        e: common_vendor.o(($event) => setViewMode("amount"), "48"),
         f: common_vendor.n(viewMode.value === "rate" ? "active" : ""),
-        g: common_vendor.o(($event) => setViewMode("rate"), "9c"),
+        g: common_vendor.o(($event) => setViewMode("rate"), "6e"),
         h: common_vendor.t(overview.value.statusText),
         i: common_vendor.t(overview.value.primaryText),
         j: common_vendor.n(overview.value.primaryClass),
@@ -291,10 +291,10 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         r: common_vendor.t(viewMode.value === "rate" ? "累计盈亏" : "累计收益率"),
         s: common_vendor.t(viewMode.value === "rate" ? overview.value.totalProfitText : overview.value.totalRateText),
         t: common_vendor.n(viewMode.value === "rate" ? overview.value.totalProfitClass : overview.value.totalRateClass),
-        v: common_vendor.o(goPrevMonth, "0b"),
+        v: common_vendor.o(goPrevMonth, "8c"),
         w: common_vendor.t(currentMonth.value),
-        x: common_vendor.o(goNextMonth, "e6"),
-        y: common_vendor.o(goToday, "09"),
+        x: common_vendor.o(goNextMonth, "dc"),
+        y: common_vendor.o(goToday, "0c"),
         z: common_vendor.f(weekDays, (item, k0, i0) => {
           return {
             a: common_vendor.t(item),
@@ -344,7 +344,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         K: selectedDayRows.value.length === 0
       }, selectedDayRows.value.length === 0 ? {
         L: common_vendor.t(isGuest.value ? "登录后可同步你的个人持仓记录。" : "该日暂无基金明细，点击重试或下拉刷新"),
-        M: common_vendor.o(($event) => !isGuest.value && loadData(true), "4a")
+        M: common_vendor.o(($event) => !isGuest.value && loadData(true), "30")
       } : {}, {
         N: common_vendor.f(selectedDayRows.value, (item, k0, i0) => {
           return {

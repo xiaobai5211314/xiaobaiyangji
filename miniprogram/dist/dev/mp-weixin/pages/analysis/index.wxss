@@ -43,7 +43,7 @@
 }
 .mode-button.active.data-v-c6aadd33 {
   color: var(--button-primary-text);
-  background: linear-gradient(135deg, #4f6ef7 0%, #7c5cfc 60%, #a78bfa 100%);
+  background: linear-gradient(135deg, #ec4899, #f472b6);
   box-shadow: 0 12rpx 28rpx rgba(139, 92, 246, 0.18);
 }
 .overview-head.data-v-c6aadd33,
@@ -160,9 +160,10 @@
   font-weight: 900;
 }
 .day-profit.data-v-c6aadd33 {
-  margin-top: 6rpx;
-  font-size: 17rpx;
-  transform: scale(0.86);
+  margin-top: 4rpx;
+  font-size: 14rpx;
+  line-height: 1.2;
+  overflow: visible;
 }
 .top-grid.data-v-c6aadd33 {
   display: grid;

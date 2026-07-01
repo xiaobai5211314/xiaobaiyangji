@@ -4,6 +4,7 @@ const utils_storage = require("../utils/storage.js");
 const USERNAME_KEY = "fund_username";
 const AVATAR_KEY = "fund_avatar";
 const SESSION_KEY = "fund_session";
+const TOKEN_KEY = "fund_token";
 const sessionState = common_vendor.reactive({
   username: "",
   displayName: "",
@@ -43,7 +44,12 @@ function saveSession(payload) {
   utils_storage.setStorage(SESSION_KEY, next);
   utils_storage.setStorage(USERNAME_KEY, next.username);
   utils_storage.setStorage(AVATAR_KEY, next.avatarDataUrl || next.avatarUrl || "");
+  if (payload.token)
+    utils_storage.setStorage(TOKEN_KEY, payload.token);
   return next;
+}
+function getToken() {
+  return utils_storage.getStorage(TOKEN_KEY, "");
 }
 function loadSession() {
   const stored = normalizeSession(utils_storage.getStorage(SESSION_KEY, null));
@@ -69,8 +75,10 @@ function clearSession() {
   utils_storage.removeStorage(SESSION_KEY);
   utils_storage.removeStorage(USERNAME_KEY);
   utils_storage.removeStorage(AVATAR_KEY);
+  utils_storage.removeStorage(TOKEN_KEY);
 }
 exports.clearSession = clearSession;
+exports.getToken = getToken;
 exports.loadSession = loadSession;
 exports.restoreSession = restoreSession;
 exports.saveSession = saveSession;

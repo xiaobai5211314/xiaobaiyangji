@@ -22,8 +22,8 @@
 }
 .switch-btn.active.data-v-a33dc070 {
   color: #fff;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.24), transparent 40%), linear-gradient(135deg, #4f6ef7 0%, #7c5cfc 60%, #a78bfa 100%);
-  box-shadow: 0 8rpx 32rpx rgba(79, 110, 247, 0.18), 0 0 16rpx rgba(124, 92, 252, 0.08);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.24), transparent 40%), linear-gradient(135deg, #ec4899, #f472b6);
+  box-shadow: 0 8rpx 32rpx rgba(236, 72, 153, 0.18), 0 0 16rpx rgba(244, 114, 182, 0.08);
   color: var(--button-primary-text);
 }
 .notice-card.data-v-a33dc070 {
@@ -45,7 +45,7 @@
   height: 18rpx;
   margin-top: 12rpx;
   border-radius: 50%;
-  background: linear-gradient(135deg, #4f6ef7 0%, #7c5cfc 60%, #a78bfa 100%);
+  background: linear-gradient(135deg, #ec4899, #f472b6);
   box-shadow: 0 0 24rpx rgba(139, 92, 246, 0.45);
 }
 .news-main.data-v-a33dc070 {

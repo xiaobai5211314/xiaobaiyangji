@@ -7,7 +7,7 @@ function getInsightsDashboard(username) {
   });
 }
 function getArchives(username, limit = 120) {
-  return services_request.get(`/api/fund/get-archives?username=${encodeURIComponent(username)}&limit=${limit}`, {
+  return services_request.get(`/api/fund/get-archives?username=${encodeURIComponent(username)}&limit=${limit}&_t=${Date.now()}`, {
     loadingText: "读取档案",
     fallbackData: []
   });

@@ -4,6 +4,8 @@
     "pages/sector/index",
     "pages/news/index",
     "pages/analysis/index",
+    "pages/tweets/index",
+    "pages/tweets/webview",
     "pages/login/index",
     "pages/profile/index",
     "pages/index-detail/index"

@@ -52,9 +52,9 @@ function handleTap(key: TabKey) {
   gap: 10rpx;
   backdrop-filter: blur(24rpx);
   -webkit-backdrop-filter: blur(24rpx);
-  background: var(--tab-bg);
-  border-color: var(--border-color);
-  box-shadow: var(--card-shadow);
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(15, 23, 42, 0.08);
+  box-shadow: 0 18rpx 54rpx rgba(15, 23, 42, 0.12);
 }
 
 .tab-item {
@@ -62,8 +62,9 @@ function handleTap(key: TabKey) {
   height: 124rpx;
   padding: 0 8rpx;
   border-radius: 62rpx;
-  color: var(--text-muted);
-  background: rgba(243, 244, 248, 0.7);
+  color: #64748b;
+  background: #f8fafc;
+  border: 1rpx solid rgba(15, 23, 42, 0.04);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -77,9 +78,9 @@ function handleTap(key: TabKey) {
 }
 
 .tab-item.active {
-  background: var(--tab-active-bg);
+  background: #2563eb;
   color: #fff;
-  box-shadow: $shadow-glow;
+  box-shadow: 0 14rpx 34rpx rgba(37, 99, 235, 0.22);
 }
 
 .tab-icon {
