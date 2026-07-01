@@ -100,10 +100,17 @@ export interface OcrImportPreviewItem {
   matchScore?: number;
   holdAmount?: number;
   costAmount?: number;
+  costPrice?: number;
   holdingIncome?: number;
   yesterdayIncome?: number;
   holdingRate?: number;
   holdShares?: number;
+  costAmountIsConfirmed?: boolean;
+  holdSharesAreConfirmed?: boolean;
+  realizedProfit?: number;
+  realizedProfitIsConfirmed?: boolean;
+  profitDate?: string;
+  profitLabel?: string;
   calcMethod?: string;
   warning?: string;
   isPendingBuy?: boolean;

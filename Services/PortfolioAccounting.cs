@@ -39,6 +39,21 @@ namespace 小白养基.Services
         public static decimal HoldingProfitRate(decimal holdingProfit, decimal confirmedAmount)
             => Percent(Money(holdingProfit), HoldingCost(confirmedAmount, holdingProfit));
 
+        public static decimal CostAmountFromCostPrice(decimal costPrice, decimal shares)
+        {
+            if (costPrice <= 0m || shares <= 0m) return 0m;
+            return Money(costPrice * shares);
+        }
+
+        public static decimal RealizedProfitFromPlatformHolding(
+            decimal currentAssets,
+            decimal costAmount,
+            decimal platformHoldingProfit)
+        {
+            if (costAmount <= 0m) return 0m;
+            return Money(Money(platformHoldingProfit) - (Money(currentAssets) - Money(costAmount)));
+        }
+
         public static decimal PortfolioTodayEstimateRate(decimal intradayEstimateProfit, decimal antConfirmedAmount)
             => Percent(Money(intradayEstimateProfit), Money(antConfirmedAmount));
 

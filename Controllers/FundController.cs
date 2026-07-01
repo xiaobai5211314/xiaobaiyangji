@@ -925,10 +925,17 @@ namespace 小白养基.Controllers
             public double MatchScore { get; set; }
             public double HoldAmount { get; set; }
             public double CostAmount { get; set; }
+            public double CostPrice { get; set; }
             public double HoldingIncome { get; set; }
             public double YesterdayIncome { get; set; }
             public double HoldingRate { get; set; }
             public double HoldShares { get; set; }
+            public bool CostAmountIsConfirmed { get; set; }
+            public bool HoldSharesAreConfirmed { get; set; }
+            public double RealizedProfit { get; set; }
+            public bool RealizedProfitIsConfirmed { get; set; }
+            public string ProfitDate { get; set; } = string.Empty;
+            public string ProfitLabel { get; set; } = string.Empty;
             public string CalcMethod { get; set; } = string.Empty;
             public string Warning { get; set; } = string.Empty;
             public bool IsPendingBuy { get; set; }
@@ -1082,6 +1089,94 @@ namespace 小白养基.Controllers
                 System.Globalization.CultureInfo.InvariantCulture, out var v))
                 return Math.Round(v, 2);
             return null;
+        }
+
+        private static double? ParseFirstNumberWithPrecision(string text, int decimals)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return null;
+
+            var normalized = NormalizeNumberText(text)
+                .Replace("%", "")
+                .Replace("元", "")
+                .Replace("（", "(")
+                .Replace("）", ")");
+            var match = Regex.Match(normalized, @"-?\d+(?:\.\d+)?");
+            if (!match.Success) return null;
+
+            return double.TryParse(
+                match.Value,
+                System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var value)
+                ? Math.Round(value, decimals)
+                : null;
+        }
+
+        private static double? FindDetailFieldNumber(List<OcrRow> rows, string[] labels, int decimals)
+        {
+            for (int ri = 0; ri < rows.Count; ri++)
+            {
+                var row = rows[ri];
+                var compact = Regex.Replace(row.FullText, @"\s+", "");
+
+                foreach (var label in labels)
+                {
+                    var idx = compact.IndexOf(label, StringComparison.Ordinal);
+                    if (idx < 0) continue;
+
+                    var inline = ParseFirstNumberWithPrecision(compact[(idx + label.Length)..], decimals);
+                    if (inline.HasValue) return inline.Value;
+
+                    var labelBox = row.Boxes.FirstOrDefault(b =>
+                        b.Words.Contains(label, StringComparison.Ordinal) ||
+                        label.Contains(b.Words, StringComparison.Ordinal));
+                    if (labelBox == null) continue;
+
+                    var sameRow = row.Boxes
+                        .Where(b => b.Left >= labelBox.Left + labelBox.Width - 8)
+                        .OrderBy(b => b.Left)
+                        .Select(b => ParseFirstNumberWithPrecision(b.Words, decimals))
+                        .FirstOrDefault(v => v.HasValue);
+                    if (sameRow.HasValue) return sameRow.Value;
+
+                    if (ri + 1 < rows.Count)
+                    {
+                        var nearestNextRow = rows[ri + 1].Boxes
+                            .OrderBy(b => Math.Abs(b.CenterX - labelBox.CenterX))
+                            .Select(b => ParseFirstNumberWithPrecision(b.Words, decimals))
+                            .FirstOrDefault(v => v.HasValue);
+                        if (nearestNextRow.HasValue) return nearestNextRow.Value;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static string? ExtractDetailNavDate(List<OcrRow> rows)
+        {
+            var compact = Regex.Replace(string.Join("", rows.Select(r => r.FullText)), @"\s+", "");
+            var match = Regex.Match(compact, @"(?:基金净值|单位净值|净值)[^()（）]{0,24}[（(](\d{1,2})[-/.](\d{1,2})[）)]");
+            if (!match.Success) return null;
+
+            var now = ChinaNow();
+            if (!int.TryParse(match.Groups[1].Value, out var month) ||
+                !int.TryParse(match.Groups[2].Value, out var day))
+            {
+                return null;
+            }
+
+            try
+            {
+                var date = new DateTime(now.Year, month, day);
+                if (date.Date > now.Date.AddDays(7))
+                    date = date.AddYears(-1);
+                return date.ToString("yyyy-MM-dd");
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         /// <summary>
@@ -2215,15 +2310,18 @@ namespace 小白养基.Controllers
                 return null;
             }
 
-            // 4. 提取收益三字段：找包含"昨日收益"+"持有收益"的行
+            // 4. 提取收益三字段：找包含"昨日收益/今日收益"+"持有收益"的行
             double yesterdayIncome = 0, holdingIncome = 0, holdingRate = 0;
+            bool parsedProfitValues = false;
+            string profitLabel = "";
             int labelRowIdx = -1;
             for (int ri = 0; ri < rows.Count; ri++)
             {
                 var rowText = rows[ri].FullText;
-                if (rowText.Contains("昨日收益") && rowText.Contains("持有收益"))
+                if ((rowText.Contains("昨日收益") || rowText.Contains("今日收益")) && rowText.Contains("持有收益"))
                 {
                     labelRowIdx = ri;
+                    profitLabel = rowText.Contains("今日收益") ? "今日收益" : "昨日收益";
                     break;
                 }
             }
@@ -2257,14 +2355,16 @@ namespace 小白养基.Controllers
                     yesterdayIncome = values[0];
                     holdingIncome = values[1];
                     holdingRate = values[2];
+                    parsedProfitValues = true;
                 }
                 else if (values.Count == 2)
                 {
                     yesterdayIncome = values[0];
                     holdingIncome = values[1];
+                    parsedProfitValues = true;
                 }
             }
-            diagnostics.Add($"[AssetDetail] displayedAmount={displayedAmount} yesterdayIncome={yesterdayIncome} holdingIncome={holdingIncome} holdingRate={holdingRate}");
+            diagnostics.Add($"[AssetDetail] displayedAmount={displayedAmount} profitLabel={profitLabel} dailyIncome={yesterdayIncome} holdingIncome={holdingIncome} holdingRate={holdingRate}");
 
             // 5. 识别 pending 买入
             double pendingBuyAmount = 0;
@@ -2298,7 +2398,32 @@ namespace 小白养基.Controllers
             double confirmedAmount = Math.Max(0, Math.Round(displayedAmount - pendingBuyAmount, 2));
             diagnostics.Add($"[AssetDetail] pendingBuyAmount={pendingBuyAmount} confirmedAmount={confirmedAmount} pendingEvidence='{pendingEvidence}'");
 
-            // 6. 匹配基金
+            // 6. 提取详情页精确账务字段：持仓成本价、持有份额、基金净值日期
+            var detailCostPrice = FindDetailFieldNumber(rows, new[] { "持仓成本价", "持仓成本", "成本价" }, 6);
+            var detailShares = FindDetailFieldNumber(rows, new[] { "持有份额", "持仓份额", "持有份数" }, 6);
+            var detailNav = FindDetailFieldNumber(rows, new[] { "基金净值", "单位净值", "净值" }, 6);
+            string? detailNavDate = ExtractDetailNavDate(rows);
+            bool hasExactDetailCost = detailCostPrice.GetValueOrDefault() > 0 && detailShares.GetValueOrDefault() > 0;
+            decimal confirmedAmountMoney = PortfolioAccounting.Money(confirmedAmount);
+            decimal detailCostAmount = hasExactDetailCost
+                ? PortfolioAccounting.CostAmountFromCostPrice(
+                    Convert.ToDecimal(detailCostPrice!.Value),
+                    Convert.ToDecimal(detailShares!.Value))
+                : (parsedProfitValues
+                    ? PortfolioAccounting.HoldingCost(confirmedAmountMoney, PortfolioAccounting.Money(holdingIncome))
+                    : confirmedAmountMoney);
+            decimal detailRealizedProfit = hasExactDetailCost && parsedProfitValues
+                ? PortfolioAccounting.RealizedProfitFromPlatformHolding(
+                    confirmedAmountMoney,
+                    detailCostAmount,
+                    PortfolioAccounting.Money(holdingIncome))
+                : 0m;
+            string profitDate = profitLabel == "今日收益"
+                ? (detailNavDate ?? ChinaDateDash())
+                : "";
+            diagnostics.Add($"[AssetDetail] detailCostPrice={detailCostPrice?.ToString("F6") ?? "null"} detailShares={detailShares?.ToString("F6") ?? "null"} detailNav={detailNav?.ToString("F6") ?? "null"} detailNavDate={detailNavDate ?? "null"} exactCost={hasExactDetailCost} costAmount={detailCostAmount:F2} realized={detailRealizedProfit:F2}");
+
+            // 7. 匹配基金
             var best = (fund: (FundInfoCache?)null, score: 0d);
             if (userFundDict.TryGetValue(fundCode, out var uf))
             {
@@ -2324,14 +2449,19 @@ namespace 小白养基.Controllers
                 Name = best.fund.Name,
                 MatchScore = Math.Round(best.score, 2),
                 HoldAmount = Math.Round(displayedAmount, 2),
-                CostAmount = holdingIncome != 0
-                    ? Math.Round(displayedAmount - holdingIncome, 2)
-                    : Math.Round(displayedAmount, 2),
+                CostAmount = PortfolioAccounting.ToDouble(detailCostAmount),
+                CostPrice = Math.Round(detailCostPrice.GetValueOrDefault(), 6),
                 HoldingIncome = Math.Round(holdingIncome, 2),
                 YesterdayIncome = Math.Round(yesterdayIncome, 2),
                 HoldingRate = Math.Round(holdingRate, 2),
-                HoldShares = 0,
-                CalcMethod = "资产详情页",
+                HoldShares = Math.Round(detailShares.GetValueOrDefault(), 6),
+                CostAmountIsConfirmed = true,
+                HoldSharesAreConfirmed = detailShares.GetValueOrDefault() > 0,
+                RealizedProfit = PortfolioAccounting.ToDouble(detailRealizedProfit),
+                RealizedProfitIsConfirmed = hasExactDetailCost && parsedProfitValues,
+                ProfitDate = profitDate,
+                ProfitLabel = profitLabel,
+                CalcMethod = hasExactDetailCost ? "资产详情页(份额成本价)" : "资产详情页",
                 Warning = pendingBuyAmount > 0 ? "买入待确认，不参与今日收益" : "",
                 IsPendingBuy = pendingBuyAmount > 0,
                 IsSuspiciousPendingBuy = false,
@@ -3071,10 +3201,11 @@ namespace 小白养基.Controllers
             }
 
             int imported = 0;
-            string profitDate = ResolveOcrProfitDate();
+            string profitDate = ResolveOcrProfitDate(items.FirstOrDefault());
 
             foreach (var item in items.Where(x => !string.IsNullOrWhiteSpace(x.Code) && x.HoldAmount > 0))
             {
+                string itemProfitDate = ResolveOcrProfitDate(item);
                 if (userFundDict.TryGetValue(item.Code, out var exist))
                 {
                     ApplyOcrRowToExistingFund(exist, item);
@@ -3094,7 +3225,10 @@ namespace 小白养基.Controllers
                         FundName = item.Name,
                         HoldAmount = Math.Round(item.HoldAmount, 2),
                         CostAmount = newFundFullPending ? 0 : ResolveOcrConfirmedCost(item, newPendingAmount, newConfirmedAmount, 0),
-                        HoldShares = newFundFullPending || !HasOcrCalculatedShares(item) ? 0 : Math.Round(item.HoldShares, 6),
+                        HoldShares = newFundFullPending ? 0 : ResolveOcrConfirmedShares(item, newPendingAmount, newConfirmedAmount),
+                        RealizedProfit = newFundFullPending || !HasConfirmedOcrRealizedProfit(item)
+                            ? 0
+                            : Math.Round(item.RealizedProfit, 2),
                         LastTradeDate = item.IsPendingBuy ? ChinaDateDash() : null,
                         LastAddAmount = item.IsPendingBuy ? newPendingAmount : 0,
                         PendingBuyAmount = item.IsPendingBuy ? newPendingAmount : 0,
@@ -3103,13 +3237,13 @@ namespace 小白养基.Controllers
                         PendingTradeStatus = item.IsPendingBuy ? "pending_buy" : null,
                         PendingConfirmDate = item.PendingConfirmDate,
                         PendingSource = item.IsPendingBuy ? (string.IsNullOrWhiteSpace(item.PendingSource) ? "ocr" : item.PendingSource) : null,
-                        LastSettledDate = (Math.Abs(item.YesterdayIncome) > 0.001 || Math.Abs(item.HoldingIncome) > 0.001) ? profitDate : null,
+                        LastSettledDate = (Math.Abs(item.YesterdayIncome) > 0.001 || Math.Abs(item.HoldingIncome) > 0.001) ? itemProfitDate : null,
                         LastSettledProfit = Math.Round(item.YesterdayIncome, 2),
                         LastSettledRate = Math.Abs(item.YesterdayIncome) > 0.001
                             ? Math.Round(item.YesterdayIncome / Math.Max(0.01, item.HoldAmount - newPendingAmount - item.YesterdayIncome) * 100.0, 4)
                             : 0,  // 修复：YesterdayIncome=0 时 LastSettledRate=0，不用 HoldingRate
                         OcrYesterdayIncome = Math.Round(item.YesterdayIncome, 2),
-                        OcrYesterdayDate = profitDate,
+                        OcrYesterdayDate = itemProfitDate,
                         OcrHoldingIncome = Math.Round(item.HoldingIncome, 2),
                         OcrHoldingRate = Math.Round(item.HoldingRate, 2),
                         OcrSnapshotDate = ChinaDateDash()
@@ -3128,7 +3262,12 @@ namespace 小白养基.Controllers
             {
                 var archiveDate = DateTime.Parse(profitDate);
                 string todayDash = ChinaDateDash();
-                if (profitDate == todayDash)
+                bool isAssetDetailImport = validItems.All(item =>
+                    item.CalcMethod.StartsWith("资产详情页", StringComparison.OrdinalIgnoreCase));
+                bool explicitTodayProfit = validItems.Any(item =>
+                    item.ProfitLabel.Equals("今日收益", StringComparison.OrdinalIgnoreCase) &&
+                    ResolveOcrProfitDate(item) == todayDash);
+                if (profitDate == todayDash && !explicitTodayProfit)
                 {
                     Console.WriteLine($"[禁止写入今天] profitDate={profitDate} == today={todayDash}，OCR昨日收益不应写入当天，跳过归档");
                 }
@@ -3173,7 +3312,7 @@ namespace 小白养基.Controllers
                         DailyRate = Convert.ToDouble(dailyRate),
                         TotalProfit = PortfolioAccounting.ToDouble(holdingIncome),
                         TotalRate = Convert.ToDouble(totalRate),
-                        Source = "alipay-confirmed",
+                        Source = isAssetDetailImport ? "alipay-detail-confirmed" : "alipay-confirmed",
                         IsFinal = true,
                         UpdatedAt = DateTime.UtcNow
                     });
@@ -3182,30 +3321,76 @@ namespace 小白养基.Controllers
                     Console.WriteLine($"[OCR写入日历] code={item.Code} recordDate={profitDate} profit={yesterdayIncome:F2} rate={dailyRate:F2}% source=alipay-confirmed");
                 }
 
-                var accounting = PortfolioAccounting.Calculate(confirmedMoney, 0m);
-                decimal totalBase = confirmedMoney.Sum(x => x.ConfirmedAmount - x.YesterdayProfit);
-                decimal totalHoldingCost = accounting.AntConfirmedAmount - accounting.AntHoldingProfit;
+                var totalMoney = confirmedMoney;
                 bool allConfirmed = archives.Count == validItems.Count;
-
-                // 组合 TOTAL：只汇总蚂蚁确认行；缺一只就保持 partial，不能伪装为最终日历。
-                archives.Add(new DailyArchive
+                if (isAssetDetailImport)
                 {
-                    Username = username,
-                    FundCode = "TOTAL",
-                    FundName = "总持仓",
-                    RecordDate = archiveDate,
-                    Assets = PortfolioAccounting.ToDouble(accounting.AntConfirmedAmount),
-                    DailyProfit = PortfolioAccounting.ToDouble(accounting.ConfirmedYesterdayProfit),
-                    DailyRate = Convert.ToDouble(PortfolioAccounting.Percent(accounting.ConfirmedYesterdayProfit, totalBase)),
-                    TotalProfit = PortfolioAccounting.ToDouble(accounting.AntHoldingProfit),
-                    TotalRate = Convert.ToDouble(PortfolioAccounting.Percent(accounting.AntHoldingProfit, totalHoldingCost)),
-                    Source = allConfirmed ? "alipay-confirmed-total" : "alipay-confirmed-partial",
-                    IsFinal = allConfirmed,
-                    UpdatedAt = DateTime.UtcNow
-                });
+                    var incomingCodes = archives.Select(a => a.FundCode).ToHashSet();
+                    var expectedCodes = userFundDict.Values
+                        .Where(f => f.HoldAmount > 0.01)
+                        .Select(f => f.FundCode)
+                        .ToHashSet();
+                    var existingConfirmedRows = await _context.DailyArchives
+                        .AsNoTracking()
+                        .Where(a => a.Username == username
+                                    && a.RecordDate == archiveDate.Date
+                                    && a.FundCode != "TOTAL"
+                                    && !incomingCodes.Contains(a.FundCode))
+                        .ToListAsync();
+                    var existingConfirmedByCode = existingConfirmedRows
+                        .Where(a => a.IsFinal && DailyArchiveService.IsAntConfirmedSource(a.Source))
+                        .GroupBy(a => a.FundCode)
+                        .ToDictionary(g => g.Key, g => g
+                            .OrderByDescending(x => x.UpdatedAt)
+                            .ThenByDescending(x => x.Id)
+                            .First());
+
+                    var combinedCodes = new HashSet<string>(incomingCodes);
+                    foreach (var code in existingConfirmedByCode.Keys)
+                        combinedCodes.Add(code);
+
+                    allConfirmed = expectedCodes.Count > 0 && expectedCodes.All(code => combinedCodes.Contains(code));
+                    totalMoney = existingConfirmedByCode.Values
+                        .Select(a => new ConfirmedHoldingMoney(
+                            PortfolioAccounting.Money(a.Assets),
+                            PortfolioAccounting.Money(a.DailyProfit),
+                            PortfolioAccounting.Money(a.TotalProfit)))
+                        .Concat(confirmedMoney)
+                        .ToList();
+
+                    if (!allConfirmed)
+                    {
+                        Console.WriteLine($"[OCR详情页单只归档] date={profitDate} confirmedRows={combinedCodes.Count}/{expectedCodes.Count}，暂不生成 TOTAL");
+                    }
+                }
+
+                bool shouldWriteTotal = allConfirmed || !isAssetDetailImport;
+                if (shouldWriteTotal)
+                {
+                    var accounting = PortfolioAccounting.Calculate(totalMoney, 0m);
+                    decimal totalBase = totalMoney.Sum(x => x.ConfirmedAmount - x.YesterdayProfit);
+                    decimal totalHoldingCost = accounting.AntConfirmedAmount - accounting.AntHoldingProfit;
+
+                    // 组合 TOTAL：只在完整确认时汇总，资产详情页逐只导入时避免单只误覆盖总持仓。
+                    archives.Add(new DailyArchive
+                    {
+                        Username = username,
+                        FundCode = "TOTAL",
+                        FundName = "总持仓",
+                        RecordDate = archiveDate,
+                        Assets = PortfolioAccounting.ToDouble(accounting.AntConfirmedAmount),
+                        DailyProfit = PortfolioAccounting.ToDouble(accounting.ConfirmedYesterdayProfit),
+                        DailyRate = Convert.ToDouble(PortfolioAccounting.Percent(accounting.ConfirmedYesterdayProfit, totalBase)),
+                        TotalProfit = PortfolioAccounting.ToDouble(accounting.AntHoldingProfit),
+                        TotalRate = Convert.ToDouble(PortfolioAccounting.Percent(accounting.AntHoldingProfit, totalHoldingCost)),
+                        Source = allConfirmed ? "alipay-confirmed-total" : "alipay-confirmed-partial",
+                        IsFinal = allConfirmed,
+                        UpdatedAt = DateTime.UtcNow
+                    });
+                    Console.WriteLine($"[OCR归档完成] date={profitDate} 确认收益={accounting.ConfirmedYesterdayProfit:F2} 共{archives.Count}条 final={allConfirmed}");
+                }
 
                 await UpsertDailyArchivesAsync(username, archiveDate, archives);
-                Console.WriteLine($"[OCR归档完成] date={profitDate} 昨日确认收益={accounting.ConfirmedYesterdayProfit:F2} 共{archives.Count}条 final={allConfirmed}");
                 } // end else (profitDate != todayDash)
             }
 
@@ -3220,7 +3405,10 @@ namespace 小白养基.Controllers
         {
             if (item.CostAmount > 0)
             {
-                return Math.Max(0, Math.Round(item.CostAmount - pendingAmount, 2));
+                var confirmedCost = item.CostAmountIsConfirmed
+                    ? item.CostAmount
+                    : item.CostAmount - pendingAmount;
+                return Math.Max(0, Math.Round(confirmedCost, 2));
             }
 
             if (Math.Abs(item.HoldingIncome) > 0.001)
@@ -3239,13 +3427,37 @@ namespace 小白养基.Controllers
         private static bool HasOcrCalculatedShares(OcrImportPreviewItem item)
             => item.HoldShares > 0;
 
+        private static double ResolveOcrConfirmedShares(
+            OcrImportPreviewItem item,
+            double pendingAmount,
+            double confirmedAmount)
+        {
+            if (!HasOcrCalculatedShares(item)) return 0;
+            if (item.HoldSharesAreConfirmed || pendingAmount <= 0 || item.HoldAmount <= 0)
+                return Math.Round(item.HoldShares, 6);
+
+            double confirmedRatio = confirmedAmount / item.HoldAmount;
+            return Math.Round(item.HoldShares * confirmedRatio, 6);
+        }
+
+        private static bool HasConfirmedOcrRealizedProfit(OcrImportPreviewItem item)
+            => item.RealizedProfitIsConfirmed && item.CostAmountIsConfirmed && item.CostAmount > 0;
+
         /// <summary>
         /// 解析 OCR 截图对应的真实收益日期。
         /// 蚂蚁截图里的"昨日收益"对应的是上一个交易日，不是今天。
         /// 例如 6/11 白天 OCR，截图里的昨日收益 = 6/10 的真实收益。
         /// </summary>
-        private static string ResolveOcrProfitDate()
+        private static string ResolveOcrProfitDate(OcrImportPreviewItem? item = null)
         {
+            if (!string.IsNullOrWhiteSpace(item?.ProfitDate)
+                && DateTime.TryParse(item.ProfitDate, out var explicitDate))
+            {
+                string explicitResult = explicitDate.ToString("yyyy-MM-dd");
+                Console.WriteLine($"[OCR收益日期解析] explicit profitDate={explicitResult} label={item.ProfitLabel}");
+                return explicitResult;
+            }
+
             var now = ChinaNow();
             var prev = PortfolioAccounting.ResolvePreviousWeekday(now);
             string result = prev.ToString("yyyy-MM-dd");
@@ -3258,7 +3470,7 @@ namespace 小白养基.Controllers
             Console.WriteLine(
                 $"[OCR校准前] code={exist.FundCode}, oldHoldAmount={exist.HoldAmount:F2}, oldShares={exist.HoldShares:F4}, oldCost={exist.CostAmount:F2}, oldPending={exist.PendingBuyAmount:F2}");
 
-            string profitDate = ResolveOcrProfitDate();  // OCR 截图对应的真实收益日期
+            string profitDate = ResolveOcrProfitDate(item);  // OCR 截图对应的真实收益日期
             string todayDash = ChinaDateDash();
             double pendingAmount = item.IsPendingBuy ? item.PendingBuyAmount : 0;
             double confirmedAmount = item.ConfirmedAmount > 0
@@ -3278,18 +3490,23 @@ namespace 小白养基.Controllers
             }
             else if (pendingAmount > 0)
             {
-                double confirmedRatio = item.HoldAmount > 0 ? confirmedAmount / item.HoldAmount : 1.0;
                 if (HasOcrCalculatedShares(item))
                 {
-                    exist.HoldShares = Math.Round(item.HoldShares * confirmedRatio, 6);
+                    exist.HoldShares = ResolveOcrConfirmedShares(item, pendingAmount, confirmedAmount);
                 }
                 exist.CostAmount = ResolveOcrConfirmedCost(item, pendingAmount, confirmedAmount, exist.CostAmount);
-                Console.WriteLine($"[OCR部分待确认] code={exist.FundCode}, pending={pendingAmount:F2}, confirmed={confirmedAmount:F2}, ratio={confirmedRatio:F4}, shares={exist.HoldShares:F4}, calculatedShares={HasOcrCalculatedShares(item)}");
+                Console.WriteLine($"[OCR部分待确认] code={exist.FundCode}, pending={pendingAmount:F2}, confirmed={confirmedAmount:F2}, shares={exist.HoldShares:F4}, confirmedShares={item.HoldSharesAreConfirmed}, calculatedShares={HasOcrCalculatedShares(item)}");
             }
             else
             {
                 if (item.CostAmount > 0) exist.CostAmount = Math.Round(item.CostAmount, 2);
-                if (HasOcrCalculatedShares(item)) exist.HoldShares = Math.Round(item.HoldShares, 6);
+                if (HasOcrCalculatedShares(item)) exist.HoldShares = ResolveOcrConfirmedShares(item, pendingAmount, confirmedAmount);
+            }
+
+            if (!isFullPending && HasConfirmedOcrRealizedProfit(item))
+            {
+                exist.RealizedProfit = Math.Round(item.RealizedProfit, 2);
+                Console.WriteLine($"[OCR落袋收益校准] code={exist.FundCode}, realizedProfit={exist.RealizedProfit:F2}, costPrice={item.CostPrice:F6}, shares={item.HoldShares:F6}");
             }
 
             // 设置/清除 pending 状态

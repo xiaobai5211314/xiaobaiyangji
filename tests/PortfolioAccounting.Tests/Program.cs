@@ -175,6 +175,24 @@ Equal(
         fallbackHoldingProfit: -5360.08m),
     "settlement.holdingProfit.recomputesFromCurrentAssetsAndCost");
 
+var semiconductorDetailCost = PortfolioAccounting.CostAmountFromCostPrice(
+    costPrice: 1.6639m,
+    shares: 6.01m);
+var semiconductorRealized = PortfolioAccounting.RealizedProfitFromPlatformHolding(
+    currentAssets: 20.73m,
+    costAmount: semiconductorDetailCost,
+    platformHoldingProfit: 11.70m);
+Equal(10.00m, semiconductorDetailCost, "assetDetail.costAmount.fromCostPriceAndShares");
+Equal(0.97m, semiconductorRealized, "assetDetail.realizedProfit.preservesPlatformHoldingProfit");
+Equal(
+    11.70m,
+    PortfolioAccounting.ResolveOfficialHoldingProfit(
+        currentAssets: 20.73m,
+        costAmount: semiconductorDetailCost,
+        realizedProfit: semiconductorRealized,
+        fallbackHoldingProfit: 0m),
+    "assetDetail.holdingProfit.includesRealizedProfit");
+
 var staleSnapshotWins = PortfolioAccounting.IsOcrSnapshotFreshForArchive(
     "2026-06-24",
     "2026-06-23",
