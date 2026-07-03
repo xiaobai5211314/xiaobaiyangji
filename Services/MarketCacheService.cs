@@ -233,6 +233,7 @@ namespace 小白养基.Services
         {
             if (key.StartsWith("global_indices")) return "global_indices";
             if (key.StartsWith("capital_flow")) return "capital_flow";
+            if (key.StartsWith("fund_flow")) return "fund_flow";
             if (key.StartsWith("sector_radar")) return "sector_radar";
             if (key.StartsWith("sector_funds")) return "sector_funds";
             if (key.StartsWith("fund_nav")) return "fund_nav";
