@@ -5431,6 +5431,16 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     <div v-if="isDetailsLoading" style="color:var(--text-muted); text-align: center; padding: 28px 0;">📡 正在拉取板块基金...</div>
                     <div v-else-if="detailsList.length === 0" style="color:var(--text-muted); text-align: center; padding: 28px 0;">该板块暂无匹配基金</div>
                     <div v-else style="overflow-y: auto; padding-right: 5px;">
+                        <div v-if="sectorDetailMeta.signal" style="margin:0 0 12px 0;padding:12px;border:1px solid rgba(56,189,248,0.28);border-radius:14px;background:rgba(30,41,59,0.72);">
+                            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                                <span style="color:var(--text-muted);font-size:12px;font-weight:800;">次日参考</span>
+                                <strong :style="{color: sectorSignalColor(sectorDetailMeta.signal),fontSize:'14px'}">{{ sectorDetailMeta.signal.level }} · {{ sectorDetailMeta.signal.scoreText }}</strong>
+                            </div>
+                            <div style="color:var(--text-main);font-size:13px;font-weight:800;margin-top:6px;line-height:1.45;">{{ sectorDetailMeta.signal.summary }}</div>
+                            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
+                                <span v-for="reason in (sectorDetailMeta.signal.reasons || []).slice(0, 3)" :key="reason" style="font-size:10px;color:var(--text-muted);border:1px solid rgba(148,163,184,0.24);border-radius:999px;padding:3px 7px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ reason }}</span>
+                            </div>
+                        </div>
                         <div style="display:grid;grid-template-columns:minmax(0,1.45fr) 0.7fr 0.82fr 0.7fr;gap:8px;color:var(--text-muted);font-size:12px;margin-bottom:8px;padding:0 4px;">
                             <span>基金名称 / 代码</span><span style="text-align:right;">当日涨幅</span><span style="text-align:right;">资金参考</span><span style="text-align:right;">近一月</span>
                         </div>
@@ -6411,7 +6421,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const showSectorDetails = ref(false);
                 const detailsTitle = ref('');
                 const detailsList = ref([]);
-                const sectorDetailMeta = reactive({ rate: 0, fundCount: 0, updatedAt: '', flow: null });
+                const sectorDetailMeta = reactive({ rate: 0, fundCount: 0, updatedAt: '', flow: null, signal: null });
                 const isDetailsLoading = ref(false);
                 let sectorDetailsFlowToken = 0;
 
@@ -7335,6 +7345,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     sectorDetailMeta.fundCount = 0;
                     sectorDetailMeta.updatedAt = '';
                     sectorDetailMeta.flow = null;
+                    sectorDetailMeta.signal = null;
                     try {
                         const res = await fetch(`${API_BASE}/api/fund/sector-funds?sectorName=${encodeURIComponent(sectorKey)}&limit=24`);
                         if (!res.ok) throw new Error(await res.text());
@@ -7342,6 +7353,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         detailsTitle.value = `${data.name || sector.name || sectorKey} - 板块基金`;
                         const funds = Array.isArray(data.funds) ? data.funds : (Array.isArray(data) ? data : []);
                         sectorDetailMeta.flow = data.sectorFlow || null;
+                        sectorDetailMeta.signal = data.sectorSignal || null;
                         detailsList.value = funds.map(fund => ({ ...fund, sectorFlow: sectorDetailMeta.flow, fundFlowLoading: true, fundFlow: null, fundFlowMessage: '' }));
                         sectorDetailMeta.rate = Number(data.rate || 0);
                         sectorDetailMeta.fundCount = Number(data.fundCount || detailsList.value.length || 0);
@@ -7722,6 +7734,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 };
 
                 const normalizeFundCode = (code) => String(code || '').replace(/\D/g, '').slice(0, 6);
+                const sectorSignalColor = (signal) => {
+                    const score = Number(signal?.score);
+                    if (!Number.isFinite(score)) return 'var(--text-muted)';
+                    if (score >= 65) return '#ff4d4f';
+                    if (score < 45) return '#10b981';
+                    return '#fbbf24';
+                };
                 const getSectorFundFlow = (fund) => fund?.fundFlow || null;
                 const getSectorFlowReference = (fund) => {
                     const fundFlow = getSectorFundFlow(fund);
@@ -8597,7 +8616,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
                     sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, capitalFlowError, isCapitalLoading, fetchCapitalFlow,
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, isDetailsLoading, expandedSectors, toggleSector,
-                    fetchSectorDetails, sectorFundFlowText, sectorFundFlowHint, sectorFundFlowColor, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices, formatIndexPoint, formatIndexRate, getFundStatusBadgeText, getFundStatusBadgeClass, getRateDisplayMeta,
+                    fetchSectorDetails, sectorFundFlowText, sectorFundFlowHint, sectorFundFlowColor, sectorSignalColor, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices, formatIndexPoint, formatIndexRate, getFundStatusBadgeText, getFundStatusBadgeClass, getRateDisplayMeta,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
                     analysisMonth, selectedAnalysisDate, analysisViewMode, analysisDetailMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, confirmedDailyBattleReport, analysisProfitTop, analysisLossTop, analysisMonthTotal, analysisMonthHasLegacy, analysisMonthHasPendingNav, fetchAnalysis, refreshAnalysisPage, goAnalysisToday, todayDashStr,
                     assetMode, setAssetMode, stockHoldings, stockWatchList, stockSearchKeyword, stockSearchResults, stockOcrLoading, stockOcrPreview, selectedStock, stockKlinePeriod, stockKlinePeriods, stockChartRef, stockChartStatus, triggerStockOcr, handleStockOcrUpload, confirmStockOcr, loadStockDashboard, searchStocks, addStockWatch, openStockHoldingEditor, deleteStockHolding, deleteStockWatch, openStockDetail, switchStockKline, recalculateStockOcrItem, formatOcrNumber, signedOcrNumber, profitColor, dailyBattleReport, confidenceRows, confidenceMap, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, formatFinitePercent, calibrationRows,

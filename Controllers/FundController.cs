@@ -7557,6 +7557,24 @@ namespace 小白养基.Controllers
             public List<SectorFundQuote> PreviewFunds { get; init; } = new();
         }
 
+        private sealed class SectorSignalDto
+        {
+            public double Score { get; init; }
+            public string ScoreText { get; init; } = string.Empty;
+            public string Level { get; init; } = string.Empty;
+            public string Summary { get; init; } = string.Empty;
+            public string Risk { get; init; } = string.Empty;
+            public string Source { get; init; } = string.Empty;
+            public string FlowName { get; init; } = string.Empty;
+            public string FlowText { get; init; } = string.Empty;
+            public double FlowRatio { get; init; }
+            public double Rate { get; init; }
+            public double PositiveRatio { get; init; }
+            public int PositiveCount { get; init; }
+            public int QuotedCount { get; init; }
+            public List<string> Reasons { get; init; } = new();
+        }
+
         private sealed record SectorQuoteFallback(double Rate, string UpdatedAt, string RateSource, bool IsStale);
 
         private static readonly IReadOnlyList<SectorDefinition> SectorDefinitions = new List<SectorDefinition>
@@ -9168,6 +9186,117 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 .Trim();
         }
 
+        private static SectorSignalDto BuildSectorSignal(
+            SectorDefinition def,
+            double avgRate,
+            IReadOnlyList<SectorFundQuote> quotes,
+            CapitalFlowRowDto? sectorFlow)
+        {
+            var available = quotes.Where(q => q.HasQuote).ToList();
+            var quotedCount = available.Count;
+            var positiveCount = available.Count(q => q.Rate > 0);
+            var positiveRatio = quotedCount == 0 ? 0d : positiveCount / (double)quotedCount;
+
+            var monthRows = available.Where(q => q.MonthRate.HasValue).ToList();
+            var monthPositiveRatio = monthRows.Count == 0
+                ? 0.5d
+                : monthRows.Count(q => q.MonthRate.GetValueOrDefault() > 0) / (double)monthRows.Count;
+
+            var mainNet = sectorFlow?.MainNet ?? 0d;
+            var flowRatio = sectorFlow?.MainRatio ?? 0d;
+            var flowScore = sectorFlow == null ? 0d : ClampSignal(flowRatio * 7d, -35d, 35d);
+            if (sectorFlow != null && Math.Abs(flowScore) < 1d && Math.Abs(mainNet) > 0d)
+            {
+                flowScore = Math.Sign(mainNet) * 8d;
+            }
+
+            var rateScore = ClampSignal(avgRate * 4d, -20d, 20d);
+            var breadthScore = quotedCount == 0 ? 0d : ClampSignal((positiveRatio * 2d - 1d) * 15d, -15d, 15d);
+            var momentumScore = monthRows.Count == 0 ? 0d : ClampSignal((monthPositiveRatio * 2d - 1d) * 8d, -8d, 8d);
+            var overheatPenalty = avgRate >= 7d ? -10d : avgRate >= 5d ? -6d : avgRate <= -5d ? -4d : 0d;
+            var score = Math.Round(ClampSignal(50d + flowScore + rateScore + breadthScore + momentumScore + overheatPenalty, 0d, 100d), 0);
+
+            var level = score >= 80d ? "强势延续"
+                : score >= 65d ? "偏强观察"
+                : score >= 45d ? "分歧震荡"
+                : score >= 30d ? "退潮预警"
+                : "弱势回避";
+
+            var summary = score >= 80d
+                ? "资金与涨幅共振，次日优先看延续；若高开过快，注意分歧。"
+                : score >= 65d
+                    ? "资金或普涨度偏强，次日可观察延续性。"
+                    : score >= 45d
+                        ? "资金与涨幅不够一致，次日更偏震荡分歧。"
+                        : score >= 30d
+                            ? "资金或普涨度转弱，次日注意退潮风险。"
+                            : "弱势信号较多，次日不宜按强势板块处理。";
+
+            var risk = avgRate >= 7d
+                ? "涨幅过热"
+                : score >= 80d
+                    ? "高开回落"
+                    : score < 45d
+                        ? "延续不足"
+                        : "中性";
+
+            var reasons = new List<string>();
+            if (sectorFlow != null)
+            {
+                reasons.Add($"{sectorFlow.Name}主力净额{FormatSignedMoneyText(sectorFlow.MainNetText, mainNet)}，占比{FormatSignedPercent(flowRatio)}");
+            }
+            else
+            {
+                reasons.Add("暂无可核验板块资金流，仅按涨幅和普涨度评分");
+            }
+            reasons.Add($"板块基金今日均值{FormatSignedPercent(avgRate)}");
+            if (quotedCount > 0)
+            {
+                reasons.Add($"上涨基金{positiveCount}/{quotedCount}只");
+            }
+            if (monthRows.Count > 0)
+            {
+                reasons.Add($"近一月为正{monthRows.Count(q => q.MonthRate.GetValueOrDefault() > 0)}/{monthRows.Count}只");
+            }
+            if (overheatPenalty < 0d)
+            {
+                reasons.Add("当日涨幅偏大，已加入过热扣分");
+            }
+
+            return new SectorSignalDto
+            {
+                Score = score,
+                ScoreText = $"{score:0}/100",
+                Level = level,
+                Summary = summary,
+                Risk = risk,
+                Source = "公开板块资金流 + 板块基金涨幅分布",
+                FlowName = sectorFlow?.Name ?? def.Name,
+                FlowText = sectorFlow == null ? string.Empty : FormatSignedMoneyText(sectorFlow.MainNetText, mainNet),
+                FlowRatio = Math.Round(flowRatio, 2),
+                Rate = Math.Round(avgRate, 2),
+                PositiveRatio = Math.Round(positiveRatio * 100d, 2),
+                PositiveCount = positiveCount,
+                QuotedCount = quotedCount,
+                Reasons = reasons
+            };
+        }
+
+        private static double ClampSignal(double value, double min, double max)
+            => Math.Max(min, Math.Min(max, value));
+
+        private static string FormatSignedPercent(double value)
+        {
+            var prefix = value > 0 ? "+" : string.Empty;
+            return $"{prefix}{value.ToString("0.##", CultureInfo.InvariantCulture)}%";
+        }
+
+        private static string FormatSignedMoneyText(string text, double value)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return value.ToString("0.##", CultureInfo.InvariantCulture);
+            return value > 0 ? $"+{text}" : text;
+        }
+
         [HttpGet("sector-details")]
         public async Task<IActionResult> GetSectorDetails([FromQuery] string secCode)
         {
@@ -9182,8 +9311,8 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             if (string.IsNullOrWhiteSpace(sectorName)) return BadRequest("缺少板块名称");
             limit = Math.Clamp(limit, 5, 40);
             var def = ResolveSector(sectorName);
-            string cacheKey = $"SectorFundsV6_{def.Key}_{limit}";
-            string dbCacheKey = $"sector_funds_v3_{def.Key}_{limit}";
+            string cacheKey = $"SectorFundsV7_{def.Key}_{limit}";
+            string dbCacheKey = $"sector_funds_v4_{def.Key}_{limit}";
             if (!force && _cache.TryGetValue(cacheKey, out object cached)) return Ok(cached);
 
             if (!force)
@@ -9206,6 +9335,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 var sectorFlow = sectorFlowTask.Result;
                 var available = quotes.Where(q => q.HasQuote).ToList();
                 double avgRate = available.Count > 0 ? Math.Round(available.Average(q => q.Rate), 2) : 0;
+                var sectorSignal = BuildSectorSignal(def, avgRate, quotes, sectorFlow);
                 var payload = new
                 {
                     key = def.Key,
@@ -9214,6 +9344,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                     fundCount = quotes.Count,
                     updatedAt = available.Select(q => q.UpdatedAt).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t)) ?? ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
                     sectorFlow,
+                    sectorSignal,
                     funds = quotes.OrderByDescending(q => q.Rate).ToList()
                 };
                 _cache.Set(cacheKey, payload, TimeSpan.FromMinutes(3));
