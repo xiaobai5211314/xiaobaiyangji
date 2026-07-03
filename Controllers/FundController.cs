@@ -9216,26 +9216,26 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             var overheatPenalty = avgRate >= 7d ? -10d : avgRate >= 5d ? -6d : avgRate <= -5d ? -4d : 0d;
             var score = Math.Round(ClampSignal(50d + flowScore + rateScore + breadthScore + momentumScore + overheatPenalty, 0d, 100d), 0);
 
-            var level = score >= 80d ? "强势延续"
-                : score >= 65d ? "偏强观察"
+            var level = score >= 80d ? "强势高热"
+                : score >= 65d ? "偏强跟踪"
                 : score >= 45d ? "分歧震荡"
-                : score >= 30d ? "退潮预警"
-                : "弱势回避";
+                : score >= 30d ? "转弱预警"
+                : "弱势低热";
 
             var summary = score >= 80d
-                ? "资金与涨幅共振，次日优先看延续；若高开过快，注意分歧。"
+                ? "板块资金与涨幅共振，但只能说明当前热度；追高需要控制仓位。"
                 : score >= 65d
-                    ? "资金或普涨度偏强，次日可观察延续性。"
+                    ? "板块资金或普涨度偏强，适合跟踪确认，不单独作为加仓依据。"
                     : score >= 45d
-                        ? "资金与涨幅不够一致，次日更偏震荡分歧。"
+                        ? "资金与涨幅不够一致，偏震荡分歧，适合降低动作频率。"
                         : score >= 30d
-                            ? "资金或普涨度转弱，次日注意退潮风险。"
-                            : "弱势信号较多，次日不宜按强势板块处理。";
+                            ? "资金或普涨度转弱，优先检查持仓是否需要降风险。"
+                            : "弱势信号较多，不宜按强势板块处理。";
 
             var risk = avgRate >= 7d
                 ? "涨幅过热"
                 : score >= 80d
-                    ? "高开回落"
+                    ? "追高回落"
                     : score < 45d
                         ? "延续不足"
                         : "中性";
@@ -9270,7 +9270,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 Level = level,
                 Summary = summary,
                 Risk = risk,
-                Source = "公开板块资金流 + 板块基金涨幅分布",
+                Source = "公开板块资金流 + 板块基金涨幅分布，仅作板块热度参考",
                 FlowName = sectorFlow?.Name ?? def.Name,
                 FlowText = sectorFlow == null ? string.Empty : FormatSignedMoneyText(sectorFlow.MainNetText, mainNet),
                 FlowRatio = Math.Round(flowRatio, 2),
