@@ -9077,6 +9077,97 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             });
             return result;
         }
+
+        private async Task<CapitalFlowRowDto?> TryGetSectorCapitalFlowAsync(SectorDefinition def)
+        {
+            var cacheKey = $"SectorCapitalFlowV1_{def.Key}";
+            if (_cache.TryGetValue<CapitalFlowRowDto>(cacheKey, out var cached))
+            {
+                return cached;
+            }
+
+            try
+            {
+                var http = _httpClientFactory.CreateClient("EastMoneyQuote");
+                var attempts = new List<ExternalDataAttemptDto>();
+                var sources = new[]
+                {
+                    new { Key = "industry", Fs = "m:90+t:2" },
+                    new { Key = "concept", Fs = "m:90+t:3" }
+                };
+                var rows = new List<CapitalFlowRowDto>();
+
+                foreach (var source in sources)
+                {
+                    rows.AddRange(await FetchCapitalFlowRowsAsync(http, source.Key, source.Fs, 1, 120, attempts));
+                    rows.AddRange(await FetchCapitalFlowRowsAsync(http, source.Key, source.Fs, 0, 120, attempts));
+                }
+
+                var match = SelectBestSectorCapitalFlowRow(def, rows);
+                if (match != null)
+                {
+                    _cache.Set(cacheKey, match, TimeSpan.FromMinutes(2));
+                }
+                return match;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[sector-flow] {def.Key} lookup failed: {ex.Message}");
+                return null;
+            }
+        }
+
+        private static CapitalFlowRowDto? SelectBestSectorCapitalFlowRow(SectorDefinition def, IEnumerable<CapitalFlowRowDto> rows)
+        {
+            return rows
+                .Select(row => new { Row = row, Score = ScoreCapitalFlowRowForSector(row, def) })
+                .Where(x => x.Score > 0)
+                .OrderByDescending(x => x.Score)
+                .ThenByDescending(x => Math.Abs(x.Row.MainNet))
+                .FirstOrDefault()
+                ?.Row;
+        }
+
+        private static int ScoreCapitalFlowRowForSector(CapitalFlowRowDto row, SectorDefinition def)
+        {
+            var rowName = NormalizeSectorFlowMatchName(row.Name);
+            var sectorName = NormalizeSectorFlowMatchName(def.Name);
+            if (string.IsNullOrWhiteSpace(rowName) || string.IsNullOrWhiteSpace(sectorName)) return 0;
+
+            foreach (var keyword in def.Exclude)
+            {
+                var normalized = NormalizeSectorFlowMatchName(keyword);
+                if (!string.IsNullOrWhiteSpace(normalized) && rowName.Contains(normalized, StringComparison.OrdinalIgnoreCase))
+                {
+                    return 0;
+                }
+            }
+
+            if (string.Equals(rowName, sectorName, StringComparison.OrdinalIgnoreCase)) return 100;
+            if (rowName.Contains(sectorName, StringComparison.OrdinalIgnoreCase) ||
+                sectorName.Contains(rowName, StringComparison.OrdinalIgnoreCase)) return 90;
+
+            foreach (var keyword in def.Include)
+            {
+                var normalized = NormalizeSectorFlowMatchName(keyword);
+                if (string.IsNullOrWhiteSpace(normalized)) continue;
+                if (string.Equals(rowName, normalized, StringComparison.OrdinalIgnoreCase)) return 80;
+                if (rowName.Contains(normalized, StringComparison.OrdinalIgnoreCase) ||
+                    normalized.Contains(rowName, StringComparison.OrdinalIgnoreCase)) return 60;
+            }
+
+            return 0;
+        }
+
+        private static string NormalizeSectorFlowMatchName(string? value)
+        {
+            return NormalizeCapitalFlowName(value)
+                .Replace("概念", string.Empty, StringComparison.OrdinalIgnoreCase)
+                .Replace("行业", string.Empty, StringComparison.OrdinalIgnoreCase)
+                .Replace("主题", string.Empty, StringComparison.OrdinalIgnoreCase)
+                .Trim();
+        }
+
         [HttpGet("sector-details")]
         public async Task<IActionResult> GetSectorDetails([FromQuery] string secCode)
         {
@@ -9091,8 +9182,8 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             if (string.IsNullOrWhiteSpace(sectorName)) return BadRequest("缺少板块名称");
             limit = Math.Clamp(limit, 5, 40);
             var def = ResolveSector(sectorName);
-            string cacheKey = $"SectorFundsV5_{def.Key}_{limit}";
-            string dbCacheKey = $"sector_funds_v2_{def.Key}_{limit}";
+            string cacheKey = $"SectorFundsV6_{def.Key}_{limit}";
+            string dbCacheKey = $"sector_funds_v3_{def.Key}_{limit}";
             if (!force && _cache.TryGetValue(cacheKey, out object cached)) return Ok(cached);
 
             if (!force)
@@ -9107,7 +9198,12 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
             try
             {
-                var quotes = await BuildSectorQuotesAsync(def, limit, withMonthRate: true);
+                var quotesTask = BuildSectorQuotesAsync(def, limit, withMonthRate: true);
+                var sectorFlowTask = TryGetSectorCapitalFlowAsync(def);
+                await Task.WhenAll(quotesTask, sectorFlowTask);
+
+                var quotes = quotesTask.Result;
+                var sectorFlow = sectorFlowTask.Result;
                 var available = quotes.Where(q => q.HasQuote).ToList();
                 double avgRate = available.Count > 0 ? Math.Round(available.Average(q => q.Rate), 2) : 0;
                 var payload = new
@@ -9117,6 +9213,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                     rate = avgRate,
                     fundCount = quotes.Count,
                     updatedAt = available.Select(q => q.UpdatedAt).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t)) ?? ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
+                    sectorFlow,
                     funds = quotes.OrderByDescending(q => q.Rate).ToList()
                 };
                 _cache.Set(cacheKey, payload, TimeSpan.FromMinutes(3));
