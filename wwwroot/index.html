@@ -5442,7 +5442,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             </div>
                         </div>
                         <div style="display:grid;grid-template-columns:minmax(0,1.45fr) 0.7fr 0.82fr 0.7fr;gap:8px;color:var(--text-muted);font-size:12px;margin-bottom:8px;padding:0 4px;">
-                            <span>基金名称 / 代码</span><span style="text-align:right;">当日涨幅</span><span style="text-align:right;">资金参考</span><span style="text-align:right;">近一月</span>
+                            <span>基金名称 / 代码</span><span style="text-align:right;">当日涨幅</span><span style="text-align:right;">基金资金流</span><span style="text-align:right;">近一月</span>
                         </div>
                         <div v-for="fund in detailsList" :key="fund.code" style="display:grid;grid-template-columns:minmax(0,1.45fr) 0.7fr 0.82fr 0.7fr;gap:8px;align-items:center;padding:12px 4px;border-bottom:1px dashed rgba(255,255,255,0.06);">
                             <div style="display:flex;flex-direction:column;min-width:0;">
@@ -7742,17 +7742,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     return '#fbbf24';
                 };
                 const getSectorFundFlow = (fund) => fund?.fundFlow || null;
-                const getSectorFlowReference = (fund) => {
+                const getSectorFundFlowReference = (fund) => {
                     const fundFlow = getSectorFundFlow(fund);
                     if (fundFlow?.isAvailable) return { flow: fundFlow, type: 'fund' };
-                    const sectorFlow = fund?.sectorFlow || sectorDetailMeta.flow;
-                    const sectorMainNet = Number(sectorFlow?.mainNet);
-                    if (sectorFlow && Number.isFinite(sectorMainNet)) return { flow: sectorFlow, type: 'sector' };
                     return null;
                 };
                 const getSectorFundFlowValue = (fund) => {
-                    const reference = getSectorFlowReference(fund);
-                    const value = Number(reference?.flow?.fundFlowNet ?? reference?.flow?.mainNet);
+                    const reference = getSectorFundFlowReference(fund);
+                    const value = Number(reference?.flow?.fundFlowNet);
                     return Number.isFinite(value) ? value : null;
                 };
                 const sectorFundFlowColor = (fund) => {
@@ -7763,26 +7760,20 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     return 'var(--text-muted)';
                 };
                 const sectorFundFlowText = (fund) => {
-                    const reference = getSectorFlowReference(fund);
+                    const reference = getSectorFundFlowReference(fund);
                     if (fund?.fundFlowLoading && !reference) return '...';
-                    if (!reference) return '--';
+                    if (!reference) return '未公开';
                     const flow = reference.flow;
                     const value = getSectorFundFlowValue(fund);
-                    const rawText = flow.fundFlowNetText || flow.mainNetText || '';
+                    const rawText = flow.fundFlowNetText || '';
                     if (rawText) return `${value > 0 ? '+' : ''}${rawText}`;
                     return value === null ? '--' : `${value > 0 ? '+' : ''}${value.toFixed(2)}`;
                 };
                 const sectorFundFlowHint = (fund) => {
-                    const reference = getSectorFlowReference(fund);
+                    const reference = getSectorFundFlowReference(fund);
                     if (fund?.fundFlowLoading && !reference) return '拉取中';
-                    if (!reference) return fund?.fundFlowMessage || '暂无资金参考';
+                    if (!reference) return fund?.fundFlowMessage || '暂无基金级资金流';
                     const flow = reference.flow;
-                    if (reference.type === 'sector') {
-                        const ratio = Number(flow.mainRatio);
-                        return Number.isFinite(ratio)
-                            ? `板块参考 ${ratio > 0 ? '+' : ''}${ratio}%`
-                            : '板块参考';
-                    }
                     if (flow.isStale) return flow.message || flow.tradeDate || '最近交易日';
                     return flow.mainRatio == null ? '基金主力' : `基金主力 ${flow.mainRatio > 0 ? '+' : ''}${flow.mainRatio}%`;
                 };
