@@ -151,6 +151,10 @@ app.Use(async (context, next) =>
         path.StartsWith("/api/auth/register", StringComparison.OrdinalIgnoreCase) ||
         path.StartsWith("/api/auth/wechat-login", StringComparison.OrdinalIgnoreCase) ||
         path.StartsWith("/api/health", StringComparison.OrdinalIgnoreCase) ||
+        path.StartsWith("/api/fund/sectors", StringComparison.OrdinalIgnoreCase) ||
+        path.StartsWith("/api/fund/sector-funds", StringComparison.OrdinalIgnoreCase) ||
+        path.StartsWith("/api/fund/sector-details", StringComparison.OrdinalIgnoreCase) ||
+        path.StartsWith("/api/fund/capital-flow", StringComparison.OrdinalIgnoreCase) ||
         path.StartsWith("/api/fund/fund-flow", StringComparison.OrdinalIgnoreCase) ||
         path.StartsWith("/api/influencer-posts/latest", StringComparison.OrdinalIgnoreCase) ||
         !path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase);
