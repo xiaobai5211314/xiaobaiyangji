@@ -91,6 +91,9 @@ async function loadData(force: boolean) {
   loading.value = true;
   try {
     payload.value = await getInfluencerPosts(force);
+  } catch (error) {
+    console.warn('[tweets:load]', error);
+    payload.value = { success: false, status: 'unavailable', items: [] };
   } finally {
     loading.value = false;
   }

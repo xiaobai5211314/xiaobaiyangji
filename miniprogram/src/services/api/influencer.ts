@@ -46,8 +46,7 @@ export interface InfluencerReply {
 }
 
 export function getInfluencerPosts(force = false) {
-  const query = new URLSearchParams({ limit: '20' });
-  if (force) query.set('_t', String(Date.now()));
+  const query = `limit=20${force ? `&_t=${Date.now()}` : ''}`;
   return get<InfluencerPostsResponse>(`/api/influencer-posts/latest?${query}`, {
     silent: true,
     showErrorToast: false,

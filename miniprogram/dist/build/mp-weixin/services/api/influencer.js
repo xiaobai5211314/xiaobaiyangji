@@ -1,1 +1,1 @@
-"use strict";const t=require("../request.js");exports.getInfluencerPosts=function(s=!1){const e=new URLSearchParams({limit:"20"});return s&&e.set("_t",String(Date.now())),t.get(`/api/influencer-posts/latest?${e}`,{silent:!0,showErrorToast:!1,fallbackData:{success:!1,status:"unavailable",items:[]}})};
+"use strict";const t=require("../request.js");exports.getInfluencerPosts=function(s=!1){const e="limit=20"+(s?`&_t=${Date.now()}`:"");return t.get(`/api/influencer-posts/latest?${e}`,{silent:!0,showErrorToast:!1,fallbackData:{success:!1,status:"unavailable",items:[]}})};
