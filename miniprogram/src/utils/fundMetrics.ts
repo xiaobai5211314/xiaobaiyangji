@@ -14,6 +14,7 @@ export interface FundView extends FundTodayItem {
   currentRateValue: number;
   todayProfitValue: number;
   todayAmountValue: number;
+  todayBaseAmountValue: number;
   confirmedAmountValue: number;
   pendingBuyAmountValue: number;
   pendingBuyValue: boolean;
@@ -242,14 +243,35 @@ function buildDailyReport(funds: FundView[], totalTodayProfit: number, exposure:
   };
 }
 
+function isActiveHoldingFund(fund: FundView) {
+  if (
+    fund.isCleared === true ||
+    (fund as FundView & { inactiveHolding?: boolean }).inactiveHolding === true ||
+    (fund as FundView & { isClearedHolding?: boolean }).isClearedHolding === true
+  ) {
+    return false;
+  }
+
+  const amounts = [
+    fund.todayAmountValue,
+    fund.confirmedAmountValue,
+    fund.pendingBuyAmountValue,
+    fund.amount,
+    fund.rawHoldAmount,
+    fund.marketValue
+  ];
+
+  return (
+    fund.pendingBuyValue ||
+    numberOrZero(fund.shares) > 0.000001 ||
+    amounts.some((value) => numberOrZero(value) > 0.005)
+  );
+}
+
 export function buildPortfolioMetrics(rawFunds: FundTodayItem[], now = new Date()): PortfolioMetrics {
   const { dash } = todayParts(now);
-  let totalPrincipal = 0;
-  let totalPrincipalForRate = 0;
-  let totalCost = 0;
-  let totalTodayProfit = 0;
 
-  const funds = rawFunds.map((fund, index) => {
+  const allFunds = rawFunds.map((fund, index) => {
     const fundDash = fund.effectiveDate || dash;
     const rateState = deriveRateState(fund, now, fundDash.split('-').join('/'), fundDash);
     const pendingBuyAmount = Math.max(0, numberOrZero(fund.pendingBuyAmount));
@@ -275,12 +297,6 @@ export function buildPortfolioMetrics(rawFunds: FundTodayItem[], now = new Date(
       validCost && validCost > todayAmountValue && todayAmountValue > 0 ? ((validCost / todayAmountValue - 1) * 100) : 0;
     const apiExistingReturnRate = finiteNumber(fund.holdingRate) ?? finiteNumber(fund.existingReturnRate);
     const existingReturnRateValue = apiExistingReturnRate ?? 0;
-    const rateBaseForToday = todayBaseAmount;
-
-    totalPrincipal += rawDisplayAmount;
-    totalPrincipalForRate += rateBaseForToday;
-    totalCost += validCost || currentAmount;
-    totalTodayProfit += Number.isNaN(todayProfitValue) ? 0 : todayProfitValue;
 
     const view: FundView = {
       ...fund,
@@ -299,6 +315,7 @@ export function buildPortfolioMetrics(rawFunds: FundTodayItem[], now = new Date(
       todayProfitValue: round(todayProfitValue),
       todayAmount: round(todayAmountValue),
       todayAmountValue: round(todayAmountValue),
+      todayBaseAmountValue: round(todayBaseAmount),
       estimatedProfit: round(estimatedProfitValue),
       estimatedProfitValue: round(estimatedProfitValue),
       existingReturnRate: round(existingReturnRateValue),
@@ -320,6 +337,12 @@ export function buildPortfolioMetrics(rawFunds: FundTodayItem[], now = new Date(
     return view;
   });
 
+  const funds = allFunds.filter(isActiveHoldingFund);
+
+  const totalPrincipal = funds.reduce((sum, fund) => sum + fund.amount, 0);
+  const totalPrincipalForRate = funds.reduce((sum, fund) => sum + fund.todayBaseAmountValue, 0);
+  const totalCost = funds.reduce((sum, fund) => sum + (fund.costValue || fund.confirmedAmountValue), 0);
+  const totalTodayProfit = funds.reduce((sum, fund) => sum + fund.todayProfitValue, 0);
   const totalAssets = funds.reduce((sum, fund) => sum + fund.todayAmountValue, 0);
   const totalRealized = funds.reduce((sum, fund) => sum + fund.realizedProfitValue, 0);
   const totalProfit = totalAssets - totalCost + totalRealized;
