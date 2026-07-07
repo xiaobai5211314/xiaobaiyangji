@@ -60,13 +60,13 @@ namespace 小白养基.Services
 
         private static double GetEffectiveBaseAmount(MyFundConfig fund, string settleDate)
         {
-            double baseAmount = fund.HoldAmount;
-            baseAmount -= GetActivePendingBuyAmount(fund, settleDate);
+            decimal baseAmount = PortfolioSettlementService.GetHoldAmountBasis(fund);
+            baseAmount -= PortfolioAccounting.LedgerMoney(GetActivePendingBuyAmount(fund, settleDate));
             if (fund.LastTradeDate == settleDate && fund.LastAddAmount < 0)
             {
-                baseAmount -= fund.LastAddAmount;
+                baseAmount -= PortfolioAccounting.LedgerMoney(fund.LastAddAmount);
             }
-            return Math.Max(0, Math.Round(baseAmount, 4));
+            return Convert.ToDouble(Math.Max(0m, PortfolioAccounting.LedgerMoney(baseAmount)));
         }
 
         private static double GetPendingTradeAmount(MyFundConfig fund, string settleDate)
@@ -84,9 +84,10 @@ namespace 小白养基.Services
             if (fund.HoldShares <= 0) return 0;
 
             double baseAmount = GetEffectiveBaseAmount(fund, settleDate);
-            if (fund.LastTradeDate == settleDate && Math.Abs(fund.LastAddAmount) > 0.000001 && fund.HoldAmount > 0)
+            var holdAmountBasis = PortfolioSettlementService.GetHoldAmountBasis(fund);
+            if (fund.LastTradeDate == settleDate && Math.Abs(fund.LastAddAmount) > 0.000001 && holdAmountBasis > 0m)
             {
-                return Math.Max(0, fund.HoldShares * (baseAmount / fund.HoldAmount));
+                return Math.Max(0, fund.HoldShares * (baseAmount / Convert.ToDouble(holdAmountBasis)));
             }
 
             return fund.HoldShares;
@@ -200,31 +201,35 @@ namespace 小白养基.Services
       double? exactAssets = null)
         {
             double beforeHoldAmount = fund.HoldAmount;
+            decimal beforeHoldAmountBasis = PortfolioSettlementService.GetHoldAmountBasis(fund);
             double baseAmount = GetDailyBaseAmount(fund, settleDate);
-            double settledProfit = fund.OcrYesterdayDate == settleDate
-                ? Math.Round(fund.OcrYesterdayIncome, 2)
-                : Math.Round(exactProfit ?? (baseAmount * actualRate / 100.0), 2);
+            decimal settledProfitBasis = fund.OcrYesterdayDate == settleDate
+                ? PortfolioAccounting.LedgerMoney(fund.OcrYesterdayIncome)
+                : PortfolioAccounting.LedgerMoney(exactProfit ?? (baseAmount * actualRate / 100.0));
+            double settledProfit = PortfolioAccounting.ToDouble(settledProfitBasis);
             double activePendingBuyAmount = GetActivePendingBuyAmount(fund, settleDate);
-            double settledDisplayAmount = PortfolioAccounting.ToDouble(
-                PortfolioAccounting.ResolveSettledDisplayAmount(
+            decimal settledLedgerAmount = PortfolioAccounting.ResolveSettledLedgerAmount(
                     Convert.ToDecimal(baseAmount),
-                    Convert.ToDecimal(settledProfit),
+                    settledProfitBasis,
                     Convert.ToDecimal(activePendingBuyAmount),
-                    exactAssets.HasValue ? Convert.ToDecimal(exactAssets.Value) : null));
+                    exactAssets.HasValue ? Convert.ToDecimal(exactAssets.Value) : null);
+            double settledDisplayAmount = PortfolioAccounting.ToDouble(settledLedgerAmount);
 
             Console.WriteLine(
-                $"[官方净值落库] code={fund.FundCode}, beforeHoldAmount={beforeHoldAmount:F2}, baseAmount={baseAmount:F2}, settledProfit={settledProfit:F2}, exactAssets={exactAssets:F2}, nextHoldAmount={settledDisplayAmount:F2}; HoldAmount随净值滚动");
+                $"[官方净值落库] code={fund.FundCode}, beforeHoldAmount={beforeHoldAmount:F2}, beforeBasis={beforeHoldAmountBasis:F4}, baseAmount={baseAmount:F4}, settledProfit={settledProfit:F2}, settledProfitBasis={settledProfitBasis:F4}, exactAssets={exactAssets:F2}, nextHoldAmount={settledDisplayAmount:F2}, nextBasis={settledLedgerAmount:F4}; HoldAmount随净值滚动");
 
             bool changed = fund.LastSettledDate != settleDate ||
                            Math.Abs(fund.LastSettledRate - actualRate) > 0.0001 ||
                            Math.Abs(fund.LastSettledProfit - settledProfit) > 0.01 ||
-                           Math.Abs(fund.HoldAmount - settledDisplayAmount) > 0.004;
+                           Math.Abs(fund.LastSettledProfitPrecise - settledProfitBasis) > 0.0001m ||
+                           Math.Abs(fund.HoldAmount - settledDisplayAmount) > 0.004 ||
+                           Math.Abs(fund.HoldAmountPrecise - settledLedgerAmount) > 0.0001m;
 
             if (!changed) return false;
 
-            fund.HoldAmount = settledDisplayAmount;
+            PortfolioSettlementService.SetHoldAmount(fund, settledLedgerAmount);
             fund.LastSettledDate = settleDate;
-            fund.LastSettledProfit = settledProfit;
+            PortfolioSettlementService.SetLastSettledProfit(fund, settledProfitBasis);
             fund.LastSettledRate = Math.Round(actualRate, 4);
 
             return true;
@@ -234,7 +239,10 @@ namespace 小白养基.Services
             double pending = GetPendingTradeAmount(fund, settleDate);
             if (fund.LastSettledDate == settleDate)
             {
-                return Math.Max(0, Math.Round(fund.HoldAmount - pending - fund.LastSettledProfit, 4));
+                var baseAmount = PortfolioSettlementService.GetHoldAmountBasis(fund)
+                    - PortfolioAccounting.LedgerMoney(pending)
+                    - PortfolioSettlementService.GetLastSettledProfitBasis(fund);
+                return Convert.ToDouble(Math.Max(0m, PortfolioAccounting.LedgerMoney(baseAmount)));
             }
             return GetEffectiveBaseAmount(fund, settleDate);
         }
@@ -347,7 +355,7 @@ namespace 小白养基.Services
                             {
                                 if (navSnapshot.NavDiff.HasValue)
                                 {
-                                    exactProfit = Math.Round(effectiveShares * navSnapshot.NavDiff.Value, 2);
+                                    exactProfit = Math.Round(effectiveShares * navSnapshot.NavDiff.Value, 4);
                                 }
 
                                 if (navSnapshot.TodayNav.HasValue && navSnapshot.TodayNav.Value > 0)

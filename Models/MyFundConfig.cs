@@ -12,9 +12,11 @@ namespace 小白养基.Models
         public string FundCode { get; set; } = string.Empty;
         public string FundName { get; set; } = string.Empty;
         public double HoldAmount { get; set; } // 持仓本金
+        public decimal HoldAmountPrecise { get; set; } = 0m; // 4位内部滚动底稿，展示仍使用 HoldAmount 两位金额
         public double HoldShares { get; set; } // 🚀 新增：持仓份额
         public string? LastSettledDate { get; set; }
         public double LastSettledProfit { get; set; } = 0;
+        public decimal LastSettledProfitPrecise { get; set; } = 0m;
         public double LastSettledRate { get; set; } = 0;
         public double CostAmount { get; set; }
         // 🚀 新增：落袋为安小金库（记录历史变现的利润）

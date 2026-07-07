@@ -58,15 +58,43 @@ namespace 小白养基.Services
             return Math.Round(Math.Max(explicitPending, legacyTodayAdd), 2);
         }
 
+        public static decimal GetHoldAmountBasis(MyFundConfig fund)
+        {
+            return fund.HoldAmountPrecise > 0m
+                ? PortfolioAccounting.LedgerMoney(fund.HoldAmountPrecise)
+                : PortfolioAccounting.LedgerMoney(fund.HoldAmount);
+        }
+
+        public static void SetHoldAmount(MyFundConfig fund, decimal ledgerAmount)
+        {
+            var amount = PortfolioAccounting.LedgerMoney(Math.Max(0m, ledgerAmount));
+            fund.HoldAmountPrecise = amount;
+            fund.HoldAmount = PortfolioAccounting.ToDouble(amount);
+        }
+
+        public static decimal GetLastSettledProfitBasis(MyFundConfig fund)
+        {
+            return fund.LastSettledProfitPrecise != 0m
+                ? PortfolioAccounting.LedgerMoney(fund.LastSettledProfitPrecise)
+                : PortfolioAccounting.LedgerMoney(fund.LastSettledProfit);
+        }
+
+        public static void SetLastSettledProfit(MyFundConfig fund, decimal ledgerProfit)
+        {
+            var profit = PortfolioAccounting.LedgerMoney(ledgerProfit);
+            fund.LastSettledProfitPrecise = profit;
+            fund.LastSettledProfit = PortfolioAccounting.ToDouble(profit);
+        }
+
         public double GetEffectiveBaseAmount(MyFundConfig fund, string settleDate)
         {
-            double baseAmount = fund.HoldAmount;
-            baseAmount -= GetActivePendingBuyAmount(fund, settleDate);
+            decimal baseAmount = GetHoldAmountBasis(fund);
+            baseAmount -= PortfolioAccounting.LedgerMoney(GetActivePendingBuyAmount(fund, settleDate));
             if (fund.LastTradeDate == settleDate && fund.LastAddAmount < 0)
             {
-                baseAmount -= fund.LastAddAmount;
+                baseAmount -= PortfolioAccounting.LedgerMoney(fund.LastAddAmount);
             }
-            return Math.Max(0, Math.Round(baseAmount, 4));
+            return Convert.ToDouble(Math.Max(0m, PortfolioAccounting.LedgerMoney(baseAmount)));
         }
 
         public double GetPendingTradeAmount(MyFundConfig fund, string settleDate)
@@ -84,7 +112,10 @@ namespace 小白养基.Services
             double pending = GetPendingTradeAmount(fund, settleDate);
             if (fund.LastSettledDate == settleDate)
             {
-                return Math.Max(0, Math.Round(fund.HoldAmount - pending - fund.LastSettledProfit, 4));
+                var baseAmount = GetHoldAmountBasis(fund)
+                    - PortfolioAccounting.LedgerMoney(pending)
+                    - GetLastSettledProfitBasis(fund);
+                return Convert.ToDouble(Math.Max(0m, PortfolioAccounting.LedgerMoney(baseAmount)));
             }
             return GetEffectiveBaseAmount(fund, settleDate);
         }
@@ -94,9 +125,10 @@ namespace 小白养基.Services
             if (fund.HoldShares <= 0) return 0;
 
             double baseAmount = GetEffectiveBaseAmount(fund, settleDate);
-            if (fund.LastTradeDate == settleDate && Math.Abs(fund.LastAddAmount) > 0.000001 && fund.HoldAmount > 0)
+            var holdAmountBasis = GetHoldAmountBasis(fund);
+            if (fund.LastTradeDate == settleDate && Math.Abs(fund.LastAddAmount) > 0.000001 && holdAmountBasis > 0m)
             {
-                return Math.Max(0, fund.HoldShares * (baseAmount / fund.HoldAmount));
+                return Math.Max(0, fund.HoldShares * (baseAmount / Convert.ToDouble(holdAmountBasis)));
             }
 
             return fund.HoldShares;
@@ -105,18 +137,28 @@ namespace 小白养基.Services
         public bool ApplyOneDaySettlement(MyFundConfig fund, double actualRate, string settleDate, double? exactProfit = null)
         {
             double baseAmount = GetDailyBaseAmount(fund, settleDate);
-            double settledProfit = fund.OcrYesterdayDate == settleDate
-                ? Math.Round(fund.OcrYesterdayIncome, 2)
-                : Math.Round(exactProfit ?? (baseAmount * (actualRate / 100.0)), 2);
+            decimal settledProfitBasis = fund.OcrYesterdayDate == settleDate
+                ? PortfolioAccounting.LedgerMoney(fund.OcrYesterdayIncome)
+                : PortfolioAccounting.LedgerMoney(exactProfit ?? (baseAmount * (actualRate / 100.0)));
+            double settledProfit = PortfolioAccounting.ToDouble(settledProfitBasis);
+            decimal settledLedgerAmount = PortfolioAccounting.ResolveSettledLedgerAmount(
+                Convert.ToDecimal(baseAmount),
+                settledProfitBasis,
+                Convert.ToDecimal(GetActivePendingBuyAmount(fund, settleDate)));
+            double settledDisplayAmount = PortfolioAccounting.ToDouble(settledLedgerAmount);
 
             bool changed = fund.LastSettledDate != settleDate ||
                            Math.Abs(fund.LastSettledRate - actualRate) > 0.0001 ||
-                           Math.Abs(fund.LastSettledProfit - settledProfit) > 0.01;
+                           Math.Abs(fund.LastSettledProfit - settledProfit) > 0.01 ||
+                           Math.Abs(fund.LastSettledProfitPrecise - settledProfitBasis) > 0.0001m ||
+                           Math.Abs(fund.HoldAmount - settledDisplayAmount) > 0.004 ||
+                           Math.Abs(fund.HoldAmountPrecise - settledLedgerAmount) > 0.0001m;
 
             if (!changed) return false;
 
+            SetHoldAmount(fund, settledLedgerAmount);
             fund.LastSettledDate = settleDate;
-            fund.LastSettledProfit = settledProfit;
+            SetLastSettledProfit(fund, settledProfitBasis);
             fund.LastSettledRate = Math.Round(actualRate, 4);
             return true;
         }
@@ -125,7 +167,7 @@ namespace 小白养基.Services
         {
             if (addAmount <= 0) throw new ArgumentOutOfRangeException(nameof(addAmount), "加仓金额必须大于 0。");
 
-            fund.HoldAmount = Math.Round(fund.HoldAmount + addAmount, 2);
+            SetHoldAmount(fund, GetHoldAmountBasis(fund) + PortfolioAccounting.LedgerMoney(addAmount));
             fund.CostAmount = Math.Round(fund.CostAmount + addAmount, 2);
             fund.PendingBuyAmount = Math.Round(GetActivePendingBuyAmount(fund, tradeDate) + addAmount, 2);
             fund.PendingSellAmount = 0;
@@ -163,7 +205,8 @@ namespace 小白养基.Services
 
             double oldShares = fund.HoldShares;
             double unitCost = fund.CostAmount / oldShares;
-            double unitAmount = fund.HoldAmount / oldShares;
+            decimal holdAmountBasis = GetHoldAmountBasis(fund);
+            decimal unitAmount = holdAmountBasis / Convert.ToDecimal(oldShares);
             double soldCost = unitCost * reduceShares;
             bool isFullSell = Math.Abs(reduceShares - oldShares) < 0.0001;
 
@@ -176,8 +219,8 @@ namespace 小白养基.Services
                 double profit = confirmedAmount - soldCost;
                 fund.HoldShares = Math.Round(fund.HoldShares - reduceShares, 4);
                 fund.CostAmount = Math.Round(fund.CostAmount - soldCost, 2);
-                fund.HoldAmount = Math.Round(fund.HoldAmount - unitAmount * reduceShares, 2);
-                if (fund.HoldShares <= 0) { fund.CostAmount = 0; fund.HoldAmount = 0; }
+                SetHoldAmount(fund, holdAmountBasis - unitAmount * Convert.ToDecimal(reduceShares));
+                if (fund.HoldShares <= 0) { fund.CostAmount = 0; SetHoldAmount(fund, 0m); }
                 fund.RealizedProfit = Math.Round(fund.RealizedProfit + profit, 2);
 
                 if (fund.LastTradeDate == tradeDate)
@@ -211,14 +254,14 @@ namespace 小白养基.Services
                     fund.PendingConfirmDate = string.IsNullOrWhiteSpace(confirmDate) ? fund.PendingConfirmDate : confirmDate;
                     fund.PendingSource = "manual_reduce_position";
                     fund.CostAmount = 0;
-                    fund.HoldAmount = 0;
+                    SetHoldAmount(fund, 0m);
                 }
                 else
                 {
                     fund.CostAmount = Math.Round(fund.CostAmount - soldCost, 2);
                     fund.LastTradeDate = tradeDate;
                     fund.LastAddAmount = Math.Round(-soldCost, 2);
-                    fund.HoldAmount = Math.Round(fund.HoldAmount - unitAmount * reduceShares, 2);
+                    SetHoldAmount(fund, holdAmountBasis - unitAmount * Convert.ToDecimal(reduceShares));
                     fund.PendingSellAmount = Math.Round(soldCost, 2);
                     fund.PendingTradeDate = tradeDate;
                     fund.PendingTradeTime = ChinaNow().ToString("HH:mm:ss");

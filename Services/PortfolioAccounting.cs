@@ -24,6 +24,12 @@ namespace 小白养基.Services
         public static decimal Money(double value)
             => Money(Convert.ToDecimal(value));
 
+        public static decimal LedgerMoney(decimal value)
+            => decimal.Round(value, 4, MidpointRounding.AwayFromZero);
+
+        public static decimal LedgerMoney(double value)
+            => LedgerMoney(Convert.ToDecimal(value));
+
         public static double ToDouble(decimal value)
             => Convert.ToDouble(Money(value));
 
@@ -84,12 +90,21 @@ namespace 小白养基.Services
             decimal activePendingBuyAmount,
             decimal? exactConfirmedAssets = null)
         {
-            // Official NAV settlement should roll the displayed amount from the prior
-            // platform amount plus the rounded confirmed profit. Using shares * NAV
-            // directly can introduce 0.01-level drift from auto-calibrated shares.
-            var confirmedAssets = Money(Money(baseAmount) + Money(settledProfit));
+            return Money(ResolveSettledLedgerAmount(baseAmount, settledProfit, activePendingBuyAmount, exactConfirmedAssets));
+        }
 
-            return Money(Math.Max(0m, confirmedAssets) + Math.Max(0m, Money(activePendingBuyAmount)));
+        public static decimal ResolveSettledLedgerAmount(
+            decimal baseAmount,
+            decimal settledProfit,
+            decimal activePendingBuyAmount,
+            decimal? exactConfirmedAssets = null)
+        {
+            // Official NAV settlement rolls from the prior platform amount plus
+            // confirmed profit. Keep four decimals internally, then round only
+            // the display/archive boundary to two decimals.
+            var confirmedAssets = LedgerMoney(LedgerMoney(baseAmount) + LedgerMoney(settledProfit));
+
+            return LedgerMoney(Math.Max(0m, confirmedAssets) + Math.Max(0m, LedgerMoney(activePendingBuyAmount)));
         }
 
         public static decimal ResolveOfficialHoldingProfit(

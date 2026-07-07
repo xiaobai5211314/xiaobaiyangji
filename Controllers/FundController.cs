@@ -414,14 +414,14 @@ namespace 小白养基.Controllers
         // LastAddAmount < 0：当天减仓，收益基数要把卖出份额当天仍应承担的涨跌补回。
         private static double GetEffectiveBaseAmount(MyFundConfig fund, string settleDate, double? resolvedPendingBuyAmount = null)
         {
-            double baseAmount = fund.HoldAmount;
+            decimal baseAmount = PortfolioSettlementService.GetHoldAmountBasis(fund);
             double pendingBuy = resolvedPendingBuyAmount ?? GetActivePendingBuyAmount(fund, settleDate);
-            baseAmount -= pendingBuy;
+            baseAmount -= PortfolioAccounting.LedgerMoney(pendingBuy);
             if (fund.LastTradeDate == settleDate && fund.LastAddAmount < 0)
             {
-                baseAmount -= fund.LastAddAmount;
+                baseAmount -= PortfolioAccounting.LedgerMoney(fund.LastAddAmount);
             }
-            return Math.Max(0, Math.Round(baseAmount, 4));
+            return Convert.ToDouble(Math.Max(0m, PortfolioAccounting.LedgerMoney(baseAmount)));
         }
 
         private static double GetPendingTradeAmount(MyFundConfig fund, string settleDate, double? resolvedPendingBuyAmount = null)
@@ -439,9 +439,10 @@ namespace 小白养基.Controllers
             if (fund.HoldShares <= 0) return 0;
 
             double baseAmount = GetEffectiveBaseAmount(fund, settleDate);
-            if (fund.LastTradeDate == settleDate && Math.Abs(fund.LastAddAmount) > 0.000001 && fund.HoldAmount > 0)
+            var holdAmountBasis = PortfolioSettlementService.GetHoldAmountBasis(fund);
+            if (fund.LastTradeDate == settleDate && Math.Abs(fund.LastAddAmount) > 0.000001 && holdAmountBasis > 0m)
             {
-                return Math.Max(0, fund.HoldShares * (baseAmount / fund.HoldAmount));
+                return Math.Max(0, fund.HoldShares * (baseAmount / Convert.ToDouble(holdAmountBasis)));
             }
 
             return fund.HoldShares;
@@ -602,31 +603,35 @@ namespace 小白养基.Controllers
      double? exactAssets = null)
         {
             double beforeHoldAmount = fund.HoldAmount;
+            decimal beforeHoldAmountBasis = PortfolioSettlementService.GetHoldAmountBasis(fund);
             double baseAmount = GetDailyBaseAmount(fund, settleDate);
-            double settledProfit = fund.OcrYesterdayDate == settleDate
-                ? Math.Round(fund.OcrYesterdayIncome, 2)
-                : Math.Round(exactProfit ?? (baseAmount * actualRate / 100.0), 2);
+            decimal settledProfitBasis = fund.OcrYesterdayDate == settleDate
+                ? PortfolioAccounting.LedgerMoney(fund.OcrYesterdayIncome)
+                : PortfolioAccounting.LedgerMoney(exactProfit ?? (baseAmount * actualRate / 100.0));
+            double settledProfit = PortfolioAccounting.ToDouble(settledProfitBasis);
             double activePendingBuyAmount = GetActivePendingBuyAmount(fund, settleDate);
-            double settledDisplayAmount = PortfolioAccounting.ToDouble(
-                PortfolioAccounting.ResolveSettledDisplayAmount(
+            decimal settledLedgerAmount = PortfolioAccounting.ResolveSettledLedgerAmount(
                     Convert.ToDecimal(baseAmount),
-                    Convert.ToDecimal(settledProfit),
+                    settledProfitBasis,
                     Convert.ToDecimal(activePendingBuyAmount),
-                    exactAssets.HasValue ? Convert.ToDecimal(exactAssets.Value) : null));
+                    exactAssets.HasValue ? Convert.ToDecimal(exactAssets.Value) : null);
+            double settledDisplayAmount = PortfolioAccounting.ToDouble(settledLedgerAmount);
 
             Console.WriteLine(
-                $"[官方净值落库] code={fund.FundCode}, beforeHoldAmount={beforeHoldAmount:F2}, baseAmount={baseAmount:F2}, settledProfit={settledProfit:F2}, exactAssets={exactAssets:F2}, nextHoldAmount={settledDisplayAmount:F2}; HoldAmount随净值滚动");
+                $"[官方净值落库] code={fund.FundCode}, beforeHoldAmount={beforeHoldAmount:F2}, beforeBasis={beforeHoldAmountBasis:F4}, baseAmount={baseAmount:F4}, settledProfit={settledProfit:F2}, settledProfitBasis={settledProfitBasis:F4}, exactAssets={exactAssets:F2}, nextHoldAmount={settledDisplayAmount:F2}, nextBasis={settledLedgerAmount:F4}; HoldAmount随净值滚动");
 
             bool changed = fund.LastSettledDate != settleDate ||
                            Math.Abs(fund.LastSettledRate - actualRate) > 0.0001 ||
                            Math.Abs(fund.LastSettledProfit - settledProfit) > 0.01 ||
-                           Math.Abs(fund.HoldAmount - settledDisplayAmount) > 0.01;
+                           Math.Abs(fund.LastSettledProfitPrecise - settledProfitBasis) > 0.0001m ||
+                           Math.Abs(fund.HoldAmount - settledDisplayAmount) > 0.01 ||
+                           Math.Abs(fund.HoldAmountPrecise - settledLedgerAmount) > 0.0001m;
 
             if (!changed) return false;
 
-            fund.HoldAmount = settledDisplayAmount;
+            PortfolioSettlementService.SetHoldAmount(fund, settledLedgerAmount);
             fund.LastSettledDate = settleDate;
-            fund.LastSettledProfit = settledProfit;
+            PortfolioSettlementService.SetLastSettledProfit(fund, settledProfitBasis);
             fund.LastSettledRate = Math.Round(actualRate, 4);
 
             return true;
@@ -693,7 +698,10 @@ namespace 小白养基.Controllers
             // 今日收益率分母必须回到清算前有效基数，否则总收益率会被“已结算后的市值”稀释。
             if (fund.LastSettledDate == settleDate)
             {
-                return Math.Max(0, Math.Round(fund.HoldAmount - pending - fund.LastSettledProfit, 4));
+                var baseAmount = PortfolioSettlementService.GetHoldAmountBasis(fund)
+                    - PortfolioAccounting.LedgerMoney(pending)
+                    - PortfolioSettlementService.GetLastSettledProfitBasis(fund);
+                return Convert.ToDouble(Math.Max(0m, PortfolioAccounting.LedgerMoney(baseAmount)));
             }
 
             return GetEffectiveBaseAmount(fund, settleDate, resolvedPendingBuyAmount);
@@ -3264,6 +3272,7 @@ namespace 小白养基.Controllers
                         FundCode = item.Code,
                         FundName = item.Name,
                         HoldAmount = Math.Round(item.HoldAmount, 2),
+                        HoldAmountPrecise = PortfolioAccounting.LedgerMoney(item.HoldAmount),
                         CostAmount = newFundFullPending ? 0 : ResolveOcrConfirmedCost(item, newPendingAmount, newConfirmedAmount, 0),
                         HoldShares = newFundFullPending ? 0 : ResolveOcrConfirmedShares(item, newPendingAmount, newConfirmedAmount),
                         RealizedProfit = newFundFullPending || !HasConfirmedOcrRealizedProfit(item)
@@ -3279,6 +3288,7 @@ namespace 小白养基.Controllers
                         PendingSource = item.IsPendingBuy ? (string.IsNullOrWhiteSpace(item.PendingSource) ? "ocr" : item.PendingSource) : null,
                         LastSettledDate = (Math.Abs(item.YesterdayIncome) > 0.001 || Math.Abs(item.HoldingIncome) > 0.001) ? itemProfitDate : null,
                         LastSettledProfit = Math.Round(item.YesterdayIncome, 2),
+                        LastSettledProfitPrecise = PortfolioAccounting.LedgerMoney(item.YesterdayIncome),
                         LastSettledRate = Math.Abs(item.YesterdayIncome) > 0.001
                             ? Math.Round(item.YesterdayIncome / Math.Max(0.01, item.HoldAmount - newPendingAmount - item.YesterdayIncome) * 100.0, 4)
                             : 0,  // 修复：YesterdayIncome=0 时 LastSettledRate=0，不用 HoldingRate
@@ -3520,7 +3530,7 @@ namespace 小白养基.Controllers
 
             // HoldAmount 保留平台总资产（对齐蚂蚁），不做缩减
             if (item.HoldAmount > 0)
-                exist.HoldAmount = Math.Round(item.HoldAmount, 2);
+                PortfolioSettlementService.SetHoldAmount(exist, PortfolioAccounting.LedgerMoney(item.HoldAmount));
 
             if (isFullPending)
             {
@@ -3586,7 +3596,7 @@ namespace 小白养基.Controllers
             {
                 double confirmedBase = Math.Max(0.01, item.HoldAmount - pendingAmount - item.YesterdayIncome);
                 exist.LastSettledDate = profitDate;
-                exist.LastSettledProfit = Math.Round(item.YesterdayIncome, 2);
+                PortfolioSettlementService.SetLastSettledProfit(exist, PortfolioAccounting.LedgerMoney(item.YesterdayIncome));
                 exist.LastSettledRate = Math.Round(item.YesterdayIncome / confirmedBase * 100.0, 4);
                 Console.WriteLine($"[OCR蚂蚁清算] code={exist.FundCode}, date={profitDate}, LastSettledProfit={exist.LastSettledProfit:F2}, LastSettledRate={exist.LastSettledRate:F4}");
             }
@@ -3594,7 +3604,7 @@ namespace 小白养基.Controllers
             {
                 // YesterdayIncome=0：真实收益就是 0，不能用 HoldingRate 冒充 LastSettledRate
                 exist.LastSettledDate = profitDate;
-                exist.LastSettledProfit = 0;
+                PortfolioSettlementService.SetLastSettledProfit(exist, 0m);
                 exist.LastSettledRate = 0;
                 Console.WriteLine($"[OCR零收益] code={exist.FundCode}, date={profitDate}, YesterdayIncome=0, LastSettledProfit=0, LastSettledRate=0");
             }
@@ -3715,7 +3725,7 @@ namespace 小白养基.Controllers
                     {
                         double oldAmount = exist.HoldAmount;
                         double pendingAmount = amount > oldAmount ? Math.Round(amount - oldAmount, 2) : amount;
-                        exist.HoldAmount = Math.Round(amount, 2);
+                        PortfolioSettlementService.SetHoldAmount(exist, PortfolioAccounting.LedgerMoney(amount));
                         if (amount > oldAmount)
                         {
                             exist.CostAmount = Math.Round(Math.Max(exist.CostAmount, oldAmount) + pendingAmount, 2);
@@ -3730,6 +3740,7 @@ namespace 小白养基.Controllers
                             FundCode = code,
                             FundName = name,
                             HoldAmount = Math.Round(amount, 2),
+                            HoldAmountPrecise = PortfolioAccounting.LedgerMoney(amount),
                             CostAmount = Math.Round(amount, 2),
                             HoldShares = 0
                         };
@@ -7258,7 +7269,7 @@ namespace 小白养基.Controllers
                         {
                             if (snapshot.NavDiff.HasValue)
                             {
-                                exactProfit = Math.Round(effectiveShares * snapshot.NavDiff.Value, 2);
+                                    exactProfit = Math.Round(effectiveShares * snapshot.NavDiff.Value, 4);
                             }
 
                             if (snapshot.TodayNav.HasValue && snapshot.TodayNav.Value > 0)
@@ -7331,7 +7342,7 @@ namespace 小白养基.Controllers
                     double? exactProfit = null;
                     if (shares > 0 && snapshot.NavDiff.HasValue)
                     {
-                        exactProfit = Math.Round(shares * snapshot.NavDiff.Value, 2);
+                        exactProfit = Math.Round(shares * snapshot.NavDiff.Value, 4);
                     }
 
                     var result = (snapshot.Rate, exactProfit);
@@ -9974,7 +9985,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             double oldPending = fund.PendingBuyAmount;
             ClearPendingBuy(fund);
             fund.LastSettledDate = null;
-            fund.LastSettledProfit = 0;
+            PortfolioSettlementService.SetLastSettledProfit(fund, 0m);
             fund.LastSettledRate = 0;
             await _context.SaveChangesAsync();
             ClearTodayCache(req.Username);

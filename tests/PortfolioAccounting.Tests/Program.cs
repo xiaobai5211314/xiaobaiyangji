@@ -158,6 +158,38 @@ Equal(
     "settlement.displayAmount.rollsFromRoundedProfitOnNextDay");
 
 Equal(
+    101.2394m,
+    PortfolioAccounting.ResolveSettledLedgerAmount(
+        baseAmount: 100.0049m,
+        settledProfit: 1.2345m,
+        activePendingBuyAmount: 0m),
+    "settlement.ledgerAmount.keepsFourDecimals");
+
+Equal(
+    101.24m,
+    PortfolioAccounting.ResolveSettledDisplayAmount(
+        baseAmount: 100.0049m,
+        settledProfit: 1.2345m,
+        activePendingBuyAmount: 0m),
+    "settlement.displayAmount.roundsLedgerAtBoundary");
+
+var preciseSettlement = new PortfolioSettlementService();
+var preciseFund = new MyFundConfig
+{
+    HoldAmount = 100.00,
+    HoldAmountPrecise = 100.0049m
+};
+if (!preciseSettlement.ApplyOneDaySettlement(preciseFund, 1.23, "2026-07-07", exactProfit: 1.2345))
+    throw new InvalidOperationException("settlement.precise.changed: first settlement should update the ledger amount");
+Equal(101.24m, PortfolioAccounting.Money(preciseFund.HoldAmount), "settlement.precise.displayAmount");
+Equal(101.2394m, PortfolioAccounting.LedgerMoney(preciseFund.HoldAmountPrecise), "settlement.precise.ledgerAmount");
+Equal(1.23m, PortfolioAccounting.Money(preciseFund.LastSettledProfit), "settlement.precise.displayProfit");
+Equal(1.2345m, PortfolioAccounting.LedgerMoney(preciseFund.LastSettledProfitPrecise), "settlement.precise.ledgerProfit");
+if (preciseSettlement.ApplyOneDaySettlement(preciseFund, 1.23, "2026-07-07", exactProfit: 1.2345))
+    throw new InvalidOperationException("settlement.precise.repeat: same-day repeat settlement must not drift");
+Equal(100.0049m, PortfolioAccounting.LedgerMoney(preciseSettlement.GetDailyBaseAmount(preciseFund, "2026-07-07")), "settlement.precise.repeatBase");
+
+Equal(
     33198.62m,
     PortfolioAccounting.ResolveSettledDisplayAmount(
         baseAmount: 33220.53m,

@@ -51,6 +51,14 @@ namespace 小白养基.Models
                 .IsUnique()
                 .HasDatabaseName("IX_MyFundConfig_User_Code");
 
+            modelBuilder.Entity<MyFundConfig>()
+                .Property(f => f.HoldAmountPrecise)
+                .HasColumnType("decimal(20,4)");
+
+            modelBuilder.Entity<MyFundConfig>()
+                .Property(f => f.LastSettledProfitPrecise)
+                .HasColumnType("decimal(20,4)");
+
             modelBuilder.Entity<DailyArchive>()
                 .HasIndex(a => new { a.Username, a.RecordDate, a.FundCode })
                 .HasDatabaseName("IX_DailyArchive_User_Date_Code");
