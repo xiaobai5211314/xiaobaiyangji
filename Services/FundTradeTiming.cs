@@ -3,9 +3,11 @@ using System.Text.RegularExpressions;
 namespace 小白养基.Services
 {
     // Rule sources:
-    // - T-day cutoff at 15:00 and holiday rollover: https://help.1234567.com.cn/question_243.html
-    // - Common open-end fund T+1 and QDII T+2 examples: https://www.chinaamc.com/c/2014-02-21/601825.shtml
-    // - QDII/FOF confirmation may differ by product; OCR/extracted platform dates must override this default.
+    // - 15:00 cutoff and ordinary T+1 confirmation:
+    //   https://www.csrc.gov.cn/shenzhen/c105614/c7602071/content.shtml
+    // - Product-specific query/confirmation examples:
+    //   https://m.chinaamc.com/cjwt/gmwt/5501300.shtml
+    // QDII/FOF dates differ by product. Platform/OCR dates always override this estimate.
     public sealed record FundTradeTimingResult(
         string TradeDate,
         string ConfirmDate,
@@ -46,8 +48,10 @@ namespace 小白养基.Services
         {
             var market = DetectMarket(fundName);
             var confirmTradingDays = ConfirmTradingDays(fundName);
-            var tradeDate = ResolveTradeDate(submitDate, afterCutoff, market);
-            var confirmDate = MarketCalendar.AddTradingDays(tradeDate, confirmTradingDays, market);
+            // OTC fund sales use the domestic sales-day calendar as the safe default.
+            // Overseas-market opening rules are product-specific and cannot be inferred from a name.
+            var tradeDate = ResolveTradeDate(submitDate, afterCutoff, "cn");
+            var confirmDate = MarketCalendar.AddTradingDays(tradeDate, confirmTradingDays, "cn");
             var firstProfitDate = confirmDate;
 
             return new FundTradeTimingResult(

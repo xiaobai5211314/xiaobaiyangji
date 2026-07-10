@@ -30,20 +30,6 @@ export interface FundTodayItem {
   currentRate?: number;
   rawCurrentRate?: number;
   diffRate?: number;
-  fundFlow?: FundCapitalFlowRow;
-  fundFlowDirection?: string;
-  fundFlowTradeDate?: string;
-  fundFlowSource?: string;
-  fundFlowMessage?: string;
-  fundFlowIn?: number;
-  fundFlowInText?: string;
-  fundFlowOut?: number;
-  fundFlowOutText?: string;
-  fundFlowNet?: number;
-  fundFlowNetText?: string;
-  fundFlowMainRatio?: number;
-  fundFlowAvailable?: boolean;
-  fundFlowStale?: boolean;
   isSettled?: boolean;
   isHoliday?: boolean;
   actualRate?: number;
@@ -105,43 +91,6 @@ export interface FundTodayItem {
   data?: Array<[unknown, unknown]>;
   breakEvenSimulator?: unknown[];
   [key: string]: unknown;
-}
-
-export interface FundCapitalFlowRow {
-  code?: string;
-  name?: string;
-  secid?: string;
-  isAvailable?: boolean;
-  isFallback?: boolean;
-  isStale?: boolean;
-  direction?: string;
-  tradeDate?: string;
-  source?: string;
-  message?: string;
-  fundFlowIn?: number;
-  fundFlowInText?: string;
-  fundFlowOut?: number;
-  fundFlowOutText?: string;
-  fundFlowNet?: number;
-  fundFlowNetText?: string;
-  mainNet?: number;
-  mainNetText?: string;
-  mainRatio?: number;
-  superNet?: number;
-  bigNet?: number;
-  mediumNet?: number;
-  smallNet?: number;
-  close?: number;
-  changeRate?: number;
-  [key: string]: unknown;
-}
-
-export interface FundCapitalFlowResponse {
-  source?: string;
-  updatedAt?: string;
-  isFallback?: boolean;
-  message?: string;
-  rows?: FundCapitalFlowRow[];
 }
 
 export interface OcrImportPreviewItem {
@@ -221,27 +170,6 @@ export function getTodayFunds(username: string, force = false, silent = false) {
     if (Array.isArray(raw)) return raw as FundTodayItem[];
     if (raw && typeof raw === 'object' && 'funds' in raw) return (raw as { funds: FundTodayItem[] }).funds;
     return [] as FundTodayItem[];
-  });
-}
-
-export function getFundCapitalFlows(username: string, codes: string[], force = false, silent = false) {
-  const normalizedCodes = Array.from(
-    new Set(codes.map((code) => String(code || '').trim()).filter(Boolean))
-  );
-  if (!normalizedCodes.length) {
-    return Promise.resolve({ rows: [] } as FundCapitalFlowResponse);
-  }
-
-  const query = [
-    `username=${encodeURIComponent(username)}`,
-    `codes=${encodeURIComponent(normalizedCodes.join(','))}`,
-    force ? `force=true&_t=${Date.now()}` : ''
-  ].filter(Boolean).join('&');
-
-  return get<FundCapitalFlowResponse>(`/api/fund/fund-flow?${query}`, {
-    loadingText: '读取资金流',
-    silent,
-    fallbackData: { rows: [] }
   });
 }
 

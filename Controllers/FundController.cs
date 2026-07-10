@@ -60,44 +60,6 @@ namespace 小白养基.Controllers
             public object? Debug { get; set; }
         }
 
-        public class FundCapitalFlowRowDto
-        {
-            public string Code { get; set; } = string.Empty;
-            public string Name { get; set; } = string.Empty;
-            public string Secid { get; set; } = string.Empty;
-            public bool IsAvailable { get; set; }
-            public bool IsFallback { get; set; }
-            public bool IsStale { get; set; }
-            public string Direction { get; set; } = "unknown";
-            public string TradeDate { get; set; } = string.Empty;
-            public string Source { get; set; } = string.Empty;
-            public string Message { get; set; } = string.Empty;
-            public double FundFlowIn { get; set; }
-            public string FundFlowInText { get; set; } = string.Empty;
-            public double FundFlowOut { get; set; }
-            public string FundFlowOutText { get; set; } = string.Empty;
-            public double FundFlowNet { get; set; }
-            public string FundFlowNetText { get; set; } = string.Empty;
-            public double MainNet { get; set; }
-            public string MainNetText { get; set; } = string.Empty;
-            public double MainRatio { get; set; }
-            public double SuperNet { get; set; }
-            public double BigNet { get; set; }
-            public double MediumNet { get; set; }
-            public double SmallNet { get; set; }
-            public double Close { get; set; }
-            public double ChangeRate { get; set; }
-        }
-
-        public class FundCapitalFlowPayloadDto
-        {
-            public string Source { get; set; } = string.Empty;
-            public string UpdatedAt { get; set; } = string.Empty;
-            public bool IsFallback { get; set; }
-            public string Message { get; set; } = string.Empty;
-            public List<FundCapitalFlowRowDto> Rows { get; set; } = new();
-        }
-
         private sealed class ExternalDataAttemptDto
         {
             public string Source { get; init; } = string.Empty;
@@ -138,8 +100,6 @@ namespace 小白养基.Controllers
         private static readonly TimeSpan _historicalKlineFreshTtl = TimeSpan.FromDays(7);
         private static readonly TimeSpan _capitalFlowFreshTtl = TimeSpan.FromMinutes(2);
         private static readonly TimeSpan _capitalFlowStaleTtl = TimeSpan.FromDays(1);
-        private static readonly TimeSpan _fundFlowStaleTtl = TimeSpan.FromDays(7);
-        private const string FundCapitalFlowSource = "东方财富场内基金资金流（日线接口，待核实）";
 
         private static TimeSpan GetExternalDataFreshTtl()
         {
@@ -384,7 +344,9 @@ namespace 小白养基.Controllers
         {
             if (amount <= 0) return;
             fund.PendingBuyAmount = Math.Round(amount, 2);
+            fund.PendingBuyShares = 0;
             fund.PendingSellAmount = 0;
+            fund.PendingSellShares = 0;
             fund.PendingTradeDate = tradeDate;
             fund.PendingTradeTime = ChinaNow().ToString("HH:mm:ss");
             fund.PendingTradeStatus = "pending_buy";
@@ -398,6 +360,7 @@ namespace 小白养基.Controllers
         {
             if (fund.PendingBuyAmount <= 0 && fund.LastAddAmount <= 0) return;
             fund.PendingBuyAmount = 0;
+            fund.PendingBuyShares = 0;
             if (fund.LastAddAmount > 0)
             {
                 fund.LastAddAmount = 0;
@@ -435,18 +398,7 @@ namespace 小白养基.Controllers
         }
 
         private static double GetEffectiveShares(MyFundConfig fund, string settleDate)
-        {
-            if (fund.HoldShares <= 0) return 0;
-
-            double baseAmount = GetEffectiveBaseAmount(fund, settleDate);
-            var holdAmountBasis = PortfolioSettlementService.GetHoldAmountBasis(fund);
-            if (fund.LastTradeDate == settleDate && Math.Abs(fund.LastAddAmount) > 0.000001 && holdAmountBasis > 0m)
-            {
-                return Math.Max(0, fund.HoldShares * (baseAmount / Convert.ToDouble(holdAmountBasis)));
-            }
-
-            return fund.HoldShares;
-        }
+            => PortfolioSettlementService.GetEffectiveShares(fund, settleDate);
 
         private sealed class OfficialNavSnapshot
         {
@@ -1560,8 +1512,8 @@ namespace 小白养基.Controllers
             {
                 var market = FundTradeTiming.DetectMarket(fund.FundName);
                 var confirmTradingDays = FundTradeTiming.ConfirmTradingDays(fund.FundName);
-                var normalizedTradeDate = MarketCalendar.GetNextTradingDate(tradeDate, market);
-                var confirmDate = MarketCalendar.AddTradingDays(normalizedTradeDate, confirmTradingDays, market);
+                var normalizedTradeDate = MarketCalendar.GetNextTradingDate(tradeDate, "cn");
+                var confirmDate = MarketCalendar.AddTradingDays(normalizedTradeDate, confirmTradingDays, "cn");
                 return new FundTradeTimingResult(
                     normalizedTradeDate.ToString("yyyy-MM-dd"),
                     confirmDate.ToString("yyyy-MM-dd"),
@@ -3770,57 +3722,9 @@ namespace 小白养基.Controllers
             return BadRequest("未找到该基金配置");
         }
 
-        [HttpPost("settle-nightly")]
-        public async Task<IActionResult> SettleNightly([FromForm] string username, [FromForm] string codes, [FromForm] string rates)
-        {
-            if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(codes)) return BadRequest("缺少清算参数！");
-
-            try
-            {
-                var codeList = codes.Split(',');
-                var rateList = rates.Split(',');
-
-                var funds = await _context.MyFunds.Where(f => f.Username == username).ToListAsync();
-                int count = 0;
-
-                for (int i = 0; i < codeList.Length; i++)
-                {
-                    var fund = funds.FirstOrDefault(f => f.FundCode == codeList[i]);
-                    if (fund != null && i < rateList.Length)
-                    {
-                        if (double.TryParse(rateList[i], out double rate))
-                        {
-                            var settleDate = ChinaDateDash();
-                            if (ApplyOneDaySettlement(fund, rate, settleDate))
-                            {
-                                count++;
-                            }
-                        }
-                    }
-                }
-
-                if (count > 0)
-                {
-                    var settleDate = ChinaNow().Date;
-                    var fundCodes = funds.Select(f => f.FundCode).Distinct().ToList();
-                    var todayRecords = await _context.FundRecords
-                        .Where(r => r.FetchTime >= settleDate && fundCodes.Contains(r.FundCode))
-                        .ToListAsync();
-                    await UpsertTodayArchivesFromCurrentHoldingsAsync(username, settleDate, funds, todayRecords);
-                }
-
-                await _context.SaveChangesAsync();
-                ClearTodayCache(username);
-                return Ok($"已清算 {count} 只基金，并已同步今日收益档案！");
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, $"清算异常: {ex.Message}");
-            }
-        }
-
-        [HttpGet("auto-settle")]
-        public async Task<IActionResult> AutoSettle()
+        // Retired: this legacy path used intraday estimates as settlement input.
+        [NonAction]
+        private async Task<IActionResult> AutoSettle()
         {
             try
             {
@@ -7278,7 +7182,10 @@ namespace 小白养基.Controllers
                             }
                         }
 
-                        if (ApplyOneDaySettlement(fund, snapshot.Rate, actualSettleDate, exactProfit, exactAssets))
+                        bool changed = ApplyOneDaySettlement(fund, snapshot.Rate, actualSettleDate, exactProfit, exactAssets);
+                        changed |= PortfolioSettlementService.CapturePendingBuyShares(fund, actualSettleDate, snapshot.TodayNav);
+                        changed |= PortfolioSettlementService.ConfirmPendingBuyIfDue(fund, actualSettleDate);
+                        if (changed)
                         {
                             updated++;
                         }
@@ -7388,13 +7295,16 @@ namespace 小白养基.Controllers
                 return Ok(new
                 {
                     success = true,
-                    msg = $"加仓成功！T日[{timing.TradeDate}]，确认日[{timing.ConfirmDate}]，注入资金: {addAmount:F2} 元",
+                    msg = $"加仓成功！T日[{timing.TradeDate}]，预计确认日[{timing.ConfirmDate}]，注入资金: {addAmount:F2} 元",
                     tradeDate = timing.TradeDate,
                     confirmDate = timing.ConfirmDate,
                     firstProfitDate = timing.FirstProfitDate,
-                    market = timing.Market
+                    market = timing.Market,
+                    timingEstimated = true
                 });
             }
+            catch (ArgumentOutOfRangeException ex) { return BadRequest(ex.Message); }
+            catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
             catch (Exception ex) { return StatusCode(500, $"加仓异常: {ex.Message}"); }
         }
 
@@ -7424,11 +7334,13 @@ namespace 小白养基.Controllers
             await _context.SaveChangesAsync();
             ClearTodayCache(username);
 
-            bool isPending = fund.HoldShares <= 0 && profit == 0 && !(reduceAmount.GetValueOrDefault() > 0);
+            bool isPending = string.Equals(fund.PendingTradeStatus, "pending_sell", StringComparison.OrdinalIgnoreCase)
+                && fund.PendingSellShares > 0
+                && profit == 0;
             string msg = isPending
-                ? $"T日[{timing.TradeDate}] 减仓已记录，确认日[{timing.ConfirmDate}]，赎回金额待确认。请在蚂蚁财富查看确认金额后，再次减仓并填写实际到手金额。"
+                ? $"T日[{timing.TradeDate}] 减仓已记录，预计确认日[{timing.ConfirmDate}]。确认后请用相同份额填写实际到账金额完成结转。"
                 : $"T日[{timing.TradeDate}] 减仓完毕！归库利润: {profit:F2} 元";
-            return Ok(new { success = true, msg, pendingRedeem = isPending, tradeDate = timing.TradeDate, confirmDate = timing.ConfirmDate, firstProfitDate = timing.FirstProfitDate, market = timing.Market });
+            return Ok(new { success = true, msg, pendingRedeem = isPending, tradeDate = timing.TradeDate, confirmDate = timing.ConfirmDate, firstProfitDate = timing.FirstProfitDate, market = timing.Market, timingEstimated = true });
         }
 
         // =========================================================================
@@ -8300,299 +8212,6 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
         {
             public CapitalFlowPayloadDto Payload { get; init; } = new();
             public string Source { get; init; } = string.Empty;
-        }
-
-        [HttpGet("fund-flow")]
-        public async Task<IActionResult> GetFundCapitalFlow(
-            [FromQuery] string? username = null,
-            [FromQuery] string? codes = null,
-            [FromQuery] bool force = false)
-        {
-            Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0";
-            Response.Headers["Pragma"] = "no-cache";
-            Response.Headers["Expires"] = "0";
-
-            var codeList = NormalizeFundFlowCodes(codes);
-            var nameByCode = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            if (!string.IsNullOrWhiteSpace(username))
-            {
-                var userFunds = await _context.MyFunds
-                    .AsNoTracking()
-                    .Where(f => f.Username == username)
-                    .Select(f => new { f.FundCode, f.FundName })
-                    .ToListAsync();
-
-                foreach (var fund in userFunds)
-                {
-                    if (string.IsNullOrWhiteSpace(fund.FundCode)) continue;
-                    var normalizedCode = Regex.Replace(fund.FundCode.Trim(), @"\D", "");
-                    if (normalizedCode.Length == 6)
-                    {
-                        nameByCode[normalizedCode] = fund.FundName ?? string.Empty;
-                    }
-                }
-
-                if (codeList.Count == 0)
-                {
-                    codeList = userFunds
-                        .Select(f => f.FundCode)
-                        .Where(c => !string.IsNullOrWhiteSpace(c))
-                        .Select(c => c.Trim())
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .Take(50)
-                        .ToList();
-                }
-            }
-
-            if (codeList.Count == 0)
-            {
-                return Ok(new FundCapitalFlowPayloadDto
-                {
-                    Source = FundCapitalFlowSource,
-                    UpdatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
-                    Message = "缺少基金代码",
-                    Rows = new List<FundCapitalFlowRowDto>()
-                });
-            }
-
-            var rows = new List<FundCapitalFlowRowDto>();
-            foreach (var code in codeList.Take(50))
-            {
-                nameByCode.TryGetValue(code, out var fallbackName);
-                rows.Add(await GetFundCapitalFlowRowAsync(code, fallbackName, force));
-            }
-
-            var hasFallback = rows.Any(x => x.IsFallback);
-            return Ok(new FundCapitalFlowPayloadDto
-            {
-                Source = FundCapitalFlowSource,
-                UpdatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
-                IsFallback = hasFallback,
-                Message = rows.Any(x => x.IsAvailable)
-                    ? "场内基金资金流来自公开行情接口；普通场外基金暂无公开资金流"
-                    : "当前持仓暂无可用公开资金流",
-                Rows = rows
-            });
-        }
-
-        private static List<string> NormalizeFundFlowCodes(string? codes)
-        {
-            if (string.IsNullOrWhiteSpace(codes)) return new List<string>();
-
-            return codes
-                .Split(new[] { ',', ';', '|', ' ', '\n', '\r', '\t' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(x => Regex.Replace(x.Trim(), @"\D", ""))
-                .Where(x => x.Length == 6)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Take(50)
-                .ToList();
-        }
-
-        private async Task<FundCapitalFlowRowDto> GetFundCapitalFlowRowAsync(string code, string? fallbackName, bool force)
-        {
-            var secid = ResolveListedFundSecid(code);
-            if (string.IsNullOrWhiteSpace(secid))
-            {
-                return CreateUnavailableFundFlowRow(code, fallbackName, "普通场外基金暂无公开场内资金流");
-            }
-
-            var cacheKey = $"fund_flow_v1_{secid}";
-            if (!force)
-            {
-                var (cached, _) = await _marketCache.TryGetAsync<FundCapitalFlowRowDto>(cacheKey);
-                if (cached != null)
-                {
-                    return cached;
-                }
-            }
-
-            try
-            {
-                var http = _httpClientFactory.CreateClient("EastMoneyQuote");
-                var row = await FetchFundCapitalFlowRowAsync(http, code, fallbackName, secid);
-                await _marketCache.SetAsync(cacheKey, row, GetExternalDataFreshTtl(), _fundFlowStaleTtl, "eastmoney-fund-flow");
-                return row;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[fund-flow] {code} fetch failed: {ex.Message}");
-                try
-                {
-                    var (stale, _) = await _marketCache.TryGetStaleAsync<FundCapitalFlowRowDto>(cacheKey, _fundFlowStaleTtl);
-                    if (stale != null)
-                    {
-                        return CloneFundFlowRow(stale, isFallback: true, isStale: true, message: "资金流使用缓存数据");
-                    }
-                }
-                catch { }
-
-                return CreateUnavailableFundFlowRow(code, fallbackName, "资金流暂不可用");
-            }
-        }
-
-        private static string? ResolveListedFundSecid(string code)
-        {
-            var normalized = Regex.Replace(code ?? string.Empty, @"\D", "");
-            if (normalized.Length != 6) return null;
-
-            if (normalized.StartsWith("50", StringComparison.Ordinal) ||
-                normalized.StartsWith("51", StringComparison.Ordinal) ||
-                normalized.StartsWith("52", StringComparison.Ordinal) ||
-                normalized.StartsWith("56", StringComparison.Ordinal) ||
-                normalized.StartsWith("58", StringComparison.Ordinal))
-            {
-                return $"1.{normalized}";
-            }
-
-            if (normalized.StartsWith("15", StringComparison.Ordinal) ||
-                normalized.StartsWith("16", StringComparison.Ordinal) ||
-                normalized.StartsWith("18", StringComparison.Ordinal))
-            {
-                return $"0.{normalized}";
-            }
-
-            return null;
-        }
-
-        private static FundCapitalFlowRowDto CreateUnavailableFundFlowRow(string code, string? name, string message)
-        {
-            return new FundCapitalFlowRowDto
-            {
-                Code = code,
-                Name = name ?? string.Empty,
-                IsAvailable = false,
-                IsStale = true,
-                Direction = "unknown",
-                Source = FundCapitalFlowSource,
-                Message = message
-            };
-        }
-
-        private static FundCapitalFlowRowDto CloneFundFlowRow(
-            FundCapitalFlowRowDto row,
-            bool isFallback,
-            bool isStale,
-            string message)
-        {
-            return new FundCapitalFlowRowDto
-            {
-                Code = row.Code,
-                Name = row.Name,
-                Secid = row.Secid,
-                IsAvailable = row.IsAvailable,
-                IsFallback = isFallback,
-                IsStale = isStale,
-                Direction = row.Direction,
-                TradeDate = row.TradeDate,
-                Source = row.Source,
-                Message = message,
-                FundFlowIn = row.FundFlowIn,
-                FundFlowInText = row.FundFlowInText,
-                FundFlowOut = row.FundFlowOut,
-                FundFlowOutText = row.FundFlowOutText,
-                FundFlowNet = row.FundFlowNet,
-                FundFlowNetText = row.FundFlowNetText,
-                MainNet = row.MainNet,
-                MainNetText = row.MainNetText,
-                MainRatio = row.MainRatio,
-                SuperNet = row.SuperNet,
-                BigNet = row.BigNet,
-                MediumNet = row.MediumNet,
-                SmallNet = row.SmallNet,
-                Close = row.Close,
-                ChangeRate = row.ChangeRate
-            };
-        }
-
-        private static async Task<FundCapitalFlowRowDto> FetchFundCapitalFlowRowAsync(
-            HttpClient http,
-            string code,
-            string? fallbackName,
-            string secid)
-        {
-            var ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            var url = $"https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get?secid={Uri.EscapeDataString(secid)}&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63&klt=101&lmt=1&_={ts}";
-            var body = await FetchWithRetryAsync(http, url, source: "fund-flow-daykline");
-            using var doc = JsonDocument.Parse(body);
-
-            if (!doc.RootElement.TryGetProperty("data", out var data) ||
-                data.ValueKind == JsonValueKind.Null ||
-                !data.TryGetProperty("klines", out var klines) ||
-                klines.ValueKind != JsonValueKind.Array ||
-                klines.GetArrayLength() == 0)
-            {
-                throw new InvalidOperationException("fund flow kline missing");
-            }
-
-            var kline = klines[0].GetString();
-            if (string.IsNullOrWhiteSpace(kline)) throw new InvalidOperationException("fund flow kline empty");
-
-            var name = fallbackName ?? string.Empty;
-            if (data.TryGetProperty("name", out var nameElement))
-            {
-                var apiName = nameElement.GetString();
-                if (!string.IsNullOrWhiteSpace(apiName)) name = apiName;
-            }
-
-            return ParseFundCapitalFlowKline(code, name, secid, kline);
-        }
-
-        private static FundCapitalFlowRowDto ParseFundCapitalFlowKline(string code, string name, string secid, string kline)
-        {
-            var parts = kline.Split(',');
-            if (parts.Length < 13) throw new InvalidOperationException("fund flow kline format invalid");
-
-            double read(int index)
-            {
-                return index >= 0 && index < parts.Length && TryParseInvariantDouble(parts[index], out var value)
-                    ? value
-                    : 0d;
-            }
-
-            var tradeDate = parts[0].Trim();
-            var mainNet = read(1);
-            var smallNet = read(2);
-            var mediumNet = read(3);
-            var bigNet = read(4);
-            var superNet = read(5);
-            var mainRatio = read(6);
-            var close = read(11);
-            var changeRate = read(12);
-            var buckets = new[] { smallNet, mediumNet, bigNet, superNet };
-            var fundFlowIn = buckets.Where(x => x > 0).Sum();
-            var fundFlowOut = Math.Abs(buckets.Where(x => x < 0).Sum());
-            var expectedDate = GetEffectiveFundDateInfo(ChinaNow(), "cn").EffectiveDateText;
-            var isStale = !string.Equals(tradeDate, expectedDate, StringComparison.Ordinal);
-
-            return new FundCapitalFlowRowDto
-            {
-                Code = code,
-                Name = name,
-                Secid = secid,
-                IsAvailable = true,
-                IsFallback = false,
-                IsStale = isStale,
-                Direction = mainNet > 0 ? "inflow" : mainNet < 0 ? "outflow" : "flat",
-                TradeDate = tradeDate,
-                Source = FundCapitalFlowSource,
-                Message = isStale ? "资金流为最近可用交易日数据" : string.Empty,
-                FundFlowIn = Math.Round(fundFlowIn, 2),
-                FundFlowInText = FormatMoneyWanYi(fundFlowIn),
-                FundFlowOut = Math.Round(fundFlowOut, 2),
-                FundFlowOutText = FormatMoneyWanYi(fundFlowOut),
-                FundFlowNet = Math.Round(mainNet, 2),
-                FundFlowNetText = FormatMoneyWanYi(mainNet),
-                MainNet = Math.Round(mainNet, 2),
-                MainNetText = FormatMoneyWanYi(mainNet),
-                MainRatio = Math.Round(mainRatio, 2),
-                SuperNet = Math.Round(superNet, 2),
-                BigNet = Math.Round(bigNet, 2),
-                MediumNet = Math.Round(mediumNet, 2),
-                SmallNet = Math.Round(smallNet, 2),
-                Close = Math.Round(close, 4),
-                ChangeRate = Math.Round(changeRate, 2)
-            };
         }
 
         [HttpGet("capital-flow")]

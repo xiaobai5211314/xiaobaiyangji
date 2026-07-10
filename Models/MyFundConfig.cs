@@ -34,7 +34,9 @@ namespace 小白养基.Models
 
         // 买入/卖出待确认：蚂蚁显示“交易进行中/未确认份额”时，金额可以展示，但不能参与今日收益。
         public double PendingBuyAmount { get; set; } = 0;
+        public double PendingBuyShares { get; set; } = 0;
         public double PendingSellAmount { get; set; } = 0;
+        public double PendingSellShares { get; set; } = 0;
         [MaxLength(20)]
         public string? PendingTradeDate { get; set; }
         [MaxLength(20)]

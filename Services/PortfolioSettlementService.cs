@@ -120,18 +120,51 @@ namespace 小白养基.Services
             return GetEffectiveBaseAmount(fund, settleDate);
         }
 
-        public double GetEffectiveShares(MyFundConfig fund, string settleDate)
+        public static double GetEffectiveShares(MyFundConfig fund, string settleDate)
         {
             if (fund.HoldShares <= 0) return 0;
 
-            double baseAmount = GetEffectiveBaseAmount(fund, settleDate);
-            var holdAmountBasis = GetHoldAmountBasis(fund);
-            if (fund.LastTradeDate == settleDate && Math.Abs(fund.LastAddAmount) > 0.000001 && holdAmountBasis > 0m)
+            var activePendingBuy = GetActivePendingBuyAmount(fund, settleDate);
+            return activePendingBuy > 0 && fund.PendingBuyShares > 0
+                ? Math.Max(0, fund.HoldShares - fund.PendingBuyShares)
+                : fund.HoldShares;
+        }
+
+        public static bool CapturePendingBuyShares(MyFundConfig fund, string settleDate, double? purchaseNav)
+        {
+            if (!string.Equals(fund.PendingTradeStatus, "pending_buy", StringComparison.OrdinalIgnoreCase)
+                || fund.PendingBuyAmount <= 0
+                || fund.PendingBuyShares > 0
+                || fund.PendingTradeDate != settleDate
+                || !purchaseNav.HasValue
+                || purchaseNav.Value <= 0)
             {
-                return Math.Max(0, fund.HoldShares * (baseAmount / Convert.ToDouble(holdAmountBasis)));
+                return false;
             }
 
-            return fund.HoldShares;
+            var pendingShares = Math.Round(fund.PendingBuyAmount / purchaseNav.Value, 4);
+            if (pendingShares <= 0) return false;
+
+            fund.PendingBuyShares = pendingShares;
+            fund.HoldShares = Math.Round(fund.HoldShares + pendingShares, 4);
+            return true;
+        }
+
+        public static bool ConfirmPendingBuyIfDue(MyFundConfig fund, string settleDate)
+        {
+            if (!string.Equals(fund.PendingTradeStatus, "pending_buy", StringComparison.OrdinalIgnoreCase)
+                || string.IsNullOrWhiteSpace(fund.PendingConfirmDate)
+                || string.CompareOrdinal(fund.PendingConfirmDate, settleDate) > 0
+                || fund.PendingBuyShares <= 0)
+            {
+                return false;
+            }
+
+            fund.PendingBuyAmount = 0;
+            fund.PendingBuyShares = 0;
+            fund.PendingTradeStatus = "confirmed";
+            if (fund.LastAddAmount > 0) fund.LastAddAmount = 0;
+            return true;
         }
 
         public bool ApplyOneDaySettlement(MyFundConfig fund, double actualRate, string settleDate, double? exactProfit = null)
@@ -167,10 +200,26 @@ namespace 小白养基.Services
         {
             if (addAmount <= 0) throw new ArgumentOutOfRangeException(nameof(addAmount), "加仓金额必须大于 0。");
 
+            var existingPending = GetActivePendingBuyAmount(fund, tradeDate);
+            if (string.Equals(fund.PendingTradeStatus, "pending_buy", StringComparison.OrdinalIgnoreCase)
+                && fund.PendingBuyAmount > 0
+                && existingPending <= 0)
+            {
+                throw new InvalidOperationException("上一笔买入尚未完成份额结转，请等待官方净值清算。");
+            }
+            if (existingPending > 0
+                && (!string.Equals(fund.PendingTradeDate, tradeDate, StringComparison.Ordinal)
+                    || fund.PendingBuyShares > 0))
+            {
+                throw new InvalidOperationException("已有其他买入待确认，请等待确认后再记录下一笔加仓。");
+            }
+
             SetHoldAmount(fund, GetHoldAmountBasis(fund) + PortfolioAccounting.LedgerMoney(addAmount));
             fund.CostAmount = Math.Round(fund.CostAmount + addAmount, 2);
-            fund.PendingBuyAmount = Math.Round(GetActivePendingBuyAmount(fund, tradeDate) + addAmount, 2);
+            fund.PendingBuyAmount = Math.Round(existingPending + addAmount, 2);
+            fund.PendingBuyShares = 0;
             fund.PendingSellAmount = 0;
+            fund.PendingSellShares = 0;
             fund.PendingTradeDate = tradeDate;
             fund.PendingTradeTime = ChinaNow().ToString("HH:mm:ss");
             fund.PendingTradeStatus = "pending_buy";
@@ -188,19 +237,33 @@ namespace 小白养基.Services
             }
         }
 
-        // Pending sell marker: -(soldCost + 1) in LastAddAmount when HoldShares=0 and no confirmed amount
-        private const double PendingMarkerOffset = 1.0;
-
         public static bool IsPendingRedeem(MyFundConfig fund)
-            => fund.HoldShares <= 0 && fund.LastAddAmount < -PendingMarkerOffset;
+            => string.Equals(fund.PendingTradeStatus, "pending_sell", StringComparison.OrdinalIgnoreCase)
+               && fund.PendingSellShares > 0;
 
         public static double GetSoldCost(MyFundConfig fund)
-            => IsPendingRedeem(fund) ? Math.Abs(fund.LastAddAmount) - PendingMarkerOffset : 0;
+            => IsPendingRedeem(fund) ? Math.Max(0, fund.PendingSellAmount) : 0;
 
         public double ReducePosition(MyFundConfig fund, double reduceShares, double? reduceAmount, string tradeDate, string? confirmDate = null)
         {
             if (reduceShares <= 0) throw new ArgumentOutOfRangeException(nameof(reduceShares), "减仓份额必须大于 0。");
             if (fund.HoldShares <= 0) throw new InvalidOperationException("当前基金未记录有效份额，无法按份额减仓。");
+
+            bool confirmsPendingSell = reduceAmount.GetValueOrDefault() > 0
+                && string.Equals(fund.PendingTradeStatus, "pending_sell", StringComparison.OrdinalIgnoreCase)
+                && fund.PendingSellShares > 0;
+            if (confirmsPendingSell)
+            {
+                if (Math.Abs(reduceShares - fund.PendingSellShares) > 0.0001)
+                    throw new InvalidOperationException($"确认份额必须与待确认赎回份额 {fund.PendingSellShares:F4} 一致。");
+                tradeDate = string.IsNullOrWhiteSpace(fund.PendingTradeDate) ? tradeDate : fund.PendingTradeDate;
+            }
+            else if (!reduceAmount.GetValueOrDefault().Equals(0d)
+                     && string.Equals(fund.PendingTradeStatus, "pending_sell", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("已有赎回待确认，请先完成原交易确认。");
+            }
+
             if (reduceShares > fund.HoldShares) throw new InvalidOperationException("减仓份额不能大于持仓份额。");
 
             double oldShares = fund.HoldShares;
@@ -208,8 +271,6 @@ namespace 小白养基.Services
             decimal holdAmountBasis = GetHoldAmountBasis(fund);
             decimal unitAmount = holdAmountBasis / Convert.ToDecimal(oldShares);
             double soldCost = unitCost * reduceShares;
-            bool isFullSell = Math.Abs(reduceShares - oldShares) < 0.0001;
-
             double confirmedAmount = reduceAmount.GetValueOrDefault();
             bool hasConfirmed = confirmedAmount > 0;
 
@@ -231,6 +292,7 @@ namespace 小白养基.Services
                     fund.LastAddAmount = Math.Round(-confirmedAmount, 2);
                 }
                 fund.PendingSellAmount = 0;
+                fund.PendingSellShares = 0;
                 if (fund.PendingTradeStatus == "pending_sell")
                 {
                     fund.PendingTradeStatus = "confirmed";
@@ -240,36 +302,20 @@ namespace 小白养基.Services
             }
             else
             {
-                // No confirmed amount: mark as pending
-                fund.HoldShares = Math.Round(fund.HoldShares - reduceShares, 4);
-                if (isFullSell)
-                {
-                    // Preserve original cost for display; soldCost encoded in LastAddAmount
-                    fund.LastTradeDate = tradeDate;
-                    fund.LastAddAmount = Math.Round(-(soldCost + PendingMarkerOffset), 2);
-                    fund.PendingSellAmount = Math.Round(soldCost, 2);
-                    fund.PendingTradeDate = tradeDate;
-                    fund.PendingTradeTime = ChinaNow().ToString("HH:mm:ss");
-                    fund.PendingTradeStatus = "pending_sell";
-                    fund.PendingConfirmDate = string.IsNullOrWhiteSpace(confirmDate) ? fund.PendingConfirmDate : confirmDate;
-                    fund.PendingSource = "manual_reduce_position";
-                    fund.CostAmount = 0;
-                    SetHoldAmount(fund, 0m);
-                }
-                else
-                {
-                    fund.CostAmount = Math.Round(fund.CostAmount - soldCost, 2);
-                    fund.LastTradeDate = tradeDate;
-                    fund.LastAddAmount = Math.Round(-soldCost, 2);
-                    SetHoldAmount(fund, holdAmountBasis - unitAmount * Convert.ToDecimal(reduceShares));
-                    fund.PendingSellAmount = Math.Round(soldCost, 2);
-                    fund.PendingTradeDate = tradeDate;
-                    fund.PendingTradeTime = ChinaNow().ToString("HH:mm:ss");
-                    fund.PendingTradeStatus = "pending_sell";
-                    fund.PendingConfirmDate = string.IsNullOrWhiteSpace(confirmDate) ? fund.PendingConfirmDate : confirmDate;
-                    fund.PendingSource = "manual_reduce_position";
-                }
-                // RealizedProfit NOT updated — waiting for confirmed amount
+                if (string.Equals(fund.PendingTradeStatus, "pending_sell", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("已有赎回待确认，请勿重复提交。");
+
+                // A redemption only becomes effective after registration confirms it.
+                // Keep confirmed shares/assets unchanged so the later confirmation can settle once.
+                fund.PendingSellAmount = Math.Round(Convert.ToDouble(unitAmount * Convert.ToDecimal(reduceShares)), 2);
+                fund.PendingSellShares = Math.Round(reduceShares, 4);
+                fund.PendingTradeDate = tradeDate;
+                fund.PendingTradeTime = ChinaNow().ToString("HH:mm:ss");
+                fund.PendingTradeStatus = "pending_sell";
+                fund.PendingConfirmDate = string.IsNullOrWhiteSpace(confirmDate) ? fund.PendingConfirmDate : confirmDate;
+                fund.PendingSource = "manual_reduce_position";
+                fund.LastTradeDate = tradeDate;
+                fund.LastAddAmount = 0;
                 return 0;
             }
         }

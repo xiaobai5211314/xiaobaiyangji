@@ -343,6 +343,10 @@ var qdiiBeforeCutoff = FundTradeTiming.Resolve(new DateTime(2026, 6, 18), false,
 if (qdiiBeforeCutoff.TradeDate != "2026-06-18" || qdiiBeforeCutoff.ConfirmDate != "2026-06-23")
     throw new InvalidOperationException($"trade.qdii.beforeCutoff: expected T=2026-06-18 confirm=2026-06-23, actual T={qdiiBeforeCutoff.TradeDate} confirm={qdiiBeforeCutoff.ConfirmDate}");
 
+var qdiiDomesticHoliday = FundTradeTiming.Resolve(new DateTime(2026, 10, 7), false, "天弘恒生科技ETF联接(QDII)C");
+if (qdiiDomesticHoliday.TradeDate != "2026-10-08")
+    throw new InvalidOperationException($"trade.qdii.domesticHoliday: expected estimated T=2026-10-08, actual T={qdiiDomesticHoliday.TradeDate}");
+
 var qdiiPending = new MyFundConfig
 {
     HoldAmount = 34190.04,
@@ -379,5 +383,38 @@ Equal(12000.00m, PortfolioAccounting.Money(manualAddFund.HoldAmount), "manualAdd
 Equal(2000.00m, PortfolioAccounting.Money(manualAddFund.PendingBuyAmount), "manualAdd.pendingAmount");
 if (manualAddFund.PendingConfirmDate != "2026-06-22")
     throw new InvalidOperationException($"manualAdd.confirmDate: expected 2026-06-22, actual {manualAddFund.PendingConfirmDate}");
+
+Equal(10000.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetEffectiveShares(manualAddFund, "2026-06-18")), "manualAdd.tradeDate.confirmedSharesOnly");
+if (!PortfolioSettlementService.CapturePendingBuyShares(manualAddFund, "2026-06-18", 2.0))
+    throw new InvalidOperationException("manualAdd.capturePendingShares: expected pending shares to be captured");
+Equal(11000.00m, PortfolioAccounting.Money(manualAddFund.HoldShares), "manualAdd.totalSharesAfterPurchaseNav");
+Equal(10000.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetEffectiveShares(manualAddFund, "2026-06-19")), "manualAdd.beforeConfirm.excludesPendingShares");
+if (!PortfolioSettlementService.ConfirmPendingBuyIfDue(manualAddFund, "2026-06-22"))
+    throw new InvalidOperationException("manualAdd.confirmPending: expected pending buy to confirm");
+Equal(0.00m, PortfolioAccounting.Money(manualAddFund.PendingBuyAmount), "manualAdd.confirmed.pendingAmountCleared");
+Equal(11000.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetEffectiveShares(manualAddFund, "2026-06-22")), "manualAdd.confirmed.allSharesEffective");
+
+var pendingSellFund = new MyFundConfig
+{
+    HoldAmount = 10000,
+    HoldAmountPrecise = 10000m,
+    CostAmount = 10000,
+    HoldShares = 10000
+};
+var pendingSellProfit = settlement.ReducePosition(pendingSellFund, 2500, null, "2026-06-18", "2026-06-22");
+Equal(0.00m, PortfolioAccounting.Money(pendingSellProfit), "manualSell.pending.noProfit");
+Equal(10000.00m, PortfolioAccounting.Money(pendingSellFund.HoldAmount), "manualSell.pending.keepsAmount");
+Equal(10000.00m, PortfolioAccounting.Money(pendingSellFund.HoldShares), "manualSell.pending.keepsShares");
+Equal(10000.00m, PortfolioAccounting.Money(pendingSellFund.CostAmount), "manualSell.pending.keepsCost");
+Equal(2500.00m, PortfolioAccounting.Money(pendingSellFund.PendingSellShares), "manualSell.pending.shares");
+
+var confirmedSellProfit = settlement.ReducePosition(pendingSellFund, 2500, 2700, "2026-06-22", "2026-06-22");
+Equal(200.00m, PortfolioAccounting.Money(confirmedSellProfit), "manualSell.confirmed.realizedProfit");
+Equal(7500.00m, PortfolioAccounting.Money(pendingSellFund.HoldAmount), "manualSell.confirmed.amountReducedOnce");
+Equal(7500.00m, PortfolioAccounting.Money(pendingSellFund.HoldShares), "manualSell.confirmed.sharesReducedOnce");
+Equal(7500.00m, PortfolioAccounting.Money(pendingSellFund.CostAmount), "manualSell.confirmed.costReducedOnce");
+Equal(0.00m, PortfolioAccounting.Money(pendingSellFund.PendingSellShares), "manualSell.confirmed.pendingSharesCleared");
+if (pendingSellFund.LastTradeDate != "2026-06-18")
+    throw new InvalidOperationException($"manualSell.confirmed.tradeDate: expected original 2026-06-18, actual {pendingSellFund.LastTradeDate}");
 
 Console.WriteLine("Portfolio accounting regression passed.");

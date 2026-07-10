@@ -80,18 +80,7 @@ namespace 小白养基.Services
         }
 
         private static double GetEffectiveShares(MyFundConfig fund, string settleDate)
-        {
-            if (fund.HoldShares <= 0) return 0;
-
-            double baseAmount = GetEffectiveBaseAmount(fund, settleDate);
-            var holdAmountBasis = PortfolioSettlementService.GetHoldAmountBasis(fund);
-            if (fund.LastTradeDate == settleDate && Math.Abs(fund.LastAddAmount) > 0.000001 && holdAmountBasis > 0m)
-            {
-                return Math.Max(0, fund.HoldShares * (baseAmount / Convert.ToDouble(holdAmountBasis)));
-            }
-
-            return fund.HoldShares;
-        }
+            => PortfolioSettlementService.GetEffectiveShares(fund, settleDate);
 
         private sealed class OfficialNavSnapshot
         {
@@ -115,6 +104,20 @@ namespace 小白养基.Services
                 return double.TryParse(text, out value);
             }
             return false;
+        }
+
+        private static double? TryGetNavForDate(JsonElement dataArray, string? navDate)
+        {
+            if (string.IsNullOrWhiteSpace(navDate) || dataArray.ValueKind != JsonValueKind.Array) return null;
+
+            foreach (var item in dataArray.EnumerateArray())
+            {
+                var dateText = item.TryGetProperty("FSRQ", out var dateElement) ? dateElement.GetString() : null;
+                if (!string.Equals(dateText, navDate, StringComparison.Ordinal)) continue;
+                return TryGetDouble(item, "DWJZ", out var nav) && nav > 0 ? nav : null;
+            }
+
+            return null;
         }
 
         private static OfficialNavSnapshot? TryBuildOfficialNavSnapshot(JsonElement dataArray, string settleDate)
@@ -262,13 +265,15 @@ namespace 小白养基.Services
             var tomorrowStart = settleDateDt.AddDays(1);
 
             var targetFunds = await dbContext.MyFunds
+                .Where(f => f.HoldAmount > 0 || f.HoldShares > 0 || f.PendingBuyAmount > 0 || f.PendingSellAmount > 0)
                 .Select(f => f.FundCode)
                 .Distinct()
                 .ToListAsync(stoppingToken);
 
             // 优化3：一次性获取所有持仓，避免N+1查询
             var allHoldings = await dbContext.MyFunds
-                .Where(f => targetFunds.Contains(f.FundCode))
+                .Where(f => targetFunds.Contains(f.FundCode)
+                            && (f.HoldAmount > 0 || f.HoldShares > 0 || f.PendingBuyAmount > 0 || f.PendingSellAmount > 0))
                 .ToListAsync(stoppingToken);
 
             var holdingsByCode = allHoldings.GroupBy(f => f.FundCode)
@@ -285,7 +290,7 @@ namespace 小白养基.Services
                 try
                 {
                     long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                    string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize=2&_={timestamp}";
+                    string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize=10&_={timestamp}";
                     string response = await _httpClient.GetStringAsync(url, stoppingToken);
 
                     using var doc = JsonDocument.Parse(response);
@@ -348,6 +353,7 @@ namespace 小白养基.Services
                         {
                             double? exactProfit = null;
                             double? exactAssets = null;
+                            double? pendingBuyNav = TryGetNavForDate(dataArray, holding.PendingTradeDate);
 
                             double effectiveShares = GetEffectiveShares(holding, actualSettleDate);
 
@@ -364,7 +370,13 @@ namespace 小白养基.Services
                                 }
                             }
 
-                            if (ApplyOneDaySettlement(holding, actualRate, actualSettleDate, exactProfit, exactAssets))
+                            bool changed = ApplyOneDaySettlement(holding, actualRate, actualSettleDate, exactProfit, exactAssets);
+                            changed |= PortfolioSettlementService.CapturePendingBuyShares(
+                                holding,
+                                holding.PendingTradeDate ?? actualSettleDate,
+                                pendingBuyNav ?? (holding.PendingTradeDate == actualSettleDate ? navSnapshot.TodayNav : null));
+                            changed |= PortfolioSettlementService.ConfirmPendingBuyIfDue(holding, actualSettleDate);
+                            if (changed)
                             {
                                 _logger.LogInformation(
                                     "清算完成 {FundName}({Code}) {Rate}% [{Source}] -> {Amount} ExactAssets={ExactAssets}",

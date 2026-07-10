@@ -5441,19 +5441,15 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                                 <span v-for="reason in (sectorDetailMeta.signal.reasons || []).slice(0, 3)" :key="reason" style="font-size:10px;color:var(--text-muted);border:1px solid rgba(148,163,184,0.24);border-radius:999px;padding:3px 7px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ reason }}</span>
                             </div>
                         </div>
-                        <div style="display:grid;grid-template-columns:minmax(0,1.45fr) 0.7fr 0.82fr 0.7fr;gap:8px;color:var(--text-muted);font-size:12px;margin-bottom:8px;padding:0 4px;">
-                            <span>基金名称 / 代码</span><span style="text-align:right;">当日涨幅</span><span style="text-align:right;">基金资金流</span><span style="text-align:right;">近一月</span>
+                        <div style="display:grid;grid-template-columns:minmax(0,1.6fr) 0.75fr 0.75fr;gap:8px;color:var(--text-muted);font-size:12px;margin-bottom:8px;padding:0 4px;">
+                            <span>基金名称 / 代码</span><span style="text-align:right;">当日涨幅</span><span style="text-align:right;">近一月</span>
                         </div>
-                        <div v-for="fund in detailsList" :key="fund.code" style="display:grid;grid-template-columns:minmax(0,1.45fr) 0.7fr 0.82fr 0.7fr;gap:8px;align-items:center;padding:12px 4px;border-bottom:1px dashed rgba(255,255,255,0.06);">
+                        <div v-for="fund in detailsList" :key="fund.code" style="display:grid;grid-template-columns:minmax(0,1.6fr) 0.75fr 0.75fr;gap:8px;align-items:center;padding:12px 4px;border-bottom:1px dashed rgba(255,255,255,0.06);">
                             <div style="display:flex;flex-direction:column;min-width:0;">
                                 <span style="color:var(--text-main);font-weight:bold;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ fund.name }}</span>
                                 <span style="color:var(--text-muted);font-size:11px;font-family:monospace;">{{ fund.code }} <span v-if="fund.hasQuote" style="color:#60a5fa;">已更新</span></span>
                             </div>
                             <div :style="{ textAlign:'right', color: fund.rate >= 0 ? '#ff4d4f' : '#10b981', fontWeight:'900', fontFamily:'Courier New', fontSize:'16px' }">{{ fund.rate > 0 ? '+' : '' }}{{ fund.rate }}%</div>
-                            <div :style="{ textAlign:'right', color: sectorFundFlowColor(fund), fontWeight:'900', fontFamily:'Courier New', fontSize:'13px', lineHeight:'1.25' }">
-                                <div style="white-space:nowrap;">{{ sectorFundFlowText(fund) }}</div>
-                                <div style="font-size:10px;color:var(--text-muted);font-family:inherit;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ sectorFundFlowHint(fund) }}</div>
-                            </div>
                             <div :style="{ textAlign:'right', color: (fund.monthRate || 0) >= 0 ? '#ff4d4f' : '#10b981', fontWeight:'bold', fontFamily:'Courier New', fontSize:'15px' }">{{ fund.monthRate == null ? '--' : ((fund.monthRate > 0 ? '+' : '') + fund.monthRate + '%') }}</div>
                         </div>
                     </div>
@@ -6423,7 +6419,6 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const detailsList = ref([]);
                 const sectorDetailMeta = reactive({ rate: 0, fundCount: 0, updatedAt: '', flow: null, signal: null });
                 const isDetailsLoading = ref(false);
-                let sectorDetailsFlowToken = 0;
 
                 const showNewsPanel = ref(false);
                 const isNewsLoading = ref(false);
@@ -7336,7 +7331,6 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                 const fetchSectorDetails = async (sector) => {
                     const sectorKey = sector.key || sector.name;
-                    const flowToken = ++sectorDetailsFlowToken;
                     detailsTitle.value = (sector.name || sectorKey) + ' - 板块基金';
                     showSectorDetails.value = true;
                     isDetailsLoading.value = true;
@@ -7354,11 +7348,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const funds = Array.isArray(data.funds) ? data.funds : (Array.isArray(data) ? data : []);
                         sectorDetailMeta.flow = data.sectorFlow || null;
                         sectorDetailMeta.signal = data.sectorSignal || null;
-                        detailsList.value = funds.map(fund => ({ ...fund, sectorFlow: sectorDetailMeta.flow, fundFlowLoading: true, fundFlow: null, fundFlowMessage: '' }));
+                        detailsList.value = funds.map(fund => ({ ...fund, sectorFlow: sectorDetailMeta.flow }));
                         sectorDetailMeta.rate = Number(data.rate || 0);
                         sectorDetailMeta.fundCount = Number(data.fundCount || detailsList.value.length || 0);
                         sectorDetailMeta.updatedAt = data.updatedAt || '';
-                        hydrateSectorFundFlows(detailsList.value, flowToken);
                     } catch (e) {
                         showToast("🚨 板块基金拉取失败", "error");
                     } finally {
@@ -7733,7 +7726,6 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     }
                 };
 
-                const normalizeFundCode = (code) => String(code || '').replace(/\D/g, '').slice(0, 6);
                 const sectorSignalColor = (signal) => {
                     const score = Number(signal?.score);
                     if (!Number.isFinite(score)) return 'var(--text-muted)';
@@ -7741,78 +7733,6 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     if (score < 45) return '#10b981';
                     return '#fbbf24';
                 };
-                const getSectorFundFlow = (fund) => fund?.fundFlow || null;
-                const getSectorFundFlowReference = (fund) => {
-                    const fundFlow = getSectorFundFlow(fund);
-                    if (fundFlow?.isAvailable) return { flow: fundFlow, type: 'fund' };
-                    return null;
-                };
-                const getSectorFundFlowValue = (fund) => {
-                    const reference = getSectorFundFlowReference(fund);
-                    const value = Number(reference?.flow?.fundFlowNet);
-                    return Number.isFinite(value) ? value : null;
-                };
-                const sectorFundFlowColor = (fund) => {
-                    const value = getSectorFundFlowValue(fund);
-                    if (value === null) return 'var(--text-muted)';
-                    if (value > 0) return '#ff4d4f';
-                    if (value < 0) return '#10b981';
-                    return 'var(--text-muted)';
-                };
-                const sectorFundFlowText = (fund) => {
-                    const reference = getSectorFundFlowReference(fund);
-                    if (fund?.fundFlowLoading && !reference) return '...';
-                    if (!reference) return '未公开';
-                    const flow = reference.flow;
-                    const value = getSectorFundFlowValue(fund);
-                    const rawText = flow.fundFlowNetText || '';
-                    if (rawText) return `${value > 0 ? '+' : ''}${rawText}`;
-                    return value === null ? '--' : `${value > 0 ? '+' : ''}${value.toFixed(2)}`;
-                };
-                const sectorFundFlowHint = (fund) => {
-                    const reference = getSectorFundFlowReference(fund);
-                    if (fund?.fundFlowLoading && !reference) return '拉取中';
-                    if (!reference) return fund?.fundFlowMessage || '暂无基金级资金流';
-                    const flow = reference.flow;
-                    if (flow.isStale) return flow.message || flow.tradeDate || '最近交易日';
-                    return flow.mainRatio == null ? '基金主力' : `基金主力 ${flow.mainRatio > 0 ? '+' : ''}${flow.mainRatio}%`;
-                };
-                const hydrateSectorFundFlows = async (funds, token) => {
-                    const codes = [...new Set((Array.isArray(funds) ? funds : [])
-                        .map(f => normalizeFundCode(f?.code))
-                        .filter(code => code.length === 6))].slice(0, 50);
-                    if (codes.length === 0) return;
-
-                    try {
-                        const res = await fetch(`${API_BASE}/api/fund/fund-flow?codes=${encodeURIComponent(codes.join(','))}`, { cache: 'default' });
-                        if (!res.ok) throw new Error(await res.text());
-                        const data = await res.json();
-                        const rows = Array.isArray(data?.rows) ? data.rows : [];
-                        const byCode = new Map(rows.map(row => [normalizeFundCode(row.code), row]));
-                        if (token !== sectorDetailsFlowToken) return;
-                        detailsList.value = detailsList.value.map(fund => {
-                            const code = normalizeFundCode(fund?.code);
-                            const flow = byCode.get(code) || null;
-                            return {
-                                ...fund,
-                                sectorFlow: fund.sectorFlow || sectorDetailMeta.flow,
-                                fundFlow: flow,
-                                fundFlowLoading: false,
-                                fundFlowMessage: flow?.message || (flow ? '' : '暂无该基金公开资金流')
-                            };
-                        });
-                    } catch (e) {
-                        if (token !== sectorDetailsFlowToken) return;
-                        detailsList.value = detailsList.value.map(fund => ({
-                            ...fund,
-                            sectorFlow: fund.sectorFlow || sectorDetailMeta.flow,
-                            fundFlow: null,
-                            fundFlowLoading: false,
-                            fundFlowMessage: '资金流暂不可用'
-                        }));
-                    }
-                };
-
                 let capitalCacheTime = 0;
                 const capitalIndustryWhitelist = [
                     '半导体','光伏设备','消费电子','通信设备','软件开发','互联网服务','电子元件','电池','汽车整车','汽车零部件','白酒','食品饮料','医疗服务','医疗器械','生物制品','化学制药','中药','银行','证券','保险','房地产开发','房地产服务','煤炭','石油','钢铁','有色金属','贵金属','化学原料','化学制品','工程建设','工程机械','电网设备','电力','光伏','风电','军工','船舶','航天航空','农牧饲渔','家电','商业百货','旅游酒店','传媒','游戏','教育','物流','航运港口','铁路公路',
@@ -8607,7 +8527,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
                     sectorTopList, sectorBottomList, sectorMode, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, capitalFlowError, isCapitalLoading, fetchCapitalFlow,
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, isDetailsLoading, expandedSectors, toggleSector,
-                    fetchSectorDetails, sectorFundFlowText, sectorFundFlowHint, sectorFundFlowColor, sectorSignalColor, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices, formatIndexPoint, formatIndexRate, getFundStatusBadgeText, getFundStatusBadgeClass, getRateDisplayMeta,
+                    fetchSectorDetails, sectorSignalColor, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices, formatIndexPoint, formatIndexRate, getFundStatusBadgeText, getFundStatusBadgeClass, getRateDisplayMeta,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
                     analysisMonth, selectedAnalysisDate, analysisViewMode, analysisDetailMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, confirmedDailyBattleReport, analysisProfitTop, analysisLossTop, analysisMonthTotal, analysisMonthHasLegacy, analysisMonthHasPendingNav, fetchAnalysis, refreshAnalysisPage, goAnalysisToday, todayDashStr,
                     assetMode, setAssetMode, stockHoldings, stockWatchList, stockSearchKeyword, stockSearchResults, stockOcrLoading, stockOcrPreview, selectedStock, stockKlinePeriod, stockKlinePeriods, stockChartRef, stockChartStatus, triggerStockOcr, handleStockOcrUpload, confirmStockOcr, loadStockDashboard, searchStocks, addStockWatch, openStockHoldingEditor, deleteStockHolding, deleteStockWatch, openStockDetail, switchStockKline, recalculateStockOcrItem, formatOcrNumber, signedOcrNumber, profitColor, dailyBattleReport, confidenceRows, confidenceMap, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, formatFinitePercent, calibrationRows,

@@ -258,27 +258,6 @@
         </view>
       </view>
 
-      <view class="fund-flow-strip">
-        <view class="fund-flow-head">
-          <text>今日资金流参考</text>
-          <text>{{ fundFlowDateText(fund) }}</text>
-        </view>
-        <view v-if="fund.fundFlowAvailable" class="fund-flow-body">
-          <view class="fund-flow-main">
-            <text>主力净额</text>
-            <text :class="['finance-number', fundFlowToneClass(fund)]">{{ fundFlowNetText(fund) }}</text>
-          </view>
-          <view class="fund-flow-meta">
-            <text>流入 {{ fund.fundFlowInText || '--' }}</text>
-            <text>流出 {{ fund.fundFlowOutText || '--' }}</text>
-            <text>净占比 {{ fundFlowRatioText(fund) }}</text>
-          </view>
-        </view>
-        <view v-else class="fund-flow-empty">
-          <text>{{ fundFlowUnavailableText(fund) }}</text>
-        </view>
-      </view>
-
       <view class="fund-foot">
         <view>
           <text class="muted-text">可信度</text>
@@ -689,12 +668,10 @@ import { clearGetCache } from '../../services/request';
 import { getProfile, isGeneratedWechatUsername, pickAvatar, pickDisplayName, pickUsername } from '../../services/api/auth';
 import {
   confirmFundOcr,
-  getFundCapitalFlows,
   getFundArchives,
   getTodayFunds,
   previewFundOcr,
   type FundArchiveRow,
-  type FundCapitalFlowRow,
   type FundTodayItem,
   type OcrImportPreviewItem
 } from '../../services/api/fund';
@@ -914,7 +891,6 @@ async function loadFunds(force: boolean) {
     dashboardStale.value = false;
     dashboardUpdatedAt.value = '';
     setLocalStorageCache(cacheKey, items, 3600000);
-    loadFundFlows(items, force).catch((error) => console.warn('[fund-flow:load]', error));
   } catch (error) {
     console.warn('[dashboard] load failed, keeping cached data:', error);
     if (rawFunds.value.length > 0) {
@@ -924,41 +900,6 @@ async function loadFunds(force: boolean) {
   } finally {
     loading.value = false;
   }
-}
-
-async function loadFundFlows(items: FundTodayItem[], force: boolean) {
-  if (!sessionState.username || !items.length) return;
-  const codes = items.map((fund) => String(fund.code || '').trim()).filter(Boolean);
-  if (!codes.length) return;
-
-  const payload = await getFundCapitalFlows(sessionState.username, codes, force, true);
-  const rows = Array.isArray(payload.rows) ? payload.rows : [];
-  if (!rows.length) return;
-
-  const flowByCode = new Map(rows.map((row) => [String(row.code || '').trim(), row]));
-  rawFunds.value = rawFunds.value.map((fund) => attachFundFlow(fund, flowByCode.get(String(fund.code || '').trim())));
-}
-
-function attachFundFlow(fund: FundTodayItem, flow?: FundCapitalFlowRow): FundTodayItem {
-  if (!flow) return fund;
-
-  return {
-    ...fund,
-    fundFlow: flow,
-    fundFlowDirection: flow.direction,
-    fundFlowTradeDate: flow.tradeDate,
-    fundFlowSource: flow.source,
-    fundFlowMessage: flow.message,
-    fundFlowIn: flow.fundFlowIn,
-    fundFlowInText: flow.fundFlowInText,
-    fundFlowOut: flow.fundFlowOut,
-    fundFlowOutText: flow.fundFlowOutText,
-    fundFlowNet: flow.fundFlowNet ?? flow.mainNet,
-    fundFlowNetText: flow.fundFlowNetText ?? flow.mainNetText,
-    fundFlowMainRatio: flow.mainRatio,
-    fundFlowAvailable: Boolean(flow.isAvailable),
-    fundFlowStale: Boolean(flow.isStale)
-  };
 }
 
 function logFundTodayAudit(items: FundTodayItem[], phase = 'today') {
@@ -1567,39 +1508,6 @@ function displayFundCost(fund: FundView) {
 function numericOrDash(value: unknown, digits = 2) {
   const n = Number(value);
   return Number.isFinite(n) ? n.toFixed(digits) : '--';
-}
-
-function signedCompactMoneyText(value: unknown, text?: string) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return text || '--';
-  const compact = text || formatMoney(n);
-  if (n > 0 && !compact.startsWith('+')) return `+${compact}`;
-  return compact;
-}
-
-function fundFlowNetText(fund: FundView) {
-  return signedCompactMoneyText(fund.fundFlowNet, fund.fundFlowNetText);
-}
-
-function fundFlowRatioText(fund: FundView) {
-  const n = Number(fund.fundFlowMainRatio);
-  if (!Number.isFinite(n)) return '--';
-  return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
-}
-
-function fundFlowToneClass(fund: FundView) {
-  const n = Number(fund.fundFlowNet);
-  if (!Number.isFinite(n) || n === 0) return '';
-  return n > 0 ? 'profit-text' : 'loss-text';
-}
-
-function fundFlowDateText(fund: FundView) {
-  if (!fund.fundFlowTradeDate) return '待更新';
-  return fund.fundFlowStale ? `${fund.fundFlowTradeDate} 最近` : fund.fundFlowTradeDate;
-}
-
-function fundFlowUnavailableText(fund: FundView) {
-  return fund.fundFlowMessage || '资金流加载中';
 }
 
 function fundNavLabel(fund: FundView) {
@@ -2595,61 +2503,6 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 .accent-blue {
   background: rgba(79, 172, 254, 0.1);
-}
-
-.fund-flow-strip {
-  margin-top: 20rpx;
-  padding: 18rpx;
-  border-radius: 24rpx;
-  color: #0f172a;
-  background: #f8fafc;
-  border: 1rpx solid rgba(15, 23, 42, 0.07);
-}
-
-.fund-flow-head,
-.fund-flow-main,
-.fund-flow-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16rpx;
-}
-
-.fund-flow-head {
-  color: #64748b;
-  font-size: 21rpx;
-}
-
-.fund-flow-head text:first-child {
-  color: #0f172a;
-  font-weight: 900;
-}
-
-.fund-flow-body {
-  margin-top: 12rpx;
-}
-
-.fund-flow-main text:first-child {
-  color: #64748b;
-  font-size: 22rpx;
-}
-
-.fund-flow-main text:last-child {
-  font-size: 31rpx;
-  font-weight: 900;
-}
-
-.fund-flow-meta {
-  margin-top: 10rpx;
-  color: #64748b;
-  font-size: 20rpx;
-  flex-wrap: wrap;
-}
-
-.fund-flow-empty {
-  margin-top: 12rpx;
-  color: #94a3b8;
-  font-size: 22rpx;
 }
 
 .metric-hint {

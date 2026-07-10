@@ -46,11 +46,17 @@ namespace 小白养基.Services
             using var scope = _serviceProvider.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-            var targetFunds = await dbContext.MyFunds
+            var targetFundRows = await dbContext.MyFunds
                 .AsNoTracking()
+                .Where(f => f.HoldAmount > 0 || f.HoldShares > 0 || f.PendingBuyAmount > 0 || f.PendingSellAmount > 0)
                 .Select(f => new { f.FundCode, f.FundName })
-                .Distinct()
                 .ToListAsync(stoppingToken);
+
+            var targetFunds = targetFundRows
+                .Where(f => !string.IsNullOrWhiteSpace(f.FundCode))
+                .GroupBy(f => f.FundCode, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .ToList();
 
             if (targetFunds.Count == 0) return;
 

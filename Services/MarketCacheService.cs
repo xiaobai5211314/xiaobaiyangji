@@ -38,17 +38,6 @@ namespace 小白养基.Services
 
                 if (row != null && row.ExpiresAt > DateTime.UtcNow)
                 {
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            await _db.MarketDataCaches
-                                .Where(x => x.CacheKey == key)
-                                .ExecuteUpdateAsync(s => s.SetProperty(x => x.HitCount, x => x.HitCount + 1));
-                        }
-                        catch { }
-                    });
-
                     var data = JsonSerializer.Deserialize<T>(row.PayloadJson, JsonOptions);
                     if (data != null)
                     {
@@ -233,7 +222,6 @@ namespace 小白养基.Services
         {
             if (key.StartsWith("global_indices")) return "global_indices";
             if (key.StartsWith("capital_flow")) return "capital_flow";
-            if (key.StartsWith("fund_flow")) return "fund_flow";
             if (key.StartsWith("sector_radar")) return "sector_radar";
             if (key.StartsWith("sector_funds")) return "sector_funds";
             if (key.StartsWith("fund_nav")) return "fund_nav";
