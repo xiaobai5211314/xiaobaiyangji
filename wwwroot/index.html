@@ -7,7 +7,7 @@
     <title>小白养基</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2064%2064%27%3E%3Cdefs%3E%3ClinearGradient%20id%3D%27g%27%20x1%3D%270%27%20y1%3D%270%27%20x2%3D%271%27%20y2%3D%271%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27%232563eb%27/%3E%3Cstop%20offset%3D%27100%25%27%20stop-color%3D%27%237c3aed%27/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20width%3D%2764%27%20height%3D%2764%27%20rx%3D%2716%27%20fill%3D%27url%28%23g%29%27/%3E%3Ctext%20x%3D%2732%27%20y%3D%2742%27%20text-anchor%3D%27middle%27%20font-size%3D%2732%27%3E%F0%9F%92%B9%3C/text%3E%3C/svg%3E">
     <base href="/" />
-    <meta name="theme-color" content="#db2777">
+    <meta name="theme-color" content="#111318">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -16,8 +16,8 @@
         (function () {
             try {
                 var rawTheme = String(localStorage.getItem('guzhi_web_theme') || '').toLowerCase();
-                var theme = rawTheme === 'vivid' ? 'vivid'
-                          : rawTheme === 'light' ? 'light'
+                var theme = rawTheme === 'light' || rawTheme === 'apple' || rawTheme === 'frost' || rawTheme === 'warm' || rawTheme === 'vivid_gold'
+                          ? 'light'
                           : 'rainbow';
                 document.documentElement.setAttribute('data-theme', theme);
             } catch (e) {
@@ -26,29 +26,29 @@
         })();
     </script>
     <style>
-                                :root {
-            --page-bg: linear-gradient(175deg, #fce4ec 0%, #fdf2f8 30%, #f8bbd0 100%);
-            --page-bg-color: #fdf2f8;
-            --card-bg: rgba(255, 244, 249, 0.94);
-            --card-border: rgba(244, 114, 182, 0.08);
-            --card-shadow: 0 0 0 0.5px rgba(236, 72, 153, 0.06), 0 2px 20px rgba(219, 39, 119, 0.06);
-            --card-bg-hero: linear-gradient(135deg, #db2777 0%, #ec4899 50%, #f472b6 100%);
-            --card-bg-report: rgba(255, 244, 249, 0.94);
-            --card-bg-list: rgba(255, 244, 249, 0.93);
-            --card-bg-soft: rgba(253, 242, 248, 0.88);
-            --card-border-glow: rgba(244, 114, 182, 0.14);
-            --primary-gradient: linear-gradient(135deg, #ec4899, #f472b6);
-            --logo-gradient: linear-gradient(to right, #db2777, #ec4899);
-            --secondary-gradient: linear-gradient(135deg, rgba(244, 114, 182, 0.08), rgba(236, 72, 153, 0.05));
-            --accent-pink: #f472b6;
-            --accent-purple: #8b5cf6;
-            --accent-blue: #ec4899;
-            --text-main: #1f2937;
-            --text-muted: #6b7280;
-            --profit-color: #e11d48;
-            --loss-color: #059669;
+        :root {
+            --page-bg: linear-gradient(160deg, #101216 0%, #171b22 55%, #0f252b 100%);
+            --page-bg-color: #111318;
+            --card-bg: linear-gradient(155deg, rgba(31, 35, 42, .96), rgba(24, 29, 35, .94));
+            --card-border: rgba(255, 255, 255, .10);
+            --card-shadow: 0 14px 36px rgba(0, 0, 0, .22);
+            --card-bg-hero: linear-gradient(145deg, rgba(34, 39, 47, .98), rgba(20, 37, 43, .96));
+            --card-bg-report: rgba(29, 33, 40, .95);
+            --card-bg-list: rgba(27, 31, 38, .94);
+            --card-bg-soft: rgba(255, 255, 255, .05);
+            --card-border-glow: rgba(100, 210, 255, .18);
+            --primary-gradient: linear-gradient(135deg, #ff5f87 0%, #4f8cff 100%);
+            --logo-gradient: linear-gradient(to right, #64d2ff, #4f8cff);
+            --secondary-gradient: linear-gradient(135deg, rgba(255, 95, 135, .08), rgba(79, 140, 255, .08));
+            --accent-pink: #ff5f87;
+            --accent-purple: #7c6ff2;
+            --accent-blue: #64d2ff;
+            --text-main: #f5f5f7;
+            --text-muted: #98989d;
+            --profit-color: #ff6961;
+            --loss-color: #30c793;
             --button-radius: 12px;
-            --card-radius: 18px;
+            --card-radius: 14px;
         /* === Typography Scale === */
         --font-display: "Microsoft YaHei", "微软雅黑", "PingFang SC", "PingFang HK", -apple-system, BlinkMacSystemFont, sans-serif;
         --font-body: "Microsoft YaHei", "微软雅黑", "PingFang SC", "PingFang HK", -apple-system, BlinkMacSystemFont, sans-serif;
@@ -60,7 +60,7 @@
         --text-size-xl: 1.2rem;
         --text-size-2xl: 1.45rem;
         --text-size-3xl: 1.8rem;
-        --text-soft: #6b7280;
+        --text-soft: #d1d1d6;
         /* TDesign-inspired design tokens */
         --td-radius-s: 3px;
         --td-radius-default: 6px;
@@ -74,83 +74,60 @@
         --td-space-s: 4px;
         --td-space-m: 8px;
         --td-space-l: 15px;
-        --td-color-primary: #8b5cf6;
+        --td-color-primary: #4f8cff;
         --td-color-success: #10b981;
         --td-color-warning: #f59e0b;
         --td-color-danger: #ef4444;
-        --td-color-info: #38bdf8;
+        --td-color-info: #64d2ff;
         }
 
-            :root[data-theme="warm"] {
-                --page-bg: linear-gradient(165deg, #f0e8d8 0%, #e8dcc8 40%, #e0d4b8 100%);
-                --page-bg-color: #f0e8d8;
-                --card-bg: rgba(255, 252, 243, 0.96);
-                --card-border: rgba(0, 0, 0, 0.06);
-                --card-shadow: 0 2px 12px rgba(120, 90, 40, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.03);
-                --card-bg-hero: linear-gradient(135deg, #b8945a 0%, #d4a76a 50%, #c49b5e 100%);
-                --card-bg-report: rgba(255, 252, 243, 0.96);
-                --card-bg-list: rgba(255, 252, 243, 0.96);
-                --card-bg-soft: rgba(255, 250, 238, 0.88);
-                --card-border-glow: rgba(180, 148, 90, 0.15);
-                --primary-gradient: linear-gradient(135deg, #b8945a, #d4a76a);
-                --logo-gradient: linear-gradient(to right, #b8945a, #c49b5e);
-                --secondary-gradient: linear-gradient(135deg, rgba(180, 148, 90, 0.08), rgba(200, 168, 110, 0.06));
-                --accent-pink: #d4856a;
-                --accent-purple: #b8945a;
-                --accent-blue: #c49b5e;
-                --text-main: #2c2416;
-                --text-muted: #4a4030;
-                --text-soft: #8a7e6a;
-                --profit-color: #d45a3a;
-                --loss-color: #4a8c5c;
-                --button-radius: 10px;
-                --card-radius: 16px;
-            }
-
-                                                :root[data-theme="light"] {
-                --page-bg: linear-gradient(175deg, #f0f4f0 0%, #f5f7f5 38%, #f0f4f0 100%);
-                --page-bg-color: #f0f4f0;
-                --card-bg: rgba(243, 249, 241, 0.94);
-                --card-border: rgba(139, 195, 72, 0.08);
-                --card-shadow: 0 0 0 0.5px rgba(27, 94, 32, 0.05), 0 1px 3px rgba(0, 0, 0, 0.03), 0 4px 24px rgba(27, 94, 32, 0.05);
-                --card-bg-hero: linear-gradient(160deg, #1b5e20, #2e7d32);
-                --card-bg-report: rgba(243, 249, 241, 0.92);
-                --card-bg-list: rgba(243, 249, 241, 0.88);
-                --card-bg-soft: linear-gradient(145deg, rgba(245,248,244,0.95), rgba(240,244,240,0.90));
-                --card-border-glow: rgba(139, 195, 72, 0.08);
-                --primary-gradient: linear-gradient(135deg, #8bc348, #4caf50);
-                --logo-gradient: linear-gradient(to right, #1b5e20, #2e7d32);
-                --secondary-gradient: linear-gradient(135deg, rgba(139, 195, 72, 0.06), rgba(76, 175, 80, 0.04));
-                --accent-pink: #e57373;
-                --accent-purple: #7e57c2;
-                --accent-blue: #4caf50;
-                --text-main: #1a1a1a;
-                --text-muted: #5a6b5a;
-                --text-soft: #8a9a8a;
-                --profit-color: #e53935;
-                --loss-color: #2e7d32;
-                --button-radius: 10px;
-                --card-radius: 16px;
+            :root[data-theme="light"] {
+                --page-bg: linear-gradient(180deg, #f5f5f7 0%, #eef1f5 100%);
+                --page-bg-color: #f5f5f7;
+                --card-bg: rgba(255, 255, 255, .94);
+                --card-border: rgba(60, 60, 67, .16);
+                --card-shadow: 0 8px 28px rgba(0, 0, 0, .07);
+                --card-bg-hero: linear-gradient(145deg, rgba(255,255,255,.98), rgba(244,247,251,.96));
+                --card-bg-report: rgba(255, 255, 255, .94);
+                --card-bg-list: rgba(255, 255, 255, .92);
+                --card-bg-soft: rgba(242, 242, 247, .92);
+                --card-border-glow: rgba(0, 122, 255, .18);
+                --primary-gradient: linear-gradient(180deg, #198cff 0%, #007aff 100%);
+                --logo-gradient: linear-gradient(to right, #007aff, #5856d6);
+                --secondary-gradient: linear-gradient(135deg, rgba(0, 122, 255, .06), rgba(255, 159, 10, .05));
+                --accent-pink: #ff3b30;
+                --accent-purple: #5856d6;
+                --accent-blue: #007aff;
+                --text-main: #1d1d1f;
+                --text-muted: #6e6e73;
+                --text-soft: #3a3a3c;
+                --profit-color: #ff3b30;
+                --loss-color: #168a55;
+                --button-radius: 12px;
+                --card-radius: 14px;
+                --td-color-primary: #007aff;
+                --td-color-info: #5ac8fa;
             }
 
             :root[data-theme="rainbow"] {
-                --page-bg: radial-gradient(circle at 8% -4%, rgba(255,95,162,.30), transparent 30%), radial-gradient(circle at 92% 4%, rgba(56,189,248,.24), transparent 32%), radial-gradient(circle at 22% 42%, rgba(139,92,246,.18), transparent 34%), radial-gradient(circle at 70% 100%, rgba(69,38,160,.28), transparent 46%), linear-gradient(160deg, #070b1a 0%, #111735 40%, #202053 68%, #111827 100%);
-                --page-bg-color: #080b1b;
-                --card-bg: radial-gradient(circle at 18% 0%, rgba(255,95,162,.16), transparent 34%), radial-gradient(circle at 95% 8%, rgba(56,189,248,.14), transparent 32%), linear-gradient(145deg, rgba(24, 31, 68, .88), rgba(13, 23, 48, .82));
-                --card-bg-hero: radial-gradient(circle at 4% 0%, rgba(255,95,162,.22), transparent 32%), radial-gradient(circle at 100% 12%, rgba(56,189,248,.20), transparent 34%), linear-gradient(140deg, rgba(35, 30, 78, .88), rgba(10, 35, 66, .82));
-                --card-bg-report: radial-gradient(circle at 0% 0%, rgba(255,95,162,.16), transparent 28%), linear-gradient(115deg, rgba(27, 25, 58, .88), rgba(10, 32, 57, .82));
-                --card-bg-list: radial-gradient(circle at 100% 0%, rgba(56,189,248,.15), transparent 30%), linear-gradient(155deg, rgba(19, 25, 56, .90), rgba(20, 29, 62, .80));
-                --card-bg-soft: linear-gradient(145deg, rgba(20, 28, 58, .72), rgba(18, 23, 48, .66));
-                --card-border: rgba(174, 201, 255, .16);
-                --card-border-glow: rgba(255,95,162,.20);
-                --card-shadow: 0 18px 46px rgba(2, 6, 23, .36), 0 0 32px rgba(139,92,246,.14);
-                --primary-gradient: linear-gradient(135deg, #ff5fa2 0%, #8b5cf6 48%, #38bdf8 100%);
-                --logo-gradient: var(--primary-gradient);
-                --secondary-gradient: linear-gradient(135deg, rgba(255,95,162,.22), rgba(139,92,246,.18), rgba(56,189,248,.16));
-                --text-main: #f8fafc;
-                --text-muted: #a8b3cf;
-                --button-radius: 999px;
-                --card-radius: 24px;
+                --page-bg: linear-gradient(160deg, #101216 0%, #171b22 55%, #0f252b 100%);
+                --page-bg-color: #111318;
+                --card-bg: linear-gradient(155deg, rgba(31, 35, 42, .96), rgba(24, 29, 35, .94));
+                --card-bg-hero: linear-gradient(145deg, rgba(34, 39, 47, .98), rgba(20, 37, 43, .96));
+                --card-bg-report: rgba(29, 33, 40, .95);
+                --card-bg-list: rgba(27, 31, 38, .94);
+                --card-bg-soft: rgba(255, 255, 255, .05);
+                --card-border: rgba(255, 255, 255, .10);
+                --card-border-glow: rgba(100, 210, 255, .18);
+                --card-shadow: 0 14px 36px rgba(0, 0, 0, .22);
+                --primary-gradient: linear-gradient(135deg, #ff5f87 0%, #4f8cff 100%);
+                --logo-gradient: linear-gradient(to right, #64d2ff, #4f8cff);
+                --secondary-gradient: linear-gradient(135deg, rgba(255, 95, 135, .08), rgba(79, 140, 255, .08));
+                --text-main: #f5f5f7;
+                --text-muted: #98989d;
+                --text-soft: #d1d1d6;
+                --button-radius: 12px;
+                --card-radius: 14px;
             }
 
         html {
@@ -179,14 +156,14 @@
                 position: fixed;
                 inset: 0;
                 pointer-events: none;
+                display: none;
                 opacity: 0;
                 transition: opacity .2s ease;
             }
 
             body::before {
                 z-index: 0;
-                background: radial-gradient(circle at 10% 16%, rgba(255, 95, 162, .18), transparent 22%), radial-gradient(circle at 93% 22%, rgba(56, 189, 248, .16), transparent 24%), radial-gradient(circle at 48% 92%, rgba(139, 92, 246, .14), transparent 32%);
-                filter: blur(2px);
+                background: none;
             }
 
             body::after {
@@ -194,11 +171,6 @@
                 background: linear-gradient(180deg, rgba(255,255,255,.025), transparent 18%, rgba(56,189,248,.028) 100%);
                 mix-blend-mode: screen;
             }
-
-        :root[data-theme="rainbow"] body::before,
-        :root[data-theme="rainbow"] body::after {
-            opacity: 1;
-        }
 
         :root[data-theme="rainbow"] body {
             background-attachment: fixed;
@@ -216,6 +188,77 @@
             border: 1px solid var(--card-border);
             border-radius: var(--card-radius);
             box-shadow: var(--card-shadow);
+        }
+
+        .auth-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            padding: 20px;
+            background: rgba(8, 10, 14, .76);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+        }
+
+        .auth-panel {
+            width: min(100%, 330px);
+            box-sizing: border-box;
+            padding: 32px;
+            text-align: center;
+        }
+
+        .auth-panel .logo-text {
+            margin: 0 0 24px;
+        }
+
+        .auth-input {
+            width: 100%;
+            box-sizing: border-box;
+            min-height: 44px;
+            margin: 0 0 12px;
+            padding: 11px 12px;
+            border-radius: 10px;
+            background: var(--card-bg-soft);
+            border: 1px solid var(--card-border);
+            color: var(--text-main);
+            outline: none;
+        }
+
+        .auth-input:focus {
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(79, 140, 255, .14);
+        }
+
+        .auth-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .auth-actions {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            margin-top: 8px;
+        }
+
+        .auth-actions .btn {
+            width: 100%;
+            justify-content: center;
+        }
+
+        :root[data-theme="light"] .auth-screen {
+            background: rgba(232, 235, 241, .74);
+        }
+
+        :root[data-theme="light"] .auth-input {
+            background: rgba(255, 255, 255, .96);
+        }
+
+        :root[data-theme="light"] .auth-input:focus {
+            box-shadow: 0 0 0 3px rgba(0, 122, 255, .14);
         }
 
         .header {
@@ -282,15 +325,15 @@
             border: none;
             color: #fff;
             font-weight: 600;
-            box-shadow: 0 4px 14px rgba(236, 72, 153, 0.32);
+            box-shadow: 0 4px 14px rgba(79, 140, 255, 0.24);
         }
         .btn-primary:hover {
-            box-shadow: 0 6px 20px rgba(236, 72, 153, 0.40);
+            box-shadow: 0 6px 20px rgba(79, 140, 255, 0.30);
             transform: translateY(-1px);
         }
 
             .btn-primary:hover:not(:disabled) {
-                background: linear-gradient(135deg, #db2777, #ec4899);
+                background: var(--primary-gradient);
             }
 
         .btn-success {
@@ -336,7 +379,7 @@
             box-shadow: var(--card-shadow) !important;
         }
 
-        :root[data-theme="light"] .btn:not(.btn-primary):not(.btn-success):not(.btn-danger),
+        :root[data-theme="light"] .btn:not(.btn-primary):not(.btn-success):not(.btn-danger):not(.theme-choice-btn),
         :root[data-theme="light"] .asset-mode-btn:not(.active),
         :root[data-theme="light"] .news-tab:not(.active),
         :root[data-theme="light"] .stock-kline-tab:not(.active),
@@ -389,7 +432,7 @@
         }
 
         :root[data-theme="light"] .metrics-grid {
-            background: rgba(240, 244, 240, .86);
+            background: rgba(242, 242, 247, .86);
         }
 
         :root[data-theme="light"] .metric-label {
@@ -398,30 +441,30 @@
 
         :root[data-theme="light"] .modal-content {
             background: #ffffff;
-            border-color: rgba(27, 94, 32, .08);
-            box-shadow: 0 0 0 0.5px rgba(27, 94, 32, .06), 0 8px 40px rgba(27, 94, 32, .10);
+            border-color: rgba(60, 60, 67, .14);
+            box-shadow: 0 8px 40px rgba(0, 0, 0, .10);
         }
 
         :root[data-theme="light"] .modal-input {
             background: #ffffff;
-            border-color: rgba(27, 94, 32, .08);
-            color: #1a1a1a;
+            border-color: rgba(60, 60, 67, .14);
+            color: #1d1d1f;
         }
 
         :root[data-theme="light"] .badge-estimate {
-            color: #5a8a3c;
-            background: rgba(139, 195, 72, .10);
-            border-color: rgba(139, 195, 72, .20);
+            color: #007aff;
+            background: rgba(0, 122, 255, .10);
+            border-color: rgba(0, 122, 255, .20);
         }
 
         :root[data-theme="light"] .badge-actual {
-            color: #2e7d32;
-            background: rgba(46, 125, 50, .10);
-            border-color: rgba(46, 125, 50, .20);
+            color: #168a55;
+            background: rgba(22, 138, 85, .10);
+            border-color: rgba(22, 138, 85, .20);
         }
 
         :root[data-theme="light"] .divider {
-            background: rgba(27, 94, 32, .06);
+            background: rgba(60, 60, 67, .10);
         }
 
         :root[data-theme="light"] .skeleton-box {
@@ -430,17 +473,17 @@
         }
 
                 :root[data-theme="light"] .btn-primary {
-            box-shadow: 0 4px 14px rgba(139, 195, 72, 0.35) !important;
+            box-shadow: 0 4px 14px rgba(0, 122, 255, 0.24) !important;
         }
         :root[data-theme="light"] .btn-primary:hover {
-            box-shadow: 0 6px 20px rgba(139, 195, 72, 0.45) !important;
+            box-shadow: 0 6px 20px rgba(0, 122, 255, 0.30) !important;
         }
         :root[data-theme="light"] .fund-card:hover {
-            background: rgba(139, 195, 72, 0.06) !important;
+            background: rgba(0, 122, 255, 0.05) !important;
         }
         :root[data-theme="light"] .home-ocr-main {
             background: var(--primary-gradient) !important;
-            box-shadow: 0 10px 26px rgba(139, 195, 72, 0.32) !important;
+            box-shadow: 0 10px 26px rgba(0, 122, 255, 0.24) !important;
         }
 
 
@@ -458,14 +501,14 @@ html[data-theme="light"] .page-title,
         html[data-theme="light"] .profit-list-row > div:not(:last-child),
         html[data-theme="light"] .metric-value:not([style]),
         html[data-theme="light"] .stock-metric .value:not([style]) {
-            color: #1a1a1a;
-            -webkit-text-fill-color: #1a1a1a;
+            color: #1d1d1f;
+            -webkit-text-fill-color: #1d1d1f;
         }
 
         html[data-theme="light"] .fund-card > div:first-child > span:first-child,
         html[data-theme="light"] .fund-card > div:first-child > span:first-child > span:first-child {
-            color: #1a1a1a !important;
-            -webkit-text-fill-color: #1a1a1a !important;
+            color: #1d1d1f !important;
+            -webkit-text-fill-color: #1d1d1f !important;
             opacity: 1 !important;
             text-shadow: none !important;
         }
@@ -478,49 +521,13 @@ html[data-theme="light"] .page-title,
         html[data-theme="light"] .sector-table-head,
         html[data-theme="light"] .calendar-week,
         html[data-theme="light"] .news-empty {
-            color: #5a6b5a;
-            -webkit-text-fill-color: #5a6b5a;
+            color: #6e6e73;
+            -webkit-text-fill-color: #6e6e73;
         }
 
         html[data-theme="light"] .fund-card [style*="color: #fff"],
-        html[data-theme="light"] .fund-card [style*="color:#fff"],
-        /* Vivid theme (default): force dark text on light cards */
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .fund-card [style*="color: #f8fafc"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .fund-card [style*="color:#f8fafc"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .stock-card [style*="color: #f8fafc"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .stock-card [style*="color:#f8fafc"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .sector-row [style*="color:#f8fafc"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .sector-row [style*="color: #f8fafc"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .exposure-row [style*="color:#f8fafc"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .exposure-row [style*="color: #f8fafc"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .calibration-card-row [style*="color:#f8fafc"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .calibration-card-row [style*="color: #f8fafc"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .profit-list-row [style*="color:#f8fafc"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .profit-list-row [style*="color: #f8fafc"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .glass-panel [style*="color: #f8fafc"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .glass-panel [style*="color:#f8fafc"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .feature-card [style*="color: #f8fafc"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .feature-card [style*="color:#f8fafc"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .quick-holding-card [style*="color:#f8fafc"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .quick-holding-card [style*="color: #f8fafc"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .bottom-tabbar [style*="color:#f8fafc"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .bottom-tabbar [style*="color: #f8fafc"] {
-            color: #1a1d2e !important;
-        }
-
-        /* warm theme: override hardcoded #cbd5e1 (pale blue-gray) with warm dark tone */
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .total-panel [style*="color:#cbd5e1"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .total-panel [style*="color: #cbd5e1"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .fund-card [style*="color:#cbd5e1"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .fund-card [style*="color: #cbd5e1"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .number-display [style*="color:#cbd5e1"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .number-display [style*="color: #cbd5e1"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .metric-value [style*="color:#cbd5e1"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .metric-value [style*="color: #cbd5e1"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .metric-item [style*="color:#cbd5e1"],
-        :root:not([data-theme="rainbow"]):not([data-theme="light"]) .metric-item [style*="color: #cbd5e1"] {
-            color: #4a4030 !important;
-            -webkit-text-fill-color: #4a4030 !important;
+        html[data-theme="light"] .fund-card [style*="color:#fff"] {
+            color: #1d1d1f !important;
         }
 
 html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
@@ -537,8 +544,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         html[data-theme="light"] .calibration-card-row [style*="color: #f8fafc"],
         html[data-theme="light"] .profit-list-row [style*="color:#f8fafc"],
         html[data-theme="light"] .profit-list-row [style*="color: #f8fafc"] {
-            color: #1a1a1a !important;
-            -webkit-text-fill-color: #1a1a1a !important;
+            color: #1d1d1f !important;
+            -webkit-text-fill-color: #1d1d1f !important;
         }
 
         html[data-theme="light"] .glass-panel [style*="color: #fff"],
@@ -553,8 +560,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         html[data-theme="light"] .modal-content [style*="color:#fff"],
         html[data-theme="light"] .modal-content [style*="color: #f8fafc"],
         html[data-theme="light"] .modal-content [style*="color:#f8fafc"] {
-            color: #1a1a1a !important;
-            -webkit-text-fill-color: #1a1a1a !important;
+            color: #1d1d1f !important;
+            -webkit-text-fill-color: #1d1d1f !important;
         }
 
         html[data-theme="light"] .fund-card [style*="color:#cbd5e1"],
@@ -563,25 +570,25 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         html[data-theme="light"] .stock-card [style*="color: #cbd5e1"],
         html[data-theme="light"] .sector-row [style*="color:#cbd5e1"],
         html[data-theme="light"] .sector-row [style*="color: #cbd5e1"] {
-            color: #5a6b5a !important;
-            -webkit-text-fill-color: #5a6b5a !important;
+            color: #6e6e73 !important;
+            -webkit-text-fill-color: #6e6e73 !important;
         }
 
         html[data-theme="light"] .stock-code-chip {
-            color: #5a6b5a;
-            background: rgba(27, 94, 32, .05);
-            border: 1px solid rgba(27, 94, 32, .08);
+            color: #6e6e73;
+            background: rgba(118, 118, 128, .08);
+            border: 1px solid rgba(60, 60, 67, .12);
         }
 
         html[data-theme="light"] .stock-metric,
         html[data-theme="light"] .quick-holding-card,
         html[data-theme="light"] .calendar-day {
-            background: rgba(240, 244, 240, .84);
-            border-color: rgba(27, 94, 32, .06);
+            background: rgba(242, 242, 247, .84);
+            border-color: rgba(60, 60, 67, .10);
         }
 
         html[data-theme="light"] .calendar-date {
-            color: #1a1a1a;
+            color: #1d1d1f;
         }
 
         .fund-list-container {
@@ -2226,8 +2233,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             grid-template-columns: repeat(5, 1fr);
             gap: 6px;
             padding: 7px;
-            border-radius: 24px;
-            background: rgba(255,255,255,.94);
+            border-radius: 18px;
+            background: var(--card-bg);
             border: 1px solid var(--card-border);
             box-shadow: var(--card-shadow);
             backdrop-filter: blur(18px);
@@ -2236,8 +2243,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
         .bottom-tab {
             border: 0;
-            border-radius: 18px;
-            background: transparent;
+            border-radius: 12px;
+            background: var(--card-bg-soft);
             color: var(--text-muted);
             height: 48px;
             display: flex;
@@ -2257,9 +2264,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             }
 
             .bottom-tab.active {
-                background: linear-gradient(135deg, rgba(59,130,246,.92), rgba(99,102,241,.92));
+                background: var(--primary-gradient);
                 color: #fff;
-                box-shadow: 0 8px 20px rgba(59,130,246,.35);
+                box-shadow: 0 8px 20px rgba(79, 140, 255, .24);
             }
 
             .bottom-tab:active {
@@ -2682,14 +2689,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             .bottom-tabbar {
                 bottom: 8px;
                 width: calc(100vw - 18px);
-                border-radius: 20px;
+                border-radius: 16px;
                 padding: 6px;
                 gap: 4px;
             }
 
             .bottom-tab {
                 height: 44px;
-                border-radius: 15px;
+                border-radius: 10px;
                 font-size: 11px;
             }
 
@@ -2845,17 +2852,17 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
         .profile-modal-card {
             width: min(88vw, 360px);
-            background: #0f172a;
-            border: 1px solid rgba(96,165,250,.35);
-            border-radius: 24px;
-            box-shadow: 0 20px 60px rgba(0,0,0,.55);
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: var(--card-radius);
+            box-shadow: var(--card-shadow);
             overflow: hidden;
         }
 
         .profile-head {
             padding: 26px 22px 20px;
             text-align: center;
-            background: radial-gradient(circle at top, rgba(96,165,250,.18), rgba(15,23,42,0));
+            background: var(--secondary-gradient);
         }
 
         .profile-avatar-large {
@@ -2864,7 +2871,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             border-radius: 50%;
             margin: 0 auto 12px;
             border: 2px solid rgba(255,255,255,.18);
-            background: linear-gradient(135deg, rgba(96,165,250,.35), rgba(139,92,246,.3));
+            background: var(--primary-gradient);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -3243,8 +3250,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 width: min(760px, calc(100vw - 80px));
                 bottom: 20px;
                 padding: 8px;
-                border-radius: 22px;
-                background: rgba(15,23,42,.72);
+                border-radius: 18px;
+                background: var(--card-bg);
             }
 
             .bottom-tab {
@@ -4200,9 +4207,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         .theme-settings {
             margin: 0 18px 18px;
             padding: 14px;
-            border-radius: 18px;
-            background: rgba(15, 23, 42, .34);
-            border: 1px solid rgba(255, 255, 255, .08);
+            border-radius: var(--card-radius);
+            background: var(--card-bg-soft);
+            border: 1px solid var(--card-border);
         }
 
         .theme-settings-title {
@@ -4219,17 +4226,96 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
         .theme-choice-btn {
-            min-height: 42px;
-            justify-content: center;
-            border-radius: 999px;
+            min-width: 0;
+            min-height: 112px;
+            padding: 12px;
+            position: relative;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            grid-template-rows: auto auto;
+            gap: 10px;
+            align-items: start;
+            text-align: left;
+            border-radius: 12px;
+            background: var(--card-bg-soft);
+            border-color: var(--card-border);
         }
 
             .theme-choice-btn.active {
                 background: var(--primary-gradient);
                 border-color: transparent;
                 color: #fff;
-                box-shadow: 0 10px 24px rgba(139, 92, 246, .20);
+                box-shadow: 0 10px 24px rgba(79, 140, 255, .20);
             }
+
+        .theme-choice-preview {
+            grid-column: 1 / 2;
+            width: 58px;
+            height: 30px;
+            box-sizing: border-box;
+            padding: 0 8px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, .16);
+        }
+
+        .theme-choice-preview i {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .theme-choice-preview--dark {
+            color: #64d2ff;
+            background: linear-gradient(135deg, #171b22, #0f252b);
+        }
+
+        .theme-choice-preview--dark i:nth-child(2) { color: #ff5f87; }
+        .theme-choice-preview--dark i:nth-child(3) { color: #4f8cff; }
+
+        .theme-choice-preview--apple {
+            color: #007aff;
+            background: linear-gradient(135deg, #ffffff, #e9edf3);
+            border-color: rgba(60, 60, 67, .18);
+        }
+
+        .theme-choice-preview--apple i:nth-child(2) { color: #ff9f0a; }
+        .theme-choice-preview--apple i:nth-child(3) { color: #1d1d1f; }
+
+        .theme-choice-copy {
+            grid-column: 1 / 3;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .theme-choice-copy strong {
+            font-size: 13px;
+            color: inherit;
+        }
+
+        .theme-choice-copy small {
+            color: var(--text-muted);
+            font-size: 10px;
+            line-height: 1.4;
+        }
+
+        .theme-choice-btn.active .theme-choice-copy small {
+            color: rgba(255, 255, 255, .82);
+        }
+
+        .theme-choice-check {
+            grid-column: 2 / 3;
+            min-width: 16px;
+            font-size: 16px;
+            font-weight: 900;
+            line-height: 30px;
+            text-align: right;
+        }
 
         :root[data-theme="rainbow"] .home-hero-clean,
         :root[data-theme="rainbow"] .total-panel,
@@ -4251,8 +4337,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         :root[data-theme="rainbow"] .home-hero-clean,
         :root[data-theme="rainbow"] .total-panel {
             background: var(--card-bg-hero) !important;
-            border-color: rgba(174, 201, 255, .20) !important;
-            box-shadow: 0 20px 54px rgba(2, 6, 23, .38), 0 0 34px rgba(56, 189, 248, .12) !important;
+            border-color: var(--card-border) !important;
+            box-shadow: var(--card-shadow) !important;
         }
 
         :root[data-theme="rainbow"] .feature-card,
@@ -4284,10 +4370,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             background: var(--primary-gradient) !important;
             border-color: transparent !important;
             color: #fff !important;
-            box-shadow: 0 10px 26px rgba(139, 92, 246, .22), 0 0 18px rgba(56, 189, 248, .10) !important;
+            box-shadow: 0 10px 26px rgba(79, 140, 255, .22) !important;
         }
 
-        :root[data-theme="rainbow"] .btn:not(.btn-primary):not(.btn-success):not(.btn-danger),
+        :root[data-theme="rainbow"] .btn:not(.btn-primary):not(.btn-success):not(.btn-danger):not(.theme-choice-btn),
         :root[data-theme="rainbow"] .asset-mode-btn:not(.active),
         :root[data-theme="rainbow"] .news-tab:not(.active),
         :root[data-theme="rainbow"] .stock-kline-tab:not(.active),
@@ -4299,16 +4385,16 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
         :root[data-theme="rainbow"] .bottom-tabbar {
-            border-radius: 999px !important;
-            background: radial-gradient(circle at 18% 0%, rgba(255,95,162,.20), transparent 30%), radial-gradient(circle at 88% 8%, rgba(56,189,248,.16), transparent 28%), linear-gradient(145deg, rgba(11, 17, 36, .94), rgba(15, 28, 56, .88)) !important;
+            border-radius: 18px !important;
+            background: rgba(24, 28, 34, .96) !important;
             border-color: var(--card-border) !important;
-            box-shadow: 0 14px 36px rgba(2,6,23,.46), 0 0 22px rgba(139,92,246,.14) !important;
+            box-shadow: 0 14px 36px rgba(0, 0, 0, .28) !important;
         }
 
         :root[data-theme="rainbow"] .bottom-tab {
-            border-radius: 999px !important;
-            background: rgba(21, 29, 61, .62) !important;
-            color: #d7e3f7 !important;
+            border-radius: 12px !important;
+            background: rgba(255, 255, 255, .045) !important;
+            color: #a7adb8 !important;
         }
 
             :root[data-theme="rainbow"] .bottom-tab.active {
@@ -4403,7 +4489,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
         :root[data-theme="rainbow"] .profile-head {
-            background: radial-gradient(circle at 20% 0%, rgba(255,95,162,.20), transparent 36%), radial-gradient(circle at 90% 0%, rgba(56,189,248,.15), transparent 32%) !important;
+            background: var(--secondary-gradient) !important;
         }
 
         :root[data-theme="rainbow"] .profile-avatar-large,
@@ -4424,13 +4510,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             white-space: nowrap;
         }
     
-        /* Rainbow theme overrides for elements changed for vivid base */
-        :root[data-theme="rainbow"] .btn {
+        /* 曜石流光主题的次级按钮 */
+        :root[data-theme="rainbow"] .btn:not(.btn-primary):not(.btn-success):not(.btn-danger):not(.theme-choice-btn) {
             background: rgba(255,255,255,0.1);
             border: 1px solid rgba(255,255,255,0.15);
             color: white;
         }
-        :root[data-theme="rainbow"] .btn:hover:not(:disabled) {
+        :root[data-theme="rainbow"] .btn:not(.btn-primary):not(.btn-success):not(.btn-danger):not(.theme-choice-btn):hover:not(:disabled) {
             background: rgba(255,255,255,0.2);
         }
         :root[data-theme="rainbow"] .page-title {
@@ -4549,14 +4635,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             <div v-for="t in toasts" :key="t.id" :class="['toast', t.type]">{{ t.msg }}</div>
         </div>
 
-        <div v-if="!isLoggedIn" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,23,42,0.8);backdrop-filter:blur(15px);z-index:999;display:flex;align-items:center;justify-content:center;">
-            <div class="glass-panel" style="padding: 40px; text-align: center; width: 300px;">
-                <h2 class="logo-text" style="margin-bottom: 25px;">📊 小白养基</h2>
-                <input v-model="loginForm.username" type="text" placeholder="输入用户名" style="width:100%;margin:15px 0;padding:12px;border-radius:12px;box-sizing:border-box;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);color:var(--text-main);">
-                <input v-model="loginForm.password" type="password" placeholder="安全密钥" @keyup.enter="handleLogin" style="width:100%;margin-bottom:20px;padding:12px;border-radius:12px;box-sizing:border-box;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);color:var(--text-main);">
-                <div style="display:flex;gap:10px;">
-                    <button class="btn btn-primary" @click="handleLogin" style="flex:1;justify-content:center;">登陆</button>
-                    <button class="btn" @click="handleRegister" style="flex:1;justify-content:center;">注册</button>
+        <div v-if="!isLoggedIn" class="auth-screen">
+            <div class="glass-panel auth-panel">
+                <h2 class="logo-text">小白养基</h2>
+                <input v-model="loginForm.username" class="auth-input" type="text" placeholder="输入用户名">
+                <input v-model="loginForm.password" class="auth-input" type="password" placeholder="安全密钥" @keyup.enter="handleLogin">
+                <div class="auth-actions">
+                    <button class="btn btn-primary" @click="handleLogin">登陆</button>
+                    <button class="btn" @click="handleRegister">注册</button>
                 </div>
             </div>
         </div>
@@ -5251,10 +5337,16 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     <div class="theme-settings">
                         <div class="theme-settings-title">主题设置</div>
                         <div class="theme-choice-row">
-                            <button :class="['btn', 'theme-choice-btn', appTheme === 'vivid' ? 'active' : '']" @click="setAppTheme('vivid')">Ruby Pink</button>
-                            <button :class="['btn', 'theme-choice-btn', appTheme === 'warm' ? 'active' : '']" @click="setAppTheme('warm')">暖金主题</button>
-                            <button :class="['btn', 'theme-choice-btn', appTheme === 'light' ? 'active' : '']" @click="setAppTheme('light')">绿色能源</button>
-                            <button :class="['btn', 'theme-choice-btn', appTheme === 'rainbow' ? 'active' : '']" @click="setAppTheme('rainbow')">彩虹渐变</button>
+                            <button :class="['btn', 'theme-choice-btn', appTheme === 'rainbow' ? 'active' : '']" @click="setAppTheme('rainbow')">
+                                <span class="theme-choice-preview theme-choice-preview--dark"><i></i><i></i><i></i></span>
+                                <span class="theme-choice-check">{{ appTheme === 'rainbow' ? '✓' : '' }}</span>
+                                <span class="theme-choice-copy"><strong>曜石流光</strong><small>默认 · 深色高对比、克制流光</small></span>
+                            </button>
+                            <button :class="['btn', 'theme-choice-btn', appTheme === 'light' ? 'active' : '']" @click="setAppTheme('light')">
+                                <span class="theme-choice-preview theme-choice-preview--apple"><i></i><i></i><i></i></span>
+                                <span class="theme-choice-check">{{ appTheme === 'light' ? '✓' : '' }}</span>
+                                <span class="theme-choice-copy"><strong>雾光银蓝</strong><small>Apple 风格 · 雾白层次、系统蓝操作</small></span>
+                            </button>
                         </div>
                     </div>
                     <div class="profile-actions">
@@ -5858,10 +5950,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const THEME_STORAGE_KEY = 'guzhi_web_theme';
                 const normalizeTheme = (theme) => {
                     const value = String(theme || '').toLowerCase();
-                    return value === 'rainbow' || value === 'neon' || value === 'gradient' ? 'rainbow'
-                         : value === 'light' ? 'light'
-                         : value === 'warm' || value === 'vivid_gold' ? 'warm'
-                         : value === 'vivid' ? 'vivid'
+                    return value === 'light' || value === 'apple' || value === 'frost' || value === 'warm' || value === 'vivid_gold'
+                         ? 'light'
                          : 'rainbow';
                 };
                 const applyAppTheme = (theme) => {
@@ -5869,7 +5959,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     document.documentElement.setAttribute('data-theme', safeTheme);
                     if (document.body) document.body.setAttribute('data-theme', safeTheme);
                     const metaTheme = document.querySelector('meta[name="theme-color"]');
-                    if (metaTheme) metaTheme.setAttribute('content', safeTheme === 'rainbow' ? '#151d3f' : safeTheme === 'light' ? '#f0f4f0' : safeTheme === 'warm' ? '#f0e8d8' : '#fdf2f8');
+                    if (metaTheme) metaTheme.setAttribute('content', safeTheme === 'light' ? '#f5f5f7' : '#111318');
                 };
                 const appTheme = ref(normalizeTheme(localStorage.getItem(THEME_STORAGE_KEY)));
                 applyAppTheme(appTheme.value);

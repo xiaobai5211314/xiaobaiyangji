@@ -2170,50 +2170,41 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 .metric-value.profit-text {
-  color: #dc2626;
+  color: var(--profit-color);
 }
 
 .metric-value.loss-text {
-  color: #059669;
+  color: var(--loss-color);
 }
 
-.home-page.theme-vivid .hero-card,
 .home-page .hero-card {
-  color: #0f172a !important;
-  background: rgba(255, 255, 255, 0.97) !important;
-  border-color: rgba(15, 23, 42, 0.08) !important;
+  color: var(--text-primary) !important;
+  background: var(--card-bg) !important;
+  border-color: var(--border-color) !important;
 }
 
-.home-page.theme-vivid .hero-card .muted-text,
-.home-page.theme-vivid .hero-card .hero-sub,
-.home-page.theme-vivid .hero-card .metric-label,
 .home-page .hero-card .muted-text,
 .home-page .hero-card .hero-sub,
 .home-page .hero-card .metric-label {
-  color: #64748b !important;
+  color: var(--text-muted) !important;
 }
 
-.home-page.theme-vivid .hero-card .hero-money,
-.home-page.theme-vivid .hero-card .metric-value,
 .home-page .hero-card .hero-money,
 .home-page .hero-card .metric-value {
-  color: #0f172a !important;
+  color: var(--text-primary) !important;
 }
 
-.home-page.theme-vivid .hero-card .profit-text,
 .home-page .hero-card .profit-text {
-  color: #dc2626 !important;
+  color: var(--profit-color) !important;
 }
 
-.home-page.theme-vivid .hero-card .loss-text,
 .home-page .hero-card .loss-text {
-  color: #059669 !important;
+  color: var(--loss-color) !important;
 }
 
-.home-page.theme-vivid .summary-cell,
 .home-page .summary-cell {
-  background: #f8fafc !important;
-  border-color: rgba(15, 23, 42, 0.07) !important;
+  background: var(--panel-soft) !important;
+  border-color: var(--border-color) !important;
 }
 
 .nav-value {
@@ -2551,9 +2542,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 .stock-list-card,
 .stock-chart-card {
   padding: 30rpx;
-  background:
-    radial-gradient(circle at 12% 12%, rgba(90, 167, 255, 0.14), transparent 34%),
-    linear-gradient(145deg, rgba(34, 49, 86, 0.58), rgba(17, 27, 52, 0.5));
+  background: var(--card-bg);
 }
 
 .stock-section-head,

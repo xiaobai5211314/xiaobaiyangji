@@ -67,8 +67,14 @@
             :class="['theme-option', themeState.theme === item.value ? 'active' : '']"
             @tap="selectTheme(item.value)"
           >
-            <text>{{ item.label }}</text>
-            <text>{{ item.description }}</text>
+            <view class="theme-option-top">
+              <view :class="['theme-preview', `theme-preview-${item.value}`]">
+                <text></text><text></text><text></text>
+              </view>
+              <text class="theme-check">{{ themeState.theme === item.value ? '✓' : '' }}</text>
+            </view>
+            <text class="theme-option-name">{{ item.label }}</text>
+            <text class="theme-option-description">{{ item.description }}</text>
           </button>
         </view>
       </view>
@@ -317,7 +323,7 @@ function getErrorMessage(error: unknown, fallback: string) {
   height: 148rpx;
   border-radius: 50%;
   border: 2rpx solid var(--border-color);
-  box-shadow: 0 20rpx 48rpx rgba(59, 130, 246, 0.28), 0 0 28rpx rgba(139, 92, 246, 0.18);
+  box-shadow: var(--active-shadow);
 }
 
 .avatar-fallback {
@@ -327,7 +333,7 @@ function getErrorMessage(error: unknown, fallback: string) {
   color: var(--button-primary-text);
   font-size: 58rpx;
   font-weight: 900;
-  background: linear-gradient(135deg, $primary-blue, $primary-purple);
+  background: var(--button-primary-bg);
 }
 
 .profile-name {
@@ -426,20 +432,21 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 .theme-options {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16rpx;
 }
 
 .theme-option {
-  min-height: 112rpx;
+  min-width: 0;
+  min-height: 188rpx;
   padding: 18rpx;
-  border-radius: 30rpx;
+  border-radius: 20rpx;
   background: var(--control-bg);
   border: 1rpx solid var(--border-color);
   color: var(--text-secondary);
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8rpx;
   text-align: left;
 }
@@ -448,24 +455,77 @@ function getErrorMessage(error: unknown, fallback: string) {
   border: none;
 }
 
-.theme-option text:first-child {
+.theme-option-top {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+}
+
+.theme-preview {
+  width: 72rpx;
+  height: 42rpx;
+  padding: 0 10rpx;
+  box-sizing: border-box;
+  border-radius: 12rpx;
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.16);
+}
+
+.theme-preview text {
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.theme-preview-neon {
+  color: #64d2ff;
+  background: linear-gradient(135deg, #171b22, #0f252b);
+}
+
+.theme-preview-neon text:nth-child(2) { color: #ff5f87; }
+.theme-preview-neon text:nth-child(3) { color: #4f8cff; }
+
+.theme-preview-light {
+  color: #007aff;
+  background: linear-gradient(135deg, #ffffff, #e9edf3);
+  border-color: rgba(60, 60, 67, 0.18);
+}
+
+.theme-preview-light text:nth-child(2) { color: #ff9f0a; }
+.theme-preview-light text:nth-child(3) { color: #1d1d1f; }
+
+.theme-check {
+  min-width: 28rpx;
+  color: inherit;
+  font-size: 28rpx;
+  font-weight: 900;
+  text-align: right;
+}
+
+.theme-option-name {
   font-size: 26rpx;
   font-weight: 900;
 }
 
-.theme-option text:last-child {
+.theme-option-description {
   color: var(--text-muted);
   font-size: 21rpx;
+  line-height: 1.45;
 }
 
 .theme-option.active {
   color: var(--button-primary-text);
   background: var(--button-primary-bg);
   border-color: var(--border-color);
-  box-shadow: 0 16rpx 34rpx rgba(139, 92, 246, 0.18);
+  box-shadow: var(--active-shadow);
 }
 
-.theme-option.active text:last-child {
+.theme-option.active .theme-option-description {
   color: rgba(255, 255, 255, 0.84);
 }
 

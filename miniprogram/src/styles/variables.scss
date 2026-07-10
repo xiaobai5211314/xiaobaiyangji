@@ -1,13 +1,13 @@
 // ============================================================
-// 小白养基 · Ruby Pink 色彩系统
-// 设计语言：圆润 / 通透 / 轻拟物 / 支付宝理财氛围
+// 小白养基 · 曜石流光基础色彩系统
+// 主题差异由 theme.scss 的 CSS 变量承载；这里提供默认主题和旧页面兼容值。
 // ============================================================
 
-// ─── 品牌主色（粉色系 Ruby Pink）────────────────────
-$brand-blue:   #ec4899;
-$brand-purple: #f472b6;
-$brand-light:  #f9a8d4;
-$brand-soft:   rgba(236, 72, 153, 0.08);
+// ─── 品牌主色 ────────────────────────────────────
+$brand-blue:   #4f8cff;
+$brand-purple: #7c6ff2;
+$brand-light:  #64d2ff;
+$brand-soft:   rgba(79, 140, 255, 0.12);
 
 // ─── 辅助渐变色 ──────────────────────────────────────
 $warm-red:     #e57373;
@@ -19,18 +19,18 @@ $amber-light:  #ffc56d;
 $amber-soft:   rgba(247, 166, 65, 0.10);
 
 // ─── 页面底色 ──────────────────────────────────────
-$page-bg-light:    #fdf2f8;
-$page-bg-gradient: linear-gradient(175deg, #fce4ec 0%, #fdf2f8 30%, #f8bbd0 100%);
+$page-bg-light:    #111318;
+$page-bg-gradient: linear-gradient(160deg, #101216 0%, #171b22 55%, #0f252b 100%);
 
 // ─── 卡片 ─────────────────────────────────────────
-$card-bg:          rgba(255, 244, 249, 0.94);
-$card-bg-strong:   rgba(255, 255, 255, 0.98);
-$card-border:      rgba(244, 114, 182, 0.08);
-$card-radius:      32rpx;
-$card-radius-sm:   20rpx;
+$card-bg:          rgba(29, 33, 40, 0.94);
+$card-bg-strong:   rgba(20, 23, 29, 0.98);
+$card-border:      rgba(255, 255, 255, 0.10);
+$card-radius:      20rpx;
+$card-radius-sm:   14rpx;
 
 // ─── 主渐变 ───────────────────────────────────────
-$primary-gradient: linear-gradient(135deg, #ec4899, #f472b6);
+$primary-gradient: linear-gradient(135deg, #ff5f87, #4f8cff);
 
 $warm-gradient:
   linear-gradient(135deg, $warm-red 0%, $warm-red-light 100%);
@@ -42,19 +42,19 @@ $amber-gradient:
 $profit-red:    #e53935;
 $loss-green:    #2e7d32;
 $warning-yellow: #f59e0b;
-$info-blue:     #ec4899;
+$info-blue:     #4f8cff;
 
 // ─── 文本 ─────────────────────────────────────────
-$text-primary:    #1a1d2e;
-$text-secondary:  #5a5e78;
-$text-muted:      #9498ae;
+$text-primary:    #f5f5f7;
+$text-secondary:  #d1d1d6;
+$text-muted:      #98989d;
 $text-inverse:    #ffffff;
 
 // ─── 阴影（轻拟物） ───────────────────────────────
-$shadow-sm:  0 4rpx 16rpx rgba(26, 29, 46, 0.04);
-$shadow-md:  0 12rpx 40rpx rgba(26, 29, 46, 0.06);
-$shadow-lg:  0 20rpx 60rpx rgba(26, 29, 46, 0.08);
-$shadow-glow: 0 8rpx 32rpx rgba(236, 72, 153, 0.18), 0 0 16rpx rgba(244, 114, 182, 0.08);
+$shadow-sm:  0 4rpx 16rpx rgba(0, 0, 0, 0.14);
+$shadow-md:  0 12rpx 36rpx rgba(0, 0, 0, 0.18);
+$shadow-lg:  0 20rpx 54rpx rgba(0, 0, 0, 0.24);
+$shadow-glow: 0 10rpx 28rpx rgba(79, 140, 255, 0.20);
 
 // ─── 布局 ─────────────────────────────────────────
 $page-padding: 28rpx;
@@ -66,26 +66,26 @@ $safe-bottom-padding: env(safe-area-inset-bottom);
 // ─── 兼容别名（旧页面不报错） ───────────────────────
 $bg-deep-blue: $page-bg-light;
 $bg-purple: $brand-purple;
-$rainbow-pink: #f472b6;
-$rainbow-purple: #8b5cf6;
-$rainbow-cyan: #ec4899;
-$soft-pink: rgba(244, 114, 182, 0.08);
-$soft-purple: rgba(236, 72, 153, 0.08);
-$soft-cyan: rgba(139, 92, 246, 0.08);
+$rainbow-pink: #ff5f87;
+$rainbow-purple: #7c6ff2;
+$rainbow-cyan: #64d2ff;
+$soft-pink: rgba(255, 95, 135, 0.10);
+$soft-purple: rgba(124, 111, 242, 0.10);
+$soft-cyan: rgba(100, 210, 255, 0.10);
 $rainbow-gradient: $primary-gradient;
-$bg-panel: rgba(255, 255, 255, 0.92);
+$bg-panel: rgba(29, 33, 40, 0.94);
 $bg-panel-strong: $card-bg-strong;
 $card-shadow: $shadow-md;
 
-$primary-blue: #ec4899;
-$primary-purple: #f472b6;
+$primary-blue: #4f8cff;
+$primary-purple: #7c6ff2;
 
 $page-bg: $page-bg-light;
 $panel-bg: $bg-panel;
 $panel-border: $card-border;
 $text-primary: $text-primary;
 $text-secondary: $text-secondary;
-$accent: #ec4899;
+$accent: #4f8cff;
 $danger: #e53935;
 $success: #2e7d32;
 $warning: $warning-yellow;

@@ -52,19 +52,19 @@ function handleTap(key: TabKey) {
   gap: 10rpx;
   backdrop-filter: blur(24rpx);
   -webkit-backdrop-filter: blur(24rpx);
-  background: rgba(255, 255, 255, 0.96);
-  border-color: rgba(15, 23, 42, 0.08);
-  box-shadow: 0 18rpx 54rpx rgba(15, 23, 42, 0.12);
+  background: var(--tab-bg);
+  border-color: var(--border-color);
+  box-shadow: var(--tabbar-shadow);
 }
 
 .tab-item {
   min-width: 0;
   height: 124rpx;
   padding: 0 8rpx;
-  border-radius: 62rpx;
-  color: #64748b;
-  background: #f8fafc;
-  border: 1rpx solid rgba(15, 23, 42, 0.04);
+  border-radius: 22rpx;
+  color: var(--tab-item-color);
+  background: var(--tab-item-bg);
+  border: 1rpx solid var(--border-color);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -78,9 +78,9 @@ function handleTap(key: TabKey) {
 }
 
 .tab-item.active {
-  background: #2563eb;
-  color: #fff;
-  box-shadow: 0 14rpx 34rpx rgba(37, 99, 235, 0.22);
+  background: var(--tab-active-bg);
+  color: var(--button-primary-text);
+  box-shadow: var(--active-shadow);
 }
 
 .tab-icon {

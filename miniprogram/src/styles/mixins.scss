@@ -1,7 +1,7 @@
 @import './variables.scss';
 
 // ============================================================
-// 小白养基 · 年轻活力风 混入库
+// 小白养基 · 通用视觉混入库
 // ============================================================
 
 // ─── 页面底色（柔和渐变背景） ─────────────────────
@@ -71,11 +71,10 @@
   height: $tabbar-height;
   box-sizing: border-box;
   padding: 16rpx;
-  border-radius: 84rpx;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92));
-  border: 1rpx solid $card-border;
-  box-shadow: $shadow-lg;
+  border-radius: 36rpx;
+  background: var(--tab-bg);
+  border: 1rpx solid var(--border-color);
+  box-shadow: var(--tabbar-shadow);
   backdrop-filter: blur(24rpx);
   -webkit-backdrop-filter: blur(24rpx);
 }
