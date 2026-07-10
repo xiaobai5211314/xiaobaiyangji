@@ -6659,10 +6659,22 @@ namespace 小白养基.Controllers
                     else if (dataStatus == "estimate_today")
                     {
                         todayProfit = Math.Round(todayBaseAmount * todayRate / 100.0, 2);
-                        double estimatedConfirmedAmount = Math.Max(0, Math.Round(settledMarketValue + todayProfit, 2));
-                        marketValue = Math.Round(estimatedConfirmedAmount + pendingBuyAmount, 2);
-                        rawHoldAmount = marketValue;
-                        confirmedHoldAmount = estimatedConfirmedAmount;
+                        if (hasLatestOcrAmount && rawHoldAmount > 0)
+                        {
+                            // 有新鲜 OCR 快照时，首页当前展示以 OCR 快照为准。
+                            // 晚间 OCR 当前金额已是平台最新展示值（已含当日收益），
+                            // 不再叠加盘中估算收益，避免收益重复计算。
+                            // 盘中估算收益仅用于“今日盘中估算”临时展示，不进入账户总金额。
+                            marketValue = rawHoldAmount;
+                            confirmedHoldAmount = Math.Max(0, Math.Round(rawHoldAmount - pendingBuyAmount, 2));
+                        }
+                        else
+                        {
+                            double estimatedConfirmedAmount = Math.Max(0, Math.Round(settledMarketValue + todayProfit, 2));
+                            marketValue = Math.Round(estimatedConfirmedAmount + pendingBuyAmount, 2);
+                            rawHoldAmount = marketValue;
+                            confirmedHoldAmount = estimatedConfirmedAmount;
+                        }
                     }
                     else
                     {

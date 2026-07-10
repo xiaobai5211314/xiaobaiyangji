@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2026-07-10
+
+- 修复晚间 OCR 导入后总持仓金额收益重复计算：`estimate_today`（盘中估值状态）分支中，有新鲜 OCR 快照时不再把盘中估算收益叠加到 OCR 当前金额上。晚间 OCR 截图的当前金额已是平台当天最终值（含当日收益），叠加盘中估算收益会导致收益被计算两遍。盘中估算收益仍正常计算，仅用于"今日盘中估算"临时展示，不进入账户总金额。
+- 性能审查修复（见 `docs/reviews/2026-07-10-performance-and-correctness-audit.md`）：移除 `MarketCacheService` 热读取路径的缓存命中统计写库；`FundScraperService` 只抓取有效持仓并按基金代码去重；`NavSettlementService` 只结算仍有持仓的基金；删除 `settle-nightly` 和 `auto-settle` 旧估值清算入口；删除基金级资金流接口和两端展示。
+
 ## 2026-07-01
 
 - 基金 OCR 导入规则补充：常规蚂蚁持仓截图不含份额/成本价时，系统自动用官方净值反推份额，并用 `当前金额 - 持有收益` 校准成本金额。
