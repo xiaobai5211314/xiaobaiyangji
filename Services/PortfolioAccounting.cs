@@ -16,6 +16,17 @@ namespace 小白养基.Services
         decimal IntradayEstimatedAssets,
         decimal EstimatedHoldingProfit);
 
+    public sealed record EstimatedHoldingAmount(
+        decimal DisplayAmount,
+        decimal ConfirmedAmount);
+
+    public sealed record TodayPerformancePolicy(
+        bool ForceZero,
+        bool Available,
+        string Status,
+        string ProfitLabel,
+        string RateLabel);
+
     public static class PortfolioAccounting
     {
         public static decimal Money(decimal value)
@@ -84,6 +95,44 @@ namespace 小白养基.Services
             return Money(snapshotDisplayAmount);
         }
 
+        public static EstimatedHoldingAmount ResolveEstimatedHoldingAmount(
+            decimal snapshotDisplayAmount,
+            decimal settledConfirmedAmount,
+            decimal estimatedProfit,
+            decimal pendingBuyAmount,
+            bool useCurrentOcrSnapshot)
+        {
+            var pending = Math.Max(0m, Money(pendingBuyAmount));
+            if (useCurrentOcrSnapshot && snapshotDisplayAmount > 0m)
+            {
+                var display = Money(snapshotDisplayAmount);
+                return new EstimatedHoldingAmount(display, Math.Max(0m, Money(display - pending)));
+            }
+
+            var confirmed = Math.Max(0m, Money(Money(settledConfirmedAmount) + Money(estimatedProfit)));
+            return new EstimatedHoldingAmount(Money(confirmed + pending), confirmed);
+        }
+
+        public static EstimatedHoldingAmount ResolveOfficialHoldingAmount(
+            decimal snapshotDisplayAmount,
+            decimal officialConfirmedAmount,
+            decimal rolledConfirmedAmount,
+            decimal pendingBuyAmount,
+            bool useCurrentOcrSnapshot)
+        {
+            var pending = Math.Max(0m, Money(pendingBuyAmount));
+            if (useCurrentOcrSnapshot && snapshotDisplayAmount > 0m)
+            {
+                var display = Money(snapshotDisplayAmount);
+                return new EstimatedHoldingAmount(display, Math.Max(0m, Money(display - pending)));
+            }
+
+            var confirmed = officialConfirmedAmount > 0m
+                ? Money(officialConfirmedAmount)
+                : Math.Max(0m, Money(rolledConfirmedAmount));
+            return new EstimatedHoldingAmount(Money(confirmed + pending), confirmed);
+        }
+
         public static decimal ResolveSettledDisplayAmount(
             decimal baseAmount,
             decimal settledProfit,
@@ -136,6 +185,45 @@ namespace 小白养基.Services
             }
 
             return capturedAt.Date > archiveRecordDate.Value.Date;
+        }
+
+        public static bool IsOcrSnapshotCurrentForDisplay(string? snapshotDate, DateTime naturalDate)
+            => DateTime.TryParse(snapshotDate, out var capturedAt)
+               && capturedAt.Date == naturalDate.Date;
+
+        public static TodayPerformancePolicy ResolveTodayPerformancePolicy(
+            DateTime naturalDate,
+            DateTime effectiveDate,
+            string marketStatus,
+            bool hasPortfolioData,
+            bool hasTodayData,
+            bool hasTodayEstimate,
+            bool hasTodayConfirmed)
+        {
+            if (naturalDate.Date != effectiveDate.Date)
+            {
+                return new TodayPerformancePolicy(
+                    true,
+                    hasPortfolioData,
+                    string.Equals(marketStatus, "preopen", StringComparison.OrdinalIgnoreCase) ? "preopen" : "closed",
+                    "今日收益",
+                    "今日收益率");
+            }
+
+            var status = hasTodayEstimate && hasTodayConfirmed ? "mixed"
+                : hasTodayConfirmed ? "confirmed"
+                : hasTodayEstimate ? "estimated"
+                : "unavailable";
+            return new TodayPerformancePolicy(
+                false,
+                hasPortfolioData && hasTodayData,
+                status,
+                status == "confirmed" ? "今日确认收益"
+                    : status == "mixed" ? "今日收益（部分确认）"
+                    : "今日盘中估算",
+                status == "confirmed" ? "今日确认收益率"
+                    : status == "mixed" ? "今日收益率"
+                    : "今日估算收益率");
         }
 
         public static DateTime ResolvePreviousWeekday(DateTime chinaDate)

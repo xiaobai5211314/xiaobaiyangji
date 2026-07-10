@@ -141,7 +141,7 @@ function deriveRateState(fund: FundTodayItem, now: Date, slashDate: string, dash
     return { rate: 0, isHoliday: true, isSettled: false };
   }
 
-  if (isWeekend || currentMinutes < 565) {
+  if (isWeekend || currentMinutes < 570) {
     return { rate: 0, isHoliday: true, isSettled: false };
   }
 

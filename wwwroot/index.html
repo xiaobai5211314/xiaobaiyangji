@@ -101,12 +101,15 @@
                 --text-main: #1d1d1f;
                 --text-muted: #6e6e73;
                 --text-soft: #3a3a3c;
-                --profit-color: #ff3b30;
-                --loss-color: #168a55;
+                --profit-color: #b91c2b;
+                --loss-color: #006b46;
                 --button-radius: 12px;
                 --card-radius: 14px;
                 --td-color-primary: #007aff;
-                --td-color-info: #5ac8fa;
+                --td-color-success: #006b46;
+                --td-color-warning: #855600;
+                --td-color-danger: #b91c2b;
+                --td-color-info: #0066cc;
             }
 
             :root[data-theme="rainbow"] {
@@ -589,6 +592,85 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
         html[data-theme="light"] .calendar-date {
             color: #1d1d1f;
+        }
+
+        html[data-theme="light"] .summary-tile,
+        html[data-theme="light"] .summary-radar-inline,
+        html[data-theme="light"] .performance-period-tabs button:not(.active) {
+            background: rgba(242, 242, 247, .94);
+            border-color: rgba(60, 60, 67, .14);
+        }
+
+        html[data-theme="light"] .asset-mode-switch,
+        html[data-theme="light"] .confidence-strip,
+        html[data-theme="light"] .fund-today-hero,
+        html[data-theme="light"] .performance-chart-box,
+        html[data-theme="light"] .fund-code-chip {
+            background: rgba(242, 242, 247, .94);
+            border-color: rgba(60, 60, 67, .14);
+        }
+
+        html[data-theme="light"] .performance-select {
+            color: #1d1d1f;
+            background: rgba(255, 255, 255, .94);
+            border-color: rgba(60, 60, 67, .16);
+        }
+
+        html[data-theme="light"] .badge-holiday {
+            color: #53535a;
+            background: rgba(118, 118, 128, .10);
+            border-color: rgba(60, 60, 67, .18);
+        }
+
+        html[data-theme="light"] .badge-pending,
+        html[data-theme="light"] .xb-tag--warning,
+        html[data-theme="light"] .xb-btn--warning {
+            color: #855600;
+        }
+
+        html[data-theme="light"] .xb-tag--success,
+        html[data-theme="light"] .xb-btn--success,
+        html[data-theme="light"] .summary-radar-inline .summary-value {
+            color: #006b46;
+        }
+
+        html[data-theme="light"] .xb-tag--info,
+        html[data-theme="light"] .xb-btn--info {
+            color: #0066cc;
+        }
+
+        html[data-theme="light"] .xb-tag--danger,
+        html[data-theme="light"] .xb-btn--danger {
+            color: #b91c2b;
+        }
+
+        html[data-theme="light"] .fund-card .metric-value:not(.value-gain):not(.value-loss):not(.value-pending) {
+            color: #3a3a3c !important;
+            -webkit-text-fill-color: #3a3a3c !important;
+        }
+
+        html[data-theme="light"] [style*="color: rgb(16, 185, 129)"],
+        html[data-theme="light"] [style*="color:#10b981"],
+        html[data-theme="light"] [style*="color: #10b981"] {
+            color: #006b46 !important;
+            -webkit-text-fill-color: #006b46 !important;
+        }
+
+        html[data-theme="light"] [style*="color: rgb(255, 77, 79)"],
+        html[data-theme="light"] [style*="color:#ff4d4f"],
+        html[data-theme="light"] [style*="color: #ff4d4f"] {
+            color: #b91c2b !important;
+            -webkit-text-fill-color: #b91c2b !important;
+        }
+
+        html[data-theme="light"] [style*="color: rgb(251, 191, 36)"],
+        html[data-theme="light"] [style*="color:#fbbf24"],
+        html[data-theme="light"] [style*="color: #fbbf24"],
+        html[data-theme="light"] [style*="color: rgb(245, 158, 11)"],
+        html[data-theme="light"] [style*="color:#f59e0b"],
+        html[data-theme="light"] [style*="color: #f59e0b"] {
+            color: #855600 !important;
+            -webkit-text-fill-color: #855600 !important;
         }
 
         .fund-list-container {
@@ -4811,7 +4893,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     <div class="divider"></div>
                     <div class="summary-tile">
                         <div class="summary-label">🌟 {{ dashboardActiveSummary.todayProfitLabel }}</div>
-                        <div class="summary-value" :class="privacyMode <= 1 ? (dashboardActiveSummary.todayPerformanceProfit > 0 ? 'value-gain' : (dashboardActiveSummary.todayPerformanceProfit < 0 ? 'value-loss' : '')) : ''">{{ privacyMode <= 1 ? (dashboardActiveSummary.todayPerformanceAvailable ? (dashboardActiveSummary.todayPerformanceProfit >= 0 ? '+' : '') + Number(dashboardActiveSummary.todayPerformanceProfit || 0).toFixed(2) : '--') : '****' }}</div>
+                        <div class="summary-value" :class="privacyMode <= 1 ? (dashboardActiveSummary.todayPerformanceProfit > 0 ? 'value-gain' : (dashboardActiveSummary.todayPerformanceProfit < 0 ? 'value-loss' : '')) : ''">{{ privacyMode <= 1 ? (dashboardActiveSummary.todayPerformanceAvailable ? (dashboardActiveSummary.todayPerformanceProfit > 0 ? '+' : '') + Number(dashboardActiveSummary.todayPerformanceProfit || 0).toFixed(2) : '--') : '****' }}</div>
                     </div>
                     <div class="divider"></div>
                     <div class="summary-tile">
@@ -4978,7 +5060,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                         <div :class="['fund-today-hero', Number(fund.todayProfit || 0) > 0 ? 'fund-today-hero--gain' : (Number(fund.todayProfit || 0) < 0 ? 'fund-today-hero--loss' : 'fund-today-hero--flat')]">
                             <div>
-                                <div class="fund-today-label">{{ fund.isSettled ? '今日确认收益' : '今日估算收益' }}</div>
+                                <div class="fund-today-label">{{ fund.todayProfitLabel || (fund.isSettled ? '今日确认收益' : '今日估算收益') }}</div>
                                 <div class="fund-today-profit" :class="privacyMode <= 1 ? (Number(fund.todayProfit || 0) > 0 ? 'value-gain' : (Number(fund.todayProfit || 0) < 0 ? 'value-loss' : '')) : ''">
                                     {{ privacyMode <= 1 ? (fund.todayProfit >= 0 ? '+' : '') + Number(fund.todayProfit || 0).toFixed(2) : '****' }}
                                 </div>

@@ -160,7 +160,7 @@ namespace 小白养基.Controllers
         private static readonly IReadOnlySet<string> UsShareClosedDates = MarketCalendar.UsShareClosedDates;
 
         /// <summary>
-        /// 基金有效日期：0:00~9:25 返回上一交易日，9:25 以后返回当天，周末返回上周五。
+        /// 基金有效日期：0:00~9:30 返回上一交易日，9:30 以后返回当天，周末返回上周五。
         /// </summary>
         private static string GetEffectiveFundDate(DateTime? localTime = null)
             => GetEffectiveFundDateInfo(localTime).EffectiveDateText;
@@ -168,49 +168,11 @@ namespace 小白养基.Controllers
         private static EffectiveFundDateInfo GetEffectiveFundDateInfo(DateTime? localTime = null, string market = "cn")
         {
             var now = localTime ?? ChinaNow();
-            var naturalDate = now.Date;
-            var closedDates = market switch
-            {
-                "hk" => HkShareClosedDates,
-                "us" => UsShareClosedDates,
-                _ => AShareClosedDates
-            };
-
-            bool isWeekend = naturalDate.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
-            bool isHoliday = closedDates.Contains(naturalDate.ToString("yyyy-MM-dd"));
-            bool marketOpen = false;
-            string marketStatus;
-            DateTime effectiveDate;
-
-            if (isWeekend)
-            {
-                marketStatus = "weekend";
-                effectiveDate = GetPreviousTradingDate(naturalDate.AddDays(-1), closedDates);
-            }
-            else if (isHoliday)
-            {
-                marketStatus = "holiday";
-                effectiveDate = GetPreviousTradingDate(naturalDate.AddDays(-1), closedDates);
-            }
-            else if (now.TimeOfDay < new TimeSpan(9, 25, 0))
-            {
-                marketStatus = "preopen";
-                effectiveDate = GetPreviousTradingDate(naturalDate.AddDays(-1), closedDates);
-            }
-            else if (now.TimeOfDay < new TimeSpan(15, 0, 0))
-            {
-                marketStatus = "open";
-                marketOpen = true;
-                effectiveDate = naturalDate;
-            }
-            else
-            {
-                marketStatus = "afterclose";
-                effectiveDate = naturalDate;
-            }
+            var session = MarketCalendar.ResolveFundDisplaySession(now, market);
+            var naturalDate = session.NaturalDate;
+            var effectiveDate = session.EffectiveDate;
 
             string dateMode = effectiveDate.Date == naturalDate ? "today" : "latest_trading_day";
-            string marketLabel = marketOpen ? "盘中" : "休市";
             return new EffectiveFundDateInfo(
                 naturalDate,
                 naturalDate.ToString("yyyy-MM-dd"),
@@ -219,9 +181,9 @@ namespace 小白养基.Controllers
                 effectiveDate.Date,
                 effectiveDate.Date.AddDays(1),
                 dateMode,
-                marketOpen,
-                marketStatus,
-                marketLabel);
+                session.MarketOpen,
+                session.MarketStatus,
+                session.MarketLabel);
         }
 
         private static DateTime GetPreviousTradingDate(DateTime date, IReadOnlySet<string> closedDates)
@@ -4242,11 +4204,12 @@ namespace 小白养基.Controllers
             var confirmedArchiveTotal = effectiveArchiveTotal
                 .FirstOrDefault(a => a.IsFinal && DailyArchiveService.IsAntConfirmedSource(a.Source));
 
-            bool hasFreshOcrSnapshot = myFunds.Any(f =>
-                IsOcrSnapshotCurrent(f.OcrYesterdayDate, todayDash, naturalDate)
-                || IsOcrSnapshotCurrent(f.OcrSnapshotDate, todayDash, naturalDate));
+            bool hasCurrentOcrSnapshot = myFunds.Any(f =>
+                PortfolioAccounting.IsOcrSnapshotCurrentForDisplay(f.OcrSnapshotDate, dateInfo.NaturalDate));
+            bool isRolledNaturalDate = dateInfo.NaturalDate.Date != dateInfo.EffectiveDate.Date;
 
-            if (!dateInfo.MarketOpen && confirmedArchiveTotal != null && !hasFreshOcrSnapshot)
+            if (isRolledNaturalDate
+                || (!dateInfo.MarketOpen && confirmedArchiveTotal != null && !hasCurrentOcrSnapshot))
             {
                 return Ok(new
                 {
@@ -4268,13 +4231,13 @@ namespace 小白养基.Controllers
                     indexTotalRate = 0d,
                     excessRate = 0d,
                     myTotalProfit = 0d,
-                    confirmedYesterdayProfit = Math.Round(confirmedArchiveTotal.DailyProfit, 2),
-                    confirmedProfitDate = confirmedArchiveTotal.RecordDate.ToString("yyyy-MM-dd"),
+                    confirmedYesterdayProfit = Math.Round(confirmedArchiveTotal?.DailyProfit ?? 0, 2),
+                    confirmedProfitDate = confirmedArchiveTotal?.RecordDate.ToString("yyyy-MM-dd"),
                     marketOpen = dateInfo.MarketOpen,
                     marketStatus = dateInfo.MarketStatus,
                     effectiveDate = todayDash,
-                    summarySource = "no-intraday-estimate",
-                    message = "暂无今日盘中估算；昨日确认收益已单独展示",
+                    summarySource = isRolledNaturalDate ? "closed-natural-day" : "no-intraday-estimate",
+                    message = isRolledNaturalDate ? "当前自然日休市或尚未开盘，今日收益为 0" : "暂无今日盘中估算；昨日确认收益已单独展示",
                     points = Array.Empty<PerformanceCurvePoint>()
                 });
             }
@@ -6422,7 +6385,6 @@ namespace 小白养基.Controllers
                 if (!myFundCodes.Any()) return Ok(new List<object>());
 
                 var today = dateInfo.EffectiveDateStart;
-                string todayStr = today.ToString("yyyy'/'MM'/'dd");
                 string naturalDate = dateInfo.NaturalDateText;
                 string todayDash = dateInfo.EffectiveDateText;
                 string dateMode = dateInfo.DateMode;
@@ -6434,10 +6396,6 @@ namespace 小白养基.Controllers
                     .Where(r => myFundCodes.Contains(r.FundCode) && r.FetchTime >= recentStart)
                     .OrderBy(r => r.FetchTime)
                     .ToListAsync();
-
-                var todayRecords = recentRecords
-                    .Where(r => r.FetchTime >= dateInfo.EffectiveDateStart && r.FetchTime < dateInfo.EffectiveDateEndExclusive)
-                    .ToList();
 
                 var lastRecordDict = recentRecords
                     .Where(r => r.FetchTime < dateInfo.EffectiveDateStart)
@@ -6484,14 +6442,7 @@ namespace 小白养基.Controllers
                 var effectiveArchiveByCode = effectiveArchives
                     .Where(a => !string.Equals(a.FundCode, "TOTAL", StringComparison.OrdinalIgnoreCase))
                     .ToDictionary(a => a.FundCode, StringComparer.OrdinalIgnoreCase);
-                bool hasFreshOcrSnapshot = myFunds.Any(f => f.HoldAmount > 0
-                    && PortfolioAccounting.IsOcrSnapshotFreshForArchive(
-                        f.OcrSnapshotDate,
-                        f.OcrYesterdayDate,
-                        effectiveArchiveTotal?.RecordDate));
-                bool useEffectiveArchive = !dateInfo.MarketOpen
-                    && effectiveArchiveTotal != null
-                    && !hasFreshOcrSnapshot;
+                bool canUseEffectiveArchive = !dateInfo.MarketOpen && effectiveArchiveTotal != null;
 
                 var archiveHistoryDict = await LoadRecentFundArchiveHistoryAsync(
                     username,
@@ -6508,16 +6459,24 @@ namespace 小白养基.Controllers
                 var result = myFunds.Select(config =>
                 {
                     var fundDateInfo = GetEffectiveFundDateInfo(localTime, DetectFundMarket(config.FundCode, config.FundName));
-                    var fundRecords = todayRecords.Where(r => r.FundCode == config.FundCode).ToList();
+                    bool isCurrentNaturalFundDate = fundDateInfo.EffectiveDate.Date == fundDateInfo.NaturalDate.Date;
+                    string fundEffectiveDash = fundDateInfo.EffectiveDateText;
+                    var fundRecords = isCurrentNaturalFundDate
+                        ? recentRecords
+                            .Where(r => r.FundCode == config.FundCode
+                                && r.FetchTime >= fundDateInfo.EffectiveDateStart
+                                && r.FetchTime < fundDateInfo.EffectiveDateEndExclusive)
+                            .ToList()
+                        : new List<FundData>();
                     lastRecordDict.TryGetValue(config.FundCode, out var lastRecord);
 
                     // ============ dataStatus 计算 ============
                     var officialTodayRecord = recentRecords
                         .Where(r => r.FundCode == config.FundCode)
-                        .Where(r => r.IsOfficial && r.NavDate == todayDash)
+                        .Where(r => r.IsOfficial && r.NavDate == fundEffectiveDash)
                         .OrderByDescending(r => r.FetchTime)
                         .FirstOrDefault();
-                    bool hasOfficialToday = officialTodayRecord != null;
+                    bool hasOfficialToday = isCurrentNaturalFundDate && officialTodayRecord != null;
 
                     var latestOfficialRecord = recentRecords
                         .Where(r => r.FundCode == config.FundCode && r.IsOfficial && !string.IsNullOrWhiteSpace(r.NavDate))
@@ -6543,7 +6502,7 @@ namespace 小白养基.Controllers
                     else if (latestOfficialRecord != null)
                     {
                         dataStatus = DateTime.TryParse(latestOfficialRecord.NavDate, out var latestNavDate)
-                            && (dateInfo.EffectiveDateStart - latestNavDate.Date).TotalDays <= 4
+                            && (fundDateInfo.EffectiveDateStart - latestNavDate.Date).TotalDays <= 4
                             ? "official_latest"
                             : "stale_official";
                     }
@@ -6585,17 +6544,13 @@ namespace 小白养基.Controllers
                     double confirmedHoldAmount = Math.Max(0, Math.Round(rawHoldAmount - pendingBuyAmount, 2));
                     double todayBaseAmount = GetDailyBaseAmount(config, todayDash, pendingBuyAmount);
 
-                    DateTime? latestOfficialDate = DateTime.TryParse(latestOfficialRecord?.NavDate, out var parsedLatestOfficialDate)
-                        ? parsedLatestOfficialDate.Date
-                        : null;
-                    bool hasLatestOcrAmount = PortfolioAccounting.IsOcrSnapshotFreshForArchive(
+                    bool hasCurrentOcrAmount = PortfolioAccounting.IsOcrSnapshotCurrentForDisplay(
                         config.OcrSnapshotDate,
-                        config.OcrYesterdayDate,
-                        latestOfficialDate);
+                        localTime.Date);
                     double officialMarketValue = latestOfficialRecord?.Nav is > 0 && config.HoldShares > 0
                         ? Math.Round(config.HoldShares * latestOfficialRecord.Nav.Value, 2)
                         : 0;
-                    double settledMarketValue = hasLatestOcrAmount && confirmedHoldAmount > 0
+                    double settledMarketValue = hasCurrentOcrAmount && confirmedHoldAmount > 0
                         ? confirmedHoldAmount
                         : officialMarketValue > 0
                             ? officialMarketValue
@@ -6646,12 +6601,14 @@ namespace 小白养基.Controllers
                             PortfolioAccounting.Money(todayBaseAmount),
                             PortfolioAccounting.Money(todayRate),
                             config.LastSettledDate == todayDash ? PortfolioAccounting.Money(config.LastSettledProfit) : null));
-                        double settledConfirmedAmount = hasLatestOcrAmount && confirmedHoldAmount > 0
-                            ? confirmedHoldAmount
-                            : officialMarketValue > 0
-                                ? officialMarketValue
-                                : Math.Max(0, Math.Round(todayBaseAmount + todayProfit, 2));
-                        marketValue = Math.Round(settledConfirmedAmount + pendingBuyAmount, 2);
+                        var officialAmount = PortfolioAccounting.ResolveOfficialHoldingAmount(
+                            PortfolioAccounting.Money(rawHoldAmount),
+                            PortfolioAccounting.Money(officialMarketValue),
+                            PortfolioAccounting.Money(todayBaseAmount + todayProfit),
+                            PortfolioAccounting.Money(pendingBuyAmount),
+                            hasCurrentOcrAmount);
+                        double settledConfirmedAmount = PortfolioAccounting.ToDouble(officialAmount.ConfirmedAmount);
+                        marketValue = PortfolioAccounting.ToDouble(officialAmount.DisplayAmount);
                         rawHoldAmount = marketValue;
                         confirmedHoldAmount = settledConfirmedAmount;
                         actualExactProfit = todayProfit;
@@ -6659,22 +6616,15 @@ namespace 小白养基.Controllers
                     else if (dataStatus == "estimate_today")
                     {
                         todayProfit = Math.Round(todayBaseAmount * todayRate / 100.0, 2);
-                        if (hasLatestOcrAmount && rawHoldAmount > 0)
-                        {
-                            // 有新鲜 OCR 快照时，首页当前展示以 OCR 快照为准。
-                            // 晚间 OCR 当前金额已是平台最新展示值（已含当日收益），
-                            // 不再叠加盘中估算收益，避免收益重复计算。
-                            // 盘中估算收益仅用于“今日盘中估算”临时展示，不进入账户总金额。
-                            marketValue = rawHoldAmount;
-                            confirmedHoldAmount = Math.Max(0, Math.Round(rawHoldAmount - pendingBuyAmount, 2));
-                        }
-                        else
-                        {
-                            double estimatedConfirmedAmount = Math.Max(0, Math.Round(settledMarketValue + todayProfit, 2));
-                            marketValue = Math.Round(estimatedConfirmedAmount + pendingBuyAmount, 2);
-                            rawHoldAmount = marketValue;
-                            confirmedHoldAmount = estimatedConfirmedAmount;
-                        }
+                        var estimatedAmount = PortfolioAccounting.ResolveEstimatedHoldingAmount(
+                            PortfolioAccounting.Money(rawHoldAmount),
+                            PortfolioAccounting.Money(settledMarketValue),
+                            PortfolioAccounting.Money(todayProfit),
+                            PortfolioAccounting.Money(pendingBuyAmount),
+                            hasCurrentOcrAmount);
+                        marketValue = PortfolioAccounting.ToDouble(estimatedAmount.DisplayAmount);
+                        confirmedHoldAmount = PortfolioAccounting.ToDouble(estimatedAmount.ConfirmedAmount);
+                        rawHoldAmount = marketValue;
                     }
                     else
                     {
@@ -6719,7 +6669,7 @@ namespace 小白养基.Controllers
                     }
 
                     bool hasOcrHoldingSnapshot = !string.IsNullOrWhiteSpace(config.OcrSnapshotDate)
-                        && hasLatestOcrAmount;
+                        && hasCurrentOcrAmount;
                     double totalProfitPreview = hasOcrHoldingSnapshot && !isSoldOut
                         ? Math.Round(config.OcrHoldingIncome, 2)
                         : Math.Round(marketValue - costBasis + displayedProfit, 2);
@@ -6742,7 +6692,8 @@ namespace 小白养基.Controllers
                     double breakEvenRateValue = !isCleared && marketValue > 1 && totalProfitPreview < 0 ? Math.Round(-totalProfitPreview / marketValue * 100.0, 2) : 0;
 
                     DailyArchive? effectiveFundArchive = null;
-                    bool usingEffectiveArchive = useEffectiveArchive
+                    bool usingEffectiveArchive = canUseEffectiveArchive
+                        && !hasCurrentOcrAmount
                         && !isCleared
                         && effectiveArchiveByCode.TryGetValue(config.FundCode, out effectiveFundArchive);
                     if (usingEffectiveArchive && effectiveFundArchive != null)
@@ -6753,12 +6704,6 @@ namespace 小白养基.Controllers
                         pendingBuy = false;
                         resolvedPendingStatus = null;
                         resolvedPendingSource = null;
-                        todayProfit = Math.Round(effectiveFundArchive.DailyProfit, 2);
-                        todayRate = Math.Round(effectiveFundArchive.DailyRate, 2);
-                        todayRateForDisplay = todayRate;
-                        todayRateForSimulation = todayRate;
-                        todayBaseAmount = Math.Max(0, Math.Round(rawHoldAmount - todayProfit, 2));
-                        previousMarketValue = todayBaseAmount;
                         marketValue = rawHoldAmount;
                         costBasis = PortfolioAccounting.ToDouble(PortfolioAccounting.HoldingCost(
                             PortfolioAccounting.Money(rawHoldAmount),
@@ -6770,26 +6715,54 @@ namespace 小白养基.Controllers
                         breakEvenRateValue = marketValue > 0 && totalProfitPreview < 0
                             ? Math.Round(-totalProfitPreview / marketValue * 100.0, 2)
                             : 0;
-                        dataStatus = "official_today";
-                        isSettled = true;
-                        isCarryForward = false;
-                        actualRate = todayRate;
-                        actualExactProfit = todayProfit;
-                        profitSource = "daily_archive";
 
-                        string settlementTime = todayDash.Replace("-", "/") + " 15:00:00";
-                        var settlementPoint = dataPoints.LastOrDefault(p => p[0]?.ToString()?.Contains("15:00:00") == true);
-                        if (settlementPoint == null)
+                        if (isCurrentNaturalFundDate)
                         {
-                            dataPoints.Add(new object[] { settlementTime, todayRate });
+                            todayProfit = Math.Round(effectiveFundArchive.DailyProfit, 2);
+                            todayRate = Math.Round(effectiveFundArchive.DailyRate, 2);
+                            todayRateForDisplay = todayRate;
+                            todayRateForSimulation = todayRate;
+                            todayBaseAmount = Math.Max(0, Math.Round(rawHoldAmount - todayProfit, 2));
+                            previousMarketValue = todayBaseAmount;
+                            dataStatus = "official_today";
+                            isSettled = true;
+                            isCarryForward = false;
+                            actualRate = todayRate;
+                            actualExactProfit = todayProfit;
+                            profitSource = "daily_archive";
+
+                            string settlementTime = fundEffectiveDash.Replace("-", "/") + " 15:00:00";
+                            var settlementPoint = dataPoints.LastOrDefault(p => p[0]?.ToString()?.Contains("15:00:00") == true);
+                            if (settlementPoint == null)
+                            {
+                                dataPoints.Add(new object[] { settlementTime, todayRate });
+                            }
+                            else
+                            {
+                                settlementPoint[1] = todayRate;
+                            }
+                            if (dataPoints.Count <= 1)
+                            {
+                                dataPoints.Insert(0, new object[] { fundEffectiveDash.Replace("-", "/") + " 09:30:00", 0.0 });
+                            }
                         }
                         else
                         {
-                            settlementPoint[1] = todayRate;
-                        }
-                        if (dataPoints.Count <= 1)
-                        {
-                            dataPoints.Insert(0, new object[] { todayDash.Replace("-", "/") + " 09:30:00", 0.0 });
+                            // 周末、节假日和 9:30 前仅沿用上一交易日的金额与累计收益。
+                            // 上一交易日档案不能重新标记成当前自然日的今日收益。
+                            todayProfit = 0;
+                            todayRate = 0;
+                            todayRateForDisplay = 0;
+                            todayRateForSimulation = 0;
+                            todayBaseAmount = rawHoldAmount;
+                            previousMarketValue = rawHoldAmount;
+                            dataStatus = "official_latest";
+                            isSettled = false;
+                            isCarryForward = true;
+                            actualRate = null;
+                            actualExactProfit = null;
+                            profitSource = "none";
+                            dataPoints.Clear();
                         }
                     }
 
@@ -6831,11 +6804,17 @@ namespace 小白养基.Controllers
                             : latestOfficialRecord?.Nav,
                         isOfficial = usingEffectiveArchive || hasOfficialToday,
                         hasTodayEstimate,
-                        hasTodayOfficial = usingEffectiveArchive || hasOfficialToday,
+                        hasTodayOfficial = isCurrentNaturalFundDate && (usingEffectiveArchive || hasOfficialToday),
                         isTradingTime = fundDateInfo.MarketOpen,
                         isMarketOpen = fundDateInfo.MarketOpen,
                         todayRate = Math.Round(todayRate, 2),
                         todayProfit = Math.Round(todayProfit, 2),
+                        todayProfitLabel = !isCurrentNaturalFundDate ? "今日收益"
+                            : isSettled ? "今日确认收益"
+                            : "今日估算收益",
+                        todayRateLabel = !isCurrentNaturalFundDate ? "今日收益率"
+                            : isSettled ? "今日确认收益率"
+                            : "今日估算收益率",
                         marketValue = Math.Round(marketValue, 2),
                         holdingProfit = Math.Round(totalProfitPreview, 2),
                         holdingRate = Math.Round(existingReturnRateValue, 2),
@@ -6884,7 +6863,9 @@ namespace 小白养基.Controllers
                         isSettled,
                         isCarryForward,
                         displayDate = todayDash,
-                        settlementSource = usingEffectiveArchive ? "daily-archive" : isSettled ? "nav-settlement" : null,
+                        settlementSource = usingEffectiveArchive
+                            ? (isCurrentNaturalFundDate ? "daily-archive" : "daily-archive-carry-forward")
+                            : isSettled ? "nav-settlement" : null,
                         actualRate,
                         actualExactProfit,
                         todayBaseAmount,
@@ -6964,11 +6945,11 @@ namespace 小白养基.Controllers
                 todayPerformanceProfit = PortfolioAccounting.Money(todayPerformanceProfit);
                 todayPerformanceBase = PortfolioAccounting.Money(todayPerformanceBase);
                 int activeFundCount = myFunds.Count(f => f.HoldAmount > 0);
-                int freshSnapshotCount = myFunds.Count(f => f.HoldAmount > 0
-                    && PortfolioAccounting.IsOcrSnapshotFreshForArchive(
-                        f.OcrSnapshotDate,
-                        f.OcrYesterdayDate,
-                        latestPortfolioTotal?.RecordDate));
+                var currentSnapshotFunds = myFunds
+                    .Where(f => f.HoldAmount > 0
+                        && PortfolioAccounting.IsOcrSnapshotCurrentForDisplay(f.OcrSnapshotDate, localTime.Date))
+                    .ToList();
+                int freshSnapshotCount = currentSnapshotFunds.Count;
                 bool currentSnapshotComplete = activeFundCount > 0 && freshSnapshotCount == activeFundCount;
                 bool currentSnapshotAvailable = freshSnapshotCount > 0 && summaryConfirmedAmount > 0m;
                 bool useCurrentSnapshotSummary = currentSnapshotAvailable
@@ -6982,17 +6963,19 @@ namespace 小白养基.Controllers
                     : latestPortfolioTotal == null
                     ? "pending"
                     : DailyArchiveService.GetSettlementStatus(latestPortfolioTotal);
-                decimal currentSnapshotYesterdayProfit = PortfolioAccounting.Money(myFunds
-                    .Where(f => f.HoldAmount > 0
-                        && PortfolioAccounting.IsOcrSnapshotFreshForArchive(
-                            f.OcrSnapshotDate,
-                            f.OcrYesterdayDate,
-                            latestPortfolioTotal?.RecordDate))
-                    .Sum(f => f.OcrYesterdayIncome));
+                decimal currentSnapshotYesterdayProfit = PortfolioAccounting.Money(currentSnapshotFunds.Sum(f => f.OcrYesterdayIncome));
+                string? currentSnapshotProfitDate = currentSnapshotFunds
+                    .Select(f => DateTime.TryParse(f.OcrYesterdayDate, out var parsedDate) ? parsedDate.Date : (DateTime?)null)
+                    .Where(date => date.HasValue)
+                    .OrderByDescending(date => date)
+                    .FirstOrDefault()
+                    ?.ToString("yyyy-MM-dd");
+                bool useCurrentSnapshotProfitSummary = useCurrentSnapshotSummary
+                    && (currentSnapshotComplete || latestPortfolioTotal == null);
                 decimal antConfirmedAmount = useCurrentSnapshotSummary
                     ? PortfolioAccounting.Money(summaryConfirmedAmount)
                     : latestPortfolioTotal != null ? PortfolioAccounting.Money(latestPortfolioTotal.Assets) : 0m;
-                decimal confirmedYesterdayProfit = useCurrentSnapshotSummary
+                decimal confirmedYesterdayProfit = useCurrentSnapshotProfitSummary
                     ? currentSnapshotYesterdayProfit
                     : latestPortfolioTotal != null ? PortfolioAccounting.Money(latestPortfolioTotal.DailyProfit) : 0m;
                 decimal antHoldingProfit = useCurrentSnapshotSummary
@@ -7000,20 +6983,28 @@ namespace 小白养基.Controllers
                     : latestPortfolioTotal != null ? PortfolioAccounting.Money(latestPortfolioTotal.TotalProfit) : 0m;
                 decimal antHoldingCost = antConfirmedAvailable ? PortfolioAccounting.HoldingCost(antConfirmedAmount, antHoldingProfit) : 0m;
                 decimal antHoldingRate = antConfirmedAvailable ? PortfolioAccounting.Percent(antHoldingProfit, antHoldingCost) : 0m;
-                bool todayPerformanceAvailable = antConfirmedAvailable && todayPerformanceBase > 0m;
+                var todayPolicy = PortfolioAccounting.ResolveTodayPerformancePolicy(
+                    dateInfo.NaturalDate,
+                    dateInfo.EffectiveDate,
+                    dateInfo.MarketStatus,
+                    antConfirmedAvailable || summaryDisplayAmount > 0m,
+                    todayPerformanceBase > 0m,
+                    hasTodayEstimate,
+                    hasTodayConfirmed);
+                if (todayPolicy.ForceZero)
+                {
+                    todayPerformanceProfit = 0m;
+                    todayPerformanceBase = antConfirmedAmount > 0m ? antConfirmedAmount : summaryConfirmedAmount;
+                    hasTodayEstimate = false;
+                    hasTodayConfirmed = false;
+                }
+                bool todayPerformanceAvailable = todayPolicy.Available;
                 decimal todayPerformanceRate = todayPerformanceAvailable
                     ? PortfolioAccounting.PortfolioTodayEstimateRate(todayPerformanceProfit, antConfirmedAmount)
                     : 0m;
-                string todayPerformanceStatus = hasTodayEstimate && hasTodayConfirmed ? "mixed"
-                    : hasTodayConfirmed ? "confirmed"
-                    : hasTodayEstimate ? "estimated"
-                    : "unavailable";
-                string todayProfitLabel = todayPerformanceStatus == "confirmed" ? "今日确认收益"
-                    : todayPerformanceStatus == "mixed" ? "今日收益（部分确认）"
-                    : "今日盘中估算";
-                string todayRateLabel = todayPerformanceStatus == "confirmed" ? "今日确认收益率"
-                    : todayPerformanceStatus == "mixed" ? "今日收益率"
-                    : "今日估算收益率";
+                string todayPerformanceStatus = todayPolicy.Status;
+                string todayProfitLabel = todayPolicy.ProfitLabel;
+                string todayRateLabel = todayPolicy.RateLabel;
                 bool intradayAvailable = antConfirmedAvailable && intradayQuotedBase > 0m;
                 decimal intradayRate = intradayAvailable
                     ? PortfolioAccounting.PortfolioTodayEstimateRate(intradayProfit, antConfirmedAmount)
@@ -7072,7 +7063,9 @@ namespace 小白养基.Controllers
                     antHoldingRate,
                     antHoldingProfitRate = antHoldingRate,
                     confirmedYesterdayProfit,
-                    confirmedProfitDate = latestPortfolioTotal?.RecordDate.ToString("yyyy-MM-dd"),
+                    confirmedProfitDate = useCurrentSnapshotProfitSummary
+                        ? currentSnapshotProfitDate
+                        : latestPortfolioTotal?.RecordDate.ToString("yyyy-MM-dd"),
                     confirmedStatus = summarySettlementStatus,
                     holdingSnapshotStale,
                     holdingSnapshotStatus = holdingSnapshotStale ? "archive_newer_than_holdings" : "current",

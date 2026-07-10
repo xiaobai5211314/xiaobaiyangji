@@ -2,7 +2,7 @@
 
 本文用于把本地仓库整理成“只保留一个主分支”的状态。适用场景：Visual Studio 的 Git 分支窗口里出现很多历史分支、临时分支、备份分支，希望清理到只保留主分支。
 
-> 当前仓库写作时的主分支是 `master`。来源：本地命令 `git status --short --branch` 输出 `## master...origin/master [ahead 1]`。
+> 当前仓库约定主分支为 `master`。ahead/behind 和工作树状态属于瞬时信息，操作前必须重新运行 `git status --short --branch`，不要把文档中的旧命令输出当成当前状态。
 >
 > Visual Studio 2026 的具体菜单文案我无法实时确认，待核实；以下步骤按 Visual Studio 近年 Git Repository / 分支管理窗口的通用交互写法整理。
 

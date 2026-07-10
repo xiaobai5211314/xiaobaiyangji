@@ -140,6 +140,53 @@ Equal(
         antConfirmedAvailable: true),
     "summary.accountTotalAmount.includesPendingBuyAfterArchiveRollForward");
 
+var nightOcrAmount = PortfolioAccounting.ResolveEstimatedHoldingAmount(
+    snapshotDisplayAmount: 91942.89m,
+    settledConfirmedAmount: 92747.14m,
+    estimatedProfit: -804.25m,
+    pendingBuyAmount: 0m,
+    useCurrentOcrSnapshot: true);
+Equal(91942.89m, nightOcrAmount.DisplayAmount, "ocr.night.currentAmount.mustNotAddTodayProfitAgain");
+Equal(91942.89m, nightOcrAmount.ConfirmedAmount, "ocr.night.confirmedAmount");
+
+var estimatedWithoutOcr = PortfolioAccounting.ResolveEstimatedHoldingAmount(
+    snapshotDisplayAmount: 0m,
+    settledConfirmedAmount: 92747.14m,
+    estimatedProfit: -804.25m,
+    pendingBuyAmount: 0m,
+    useCurrentOcrSnapshot: false);
+Equal(91942.89m, estimatedWithoutOcr.DisplayAmount, "estimate.withoutCurrentOcr.rollsFromSettledAmount");
+
+var nightOcrWithPending = PortfolioAccounting.ResolveEstimatedHoldingAmount(
+    snapshotDisplayAmount: 92942.89m,
+    settledConfirmedAmount: 92747.14m,
+    estimatedProfit: -804.25m,
+    pendingBuyAmount: 1000m,
+    useCurrentOcrSnapshot: true);
+Equal(92942.89m, nightOcrWithPending.DisplayAmount, "ocr.night.pending.displayIncludesPendingOnce");
+Equal(91942.89m, nightOcrWithPending.ConfirmedAmount, "ocr.night.pending.confirmedExcludesPending");
+
+var officialNightOcrAmount = PortfolioAccounting.ResolveOfficialHoldingAmount(
+    snapshotDisplayAmount: 91942.89m,
+    officialConfirmedAmount: 91942.90m,
+    rolledConfirmedAmount: 91942.89m,
+    pendingBuyAmount: 0m,
+    useCurrentOcrSnapshot: true);
+Equal(91942.89m, officialNightOcrAmount.DisplayAmount, "ocr.night.officialBranch.currentSnapshotWinsShareNavPennyDrift");
+
+var officialWithoutOcr = PortfolioAccounting.ResolveOfficialHoldingAmount(
+    snapshotDisplayAmount: 91942.89m,
+    officialConfirmedAmount: 91942.90m,
+    rolledConfirmedAmount: 91942.89m,
+    pendingBuyAmount: 0m,
+    useCurrentOcrSnapshot: false);
+Equal(91942.90m, officialWithoutOcr.DisplayAmount, "official.withoutCurrentOcr.usesOfficialAmount");
+
+if (!PortfolioAccounting.IsOcrSnapshotCurrentForDisplay("2026-07-10", new DateTime(2026, 7, 10)))
+    throw new InvalidOperationException("ocr.currentDisplay.sameNaturalDate: expected current snapshot");
+if (PortfolioAccounting.IsOcrSnapshotCurrentForDisplay("2026-07-10", new DateTime(2026, 7, 11)))
+    throw new InvalidOperationException("ocr.currentDisplay.nextNaturalDate: yesterday snapshot must expire at midnight");
+
 Equal(
     88251.52m,
     PortfolioAccounting.ResolveSettledDisplayAmount(
@@ -326,6 +373,52 @@ if (MarketCalendar.GetNextTradingDate(new DateTime(2026, 6, 19)) != new DateTime
     throw new InvalidOperationException("calendar.cn.nextTradingDate: 2026-06-19 should resolve to 2026-06-22");
 if (MarketCalendar.IsTradingDay(new DateTime(2026, 7, 1), "hk"))
     throw new InvalidOperationException("calendar.hk.sarDay: 2026-07-01 must be HK closed");
+
+var saturdaySession = MarketCalendar.ResolveFundDisplaySession(new DateTime(2026, 7, 11, 12, 0, 0));
+if (saturdaySession.MarketStatus != "weekend"
+    || saturdaySession.EffectiveDate != new DateTime(2026, 7, 10)
+    || saturdaySession.IsCurrentNaturalDate)
+{
+    throw new InvalidOperationException("session.weekend: Saturday must carry Friday assets without Friday today-performance");
+}
+
+var mondayPreopenSession = MarketCalendar.ResolveFundDisplaySession(new DateTime(2026, 7, 13, 9, 29, 59));
+if (mondayPreopenSession.MarketStatus != "preopen"
+    || mondayPreopenSession.EffectiveDate != new DateTime(2026, 7, 10)
+    || mondayPreopenSession.MarketOpen)
+{
+    throw new InvalidOperationException("session.preopen: before 09:30 must carry the previous trading day");
+}
+
+var mondayOpenSession = MarketCalendar.ResolveFundDisplaySession(new DateTime(2026, 7, 13, 9, 30, 0));
+if (mondayOpenSession.MarketStatus != "open"
+    || mondayOpenSession.EffectiveDate != new DateTime(2026, 7, 13)
+    || !mondayOpenSession.MarketOpen)
+{
+    throw new InvalidOperationException("session.open: 09:30 must start the current natural trading day");
+}
+
+var weekendPolicy = PortfolioAccounting.ResolveTodayPerformancePolicy(
+    saturdaySession.NaturalDate,
+    saturdaySession.EffectiveDate,
+    saturdaySession.MarketStatus,
+    hasPortfolioData: true,
+    hasTodayData: true,
+    hasTodayEstimate: false,
+    hasTodayConfirmed: true);
+if (!weekendPolicy.ForceZero || !weekendPolicy.Available || weekendPolicy.Status != "closed")
+    throw new InvalidOperationException("todayPanel.weekend: prior trading-day archive must display as current-day zero");
+
+var preopenPolicy = PortfolioAccounting.ResolveTodayPerformancePolicy(
+    mondayPreopenSession.NaturalDate,
+    mondayPreopenSession.EffectiveDate,
+    mondayPreopenSession.MarketStatus,
+    hasPortfolioData: true,
+    hasTodayData: true,
+    hasTodayEstimate: true,
+    hasTodayConfirmed: false);
+if (!preopenPolicy.ForceZero || preopenPolicy.Status != "preopen")
+    throw new InvalidOperationException("todayPanel.preopen: before 09:30 must display zero instead of Friday estimate");
 
 var normalBeforeCutoff = FundTradeTiming.Resolve(new DateTime(2026, 6, 18), false, "华富科技动能混合C");
 if (normalBeforeCutoff.TradeDate != "2026-06-18" || normalBeforeCutoff.ConfirmDate != "2026-06-22")

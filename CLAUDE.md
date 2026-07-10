@@ -30,6 +30,7 @@ Claude 在本仓库工作时，先读并遵守：
 - 前端缓存和 CDN：`docs/adr/0003-frontend-cache-and-cdn-policy.md`
 - OCR 字段契约：`docs/adr/0004-ocr-import-data-contract.md`
 - 推文 sidecar 边界：`docs/adr/0005-influencer-posts-source-and-cache.md`
+- 基金交易时间与基金级资金流退役：`docs/adr/0006-fund-trade-timing-and-flow-retirement.md`
 - 推文部署和敏感信息：`docs/deploy/influencer-posts-sidecar.md`
 
 ## 正式入口
@@ -48,13 +49,17 @@ Claude 在本仓库工作时，先读并遵守：
 
 - `平台当前金额 = 已确认持仓金额 + 买入待确认金额`
 - 蚂蚁 OCR 快照优先作为平台展示金额校准源，但不是每天唯一的当前金额来源。
+- 同一北京时间自然日的 OCR 当前金额已经包含截图时平台展示的收益，任何估值或官方净值分支都不得再次把当日收益叠加到该金额；跨过 00:00 后旧 OCR 退出当前展示优先级。
 - 无新鲜 OCR 时，首页当前金额必须随官方净值或盘中估值的单基当前市值合计滚动。
 - `DailyArchive` 只写正式确认金额和收益。
 - 盘中估值只作临时展示，不进正式历史日历。
 - 昨日收益不能用于反推确认金额或持有收益。
+- 周末、节假日和交易日 09:30 前只沿用上一交易日金额与累计收益，当前自然日的今日收益、今日收益率和单基金今日涨跌幅必须为 0。
 - 资产详情页 OCR 到份额和成本价时，优先按平台字段校准份额、成本金额和 `RealizedProfit`；常规 OCR 截图缺少份额或成本价时，可以用官方净值和蚂蚁持有收益自动推导辅助字段。派生份额和成本不得覆盖同日蚂蚁 OCR 的金额、昨日收益或持有收益。
 
 股票截图解析由 `StockOcrParserService` 负责；基金 OCR 契约不要错误绑定到股票 OCR parser。
+
+正式前端只保留“曜石流光”和“雾光银蓝”两个主题。浅色主题改动必须检查正文、状态色、控件和金额文字的对比度，白字不得落在浅色背景上。
 
 ## 推文 sidecar 红线
 

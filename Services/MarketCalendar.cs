@@ -1,5 +1,15 @@
 namespace 小白养基.Services
 {
+    public sealed record MarketSessionInfo(
+        DateTime NaturalDate,
+        DateTime EffectiveDate,
+        bool MarketOpen,
+        string MarketStatus,
+        string MarketLabel)
+    {
+        public bool IsCurrentNaturalDate => NaturalDate.Date == EffectiveDate.Date;
+    }
+
     public static class MarketCalendar
     {
         // Source: Shanghai Stock Exchange 2026 holiday notice, published 2025-12-22:
@@ -37,6 +47,50 @@ namespace 小白养基.Services
                 "us" => UsShareClosedDates,
                 _ => AShareClosedDates
             };
+
+        public static MarketSessionInfo ResolveFundDisplaySession(DateTime chinaTime, string market = "cn")
+        {
+            var naturalDate = chinaTime.Date;
+            var isWeekend = naturalDate.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+            var isHoliday = ClosedDatesFor(market).Contains(naturalDate.ToString("yyyy-MM-dd"));
+
+            if (isWeekend)
+            {
+                return new MarketSessionInfo(
+                    naturalDate,
+                    GetPreviousTradingDate(naturalDate.AddDays(-1), market),
+                    false,
+                    "weekend",
+                    "休市");
+            }
+
+            if (isHoliday)
+            {
+                return new MarketSessionInfo(
+                    naturalDate,
+                    GetPreviousTradingDate(naturalDate.AddDays(-1), market),
+                    false,
+                    "holiday",
+                    "休市");
+            }
+
+            if (chinaTime.TimeOfDay < new TimeSpan(9, 30, 0))
+            {
+                return new MarketSessionInfo(
+                    naturalDate,
+                    GetPreviousTradingDate(naturalDate.AddDays(-1), market),
+                    false,
+                    "preopen",
+                    "休市");
+            }
+
+            if (chinaTime.TimeOfDay < new TimeSpan(15, 0, 0))
+            {
+                return new MarketSessionInfo(naturalDate, naturalDate, true, "open", "盘中");
+            }
+
+            return new MarketSessionInfo(naturalDate, naturalDate, false, "afterclose", "休市");
+        }
 
         public static bool IsTradingDay(DateTime date, string market = "cn")
         {

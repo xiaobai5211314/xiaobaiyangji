@@ -25,7 +25,7 @@ page {
 .page {
   min-height: 100vh;
   box-sizing: border-box;
-  color: $text-primary;
+  color: var(--text-primary, #f5f5f7);
 }
 
 button {
@@ -38,7 +38,7 @@ button::after {
 }
 
 input {
-  color: $text-primary;
+  color: var(--input-text, var(--text-primary, #f5f5f7));
   font-family: "Microsoft YaHei", "微软雅黑", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
 }
 

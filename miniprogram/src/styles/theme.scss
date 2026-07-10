@@ -115,9 +115,9 @@
   --input-placeholder: #8e8e93;
   --toast-bg: rgba(29, 29, 31, 0.96);
   --toast-text: #ffffff;
-  --profit-color: #ff3b30;
-  --loss-color: #168a55;
-  --warning-color: #ff9f0a;
+  --profit-color: #b91c2b;
+  --loss-color: #006b46;
+  --warning-color: #855600;
   --panel-soft: rgba(242, 242, 247, 0.92);
   --control-bg: rgba(255, 255, 255, 0.88);
   --button-radius: 18rpx;
@@ -507,4 +507,20 @@ textarea::placeholder {
 
 .page-shell.theme-light .modal-mask {
   background: rgba(0, 0, 0, 0.32);
+}
+
+.page-shell.theme-light .warning-text,
+.page-shell.theme-light .warning-sub,
+.page-shell.theme-light .confidence-medium,
+.page-shell.theme-light .ocr-warning,
+.page-shell.theme-light .diagnostics text,
+.page-shell.theme-light .ocr-switch-button.pending,
+.page-shell.theme-light .update-badge.not-updated,
+.page-shell.theme-light .translation-status {
+  color: #855600 !important;
+}
+
+.page-shell.theme-light .confidence-high,
+.page-shell.theme-light .update-badge.updated {
+  color: #006b46 !important;
 }
