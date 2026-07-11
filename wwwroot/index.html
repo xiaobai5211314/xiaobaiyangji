@@ -149,6 +149,7 @@
             background: var(--page-bg);
             color: var(--text-main);
             font-family: "Microsoft YaHei", "微软雅黑", "PingFang SC", "苹方", "PingFang HK", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            overflow-x: hidden;
             min-height: 100vh;
             overscroll-behavior-y: contain;
         }
@@ -3395,7 +3396,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
         @media screen and (min-width: 769px) {
             #app {
-                padding-bottom: 24px;
+                padding-bottom: 96px;
             }
 
             .app-page {
@@ -3403,13 +3404,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             }
 
             .bottom-tabbar {
-                position: sticky;
-                top: 12px;
-                left: auto;
-                bottom: auto;
-                transform: none;
+                position: fixed;
+                bottom: 20px;
+                left: 50%;
+                top: auto;
+                transform: translateX(-50%);
                 width: min(760px, calc(100vw - 80px));
-                margin: 12px auto 14px;
+                margin: 0;
                 padding: 8px;
                 border-radius: 18px;
                 background: var(--card-bg);
@@ -4792,6 +4793,15 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             vertical-align: -0.16em;
         }
 
+        /* Iconify 替换后的 SVG 不得拦截父按钮的点击事件 */
+        .iconify,
+        .iconify svg,
+        .ui-icon svg,
+        .tab-icon svg,
+        [data-icon] svg {
+            pointer-events: none;
+        }
+
         .ui-icon--button {
             width: 18px;
             height: 18px;
@@ -5674,7 +5684,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 </div>
             </div>
 
-            <div v-if="editForm.show" class="modal-mask">
+            <div v-if="editForm.show" class="modal-mask" @click.self="editForm.show = false">
                 <div class="modal-content">
                     <h3 style="margin-top: 0; color:var(--text-main);">🔧 后勤补给配置</h3>
                     <p style="font-size: 13px; color:var(--text-muted); margin-bottom: 15px;">基金: <strong>{{ editForm.name }}</strong></p>
@@ -5691,7 +5701,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 </div>
             </div>
 
-            <div v-if="addModal.show" class="modal-mask">
+            <div v-if="addModal.show" class="modal-mask" @click.self="addModal.show = false">
                 <div class="modal-content">
                     <h3 style="margin-top: 0; color: #3b82f6;">💰 加仓</h3>
                     <p style="font-size: 13px; color:var(--text-muted); margin-bottom: 15px; display: flex; justify-content: space-between; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 6px;">
@@ -5721,7 +5731,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 </div>
             </div>
 
-            <div v-show="reduceModal.show" class="modal-mask">
+            <div v-show="reduceModal.show" class="modal-mask" @click.self="reduceModal.show = false">
                 <div class="modal-content">
                     <h3 style="margin-top: 0; color: #10b981;">🛒 减仓</h3>
                     <p style="font-size: 13px; color:var(--text-muted); margin-bottom: 15px; display: flex; justify-content: space-between; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 6px;">
@@ -5910,7 +5920,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 </div>
             </div>
 
-            <div v-show="historyModal.show" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: flex-end; z-index: 3000;">
+            <div v-show="historyModal.show" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: flex-end; z-index: 3000;" @click.self="historyModal.show = false">
                 <div style="background: #1e293b; width: 100%; height: 75vh; border-radius: 20px 20px 0 0; padding: 20px; display: flex; flex-direction: column;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                         <h3 style="color:var(--text-main); margin: 0; font-size: 18px;">📈 {{ historyModal.name }} (官方净值走势)</h3>
@@ -5928,7 +5938,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 </div>
             </div>
 
-            <div v-show="archiveModal.show" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 3500;">
+            <div v-show="archiveModal.show" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 3500;" @click.self="archiveModal.show = false">
                 <div style="background: #0f172a; width: 90%; max-width: 500px; height: 75vh; border-radius: 15px; border: 1px solid #38bdf8; box-shadow: 0 0 30px rgba(56, 189, 248, 0.2); padding: 20px; display: flex; flex-direction: column;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px;">
                         <h3 style="color: #38bdf8; margin: 0;">🗄️ {{ archiveModal.targetName }} - 专属收益</h3>
