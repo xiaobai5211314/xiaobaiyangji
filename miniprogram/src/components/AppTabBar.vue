@@ -6,14 +6,14 @@
       :class="['tab-item', active === item.key ? 'active' : '']"
       @tap="handleTap(item.key)"
     >
-      <text class="tab-icon">{{ item.icon }}</text>
+      <text class="tab-icon" aria-hidden="true">{{ item.icon }}</text>
       <text class="tab-label">{{ item.label }}</text>
     </button>
   </view>
 </template>
 
 <script setup lang="ts">
-import { themeState, themeClass } from '../stores/theme';
+import { themeClass } from '../stores/theme';
 
 type TabKey = 'home' | 'sector' | 'news' | 'analysis' | 'tweets';
 
@@ -22,11 +22,11 @@ defineProps<{
 }>();
 
 const tabs: Array<{ key: TabKey; icon: string; label: string }> = [
-  { key: 'home', icon: '💼', label: '持仓' },
-  { key: 'sector', icon: '🔥', label: '板块' },
-  { key: 'news', icon: '📡', label: '资讯' },
-  { key: 'analysis', icon: '📊', label: '盈亏' },
-  { key: 'tweets', icon: '🐦', label: '推文' }
+  { key: 'home', icon: '▣', label: '持仓' },
+  { key: 'sector', icon: '◇', label: '行情' },
+  { key: 'news', icon: '≋', label: '资讯' },
+  { key: 'analysis', icon: '▥', label: '复盘' },
+  { key: 'tweets', icon: '◎', label: '观点' }
 ];
 
 function handleTap(key: TabKey) {
@@ -84,8 +84,24 @@ function handleTap(key: TabKey) {
 }
 
 .tab-icon {
-  font-size: 43rpx;
-  line-height: 44rpx;
+  width: 44rpx;
+  height: 44rpx;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  border: 1rpx solid currentColor;
+  border-radius: 13rpx;
+  font-size: 30rpx;
+  font-weight: 700;
+  line-height: 1;
+  font-family: "SF Pro Display", "PingFang SC", sans-serif;
+  opacity: .94;
+}
+
+.tab-item.active .tab-icon {
+  color: var(--accent-color);
+  background: rgba(255, 255, 255, .92);
+  border-color: transparent;
 }
 
 .tab-label {

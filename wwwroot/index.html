@@ -12,6 +12,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="preconnect" href="https://guzhi.21212121.xyz" crossorigin>
+    <script defer src="https://code.iconify.design/3/3.1.1/iconify.min.js"></script>
     <script>
         (function () {
             try {
@@ -4703,6 +4704,120 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         :root[data-theme="rainbow"] .page-topbar {
             background: transparent;
         }
+
+        /* 统一使用 Lucide 线性图标，避免业务控件混用彩色表情符号。 */
+        .ui-icon {
+            width: 1.1em;
+            height: 1.1em;
+            display: inline-block;
+            flex: 0 0 auto;
+            vertical-align: -0.16em;
+        }
+
+        .ui-icon--button {
+            width: 18px;
+            height: 18px;
+        }
+
+        .home-ocr-main,
+        .asset-mode-btn,
+        .bottom-tab,
+        .profile-action-btn,
+        .summary-label,
+        .feature-title {
+            gap: 7px;
+        }
+
+        .home-ocr-main,
+        .asset-mode-btn,
+        .profile-action-btn,
+        .summary-label,
+        .feature-title {
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .summary-label .ui-icon,
+        .feature-title .ui-icon {
+            color: var(--accent-blue);
+        }
+
+        .privacy-toggle {
+            width: 30px;
+            height: 30px;
+            padding: 0;
+            display: inline-grid;
+            place-items: center;
+            vertical-align: middle;
+            color: var(--accent-blue);
+            background: var(--card-bg-soft);
+            border: 1px solid var(--card-border);
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .privacy-mode-dialog {
+            width: min(88vw, 340px);
+            overflow: hidden;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 14px;
+            box-shadow: var(--card-shadow);
+        }
+
+        .privacy-dialog-title {
+            padding: 18px 18px 10px;
+            color: var(--text-main);
+            font-size: 16px;
+            font-weight: 800;
+        }
+
+        .privacy-dialog-copy {
+            padding: 0 18px 14px;
+            color: var(--text-muted);
+            font-size: 12px;
+            line-height: 1.55;
+        }
+
+        .privacy-option-list {
+            padding: 0 10px 10px;
+            display: grid;
+            gap: 8px;
+        }
+
+        .privacy-option {
+            width: 100%;
+            min-height: 62px;
+            padding: 12px 14px;
+            display: grid;
+            grid-template-columns: 20px minmax(0, 1fr);
+            column-gap: 10px;
+            text-align: left;
+            color: var(--text-main);
+            background: var(--card-bg-soft);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+        }
+
+        .privacy-option.active {
+            color: var(--text-inverse);
+            background: var(--primary-gradient);
+            border-color: transparent;
+        }
+
+        .privacy-option strong,
+        .privacy-option small {
+            grid-column: 2;
+        }
+
+        .privacy-option strong { font-size: 13px; }
+        .privacy-option small { margin-top: 4px; color: var(--text-muted); font-size: 11px; }
+        .privacy-option.active small { color: rgba(255, 255, 255, .82); }
+
+        :root[data-theme="light"] .privacy-option:not(.active) {
+            background: #f7f8fb;
+            border-color: rgba(60, 60, 67, .14);
+        }
     </style>
 </head>
 <body>
@@ -4723,7 +4838,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 <input v-model="loginForm.username" class="auth-input" type="text" placeholder="输入用户名">
                 <input v-model="loginForm.password" class="auth-input" type="password" placeholder="安全密钥" @keyup.enter="handleLogin">
                 <div class="auth-actions">
-                    <button class="btn btn-primary" @click="handleLogin">登陆</button>
+                    <button class="btn btn-primary" @click="handleLogin">登录</button>
                     <button class="btn" @click="handleRegister">注册</button>
                 </div>
             </div>
@@ -4743,14 +4858,15 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         </button>
 
                         <button class="btn home-ocr-main" @click="triggerSmartOcr" :disabled="smartOcrBusy">
-                            📷 {{ smartOcrText }}
+                            <span class="iconify ui-icon ui-icon--button" data-icon="lucide:scan-line" aria-hidden="true"></span>
+                            <span>{{ smartOcrText }}</span>
                         </button>
                     </div>
                 </div>
 
                 <div class="asset-mode-switch">
-                    <button :class="['asset-mode-btn', assetMode==='fund'?'active':'']" @click="setAssetMode('fund')">🧾 基金</button>
-                    <button :class="['asset-mode-btn', assetMode==='stock'?'active':'']" @click="setAssetMode('stock')">📈 股票</button>
+                    <button :class="['asset-mode-btn', assetMode==='fund'?'active':'']" @click="setAssetMode('fund')"><span class="iconify ui-icon" data-icon="lucide:wallet-cards" aria-hidden="true"></span>基金</button>
+                    <button :class="['asset-mode-btn', assetMode==='stock'?'active':'']" @click="setAssetMode('stock')"><span class="iconify ui-icon" data-icon="lucide:chart-no-axes-combined" aria-hidden="true"></span>股票</button>
                 </div>
 
                 <div v-show="assetMode === 'stock'" class="stock-dashboard-grid">
@@ -4877,44 +4993,45 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 <div v-show="assetMode === 'fund'" class="glass-panel total-panel dashboard-summary">
                     <div class="summary-tile summary-tile--hero">
                         <div class="summary-hero-main">
-                            <div class="summary-label" title="平台持仓金额，包含买入待确认；下方单独展示待确认金额">💎 账户总金额 <span @click="showPrivacyModal = true" style="cursor:pointer">{{ privacyMode === 0 ? '👁️' : '🙈' }}</span></div>
+                            <div class="summary-label" title="平台持仓金额，包含买入待确认；下方单独展示待确认金额"><span class="iconify ui-icon" data-icon="lucide:wallet" aria-hidden="true"></span>账户总金额 <button class="privacy-toggle" type="button" @click="showPrivacyModal = true" :title="privacyMode === 0 ? '资产可见，点击调整显示设置' : '资产已遮罩，点击调整显示设置'" :aria-label="privacyMode === 0 ? '资产可见，点击调整显示设置' : '资产已遮罩，点击调整显示设置'"><span v-if="privacyMode === 0" class="iconify ui-icon" data-icon="lucide:eye" aria-hidden="true"></span><span v-else class="iconify ui-icon" data-icon="lucide:eye-off" aria-hidden="true"></span></button></div>
                             <div class="summary-value">{{ privacyMode === 0 ? (dashboardActiveSummary.accountTotalAmount > 0 ? '¥ ' + Number(dashboardActiveSummary.accountTotalAmount || 0).toFixed(2) : '--') : '****' }}</div>
                             <div v-if="dashboardActiveSummary.todayPendingBuyTotal > 0" class="summary-sub">确认持仓 {{ privacyMode === 0 ? '¥' + Number(dashboardActiveSummary.antConfirmedAmount || 0).toFixed(2) : '****' }}</div>
                             <div v-if="dashboardActiveSummary.intradayAvailable" class="summary-sub">盘中估算市值 {{ privacyMode === 0 ? '¥' + Number(dashboardActiveSummary.intradayEstimatedAssets || 0).toFixed(2) : '****' }}</div>
                             <div v-if="dashboardActiveSummary.todayPendingBuyTotal > 0" class="summary-note value-pending" title="待确认买入不参与今日收益和今日收益率">待确认 {{ privacyMode === 0 ? '¥' + Number(dashboardActiveSummary.todayPendingBuyTotal || 0).toFixed(2) : '****' }}</div>
                         </div>
                         <div class="summary-radar-inline">
-                            <div class="summary-label">⏱️ 系统雷达</div>
+                            <div class="summary-label"><span class="iconify ui-icon" data-icon="lucide:clock-3" aria-hidden="true"></span>市场状态</div>
                             <div class="summary-value" :style="{ color: isNight ? '#10b981' : '#f59e0b' }">
-                                {{ isNight ? '🌙 夜间休市' : '☀️ 盘中盯盘' }}
+                                <span class="iconify ui-icon" :data-icon="isNight ? 'lucide:moon-star' : 'lucide:activity'" aria-hidden="true"></span>
+                                {{ isNight ? '市场休市' : '盘中估值' }}
                             </div>
                         </div>
                     </div>
                     <div class="divider"></div>
                     <div class="summary-tile">
-                        <div class="summary-label">🌟 {{ dashboardActiveSummary.todayProfitLabel }}</div>
+                        <div class="summary-label"><span class="iconify ui-icon" data-icon="lucide:sparkles" aria-hidden="true"></span>{{ dashboardActiveSummary.todayProfitLabel }}</div>
                         <div class="summary-value" :class="privacyMode <= 1 ? (dashboardActiveSummary.todayPerformanceProfit > 0 ? 'value-gain' : (dashboardActiveSummary.todayPerformanceProfit < 0 ? 'value-loss' : '')) : ''">{{ privacyMode <= 1 ? (dashboardActiveSummary.todayPerformanceAvailable ? (dashboardActiveSummary.todayPerformanceProfit > 0 ? '+' : '') + Number(dashboardActiveSummary.todayPerformanceProfit || 0).toFixed(2) : '--') : '****' }}</div>
                     </div>
                     <div class="divider"></div>
                     <div class="summary-tile">
-                        <div class="summary-label" title="今日收益 ÷ 确认持仓基准金额">🚀 {{ dashboardActiveSummary.todayRateLabel }}</div>
+                        <div class="summary-label" title="今日收益 ÷ 确认持仓基准金额"><span class="iconify ui-icon" data-icon="lucide:gauge" aria-hidden="true"></span>{{ dashboardActiveSummary.todayRateLabel }}</div>
                         <div class="summary-value" :class="privacyMode <= 2 ? (dashboardActiveSummary.todayPerformanceRate > 0 ? 'value-gain' : (dashboardActiveSummary.todayPerformanceRate < 0 ? 'value-loss' : '')) : ''">{{ privacyMode <= 2 ? (dashboardActiveSummary.todayPerformanceAvailable ? (dashboardActiveSummary.todayPerformanceRate > 0 ? '+' : '') + Number(dashboardActiveSummary.todayPerformanceRate || 0).toFixed(2) + '%' : '--') : '****' }}</div>
                     </div>
                     <div class="divider"></div>
                     <div class="summary-tile">
-                        <div class="summary-label">📅 {{ dashboardActiveSummary.yesterdayProfitLabel }}</div>
+                        <div class="summary-label"><span class="iconify ui-icon" data-icon="lucide:calendar-days" aria-hidden="true"></span>{{ dashboardActiveSummary.yesterdayProfitLabel }}</div>
                         <div class="summary-value" :class="privacyMode <= 1 && dashboardActiveSummary.yesterdayProfitAvailable ? (dashboardActiveSummary.confirmedYesterdayProfit > 0 ? 'value-gain' : (dashboardActiveSummary.confirmedYesterdayProfit < 0 ? 'value-loss' : '')) : ''">{{ privacyMode <= 1 ? (dashboardActiveSummary.yesterdayProfitAvailable ? (dashboardActiveSummary.confirmedYesterdayProfit >= 0 ? '+' : '') + Number(dashboardActiveSummary.confirmedYesterdayProfit || 0).toFixed(2) : '--') : '****' }}</div>
                         <div v-if="dashboardActiveSummary.confirmedProfitDate" class="summary-sub">{{ dashboardActiveSummary.confirmedProfitDate }}<span v-if="dashboardActiveSummary.yesterdayProfitNote"> · {{ dashboardActiveSummary.yesterdayProfitNote }}</span></div>
                     </div>
                     <div class="divider"></div>
                     <div class="summary-tile">
-                        <div class="summary-label">💰 蚂蚁持有收益</div>
+                        <div class="summary-label"><span class="iconify ui-icon" data-icon="lucide:badge-dollar-sign" aria-hidden="true"></span>蚂蚁持有收益</div>
                         <div class="summary-value" :class="privacyMode <= 1 ? (dashboardActiveSummary.antHoldingProfit > 0 ? 'value-gain' : (dashboardActiveSummary.antHoldingProfit < 0 ? 'value-loss' : '')) : ''">{{ privacyMode <= 1 ? (dashboardActiveSummary.antHoldingProfitAvailable ? (dashboardActiveSummary.antHoldingProfit >= 0 ? '+' : '') + Number(dashboardActiveSummary.antHoldingProfit || 0).toFixed(2) : '--') : '****' }}</div>
                         <div v-if="dashboardActiveSummary.intradayAvailable" class="summary-sub">盘中估算累计 {{ privacyMode <= 1 ? (dashboardActiveSummary.estimatedHoldingProfit >= 0 ? '+' : '') + Number(dashboardActiveSummary.estimatedHoldingProfit || 0).toFixed(2) : '****' }}</div>
                     </div>
                     <div class="divider"></div>
                     <div class="summary-tile">
-                        <div class="summary-label">📈 蚂蚁持有收益率</div>
+                        <div class="summary-label"><span class="iconify ui-icon" data-icon="lucide:chart-line" aria-hidden="true"></span>蚂蚁持有收益率</div>
                         <div class="summary-value" :class="privacyMode <= 2 ? (dashboardActiveSummary.totalRate > 0 ? 'value-gain' : (dashboardActiveSummary.totalRate < 0 ? 'value-loss' : '')) : ''">{{ privacyMode <= 2 ? (dashboardActiveSummary.totalRate > 0 ? '+' : '') + Number(dashboardActiveSummary.totalRate || 0).toFixed(2) + '%' : '****' }}</div>
                     </div>
                     <div class="total-archive-entry"></div>
@@ -4924,7 +5041,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     <div class="glass-panel feature-card performance-card">
                         <div class="performance-head">
                             <div style="min-width:0;">
-                                <div class="feature-title">📈 日总收益曲线</div>
+                                <div class="feature-title"><span class="iconify ui-icon" data-icon="lucide:chart-line" aria-hidden="true"></span>日总收益曲线</div>
                                 <div class="feature-subtitle">我的收益率 vs {{ selectedPerformanceIndexName }}</div>
                             </div>
                             <div class="performance-head-actions">
@@ -5400,7 +5517,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 </div>
             </div>
 
-            <div class="bottom-tabbar" v-if="isLoggedIn"><button :class="['bottom-tab', activePage==='home'?'active':'']" @click="switchPage('home')"><span class="tab-icon">🛡️</span><span>持仓</span></button><button :class="['bottom-tab', activePage==='sector'?'active':'']" @click="switchPage('sector')"><span class="tab-icon">📈</span><span>板块</span></button><button :class="['bottom-tab', activePage==='news'?'active':'']" @click="switchPage('news')"><span class="tab-icon">📰</span><span>资讯</span></button><button :class="['bottom-tab', activePage==='analysis'?'active':'']" @click="switchPage('analysis')"><span class="tab-icon">📊</span><span>盈亏</span></button><button :class="['bottom-tab', activePage==='tweets'?'active':'']" @click="switchPage('tweets')"><span class="tab-icon">🐦</span><span>推文</span></button></div>
+            <div class="bottom-tabbar" v-if="isLoggedIn"><button :class="['bottom-tab', activePage==='home'?'active':'']" @click="switchPage('home')"><span class="tab-icon iconify" data-icon="lucide:briefcase-business" aria-hidden="true"></span><span>持仓</span></button><button :class="['bottom-tab', activePage==='sector'?'active':'']" @click="switchPage('sector')"><span class="tab-icon iconify" data-icon="lucide:chart-no-axes-combined" aria-hidden="true"></span><span>行情</span></button><button :class="['bottom-tab', activePage==='news'?'active':'']" @click="switchPage('news')"><span class="tab-icon iconify" data-icon="lucide:radio" aria-hidden="true"></span><span>资讯</span></button><button :class="['bottom-tab', activePage==='analysis'?'active':'']" @click="switchPage('analysis')"><span class="tab-icon iconify" data-icon="lucide:chart-column-increasing" aria-hidden="true"></span><span>复盘</span></button><button :class="['bottom-tab', activePage==='tweets'?'active':'']" @click="switchPage('tweets')"><span class="tab-icon iconify" data-icon="lucide:message-circle-more" aria-hidden="true"></span><span>观点</span></button></div>
 
             <div v-if="showProfileModal" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); display: flex; justify-content: center; align-items: center; z-index: 5200;" @click.self="showProfileModal = false">
                 <div class="profile-modal-card">
@@ -5417,17 +5534,17 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <input class="modal-input" v-model="profileForm.displayName" maxlength="30" placeholder="输入昵称">
                     </div>
                     <div class="theme-settings">
-                        <div class="theme-settings-title">主题设置</div>
+                        <div class="theme-settings-title">界面主题</div>
                         <div class="theme-choice-row">
                             <button :class="['btn', 'theme-choice-btn', appTheme === 'rainbow' ? 'active' : '']" @click="setAppTheme('rainbow')">
                                 <span class="theme-choice-preview theme-choice-preview--dark"><i></i><i></i><i></i></span>
                                 <span class="theme-choice-check">{{ appTheme === 'rainbow' ? '✓' : '' }}</span>
-                                <span class="theme-choice-copy"><strong>曜石流光</strong><small>默认 · 深色高对比、克制流光</small></span>
+                                <span class="theme-choice-copy"><strong>曜石流光</strong><small>默认 · 深色行情工作台</small></span>
                             </button>
                             <button :class="['btn', 'theme-choice-btn', appTheme === 'light' ? 'active' : '']" @click="setAppTheme('light')">
                                 <span class="theme-choice-preview theme-choice-preview--apple"><i></i><i></i><i></i></span>
                                 <span class="theme-choice-check">{{ appTheme === 'light' ? '✓' : '' }}</span>
-                                <span class="theme-choice-copy"><strong>雾光银蓝</strong><small>Apple 风格 · 雾白层次、系统蓝操作</small></span>
+                                <span class="theme-choice-copy"><strong>雾光银蓝</strong><small>浅色 · 清晰的系统信息层级</small></span>
                             </button>
                         </div>
                     </div>
@@ -5435,30 +5552,22 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <button class="btn profile-action-btn btn-primary" @click="saveUserProfile" :disabled="profileForm.saving">
                             {{ profileForm.saving ? '保存中...' : '保存资料' }}
                         </button>
-                        <button class="btn profile-action-btn btn-primary" @click="triggerAvatarUpload">🖼️ 设置头像</button>
-                        <button class="btn profile-action-btn profile-logout-btn" @click="handleLogout">🚪 退出登录</button>
+                        <button class="btn profile-action-btn btn-primary" @click="triggerAvatarUpload"><span class="iconify ui-icon" data-icon="lucide:image-up" aria-hidden="true"></span>设置头像</button>
+                        <button class="btn profile-action-btn profile-logout-btn" @click="handleLogout"><span class="iconify ui-icon" data-icon="lucide:log-out" aria-hidden="true"></span>退出登录</button>
                         <button class="btn profile-action-btn" @click="showProfileModal = false">取消</button>
                     </div>
                 </div>
             </div>
 
             <div v-if="showPrivacyModal" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 5000;" @click.self="showPrivacyModal = false">
-                <div style="background: #1e293b; width: 85%; max-width: 320px; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.5);">
-                    <div style="text-align: center; padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); font-weight: bold; color:var(--text-main); font-size: 16px;">闭眼模式选择</div>
-                    <div style="padding: 10px;">
-                        <div @click="setPrivacyMode(0)" style="padding: 15px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer; color: #38bdf8; font-weight: bold;">👁️ 睁眼模式 (全部显示)</div>
-                        <div @click="setPrivacyMode(1)" style="padding: 15px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; align-items: center;">
-                            <div style="font-weight: bold; color:var(--text-main); margin-bottom: 6px;">🛡️ 半遮蔽模式</div>
-                            <div style="font-size: 11px; color:var(--text-muted); background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px;">仅隐藏【持有金额】</div>
-                        </div>
-                        <div @click="setPrivacyMode(2)" style="padding: 15px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; align-items: center;">
-                            <div style="font-weight: bold; color:var(--text-main); margin-bottom: 6px;">🙈 全遮蔽模式</div>
-                            <div style="font-size: 11px; color:var(--text-muted); background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px;">隐藏【持有金额】【收益金额】</div>
-                        </div>
-                        <div @click="setPrivacyMode(3)" style="padding: 15px; cursor: pointer; display: flex; flex-direction: column; align-items: center;">
-                            <div style="font-weight: bold; color:var(--text-main); margin-bottom: 6px;">🚫 极致隐匿</div>
-                            <div style="font-size: 11px; color:var(--text-muted); background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px;">隐藏【持有金额】【收益金额】【收益率】</div>
-                        </div>
+                <div class="privacy-mode-dialog" role="dialog" aria-modal="true" aria-label="资产显示设置">
+                    <div class="privacy-dialog-title">资产显示</div>
+                    <div class="privacy-dialog-copy">选择在当前设备上展示资产与收益信息的范围。</div>
+                    <div class="privacy-option-list">
+                        <button type="button" :class="['privacy-option', privacyMode === 0 ? 'active' : '']" @click="setPrivacyMode(0)"><span class="iconify ui-icon" data-icon="lucide:eye" aria-hidden="true"></span><strong>资产可见</strong><small>显示金额、收益和收益率</small></button>
+                        <button type="button" :class="['privacy-option', privacyMode === 1 ? 'active' : '']" @click="setPrivacyMode(1)"><span class="iconify ui-icon" data-icon="lucide:shield" aria-hidden="true"></span><strong>金额遮罩</strong><small>隐藏持仓金额，保留收益趋势</small></button>
+                        <button type="button" :class="['privacy-option', privacyMode === 2 ? 'active' : '']" @click="setPrivacyMode(2)"><span class="iconify ui-icon" data-icon="lucide:eye-off" aria-hidden="true"></span><strong>收益遮罩</strong><small>隐藏金额和收益金额</small></button>
+                        <button type="button" :class="['privacy-option', privacyMode === 3 ? 'active' : '']" @click="setPrivacyMode(3)"><span class="iconify ui-icon" data-icon="lucide:lock-keyhole" aria-hidden="true"></span><strong>隐私保护</strong><small>隐藏金额、收益与收益率</small></button>
                     </div>
                 </div>
             </div>

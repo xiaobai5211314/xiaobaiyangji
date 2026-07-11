@@ -12,8 +12,8 @@ interface WxStorageLike {
 declare const wx: WxStorageLike | undefined;
 
 export const themeOptions: Array<{ value: AppTheme; label: string; description: string }> = [
-  { value: 'neon', label: '曜石流光', description: '默认主题 · 深色高对比、克制流光' },
-  { value: 'light', label: '雾光银蓝', description: 'Apple 风格 · 雾白层次、系统蓝操作' }
+  { value: 'neon', label: '曜石流光', description: '默认主题 · 深色行情工作台' },
+  { value: 'light', label: '雾光银蓝', description: '浅色主题 · 清晰的系统信息层级' }
 ];
 
 export const themeState = reactive({

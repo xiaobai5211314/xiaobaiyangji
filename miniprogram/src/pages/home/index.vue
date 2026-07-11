@@ -14,7 +14,8 @@
     <view class="glass-card action-card">
       <view class="action-buttons">
         <button class="ocr-button" :disabled="ocrBusy" @tap="handleSmartOcr">
-          {{ ocrButtonText }}
+          <text class="control-mark" aria-hidden="true">⌁</text>
+          <text>{{ ocrButtonText }}</text>
         </button>
       </view>
       <view class="user-panel">
@@ -29,12 +30,12 @@
           </view>
         </button>
       </view>
-      <button class="privacy-button" @tap="togglePrivacyMode">{{ privacyLabel }}</button>
+      <button class="privacy-button" @tap="togglePrivacyMode"><text class="privacy-mark" aria-hidden="true">{{ privacyMode === 0 ? '◉' : '◌' }}</text><text>{{ privacyLabel }}</text></button>
     </view>
 
     <view class="asset-switch glass-card">
-      <button :class="['asset-switch-btn', assetMode === 'fund' ? 'active' : '']" @tap="setAssetMode('fund')">基金</button>
-      <button :class="['asset-switch-btn', assetMode === 'stock' ? 'active' : '']" @tap="setAssetMode('stock')">股票</button>
+      <button :class="['asset-switch-btn', assetMode === 'fund' ? 'active' : '']" @tap="setAssetMode('fund')"><text class="switch-mark" aria-hidden="true">▣</text>基金</button>
+      <button :class="['asset-switch-btn', assetMode === 'stock' ? 'active' : '']" @tap="setAssetMode('stock')"><text class="switch-mark" aria-hidden="true">◇</text>股票</button>
     </view>
 
     <view class="glass-card notice-card">
@@ -70,7 +71,7 @@
           <text class="metric-value finance-number">{{ displayMoney(metrics.totalCost, 0, false) }}</text>
         </view>
         <view class="summary-cell">
-          <text class="metric-label">昨日总市值</text>
+          <text class="metric-label">昨日持仓基准</text>
           <text class="metric-value finance-number">{{ displayMoney(metrics.totalPrincipal, 0, false) }}</text>
         </view>
         <view class="summary-cell glow-cell">
@@ -138,7 +139,7 @@
 
     <view class="top-grid">
       <view class="glass-card rank-card">
-        <text class="section-title small-section-title">盈利 TOP</text>
+        <text class="section-title small-section-title">收益领先</text>
         <view v-if="metrics.profitTop.length === 0" class="muted-empty">暂无盈利持仓</view>
         <view v-for="fund in metrics.profitTop" :key="`profit-${fund.viewKey}`" class="rank-row">
           <text>{{ fund.name || fund.code }}</text>
@@ -146,7 +147,7 @@
         </view>
       </view>
       <view class="glass-card rank-card">
-        <text class="section-title small-section-title">亏损 TOP</text>
+        <text class="section-title small-section-title">回撤关注</text>
         <view v-if="metrics.lossTop.length === 0" class="muted-empty">暂无亏损持仓</view>
         <view v-for="fund in metrics.lossTop" :key="`loss-${fund.viewKey}`" class="rank-row">
           <text>{{ fund.name || fund.code }}</text>
@@ -157,7 +158,7 @@
 
     <view class="list-head">
       <view>
-        <text class="section-title">总持仓</text>
+        <text class="section-title">当前持仓</text>
         <text class="list-subtitle">共 {{ funds.length }} 支，下拉刷新</text>
       </view>
     </view>
@@ -810,10 +811,10 @@ const historyProfitTone = computed(() => {
 });
 const privacyLabel = computed(() => {
   const labels: Record<PrivacyMode, string> = {
-    0: '睁眼模式',
-    1: '半遮蔽',
-    2: '全遮蔽',
-    3: '极致隐匿'
+    0: '资产可见',
+    1: '金额遮罩',
+    2: '收益遮罩',
+    3: '隐私保护'
   };
   return labels[privacyMode.value];
 });
@@ -2003,6 +2004,28 @@ function getErrorMessage(error: unknown, fallback: string) {
   border-radius: 999rpx;
   font-size: 24rpx;
   font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10rpx;
+}
+
+.control-mark,
+.privacy-mark,
+.switch-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  font-family: "SF Pro Display", "PingFang SC", sans-serif;
+}
+
+.control-mark {
+  width: 28rpx;
+  height: 28rpx;
+  border: 1rpx solid rgba(255, 255, 255, .72);
+  border-radius: 8rpx;
+  font-size: 20rpx;
 }
 
 .privacy-button {
@@ -2012,6 +2035,16 @@ function getErrorMessage(error: unknown, fallback: string) {
   font-size: 22rpx;
   font-weight: 900;
   line-height: 72rpx;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+}
+
+.privacy-mark {
+  width: 24rpx;
+  height: 24rpx;
+  font-size: 23rpx;
 }
 
 .asset-switch {
@@ -2033,6 +2066,16 @@ function getErrorMessage(error: unknown, fallback: string) {
   font-size: 26rpx;
   font-weight: 900;
   line-height: 72rpx;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9rpx;
+}
+
+.switch-mark {
+  width: 27rpx;
+  height: 27rpx;
+  font-size: 21rpx;
 }
 
 .asset-switch-btn.active {
