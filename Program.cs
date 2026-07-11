@@ -137,6 +137,9 @@ builder.Services.AddHostedService<InfluencerPostsSidecarService>();
 
 var app = builder.Build();
 
+// CORS 中间件必须在 UseRouting 之后、UseAuthorization/MapControllers 之前，
+// 否则跨域 preflight (OPTIONS) 不会被拦截，导致 guzhicdn 跨域页面访问 API 时被 405 拦死。
+app.UseRouting();
 app.UseCors("ConfiguredOrigins");
 app.UseResponseCompression();
 
