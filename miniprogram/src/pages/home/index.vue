@@ -1887,7 +1887,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 .action-card {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 18rpx;
   align-items: center;
   justify-content: space-between;
@@ -1992,11 +1992,13 @@ function getErrorMessage(error: unknown, fallback: string) {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 0;
-  min-width: 230rpx;
+  min-width: 0;
   max-width: 300rpx;
 }
 
 .ocr-button {
+  min-width: 0;
+  padding: 10rpx 14rpx;
   color: #ffffff;
   background: #2563eb;
   box-shadow: 0 14rpx 34rpx rgba(37, 99, 235, 0.18);
@@ -2004,6 +2006,7 @@ function getErrorMessage(error: unknown, fallback: string) {
   border-radius: 999rpx;
   font-size: 24rpx;
   font-weight: 900;
+  line-height: 1.25;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2825,22 +2828,24 @@ function getErrorMessage(error: unknown, fallback: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 34rpx;
+  padding: calc(24rpx + env(safe-area-inset-top)) 24rpx calc(24rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
   background: rgba(2, 6, 23, 0.82);
+  overflow-y: auto;
 }
 
 .ocr-modal,
 .history-modal {
   width: 100%;
-  max-height: 82vh;
+  max-height: calc(100vh - 48rpx - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  box-sizing: border-box;
   padding: 30rpx;
   display: flex;
   flex-direction: column;
 }
 
 .history-modal {
-  height: 82vh;
+  height: min(82vh, calc(100vh - 48rpx - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
 }
 
 .modal-close {

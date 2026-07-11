@@ -149,7 +149,6 @@
             background: var(--page-bg);
             color: var(--text-main);
             font-family: "Microsoft YaHei", "微软雅黑", "PingFang SC", "苹方", "PingFang HK", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            overflow-x: hidden;
             min-height: 100vh;
             overscroll-behavior-y: contain;
         }
@@ -183,7 +182,7 @@
         #app {
             position: relative;
             z-index: 1;
-            padding-bottom: 96px;
+            padding-bottom: calc(118px + env(safe-area-inset-bottom));
         }
 
         /* 借鉴的新版毛玻璃与阴影质感 */
@@ -631,7 +630,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
         html[data-theme="light"] .xb-tag--success,
         html[data-theme="light"] .xb-btn--success,
-        html[data-theme="light"] .summary-radar-inline .summary-value {
+        html[data-theme="light"] .summary-radar-value {
             color: #006b46;
         }
 
@@ -949,29 +948,46 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
         .summary-tile--hero {
             grid-column: span 2;
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) auto;
-            gap: 10px;
-            align-items: center;
             background: rgba(255, 255, 255, .06);
+        }
+        .summary-hero-head {
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px 10px;
+            margin-bottom: 8px;
         }
         .summary-hero-main {
             min-width: 0;
         }
         .summary-radar-inline {
-            min-width: 96px;
-            padding: 10px 11px;
-            border-radius: 14px;
+            min-width: 0;
+            max-width: 100%;
+            padding: 6px 9px;
+            border-radius: 999px;
             border: 1px solid rgba(174, 201, 255, .12);
             background: rgba(2, 6, 23, .18);
-        }
-        .summary-radar-inline .summary-label {
-            margin-bottom: 4px;
+            display: inline-flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 4px;
             font-size: 11px;
-            white-space: nowrap;
+            font-weight: 800;
+            line-height: 1.3;
         }
-        .summary-radar-inline .summary-value {
-            font-size: 17px;
+        .summary-radar-label {
+            color: var(--text-muted);
+        }
+        .summary-radar-divider {
+            color: var(--text-muted);
+            opacity: .65;
+        }
+        .summary-radar-value {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
             white-space: nowrap;
         }
         .summary-tile--pending {
@@ -985,6 +1001,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             margin-bottom: 5px;
             font-weight: 800;
             letter-spacing: .04em;
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 4px;
+            line-height: 1.35;
         }
         .summary-value {
             font-family: var(--font-number);
@@ -995,8 +1017,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             line-height: 1.18;
         }
         .summary-tile--hero .summary-value {
-            font-size: clamp(28px, 7vw, 40px);
+            max-width: 100%;
+            font-size: clamp(28px, 5vw, 40px);
             letter-spacing: 0;
+            white-space: nowrap;
         }
         .summary-sub {
             margin-top: 4px;
@@ -1118,6 +1142,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             display: flex;
             align-items: center;
             justify-content: center;
+            box-sizing: border-box;
+            padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+            overflow-y: auto;
+            overscroll-behavior: contain;
             transition: 0.3s;
         }
 
@@ -1128,6 +1156,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             padding: 20px;
             width: 90%;
             max-width: 400px;
+            max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+            box-sizing: border-box;
+            overflow-y: auto;
             box-shadow: 0 10px 40px rgba(0,0,0,0.5);
         }
 
@@ -2256,7 +2287,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
         /* ===== 四页式移动底栏与页面骨架 ===== */
         .app-page {
-            padding-bottom: 78px;
+            min-width: 0;
+            padding-bottom: calc(118px + env(safe-area-inset-bottom));
+            scroll-margin-bottom: calc(118px + env(safe-area-inset-bottom));
             animation: pageFade .18s ease-out;
         }
 
@@ -2285,9 +2318,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             display: flex;
             align-items: center;
             justify-content: space-between;
+            flex-wrap: wrap;
             gap: 12px;
             margin: 15px;
             padding: 14px 16px;
+        }
+
+        .page-topbar > * {
+            min-width: 0;
         }
 
         .page-title {
@@ -2297,12 +2335,15 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             display: flex;
             align-items: center;
             gap: 8px;
+            min-width: 0;
+            overflow-wrap: anywhere;
         }
 
         .page-subtitle {
             font-size: 12px;
             color: var(--text-muted);
             margin-top: 4px;
+            overflow-wrap: anywhere;
         }
 
         .bottom-tabbar {
@@ -2311,9 +2352,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             bottom: 12px;
             transform: translateX(-50%);
             width: min(560px, calc(100vw - 22px));
+            box-sizing: border-box;
             z-index: 900;
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
+            grid-template-columns: repeat(5, minmax(0, 1fr));
             gap: 6px;
             padding: 7px;
             border-radius: 18px;
@@ -2325,6 +2367,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
         .bottom-tab {
+            min-width: 0;
             border: 0;
             border-radius: 12px;
             background: var(--card-bg-soft);
@@ -2339,6 +2382,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             font-size: 12px;
             cursor: pointer;
             transition: all .16s ease;
+            overflow: hidden;
+        }
+
+        .bottom-tab > span:last-child {
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
             .bottom-tab .tab-icon {
@@ -2440,9 +2491,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             gap: 10px;
             flex-wrap: wrap;
             align-items: center;
+            min-width: 0;
+            max-width: 100%;
         }
 
             .analysis-toolbar input, .analysis-toolbar select {
+                min-width: 0;
+                max-width: 100%;
                 background: rgba(15,23,42,.65);
                 border: 1px solid rgba(148,163,184,.22);
                 color: #e2e8f0;
@@ -2756,13 +2811,20 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             }
 
             .app-page {
-                padding-bottom: 84px;
+                padding-bottom: calc(108px + env(safe-area-inset-bottom));
             }
 
             .page-topbar {
                 margin: 10px 12px;
                 padding: 13px 14px;
                 border-radius: 20px;
+                align-items: flex-start;
+            }
+
+            .page-topbar .analysis-toolbar,
+            .page-topbar .mini-action-grid {
+                width: 100%;
+                min-width: 0 !important;
             }
 
             .page-title {
@@ -2781,6 +2843,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 height: 44px;
                 border-radius: 10px;
                 font-size: 11px;
+                padding-inline: 3px;
             }
 
                 .bottom-tab .tab-icon {
@@ -2935,11 +2998,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
         .profile-modal-card {
             width: min(88vw, 360px);
+            max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
             background: var(--card-bg);
             border: 1px solid var(--card-border);
             border-radius: var(--card-radius);
             box-shadow: var(--card-shadow);
-            overflow: hidden;
+            overflow-x: hidden;
+            overflow-y: auto;
         }
 
         .profile-head {
@@ -3329,9 +3394,22 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
         @media screen and (min-width: 769px) {
+            #app {
+                padding-bottom: 24px;
+            }
+
+            .app-page {
+                padding-bottom: 28px;
+            }
+
             .bottom-tabbar {
+                position: sticky;
+                top: 12px;
+                left: auto;
+                bottom: auto;
+                transform: none;
                 width: min(760px, calc(100vw - 80px));
-                bottom: 20px;
+                margin: 12px auto 14px;
                 padding: 8px;
                 border-radius: 18px;
                 background: var(--card-bg);
@@ -4758,11 +4836,32 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
         .privacy-mode-dialog {
             width: min(88vw, 340px);
-            overflow: hidden;
+            max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+            overflow-x: hidden;
+            overflow-y: auto;
             background: var(--card-bg);
             border: 1px solid var(--card-border);
             border-radius: 14px;
             box-shadow: var(--card-shadow);
+        }
+
+        .modal-overlay {
+            box-sizing: border-box;
+            padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+            overflow-y: auto;
+            overscroll-behavior: contain;
+        }
+
+        .modal-overlay > * {
+            max-width: 100%;
+            max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+            box-sizing: border-box;
+        }
+
+        .modal-overlay h3,
+        .modal-overlay .news-title {
+            min-width: 0;
+            overflow-wrap: anywhere;
         }
 
         .privacy-dialog-title {
@@ -4845,6 +4944,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         </div>
 
         <div v-else>
+            <div class="bottom-tabbar" v-if="isLoggedIn"><button :class="['bottom-tab', activePage==='home'?'active':'']" @click="switchPage('home')"><span class="tab-icon iconify" data-icon="lucide:briefcase-business" aria-hidden="true"></span><span>持仓</span></button><button :class="['bottom-tab', activePage==='sector'?'active':'']" @click="switchPage('sector')"><span class="tab-icon iconify" data-icon="lucide:chart-no-axes-combined" aria-hidden="true"></span><span>行情</span></button><button :class="['bottom-tab', activePage==='news'?'active':'']" @click="switchPage('news')"><span class="tab-icon iconify" data-icon="lucide:radio" aria-hidden="true"></span><span>资讯</span></button><button :class="['bottom-tab', activePage==='analysis'?'active':'']" @click="switchPage('analysis')"><span class="tab-icon iconify" data-icon="lucide:chart-column-increasing" aria-hidden="true"></span><span>复盘</span></button><button :class="['bottom-tab', activePage==='tweets'?'active':'']" @click="switchPage('tweets')"><span class="tab-icon iconify" data-icon="lucide:message-circle-more" aria-hidden="true"></span><span>观点</span></button></div>
             <div v-show="activePage === 'home'" class="app-page home-page">
                 <div class="home-hero-clean glass-panel">
                     <input type="file" id="ocrInput" accept="image/*" style="display: none;" @change="handleFileUpload">
@@ -4992,19 +5092,23 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                 <div v-show="assetMode === 'fund'" class="glass-panel total-panel dashboard-summary">
                     <div class="summary-tile summary-tile--hero">
-                        <div class="summary-hero-main">
+                        <div class="summary-hero-head">
                             <div class="summary-label" title="平台持仓金额，包含买入待确认；下方单独展示待确认金额"><span class="iconify ui-icon" data-icon="lucide:wallet" aria-hidden="true"></span>账户总金额 <button class="privacy-toggle" type="button" @click="showPrivacyModal = true" :title="privacyMode === 0 ? '资产可见，点击调整显示设置' : '资产已遮罩，点击调整显示设置'" :aria-label="privacyMode === 0 ? '资产可见，点击调整显示设置' : '资产已遮罩，点击调整显示设置'"><span v-if="privacyMode === 0" class="iconify ui-icon" data-icon="lucide:eye" aria-hidden="true"></span><span v-else class="iconify ui-icon" data-icon="lucide:eye-off" aria-hidden="true"></span></button></div>
+                            <div class="summary-radar-inline">
+                                <span class="iconify ui-icon" data-icon="lucide:clock-3" aria-hidden="true"></span>
+                                <span class="summary-radar-label">市场状态</span>
+                                <span class="summary-radar-divider" aria-hidden="true">·</span>
+                                <span class="summary-radar-value" :style="{ color: isNight ? '#10b981' : '#f59e0b' }">
+                                    <span class="iconify ui-icon" :data-icon="isNight ? 'lucide:moon-star' : 'lucide:activity'" aria-hidden="true"></span>
+                                    {{ isNight ? '市场休市' : '盘中估值' }}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="summary-hero-main">
                             <div class="summary-value">{{ privacyMode === 0 ? (dashboardActiveSummary.accountTotalAmount > 0 ? '¥ ' + Number(dashboardActiveSummary.accountTotalAmount || 0).toFixed(2) : '--') : '****' }}</div>
                             <div v-if="dashboardActiveSummary.todayPendingBuyTotal > 0" class="summary-sub">确认持仓 {{ privacyMode === 0 ? '¥' + Number(dashboardActiveSummary.antConfirmedAmount || 0).toFixed(2) : '****' }}</div>
                             <div v-if="dashboardActiveSummary.intradayAvailable" class="summary-sub">盘中估算市值 {{ privacyMode === 0 ? '¥' + Number(dashboardActiveSummary.intradayEstimatedAssets || 0).toFixed(2) : '****' }}</div>
                             <div v-if="dashboardActiveSummary.todayPendingBuyTotal > 0" class="summary-note value-pending" title="待确认买入不参与今日收益和今日收益率">待确认 {{ privacyMode === 0 ? '¥' + Number(dashboardActiveSummary.todayPendingBuyTotal || 0).toFixed(2) : '****' }}</div>
-                        </div>
-                        <div class="summary-radar-inline">
-                            <div class="summary-label"><span class="iconify ui-icon" data-icon="lucide:clock-3" aria-hidden="true"></span>市场状态</div>
-                            <div class="summary-value" :style="{ color: isNight ? '#10b981' : '#f59e0b' }">
-                                <span class="iconify ui-icon" :data-icon="isNight ? 'lucide:moon-star' : 'lucide:activity'" aria-hidden="true"></span>
-                                {{ isNight ? '市场休市' : '盘中估值' }}
-                            </div>
                         </div>
                     </div>
                     <div class="divider"></div>
@@ -5516,8 +5620,6 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:14px;" @click="recoveryModal.show=false">知道了</button>
                 </div>
             </div>
-
-            <div class="bottom-tabbar" v-if="isLoggedIn"><button :class="['bottom-tab', activePage==='home'?'active':'']" @click="switchPage('home')"><span class="tab-icon iconify" data-icon="lucide:briefcase-business" aria-hidden="true"></span><span>持仓</span></button><button :class="['bottom-tab', activePage==='sector'?'active':'']" @click="switchPage('sector')"><span class="tab-icon iconify" data-icon="lucide:chart-no-axes-combined" aria-hidden="true"></span><span>行情</span></button><button :class="['bottom-tab', activePage==='news'?'active':'']" @click="switchPage('news')"><span class="tab-icon iconify" data-icon="lucide:radio" aria-hidden="true"></span><span>资讯</span></button><button :class="['bottom-tab', activePage==='analysis'?'active':'']" @click="switchPage('analysis')"><span class="tab-icon iconify" data-icon="lucide:chart-column-increasing" aria-hidden="true"></span><span>复盘</span></button><button :class="['bottom-tab', activePage==='tweets'?'active':'']" @click="switchPage('tweets')"><span class="tab-icon iconify" data-icon="lucide:message-circle-more" aria-hidden="true"></span><span>观点</span></button></div>
 
             <div v-if="showProfileModal" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); display: flex; justify-content: center; align-items: center; z-index: 5200;" @click.self="showProfileModal = false">
                 <div class="profile-modal-card">

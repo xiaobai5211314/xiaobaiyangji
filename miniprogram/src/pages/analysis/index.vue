@@ -574,7 +574,8 @@ function profitClass(value: number | null) {
 }
 
 .calendar-toolbar {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  row-gap: 12rpx;
 }
 
 .compact-title {

@@ -191,23 +191,33 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 24rpx;
   padding: 8rpx 2rpx 18rpx;
 }
 
+.page-header > view,
+.page-header > text {
+  min-width: 0;
+}
+
 .page-title {
   display: block;
+  max-width: 100%;
   color: var(--text-primary);
   font-size: 46rpx;
   font-weight: 800;
   line-height: 1.1;
+  overflow-wrap: anywhere;
 }
 
 .page-subtitle {
   display: block;
+  max-width: 100%;
   margin-top: 10rpx;
   color: var(--text-muted);
   font-size: 24rpx;
+  overflow-wrap: anywhere;
 }
 
 // ─── 统计网格 ──────────────────────────────────
@@ -252,6 +262,16 @@
   border: 1rpx solid var(--accent-border);
   font-size: 22rpx;
   font-weight: 700;
+  max-width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+button {
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 // ─── 空状态 ────────────────────────────────────

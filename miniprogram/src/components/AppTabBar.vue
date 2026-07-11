@@ -105,7 +105,13 @@ function handleTap(key: TabKey) {
 }
 
 .tab-label {
+  display: block;
+  max-width: 100%;
   font-size: 27rpx;
   font-weight: 900;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>
