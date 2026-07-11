@@ -5103,7 +5103,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 <div v-show="assetMode === 'fund'" class="glass-panel total-panel dashboard-summary">
                     <div class="summary-tile summary-tile--hero">
                         <div class="summary-hero-head">
-                            <div class="summary-label" title="平台持仓金额，包含买入待确认；下方单独展示待确认金额"><span class="iconify ui-icon" data-icon="lucide:wallet" aria-hidden="true"></span>账户总金额 <button class="privacy-toggle" type="button" @click="showPrivacyModal = true" :title="privacyMode === 0 ? '资产可见，点击调整显示设置' : '资产已遮罩，点击调整显示设置'" :aria-label="privacyMode === 0 ? '资产可见，点击调整显示设置' : '资产已遮罩，点击调整显示设置'"><span v-if="privacyMode === 0" class="iconify ui-icon" data-icon="lucide:eye" aria-hidden="true"></span><span v-else class="iconify ui-icon" data-icon="lucide:eye-off" aria-hidden="true"></span></button></div>
+                            <div class="summary-label" title="平台持仓金额，包含买入待确认；下方单独展示待确认金额">
+                                <span class="iconify ui-icon" data-icon="lucide:wallet" aria-hidden="true"></span>账户总金额
+                                <button class="privacy-toggle" type="button" @click="openPrivacyModal" :title="privacyMode === 0 ? '资产可见，点击调整显示设置' : '资产已遮罩，点击调整显示设置'" :aria-label="privacyMode === 0 ? '资产可见，点击调整显示设置' : '资产已遮罩，点击调整显示设置'">
+                                    <svg v-if="privacyMode === 0" class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696a10.75 10.75 0 0 1 19.876 0a1 1 0 0 1 0 .696a10.75 10.75 0 0 1-19.876 0"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                    <svg v-else class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575a1 1 0 0 1 0 .696a10.8 10.8 0 0 1-1.444 2.49m-6.41-.679a3 3 0 0 1-4.242-4.242"></path><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151a1 1 0 0 1 0-.696a10.75 10.75 0 0 1 4.446-5.143M2 2l20 20"></path></svg>
+                                </button>
+                            </div>
                             <div class="summary-radar-inline">
                                 <span class="iconify ui-icon" data-icon="lucide:clock-3" aria-hidden="true"></span>
                                 <span class="summary-radar-label">市场状态</span>
@@ -5676,15 +5682,27 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 </div>
             </div>
 
-            <div v-show="showPrivacyModal" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 5000;" @click.self="showPrivacyModal = false">
+            <div id="privacyModeOverlay" v-show="showPrivacyModal" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 5000;" @click.self="closePrivacyModal">
                 <div class="privacy-mode-dialog" role="dialog" aria-modal="true" aria-label="资产显示设置">
                     <div class="privacy-dialog-title">资产显示</div>
                     <div class="privacy-dialog-copy">选择在当前设备上展示资产与收益信息的范围。</div>
                     <div class="privacy-option-list">
-                        <button type="button" :class="['privacy-option', privacyMode === 0 ? 'active' : '']" :aria-pressed="privacyMode === 0" @click="setPrivacyMode(0)"><span class="iconify ui-icon" data-icon="lucide:eye" aria-hidden="true"></span><strong>资产可见</strong><small>显示金额、收益和收益率</small></button>
-                        <button type="button" :class="['privacy-option', privacyMode === 1 ? 'active' : '']" :aria-pressed="privacyMode === 1" @click="setPrivacyMode(1)"><span class="iconify ui-icon" data-icon="lucide:shield" aria-hidden="true"></span><strong>金额遮罩</strong><small>隐藏持仓金额，保留收益趋势</small></button>
-                        <button type="button" :class="['privacy-option', privacyMode === 2 ? 'active' : '']" :aria-pressed="privacyMode === 2" @click="setPrivacyMode(2)"><span class="iconify ui-icon" data-icon="lucide:eye-off" aria-hidden="true"></span><strong>收益遮罩</strong><small>隐藏金额和收益金额</small></button>
-                        <button type="button" :class="['privacy-option', privacyMode === 3 ? 'active' : '']" :aria-pressed="privacyMode === 3" @click="setPrivacyMode(3)"><span class="iconify ui-icon" data-icon="lucide:lock-keyhole" aria-hidden="true"></span><strong>隐私保护</strong><small>隐藏金额、收益与收益率</small></button>
+                        <button type="button" :class="['privacy-option', privacyMode === 0 ? 'active' : '']" :aria-pressed="privacyMode === 0" @click="setPrivacyMode(0)">
+                            <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696a10.75 10.75 0 0 1 19.876 0a1 1 0 0 1 0 .696a10.75 10.75 0 0 1-19.876 0"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                            <strong>资产可见</strong><small>显示金额、收益和收益率</small>
+                        </button>
+                        <button type="button" :class="['privacy-option', privacyMode === 1 ? 'active' : '']" :aria-pressed="privacyMode === 1" @click="setPrivacyMode(1)">
+                            <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path></svg>
+                            <strong>金额遮罩</strong><small>隐藏持仓金额，保留收益趋势</small>
+                        </button>
+                        <button type="button" :class="['privacy-option', privacyMode === 2 ? 'active' : '']" :aria-pressed="privacyMode === 2" @click="setPrivacyMode(2)">
+                            <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575a1 1 0 0 1 0 .696a10.8 10.8 0 0 1-1.444 2.49m-6.41-.679a3 3 0 0 1-4.242-4.242"></path><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151a1 1 0 0 1 0-.696a10.75 10.75 0 0 1 4.446-5.143M2 2l20 20"></path></svg>
+                            <strong>收益遮罩</strong><small>隐藏金额和收益金额</small>
+                        </button>
+                        <button type="button" :class="['privacy-option', privacyMode === 3 ? 'active' : '']" :aria-pressed="privacyMode === 3" @click="setPrivacyMode(3)">
+                            <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="16" r="1"></circle><rect width="18" height="12" x="3" y="10" rx="2"></rect><path d="M7 10V7a5 5 0 0 1 10 0v3"></path></svg>
+                            <strong>隐私保护</strong><small>隐藏金额、收益与收益率</small>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -6809,12 +6827,22 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const savedMode = localStorage.getItem('privacy_mode');
                 const privacyMode = ref(savedMode !== null ? Number(savedMode) : 2);
                 const showPrivacyModal = ref(false);
+                const openPrivacyModal = () => {
+                    showPrivacyModal.value = true;
+                    const overlay = document.getElementById('privacyModeOverlay');
+                    if (overlay) overlay.style.display = 'flex';
+                };
+                const closePrivacyModal = () => {
+                    showPrivacyModal.value = false;
+                    const overlay = document.getElementById('privacyModeOverlay');
+                    if (overlay) overlay.style.display = 'none';
+                };
                 const setPrivacyMode = (mode) => {
                     const labels = ['资产可见', '金额遮罩', '收益遮罩', '隐私保护'];
                     if (!Number.isInteger(mode) || mode < 0 || mode >= labels.length) return;
                     privacyMode.value = mode;
                     localStorage.setItem('privacy_mode', String(mode));
-                    showPrivacyModal.value = false;
+                    closePrivacyModal();
                     saveUiState('privacy_mode', { value: mode });
                     showToast(`已切换为${labels[mode]}`, 'success');
                 };
@@ -8950,7 +8978,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 return {
                     appTheme, setAppTheme,
                     toasts, isLoggedIn, currentUser, userDisplayName, fundsList, activeHoldings, inactiveHoldings, getClearedProfit, chartRef, performanceChartRef, loginForm, profileForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, refreshSectorPage, activePage, switchPage, showProfileModal, userAvatar, smartOcrBusy, smartOcrText,
-                    totalPrincipal, totalProfit, totalRate, totalTodayProfit, dashboardActiveSummary, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm, dashboardLoadError, retryDashboard,
+                    totalPrincipal, totalProfit, totalRate, totalTodayProfit, dashboardActiveSummary, privacyMode, showPrivacyModal, openPrivacyModal, closePrivacyModal, setPrivacyMode, isUploading, editForm, dashboardLoadError, retryDashboard,
                     performanceCurve, performancePeriod, performanceIndex, performanceLoading, performancePeriods, performanceIndices, selectedPerformanceIndexName, performanceIsToday, showPerformanceAmount, canShowPerformanceAmount, togglePerformanceAmount, performanceMessage, performanceVerdict, performanceExcessClass, fetchPerformanceCurve, renderPerformanceChart, switchPerformancePeriod, formatPerformancePercent, formatPerformanceMoney,
                     influencerPostsDisplay, selectedInfluencerPost, selectedInfluencerReplies, influencerPostsLoading, influencerPostsStatus, influencerPostsUpdatedAt, loadInfluencerPosts, formatInfluencerPostTime, formatInfluencerCount, getInfluencerReplyCount, openInfluencerPostDetail, closeInfluencerPostDetail, openInfluencerSource,
                     handleLogin, handleRegister, handleLogout, saveUserProfile, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, setOcrPendingMode, confirmOcrImport, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
