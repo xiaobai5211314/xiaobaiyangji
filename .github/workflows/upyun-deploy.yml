@@ -34,12 +34,21 @@ jobs:
           upx rm -a /v2 || true
 
       - name: 刷新又拍云CDN缓存
+        env:
+          UPYUN_SERVICE: ${{ secrets.UPYUN_SERVICE }}
+          UPYUN_OPERATOR: ${{ secrets.UPYUN_OPERATOR }}
+          UPYUN_PASSWORD: ${{ secrets.UPYUN_PASSWORD }}
         run: |
           set -Eeuo pipefail
-          curl --fail --show-error --retry 3 --retry-all-errors -X POST "https://purge.upyun.com/purge/" \
-            -H "Content-Type: application/json" \
-            -u "${{ secrets.UPYUN_OPERATOR }}:${{ secrets.UPYUN_PASSWORD }}" \
-            -d '{"urls":"https://guzhicdn.21212121.xyz/index.html"}'
+          purge_urls="http://guzhicdn.21212121.xyz/index.html"
+          purge_date="$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S GMT')"
+          password_md5="$(printf '%s' "$UPYUN_PASSWORD" | md5sum | awk '{print $1}')"
+          purge_sign="$(printf '%s&%s&%s&%s' "$purge_urls" "$UPYUN_SERVICE" "$purge_date" "$password_md5" | md5sum | awk '{print $1}')"
+
+          curl --fail --show-error --retry 3 --retry-all-errors -X POST "http://purge.upyun.com/purge/" \
+            -H "Authorization: UpYun $UPYUN_SERVICE:$UPYUN_OPERATOR:$purge_sign" \
+            -H "Date: $purge_date" \
+            --form-string "purge=$purge_urls"
 
       - name: 校验 CDN 已同步当前页面
         run: |
