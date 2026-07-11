@@ -7,14 +7,14 @@ on:
       - gpt-two
       - wechatapp
     paths:
-      - 'wwwroot/**'
-      - '.github/workflows/upyun-deploy.yml'
+      - "wwwroot/**"
+      - ".github/workflows/upyun-deploy.yml"
   workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: 📥 拉取最新代码
         uses: actions/checkout@v4 # 升级到 v4，消除那个烦人的黄字警告
@@ -28,19 +28,40 @@ jobs:
 
       - name: ☁️ 登录并上传至又拍云
         run: |
+          set -Eeuo pipefail
           upx login ${{ secrets.UPYUN_SERVICE }} ${{ secrets.UPYUN_OPERATOR }} ${{ secrets.UPYUN_PASSWORD }}
           upx put wwwroot/index.html /index.html
           upx rm -a /v2 || true
 
       - name: 刷新又拍云CDN缓存
         run: |
-          set +e
-          curl --fail --show-error -X POST "https://purge.upyun.com/purge/" \
+          set -Eeuo pipefail
+          curl --fail --show-error --retry 3 --retry-all-errors -X POST "https://purge.upyun.com/purge/" \
             -H "Content-Type: application/json" \
             -u "${{ secrets.UPYUN_OPERATOR }}:${{ secrets.UPYUN_PASSWORD }}" \
             -d '{"urls":"https://guzhicdn.21212121.xyz/index.html"}'
-          code=$?
-          if [ "$code" -ne 0 ]; then
-            echo "::warning::又拍云 CDN 刷新失败，文件已上传；跳过刷新避免阻断前端部署。curl exit code: $code"
-          fi
-          exit 0
+
+      - name: 校验 CDN 已同步当前页面
+        run: |
+          set -Eeuo pipefail
+          source_sha="$(sha256sum wwwroot/index.html | awk '{print $1}')"
+          cdn_url="https://guzhicdn.21212121.xyz/index.html"
+
+          for attempt in $(seq 1 20); do
+            curl --fail --show-error --retry 2 --retry-all-errors \
+              -H "Cache-Control: no-cache" \
+              --output /tmp/guzhi-cdn-index.html \
+              "$cdn_url"
+            cdn_sha="$(sha256sum /tmp/guzhi-cdn-index.html | awk '{print $1}')"
+
+            if [ "$cdn_sha" = "$source_sha" ]; then
+              echo "CDN 内容校验通过（第 ${attempt} 次）"
+              exit 0
+            fi
+
+            echo "CDN 尚未返回本次页面，等待刷新：${attempt}/20"
+            sleep 3
+          done
+
+          echo "CDN 内容校验失败：又拍云页面仍与本次提交不一致"
+          exit 1

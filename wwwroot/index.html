@@ -5344,6 +5344,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     <span v-if="activeHoldings.length === 0 && !isLoading" style="color:var(--text-muted); font-size:13px; width: 100%; text-align: center; padding: 20px;">暂无持仓，请手动添加代码，或点击上方「📷 智能截图导入」自动扫描</span>
                 </div>
 
+                <div v-if="assetMode === 'fund' && !isLoading && dashboardLoadError" class="glass-panel" style="margin:0 15px 12px;padding:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-color:rgba(245,158,11,.38);">
+                    <div style="min-width:0;"><strong style="display:block;color:var(--td-color-warning);">持仓暂未加载</strong><span style="display:block;margin-top:4px;color:var(--text-muted);font-size:12px;line-height:1.45;">{{ dashboardLoadError }}</span></div>
+                    <button class="btn" style="flex:0 0 auto;" @click="retryDashboard">重试</button>
+                </div>
+
                 <div v-show="assetMode === 'fund' && inactiveHoldings.length > 0" style="margin: 5px 15px 10px 15px;">
                     <details style="font-size: 13px; color: var(--text-muted);">
                         <summary style="cursor: pointer; padding: 6px 0;">📋 已清仓 / 历史收益 ({{ inactiveHoldings.length }} 只)</summary>
@@ -5671,15 +5676,15 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 </div>
             </div>
 
-            <div v-if="showPrivacyModal" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 5000;" @click.self="showPrivacyModal = false">
+            <div v-show="showPrivacyModal" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 5000;" @click.self="showPrivacyModal = false">
                 <div class="privacy-mode-dialog" role="dialog" aria-modal="true" aria-label="资产显示设置">
                     <div class="privacy-dialog-title">资产显示</div>
                     <div class="privacy-dialog-copy">选择在当前设备上展示资产与收益信息的范围。</div>
                     <div class="privacy-option-list">
-                        <button type="button" :class="['privacy-option', privacyMode === 0 ? 'active' : '']" @click="setPrivacyMode(0)"><span class="iconify ui-icon" data-icon="lucide:eye" aria-hidden="true"></span><strong>资产可见</strong><small>显示金额、收益和收益率</small></button>
-                        <button type="button" :class="['privacy-option', privacyMode === 1 ? 'active' : '']" @click="setPrivacyMode(1)"><span class="iconify ui-icon" data-icon="lucide:shield" aria-hidden="true"></span><strong>金额遮罩</strong><small>隐藏持仓金额，保留收益趋势</small></button>
-                        <button type="button" :class="['privacy-option', privacyMode === 2 ? 'active' : '']" @click="setPrivacyMode(2)"><span class="iconify ui-icon" data-icon="lucide:eye-off" aria-hidden="true"></span><strong>收益遮罩</strong><small>隐藏金额和收益金额</small></button>
-                        <button type="button" :class="['privacy-option', privacyMode === 3 ? 'active' : '']" @click="setPrivacyMode(3)"><span class="iconify ui-icon" data-icon="lucide:lock-keyhole" aria-hidden="true"></span><strong>隐私保护</strong><small>隐藏金额、收益与收益率</small></button>
+                        <button type="button" :class="['privacy-option', privacyMode === 0 ? 'active' : '']" :aria-pressed="privacyMode === 0" @click="setPrivacyMode(0)"><span class="iconify ui-icon" data-icon="lucide:eye" aria-hidden="true"></span><strong>资产可见</strong><small>显示金额、收益和收益率</small></button>
+                        <button type="button" :class="['privacy-option', privacyMode === 1 ? 'active' : '']" :aria-pressed="privacyMode === 1" @click="setPrivacyMode(1)"><span class="iconify ui-icon" data-icon="lucide:shield" aria-hidden="true"></span><strong>金额遮罩</strong><small>隐藏持仓金额，保留收益趋势</small></button>
+                        <button type="button" :class="['privacy-option', privacyMode === 2 ? 'active' : '']" :aria-pressed="privacyMode === 2" @click="setPrivacyMode(2)"><span class="iconify ui-icon" data-icon="lucide:eye-off" aria-hidden="true"></span><strong>收益遮罩</strong><small>隐藏金额和收益金额</small></button>
+                        <button type="button" :class="['privacy-option', privacyMode === 3 ? 'active' : '']" :aria-pressed="privacyMode === 3" @click="setPrivacyMode(3)"><span class="iconify ui-icon" data-icon="lucide:lock-keyhole" aria-hidden="true"></span><strong>隐私保护</strong><small>隐藏金额、收益与收益率</small></button>
                     </div>
                 </div>
             </div>
@@ -6192,6 +6197,19 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     return fetch(API_BASE + path, Object.assign({}, options, { headers: h }));
                 };
 
+                const apiFetchWithTimeout = async (path, options = {}, timeoutMs = 15000) => {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+                    try {
+                        return await apiFetch(path, { ...options, signal: controller.signal });
+                    } catch (e) {
+                        if (e?.name === 'AbortError') throw new Error('持仓服务请求超时');
+                        throw e;
+                    } finally {
+                        clearTimeout(timeoutId);
+                    }
+                };
+
                 const apiFetchJsonWithTimeout = async (path, options = {}, timeoutMs = 45000) => {
                     const controller = new AbortController();
                     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -6529,6 +6547,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const chartRef = ref(null);
                 const performanceChartRef = ref(null);
                 const isLoading = ref(true);
+                const dashboardLoadError = ref('');
                 const isNight = ref(false);
                 const totalPrincipal = ref(0);
                 const totalProfit = ref(0);
@@ -6790,7 +6809,15 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const savedMode = localStorage.getItem('privacy_mode');
                 const privacyMode = ref(savedMode !== null ? Number(savedMode) : 2);
                 const showPrivacyModal = ref(false);
-                const setPrivacyMode = (mode) => { privacyMode.value = mode; localStorage.setItem('privacy_mode', mode); showPrivacyModal.value = false; saveUiState('privacy_mode', { value: mode }); };
+                const setPrivacyMode = (mode) => {
+                    const labels = ['资产可见', '金额遮罩', '收益遮罩', '隐私保护'];
+                    if (!Number.isInteger(mode) || mode < 0 || mode >= labels.length) return;
+                    privacyMode.value = mode;
+                    localStorage.setItem('privacy_mode', String(mode));
+                    showPrivacyModal.value = false;
+                    saveUiState('privacy_mode', { value: mode });
+                    showToast(`已切换为${labels[mode]}`, 'success');
+                };
                 const editForm = reactive({ show: false, code: '', name: '', cost: '', shares: '', originalCode: '' });
 
                 const sectorTopList = ref([]);
@@ -8541,10 +8568,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     const silent = !!options.silent;
                     isFetchingData = true;
                     if (!silent && fundsList.value.length === 0) isLoading.value = true;
+                    dashboardLoadError.value = '';
                     try {
                         const forceParam = force ? `&_t=${Date.now()}` : '';
-                        const response = await fetch(`${API_BASE}/api/fund/today?username=${encodeURIComponent(currentUser.value)}${forceParam}`, { cache: 'no-store' });
-                        if (!response.ok) throw new Error('today接口异常');
+                        const response = await apiFetchWithTimeout(`/api/fund/today?username=${encodeURIComponent(currentUser.value)}${forceParam}`, { cache: 'no-store' });
+                        if (!response.ok) throw new Error(`持仓服务返回 HTTP ${response.status}`);
                         const rawData = await response.json();
                         const apiData = Array.isArray(rawData) ? rawData : (rawData.funds || []);
                         const apiSummary = rawData.summary || null;
@@ -8775,11 +8803,20 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         else requestAnimationFrame(runChart);
                         fetchPerformanceCurve();
                     } catch (e) {
-                        isLoading.value = false;
-                        if (!silent) showToast("🌐 数据刷新失败", "error");
+                        const message = String(e?.message || '网络连接异常');
+                        dashboardLoadError.value = message.includes('超时')
+                            ? '持仓服务在 15 秒内没有响应。当前数据没有被清空，可稍后重试。'
+                            : '无法读取持仓数据。请确认登录状态或稍后重试。';
+                        if (!silent) showToast(message.includes('超时') ? '⏱️ 持仓加载超时，请重试' : '🌐 持仓数据加载失败', "error");
                     } finally {
+                        isLoading.value = false;
                         isFetchingData = false;
                     }
+                };
+
+                const retryDashboard = async () => {
+                    dashboardLoadError.value = '';
+                    await fetchData({ force: true });
                 };
 
                 const safeResizeChart = (ref) => {
@@ -8913,7 +8950,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 return {
                     appTheme, setAppTheme,
                     toasts, isLoggedIn, currentUser, userDisplayName, fundsList, activeHoldings, inactiveHoldings, getClearedProfit, chartRef, performanceChartRef, loginForm, profileForm, fundForm, isLoading, isNight, pullRefresh, refreshNow, refreshSectorPage, activePage, switchPage, showProfileModal, userAvatar, smartOcrBusy, smartOcrText,
-                    totalPrincipal, totalProfit, totalRate, totalTodayProfit, dashboardActiveSummary, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm,
+                    totalPrincipal, totalProfit, totalRate, totalTodayProfit, dashboardActiveSummary, privacyMode, showPrivacyModal, setPrivacyMode, isUploading, editForm, dashboardLoadError, retryDashboard,
                     performanceCurve, performancePeriod, performanceIndex, performanceLoading, performancePeriods, performanceIndices, selectedPerformanceIndexName, performanceIsToday, showPerformanceAmount, canShowPerformanceAmount, togglePerformanceAmount, performanceMessage, performanceVerdict, performanceExcessClass, fetchPerformanceCurve, renderPerformanceChart, switchPerformancePeriod, formatPerformancePercent, formatPerformanceMoney,
                     influencerPostsDisplay, selectedInfluencerPost, selectedInfluencerReplies, influencerPostsLoading, influencerPostsStatus, influencerPostsUpdatedAt, loadInfluencerPosts, formatInfluencerPostTime, formatInfluencerCount, getInfluencerReplyCount, openInfluencerPostDetail, closeInfluencerPostDetail, openInfluencerSource,
                     handleLogin, handleRegister, handleLogout, saveUserProfile, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, setOcrPendingMode, confirmOcrImport, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
