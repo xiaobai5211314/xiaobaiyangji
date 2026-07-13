@@ -474,6 +474,7 @@ var settlement = new PortfolioSettlementService();
 settlement.AddPosition(manualAddFund, 2000, normalBeforeCutoff.TradeDate, normalBeforeCutoff.ConfirmDate);
 Equal(12000.00m, PortfolioAccounting.Money(manualAddFund.HoldAmount), "manualAdd.displayAmount.includesPending");
 Equal(2000.00m, PortfolioAccounting.Money(manualAddFund.PendingBuyAmount), "manualAdd.pendingAmount");
+Equal(10000.00m, PortfolioAccounting.Money(settlement.GetDailyBaseAmount(manualAddFund, normalBeforeCutoff.TradeDate)), "manualAdd.todayBase.excludesPendingBuy");
 if (manualAddFund.PendingConfirmDate != "2026-06-22")
     throw new InvalidOperationException($"manualAdd.confirmDate: expected 2026-06-22, actual {manualAddFund.PendingConfirmDate}");
 
@@ -486,6 +487,28 @@ if (!PortfolioSettlementService.ConfirmPendingBuyIfDue(manualAddFund, "2026-06-2
     throw new InvalidOperationException("manualAdd.confirmPending: expected pending buy to confirm");
 Equal(0.00m, PortfolioAccounting.Money(manualAddFund.PendingBuyAmount), "manualAdd.confirmed.pendingAmountCleared");
 Equal(11000.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetEffectiveShares(manualAddFund, "2026-06-22")), "manualAdd.confirmed.allSharesEffective");
+
+var july13BeforeCutoff = FundTradeTiming.Resolve(new DateTime(2026, 7, 13), false, "示例混合基金");
+if (july13BeforeCutoff.TradeDate != "2026-07-13" || july13BeforeCutoff.ConfirmDate != "2026-07-14")
+    throw new InvalidOperationException($"trade.normal.20260713.beforeCutoff: expected T=2026-07-13 confirm=2026-07-14, actual T={july13BeforeCutoff.TradeDate} confirm={july13BeforeCutoff.ConfirmDate}");
+
+var pendingBuyEarningsFund = new MyFundConfig
+{
+    FundName = "示例混合基金",
+    HoldAmount = 35000.00,
+    HoldAmountPrecise = 35000.0000m,
+    CostAmount = 40000.00,
+    HoldShares = 20000.0000
+};
+settlement.AddPosition(pendingBuyEarningsFund, 10000, july13BeforeCutoff.TradeDate, july13BeforeCutoff.ConfirmDate);
+Equal(45000.00m, PortfolioAccounting.Money(pendingBuyEarningsFund.HoldAmount), "manualAdd.regression.displayIncludesPendingBeforeEstimate");
+Equal(35000.00m, PortfolioAccounting.Money(settlement.GetDailyBaseAmount(pendingBuyEarningsFund, "2026-07-13")), "manualAdd.regression.todayBaseExcludesPending");
+Equal(-1358.00m, PortfolioAccounting.OfficialTodayProfit(35000.00m, -3.88m), "manualAdd.regression.profitUsesConfirmedBaseOnly");
+if (!settlement.ApplyOneDaySettlement(pendingBuyEarningsFund, -3.88, "2026-07-13", exactProfit: -1358.00))
+    throw new InvalidOperationException("manualAdd.regression.settlement: expected settlement to update the confirmed ledger");
+Equal(43642.00m, PortfolioAccounting.Money(pendingBuyEarningsFund.HoldAmount), "manualAdd.regression.displayKeepsPendingAfterProfit");
+Equal(10000.00m, PortfolioAccounting.Money(pendingBuyEarningsFund.PendingBuyAmount), "manualAdd.regression.pendingRemainsUntilConfirm");
+Equal(-1358.00m, PortfolioAccounting.Money(pendingBuyEarningsFund.LastSettledProfit), "manualAdd.regression.pendingDoesNotParticipateInProfit");
 
 var pendingSellFund = new MyFundConfig
 {
