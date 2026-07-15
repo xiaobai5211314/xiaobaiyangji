@@ -2417,7 +2417,7 @@ namespace 小白养基.Controllers
                 YesterdayIncome = Math.Round(yesterdayIncome, 2),
                 HoldingRate = Math.Round(holdingRate, 2),
                 HoldShares = Math.Round(detailShares.GetValueOrDefault(), 6),
-                CostAmountIsConfirmed = true,
+                CostAmountIsConfirmed = hasExactDetailCost,
                 HoldSharesAreConfirmed = detailShares.GetValueOrDefault() > 0,
                 RealizedProfit = PortfolioAccounting.ToDouble(detailRealizedProfit),
                 RealizedProfitIsConfirmed = hasExactDetailCost && parsedProfitValues,
@@ -3180,6 +3180,12 @@ namespace 小白养基.Controllers
                         : 0;
                     double newConfirmedAmount = Math.Max(0, Math.Round(item.HoldAmount - newPendingAmount, 2));
                     bool newFundFullPending = newPendingAmount > 0 && newPendingAmount >= item.HoldAmount - 0.01;
+                    double newResolvedShares = newFundFullPending
+                        ? 0
+                        : ResolveOcrConfirmedShares(item, newPendingAmount, newConfirmedAmount);
+                    double newResolvedCost = newFundFullPending
+                        ? 0
+                        : ResolveOcrConfirmedCost(item, newPendingAmount, newConfirmedAmount, 0);
                     var newFund = new MyFundConfig
                     {
                         Username = username,
@@ -3187,8 +3193,8 @@ namespace 小白养基.Controllers
                         FundName = item.Name,
                         HoldAmount = Math.Round(item.HoldAmount, 2),
                         HoldAmountPrecise = PortfolioAccounting.LedgerMoney(item.HoldAmount),
-                        CostAmount = newFundFullPending ? 0 : ResolveOcrConfirmedCost(item, newPendingAmount, newConfirmedAmount, 0),
-                        HoldShares = newFundFullPending ? 0 : ResolveOcrConfirmedShares(item, newPendingAmount, newConfirmedAmount),
+                        CostAmount = 0,
+                        HoldShares = 0,
                         RealizedProfit = newFundFullPending || !HasConfirmedOcrRealizedProfit(item)
                             ? 0
                             : Math.Round(item.RealizedProfit, 2),
@@ -3212,6 +3218,26 @@ namespace 小白养基.Controllers
                         OcrHoldingRate = Math.Round(item.HoldingRate, 2),
                         OcrSnapshotDate = ChinaDateDash()
                     };
+                    if (newResolvedShares > 0)
+                    {
+                        PortfolioSettlementService.ApplyShareCalibration(
+                            newFund,
+                            newResolvedShares,
+                            item.HoldSharesAreConfirmed,
+                            item.HoldSharesAreConfirmed
+                                ? PortfolioSettlementService.ShareSourceOcrAssetDetail
+                                : PortfolioSettlementService.ShareSourceOcrNavDerived);
+                    }
+                    if (newResolvedCost > 0)
+                    {
+                        PortfolioSettlementService.ApplyCostCalibration(
+                            newFund,
+                            newResolvedCost,
+                            item.CostAmountIsConfirmed,
+                            item.CostAmountIsConfirmed
+                                ? PortfolioSettlementService.CostSourceOcrAssetDetail
+                                : PortfolioSettlementService.CostSourceOcrHoldingDerived);
+                    }
                     _context.MyFunds.Add(newFund);
                     userFundDict[newFund.FundCode] = newFund;
                 }
@@ -3404,6 +3430,44 @@ namespace 小白养基.Controllers
             return Math.Round(item.HoldShares * confirmedRatio, 6);
         }
 
+        private static bool ApplyOcrShareCalibration(
+            MyFundConfig fund,
+            OcrImportPreviewItem item,
+            double pendingAmount,
+            double confirmedAmount)
+        {
+            if (!HasOcrCalculatedShares(item)) return false;
+
+            double shares = ResolveOcrConfirmedShares(item, pendingAmount, confirmedAmount);
+            string source = item.HoldSharesAreConfirmed
+                ? PortfolioSettlementService.ShareSourceOcrAssetDetail
+                : PortfolioSettlementService.ShareSourceOcrNavDerived;
+            return PortfolioSettlementService.ApplyShareCalibration(
+                fund,
+                shares,
+                item.HoldSharesAreConfirmed,
+                source);
+        }
+
+        private static bool ApplyOcrCostCalibration(
+            MyFundConfig fund,
+            OcrImportPreviewItem item,
+            double pendingAmount,
+            double confirmedAmount)
+        {
+            if (item.CostAmount <= 0) return false;
+
+            double cost = ResolveOcrConfirmedCost(item, pendingAmount, confirmedAmount, fund.CostAmount);
+            string source = item.CostAmountIsConfirmed
+                ? PortfolioSettlementService.CostSourceOcrAssetDetail
+                : PortfolioSettlementService.CostSourceOcrHoldingDerived;
+            return PortfolioSettlementService.ApplyCostCalibration(
+                fund,
+                cost,
+                item.CostAmountIsConfirmed,
+                source);
+        }
+
         private static bool HasConfirmedOcrRealizedProfit(OcrImportPreviewItem item)
             => item.RealizedProfitIsConfirmed && item.CostAmountIsConfirmed && item.CostAmount > 0;
 
@@ -3449,22 +3513,26 @@ namespace 小白养基.Controllers
             if (isFullPending)
             {
                 exist.HoldShares = 0;
+                exist.HoldSharesAreConfirmed = false;
+                exist.HoldSharesSource = null;
                 exist.CostAmount = 0;
+                exist.CostAmountIsConfirmed = false;
+                exist.CostAmountSource = null;
                 Console.WriteLine($"[OCR全额待确认] code={exist.FundCode}, pending={pendingAmount:F2}, shares→0, cost→0");
             }
             else if (pendingAmount > 0)
             {
                 if (HasOcrCalculatedShares(item))
                 {
-                    exist.HoldShares = ResolveOcrConfirmedShares(item, pendingAmount, confirmedAmount);
+                    ApplyOcrShareCalibration(exist, item, pendingAmount, confirmedAmount);
                 }
-                exist.CostAmount = ResolveOcrConfirmedCost(item, pendingAmount, confirmedAmount, exist.CostAmount);
+                ApplyOcrCostCalibration(exist, item, pendingAmount, confirmedAmount);
                 Console.WriteLine($"[OCR部分待确认] code={exist.FundCode}, pending={pendingAmount:F2}, confirmed={confirmedAmount:F2}, shares={exist.HoldShares:F4}, confirmedShares={item.HoldSharesAreConfirmed}, calculatedShares={HasOcrCalculatedShares(item)}");
             }
             else
             {
-                if (item.CostAmount > 0) exist.CostAmount = Math.Round(item.CostAmount, 2);
-                if (HasOcrCalculatedShares(item)) exist.HoldShares = ResolveOcrConfirmedShares(item, pendingAmount, confirmedAmount);
+                if (item.CostAmount > 0) ApplyOcrCostCalibration(exist, item, pendingAmount, confirmedAmount);
+                if (HasOcrCalculatedShares(item)) ApplyOcrShareCalibration(exist, item, pendingAmount, confirmedAmount);
             }
 
             if (!isFullPending && HasConfirmedOcrRealizedProfit(item))
@@ -3643,6 +3711,8 @@ namespace 小白养基.Controllers
                         if (amount > oldAmount)
                         {
                             exist.CostAmount = Math.Round(Math.Max(exist.CostAmount, oldAmount) + pendingAmount, 2);
+                            exist.CostAmountIsConfirmed = false;
+                            exist.CostAmountSource = PortfolioSettlementService.CostSourcePurchaseAmount;
                             MarkPendingBuy(exist, pendingAmount, todayDash, "manual_add");
                         }
                     }
@@ -3656,6 +3726,8 @@ namespace 小白养基.Controllers
                             HoldAmount = Math.Round(amount, 2),
                             HoldAmountPrecise = PortfolioAccounting.LedgerMoney(amount),
                             CostAmount = Math.Round(amount, 2),
+                            CostAmountIsConfirmed = false,
+                            CostAmountSource = PortfolioSettlementService.CostSourcePurchaseAmount,
                             HoldShares = 0
                         };
                         MarkPendingBuy(newFund, amount, todayDash, "manual_add");
@@ -7370,8 +7442,16 @@ namespace 小白养基.Controllers
                         if (checkNewCode != null) return BadRequest($"东财代码 [{code}] 已经在库中，请不要输入重复代码。");
 
                         existFund.FundCode = code;
-                        existFund.CostAmount = costAmount;
-                        existFund.HoldShares = holdShares;
+                        PortfolioSettlementService.ApplyCostCalibration(
+                            existFund,
+                            costAmount,
+                            true,
+                            PortfolioSettlementService.CostSourceManual);
+                        PortfolioSettlementService.ApplyShareCalibration(
+                            existFund,
+                            holdShares,
+                            true,
+                            PortfolioSettlementService.ShareSourceManual);
                         // 更新份额
                         _context.MyFunds.Update(existFund);
                         var oldRecords = await _context.FundRecords.Where(r => r.FundCode == originalCode).ToListAsync();
@@ -7379,8 +7459,16 @@ namespace 小白养基.Controllers
                     }
                     else
                     {
-                        existFund.CostAmount = costAmount;
-                        existFund.HoldShares = holdShares; // 更新份额
+                        PortfolioSettlementService.ApplyCostCalibration(
+                            existFund,
+                            costAmount,
+                            true,
+                            PortfolioSettlementService.CostSourceManual);
+                        PortfolioSettlementService.ApplyShareCalibration(
+                            existFund,
+                            holdShares,
+                            true,
+                            PortfolioSettlementService.ShareSourceManual);
                         _context.MyFunds.Update(existFund);
                     }
 

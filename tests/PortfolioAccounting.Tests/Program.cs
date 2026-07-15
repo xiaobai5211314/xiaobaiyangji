@@ -482,6 +482,12 @@ Equal(10000.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetEffecti
 if (!PortfolioSettlementService.CapturePendingBuyShares(manualAddFund, "2026-06-18", 2.0))
     throw new InvalidOperationException("manualAdd.capturePendingShares: expected pending shares to be captured");
 Equal(11000.00m, PortfolioAccounting.Money(manualAddFund.HoldShares), "manualAdd.totalSharesAfterPurchaseNav");
+if (manualAddFund.HoldSharesAreConfirmed
+    || manualAddFund.HoldSharesSource != PortfolioSettlementService.ShareSourcePurchaseNavDerived)
+    throw new InvalidOperationException("manualAdd.shareSource: purchase-NAV shares must remain marked as derived");
+if (manualAddFund.CostAmountIsConfirmed
+    || manualAddFund.CostAmountSource != PortfolioSettlementService.CostSourcePurchaseAmount)
+    throw new InvalidOperationException("manualAdd.costSource: purchase amount must remain marked as transaction-derived");
 Equal(10000.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetEffectiveShares(manualAddFund, "2026-06-19")), "manualAdd.beforeConfirm.excludesPendingShares");
 if (!PortfolioSettlementService.ConfirmPendingBuyIfDue(manualAddFund, "2026-06-22"))
     throw new InvalidOperationException("manualAdd.confirmPending: expected pending buy to confirm");
@@ -509,6 +515,65 @@ if (!settlement.ApplyOneDaySettlement(pendingBuyEarningsFund, -3.88, "2026-07-13
 Equal(43642.00m, PortfolioAccounting.Money(pendingBuyEarningsFund.HoldAmount), "manualAdd.regression.displayKeepsPendingAfterProfit");
 Equal(10000.00m, PortfolioAccounting.Money(pendingBuyEarningsFund.PendingBuyAmount), "manualAdd.regression.pendingRemainsUntilConfirm");
 Equal(-1358.00m, PortfolioAccounting.Money(pendingBuyEarningsFund.LastSettledProfit), "manualAdd.regression.pendingDoesNotParticipateInProfit");
+
+var shareCalibrationFund = new MyFundConfig();
+if (!PortfolioSettlementService.ApplyShareCalibration(
+        shareCalibrationFund,
+        6.009846,
+        false,
+        PortfolioSettlementService.ShareSourceOcrNavDerived))
+    throw new InvalidOperationException("shares.derived.initial: expected initial derived shares to apply");
+if (!PortfolioSettlementService.ApplyShareCalibration(
+        shareCalibrationFund,
+        6.01,
+        true,
+        PortfolioSettlementService.ShareSourceOcrAssetDetail))
+    throw new InvalidOperationException("shares.confirmed.assetDetail: expected platform shares to replace derived shares");
+Equal(6.01m, Convert.ToDecimal(shareCalibrationFund.HoldShares), "shares.confirmed.assetDetail.value");
+if (!shareCalibrationFund.HoldSharesAreConfirmed
+    || shareCalibrationFund.HoldSharesSource != PortfolioSettlementService.ShareSourceOcrAssetDetail)
+    throw new InvalidOperationException("shares.confirmed.assetDetail.provenance: exact platform source was not persisted");
+if (PortfolioSettlementService.ApplyShareCalibration(
+        shareCalibrationFund,
+        6.009846,
+        false,
+        PortfolioSettlementService.ShareSourceOcrNavDerived))
+    throw new InvalidOperationException("shares.confirmed.protected: ordinary OCR must not replace platform-confirmed shares");
+Equal(6.01m, Convert.ToDecimal(shareCalibrationFund.HoldShares), "shares.confirmed.protected.value");
+
+var purchaseNavShareFund = new MyFundConfig
+{
+    HoldShares = 26756.2743,
+    HoldSharesSource = PortfolioSettlementService.ShareSourcePurchaseNavDerived
+};
+if (PortfolioSettlementService.ApplyShareCalibration(
+        purchaseNavShareFund,
+        26756.26758,
+        false,
+        PortfolioSettlementService.ShareSourceOcrNavDerived))
+    throw new InvalidOperationException("shares.purchaseNav.protected: rounded-amount OCR must not replace purchase-NAV shares");
+Equal(26756.2743m, Convert.ToDecimal(purchaseNavShareFund.HoldShares), "shares.purchaseNav.protected.value");
+
+var costCalibrationFund = new MyFundConfig();
+if (!PortfolioSettlementService.ApplyCostCalibration(
+        costCalibrationFund,
+        9.03,
+        false,
+        PortfolioSettlementService.CostSourceOcrHoldingDerived))
+    throw new InvalidOperationException("cost.derived.initial: expected initial derived cost to apply");
+if (!PortfolioSettlementService.ApplyCostCalibration(
+        costCalibrationFund,
+        10.00,
+        true,
+        PortfolioSettlementService.CostSourceOcrAssetDetail))
+    throw new InvalidOperationException("cost.confirmed.assetDetail: expected exact platform cost to replace derived cost");
+if (PortfolioSettlementService.ApplyCostCalibration(
+        costCalibrationFund,
+        9.03,
+        false,
+        PortfolioSettlementService.CostSourceOcrHoldingDerived))
+    throw new InvalidOperationException("cost.confirmed.protected: ordinary OCR must not replace platform-confirmed cost");
+Equal(10.00m, PortfolioAccounting.Money(costCalibrationFund.CostAmount), "cost.confirmed.protected.value");
 
 var pendingSellFund = new MyFundConfig
 {

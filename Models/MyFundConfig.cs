@@ -14,11 +14,17 @@ namespace 小白养基.Models
         public double HoldAmount { get; set; } // 持仓本金
         public decimal HoldAmountPrecise { get; set; } = 0m; // 4位内部滚动底稿，展示仍使用 HoldAmount 两位金额
         public double HoldShares { get; set; } // 🚀 新增：持仓份额
+        public bool HoldSharesAreConfirmed { get; set; } = false; // 资产详情页或用户手工确认的精确份额
+        [MaxLength(40)]
+        public string? HoldSharesSource { get; set; } // 份额来源，用于阻止低优先级反推值覆盖精确值
         public string? LastSettledDate { get; set; }
         public double LastSettledProfit { get; set; } = 0;
         public decimal LastSettledProfitPrecise { get; set; } = 0m;
         public double LastSettledRate { get; set; } = 0;
         public double CostAmount { get; set; }
+        public bool CostAmountIsConfirmed { get; set; } = false; // 资产详情页或用户手工确认的精确成本
+        [MaxLength(40)]
+        public string? CostAmountSource { get; set; }
         // 🚀 新增：落袋为安小金库（记录历史变现的利润）
         public double RealizedProfit { get; set; } = 0;
         // 平台累计收益（OCR 从蚂蚁基金识别的"累计收益"，赎回待确认时优先显示）

@@ -4,6 +4,15 @@ namespace 小白养基.Services
 {
     public sealed class PortfolioSettlementService
     {
+        public const string ShareSourceOcrAssetDetail = "ocr_asset_detail";
+        public const string ShareSourceOcrNavDerived = "ocr_nav_derived";
+        public const string ShareSourcePurchaseNavDerived = "purchase_nav_derived";
+        public const string ShareSourceManual = "manual";
+        public const string CostSourceOcrAssetDetail = "ocr_asset_detail";
+        public const string CostSourceOcrHoldingDerived = "ocr_holding_derived";
+        public const string CostSourcePurchaseAmount = "purchase_amount";
+        public const string CostSourceManual = "manual";
+
         public static DateTime ChinaNow() => DateTime.UtcNow.AddHours(8);
 
         public static string ChinaDateDash(DateTime? localTime = null)
@@ -86,6 +95,64 @@ namespace 小白养基.Services
             fund.LastSettledProfit = PortfolioAccounting.ToDouble(profit);
         }
 
+        public static bool ApplyShareCalibration(
+            MyFundConfig fund,
+            double shares,
+            bool isConfirmed,
+            string source)
+        {
+            if (shares < 0
+                || (!isConfirmed && shares == 0)
+                || string.IsNullOrWhiteSpace(source)) return false;
+
+            bool protectsPurchaseNavShares = string.Equals(
+                fund.HoldSharesSource,
+                ShareSourcePurchaseNavDerived,
+                StringComparison.OrdinalIgnoreCase);
+            if (!isConfirmed && (fund.HoldSharesAreConfirmed || protectsPurchaseNavShares))
+            {
+                return false;
+            }
+
+            double normalizedShares = Math.Round(shares, 6);
+            bool changed = Math.Abs(fund.HoldShares - normalizedShares) > 0.0000001
+                || fund.HoldSharesAreConfirmed != isConfirmed
+                || !string.Equals(fund.HoldSharesSource, source, StringComparison.OrdinalIgnoreCase);
+
+            fund.HoldShares = normalizedShares;
+            fund.HoldSharesAreConfirmed = isConfirmed;
+            fund.HoldSharesSource = source;
+            return changed;
+        }
+
+        public static bool ApplyCostCalibration(
+            MyFundConfig fund,
+            double costAmount,
+            bool isConfirmed,
+            string source)
+        {
+            if (costAmount <= 0 || string.IsNullOrWhiteSpace(source)) return false;
+
+            bool protectsPurchaseCost = string.Equals(
+                fund.CostAmountSource,
+                CostSourcePurchaseAmount,
+                StringComparison.OrdinalIgnoreCase);
+            if (!isConfirmed && (fund.CostAmountIsConfirmed || protectsPurchaseCost))
+            {
+                return false;
+            }
+
+            double normalizedCost = Math.Round(costAmount, 2);
+            bool changed = Math.Abs(fund.CostAmount - normalizedCost) > 0.001
+                || fund.CostAmountIsConfirmed != isConfirmed
+                || !string.Equals(fund.CostAmountSource, source, StringComparison.OrdinalIgnoreCase);
+
+            fund.CostAmount = normalizedCost;
+            fund.CostAmountIsConfirmed = isConfirmed;
+            fund.CostAmountSource = source;
+            return changed;
+        }
+
         public double GetEffectiveBaseAmount(MyFundConfig fund, string settleDate)
         {
             decimal baseAmount = GetHoldAmountBasis(fund);
@@ -147,6 +214,8 @@ namespace 小白养基.Services
 
             fund.PendingBuyShares = pendingShares;
             fund.HoldShares = Math.Round(fund.HoldShares + pendingShares, 4);
+            fund.HoldSharesAreConfirmed = false;
+            fund.HoldSharesSource = ShareSourcePurchaseNavDerived;
             return true;
         }
 
@@ -216,6 +285,8 @@ namespace 小白养基.Services
 
             SetHoldAmount(fund, GetHoldAmountBasis(fund) + PortfolioAccounting.LedgerMoney(addAmount));
             fund.CostAmount = Math.Round(fund.CostAmount + addAmount, 2);
+            fund.CostAmountIsConfirmed = false;
+            fund.CostAmountSource = CostSourcePurchaseAmount;
             fund.PendingBuyAmount = Math.Round(existingPending + addAmount, 2);
             fund.PendingBuyShares = 0;
             fund.PendingSellAmount = 0;
@@ -281,7 +352,15 @@ namespace 小白养基.Services
                 fund.HoldShares = Math.Round(fund.HoldShares - reduceShares, 4);
                 fund.CostAmount = Math.Round(fund.CostAmount - soldCost, 2);
                 SetHoldAmount(fund, holdAmountBasis - unitAmount * Convert.ToDecimal(reduceShares));
-                if (fund.HoldShares <= 0) { fund.CostAmount = 0; SetHoldAmount(fund, 0m); }
+                if (fund.HoldShares <= 0)
+                {
+                    fund.CostAmount = 0;
+                    fund.CostAmountIsConfirmed = false;
+                    fund.CostAmountSource = null;
+                    fund.HoldSharesAreConfirmed = false;
+                    fund.HoldSharesSource = null;
+                    SetHoldAmount(fund, 0m);
+                }
                 fund.RealizedProfit = Math.Round(fund.RealizedProfit + profit, 2);
 
                 if (fund.LastTradeDate == tradeDate)

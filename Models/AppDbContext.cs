@@ -59,6 +59,16 @@ namespace 小白养基.Models
                 .Property(f => f.LastSettledProfitPrecise)
                 .HasColumnType("decimal(20,4)");
 
+            modelBuilder.Entity<MyFundConfig>()
+                .Property(f => f.HoldSharesSource)
+                .HasMaxLength(40)
+                .IsRequired(false);
+
+            modelBuilder.Entity<MyFundConfig>()
+                .Property(f => f.CostAmountSource)
+                .HasMaxLength(40)
+                .IsRequired(false);
+
             modelBuilder.Entity<DailyArchive>()
                 .HasIndex(a => new { a.Username, a.RecordDate, a.FundCode })
                 .HasDatabaseName("IX_DailyArchive_User_Date_Code");
