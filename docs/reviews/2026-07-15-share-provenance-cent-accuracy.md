@@ -77,3 +77,11 @@
 - `0.97` 的具体经济来源无法仅凭当前截图确认，标记为“待核实”；不得称为卖出、分红或落袋收益。
 
 事实来源：用户提供的 2026-07-15 蚂蚁资产详情截图；2026-07-15 19:31 CST 对生产库 `MyFunds` 的核对与纠正。
+
+### 生产验证
+
+1. GitHub 提交 `c0ade90` 已推送到 `master`，后端部署 `29413675488` 成功。
+2. 启动迁移 `202607150002_AddPlatformHoldingAdjustment` 已写入生产库迁移历史。
+3. 修改前单基金备份为 `/root/db-backups/xiaobaiyangji/myfund_008282_before_adjustment_split_20260715_200348.sql`，文件大小 `1766` 字节。
+4. 生产库最终值：当前金额 `18.83`、成本金额 `10.00`、`RealizedProfit=0.00`、`PlatformHoldingAdjustment=0.97`、OCR 持有收益 `9.80`。
+5. 手工验算：`18.83 - 10.00 + 0.00 + 0.97 = 9.80`。服务重启后 `guzhi-assistant.service` 为 `active`，本机 `/api/health` 返回 `success=true`。
