@@ -62,13 +62,16 @@ namespace 小白养基.Services
             return Money(costPrice * shares);
         }
 
-        public static decimal RealizedProfitFromPlatformHolding(
+        public static decimal PlatformHoldingAdjustmentFromPlatformHolding(
             decimal currentAssets,
             decimal costAmount,
+            decimal realizedProfit,
             decimal platformHoldingProfit)
         {
             if (costAmount <= 0m) return 0m;
-            return Money(Money(platformHoldingProfit) - (Money(currentAssets) - Money(costAmount)));
+            return Money(
+                Money(platformHoldingProfit)
+                - (Money(currentAssets) - Money(costAmount) + Money(realizedProfit)));
         }
 
         public static decimal PortfolioTodayEstimateRate(decimal intradayEstimateProfit, decimal antConfirmedAmount)
@@ -160,12 +163,14 @@ namespace 小白养基.Services
             decimal currentAssets,
             decimal costAmount,
             decimal realizedProfit = 0m,
-            decimal fallbackHoldingProfit = 0m)
+            decimal fallbackHoldingProfit = 0m,
+            decimal platformHoldingAdjustment = 0m)
         {
             var assets = Money(currentAssets);
             var cost = Money(costAmount);
             if (cost > 0m)
-                return Money(assets - cost + Money(realizedProfit));
+                return Money(
+                    assets - cost + Money(realizedProfit) + Money(platformHoldingAdjustment));
 
             return Money(fallbackHoldingProfit);
         }

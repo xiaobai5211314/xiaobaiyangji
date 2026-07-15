@@ -23,6 +23,7 @@ export interface FundView extends FundTodayItem {
   breakEvenRateValue: number;
   costValue: number | null;
   realizedProfitValue: number;
+  platformHoldingAdjustmentValue: number;
   statusLabel: string;
   trendLabel: string;
   isHolidayValue: boolean;
@@ -288,6 +289,7 @@ export function buildPortfolioMetrics(rawFunds: FundTodayItem[], now = new Date(
     let currentRateValue = numberOrZero(fund.todayRate);
 
     const realizedProfitValue = numberOrZero(fund.realizedProfit);
+    const platformHoldingAdjustmentValue = numberOrZero(fund.platformHoldingAdjustment);
     const costValue = finiteNumber(fund.confirmedCost) ?? finiteNumber(fund.cost);
     const validCost = costValue !== null && costValue > 0 ? costValue : null;
     // 直接使用 API 的 holdingProfit 和 holdingRate
@@ -325,6 +327,8 @@ export function buildPortfolioMetrics(rawFunds: FundTodayItem[], now = new Date(
       costValue: validCost,
       realizedProfit: round(realizedProfitValue),
       realizedProfitValue: round(realizedProfitValue),
+      platformHoldingAdjustment: round(platformHoldingAdjustmentValue),
+      platformHoldingAdjustmentValue: round(platformHoldingAdjustmentValue),
       isHoliday: rateState.isHoliday,
       isHolidayValue: rateState.isHoliday,
       isSettledValue: isAlreadySettled,
@@ -345,7 +349,11 @@ export function buildPortfolioMetrics(rawFunds: FundTodayItem[], now = new Date(
   const totalTodayProfit = funds.reduce((sum, fund) => sum + fund.todayProfitValue, 0);
   const totalAssets = funds.reduce((sum, fund) => sum + fund.todayAmountValue, 0);
   const totalRealized = funds.reduce((sum, fund) => sum + fund.realizedProfitValue, 0);
-  const totalProfit = totalAssets - totalCost + totalRealized;
+  const totalPlatformHoldingAdjustment = funds.reduce(
+    (sum, fund) => sum + fund.platformHoldingAdjustmentValue,
+    0
+  );
+  const totalProfit = totalAssets - totalCost + totalRealized + totalPlatformHoldingAdjustment;
   const totalRate = totalCost > 0 ? (totalProfit / totalCost) * 100 : 0;
   const totalTodayRate = totalPrincipalForRate > 0 ? (totalTodayProfit / totalPrincipalForRate) * 100 : 0;
   const exposure = buildExposure(funds, totalAssets);

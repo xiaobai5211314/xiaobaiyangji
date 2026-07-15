@@ -700,7 +700,8 @@ namespace 小白养基.Controllers
                         currentAssets,
                         PortfolioAccounting.Money(fund.CostAmount),
                         PortfolioAccounting.Money(fund.RealizedProfit),
-                        PortfolioAccounting.Money(fund.OcrHoldingIncome));
+                        PortfolioAccounting.Money(fund.OcrHoldingIncome),
+                        PortfolioAccounting.Money(fund.PlatformHoldingAdjustment));
                 decimal fundTotalCost = PortfolioAccounting.HoldingCost(currentAssets, totalProfit);
                 decimal totalRate = PortfolioAccounting.Percent(totalProfit, fundTotalCost);
 
@@ -894,8 +895,8 @@ namespace 小白养基.Controllers
             public double HoldShares { get; set; }
             public bool CostAmountIsConfirmed { get; set; }
             public bool HoldSharesAreConfirmed { get; set; }
-            public double RealizedProfit { get; set; }
-            public bool RealizedProfitIsConfirmed { get; set; }
+            public double PlatformHoldingAdjustment { get; set; }
+            public bool PlatformHoldingAdjustmentIsConfirmed { get; set; }
             public string ProfitDate { get; set; } = string.Empty;
             public string ProfitLabel { get; set; } = string.Empty;
             public string CalcMethod { get; set; } = string.Empty;
@@ -2374,16 +2375,20 @@ namespace 小白养基.Controllers
                 : (parsedProfitValues
                     ? PortfolioAccounting.HoldingCost(confirmedAmountMoney, PortfolioAccounting.Money(holdingIncome))
                     : confirmedAmountMoney);
-            decimal detailRealizedProfit = hasExactDetailCost && parsedProfitValues
-                ? PortfolioAccounting.RealizedProfitFromPlatformHolding(
+            decimal existingRealizedProfit = userFundDict.TryGetValue(fundCode, out var existingFund)
+                ? PortfolioAccounting.Money(existingFund.RealizedProfit)
+                : 0m;
+            decimal detailPlatformHoldingAdjustment = hasExactDetailCost && parsedProfitValues
+                ? PortfolioAccounting.PlatformHoldingAdjustmentFromPlatformHolding(
                     confirmedAmountMoney,
                     detailCostAmount,
+                    existingRealizedProfit,
                     PortfolioAccounting.Money(holdingIncome))
                 : 0m;
             string profitDate = profitLabel == "今日收益"
                 ? (detailNavDate ?? ChinaDateDash())
                 : "";
-            diagnostics.Add($"[AssetDetail] detailCostPrice={detailCostPrice?.ToString("F6") ?? "null"} detailShares={detailShares?.ToString("F6") ?? "null"} detailNav={detailNav?.ToString("F6") ?? "null"} detailNavDate={detailNavDate ?? "null"} exactCost={hasExactDetailCost} costAmount={detailCostAmount:F2} realized={detailRealizedProfit:F2}");
+            diagnostics.Add($"[AssetDetail] detailCostPrice={detailCostPrice?.ToString("F6") ?? "null"} detailShares={detailShares?.ToString("F6") ?? "null"} detailNav={detailNav?.ToString("F6") ?? "null"} detailNavDate={detailNavDate ?? "null"} exactCost={hasExactDetailCost} costAmount={detailCostAmount:F2} holdingAdjustment={detailPlatformHoldingAdjustment:F2}");
 
             // 7. 匹配基金
             var best = (fund: (FundInfoCache?)null, score: 0d);
@@ -2419,8 +2424,8 @@ namespace 小白养基.Controllers
                 HoldShares = Math.Round(detailShares.GetValueOrDefault(), 6),
                 CostAmountIsConfirmed = hasExactDetailCost,
                 HoldSharesAreConfirmed = detailShares.GetValueOrDefault() > 0,
-                RealizedProfit = PortfolioAccounting.ToDouble(detailRealizedProfit),
-                RealizedProfitIsConfirmed = hasExactDetailCost && parsedProfitValues,
+                PlatformHoldingAdjustment = PortfolioAccounting.ToDouble(detailPlatformHoldingAdjustment),
+                PlatformHoldingAdjustmentIsConfirmed = hasExactDetailCost && parsedProfitValues,
                 ProfitDate = profitDate,
                 ProfitLabel = profitLabel,
                 CalcMethod = hasExactDetailCost ? "资产详情页(份额成本价)" : "资产详情页",
@@ -3195,9 +3200,10 @@ namespace 小白养基.Controllers
                         HoldAmountPrecise = PortfolioAccounting.LedgerMoney(item.HoldAmount),
                         CostAmount = 0,
                         HoldShares = 0,
-                        RealizedProfit = newFundFullPending || !HasConfirmedOcrRealizedProfit(item)
+                        RealizedProfit = 0,
+                        PlatformHoldingAdjustment = newFundFullPending || !HasConfirmedOcrPlatformHoldingAdjustment(item)
                             ? 0
-                            : Math.Round(item.RealizedProfit, 2),
+                            : Math.Round(item.PlatformHoldingAdjustment, 2),
                         LastTradeDate = item.IsPendingBuy ? ChinaDateDash() : null,
                         LastAddAmount = item.IsPendingBuy ? newPendingAmount : 0,
                         PendingBuyAmount = item.IsPendingBuy ? newPendingAmount : 0,
@@ -3468,8 +3474,8 @@ namespace 小白养基.Controllers
                 source);
         }
 
-        private static bool HasConfirmedOcrRealizedProfit(OcrImportPreviewItem item)
-            => item.RealizedProfitIsConfirmed && item.CostAmountIsConfirmed && item.CostAmount > 0;
+        private static bool HasConfirmedOcrPlatformHoldingAdjustment(OcrImportPreviewItem item)
+            => item.PlatformHoldingAdjustmentIsConfirmed && item.CostAmountIsConfirmed && item.CostAmount > 0;
 
         /// <summary>
         /// 解析 OCR 截图对应的真实收益日期。
@@ -3535,10 +3541,10 @@ namespace 小白养基.Controllers
                 if (HasOcrCalculatedShares(item)) ApplyOcrShareCalibration(exist, item, pendingAmount, confirmedAmount);
             }
 
-            if (!isFullPending && HasConfirmedOcrRealizedProfit(item))
+            if (!isFullPending && HasConfirmedOcrPlatformHoldingAdjustment(item))
             {
-                exist.RealizedProfit = Math.Round(item.RealizedProfit, 2);
-                Console.WriteLine($"[OCR落袋收益校准] code={exist.FundCode}, realizedProfit={exist.RealizedProfit:F2}, costPrice={item.CostPrice:F6}, shares={item.HoldShares:F6}");
+                exist.PlatformHoldingAdjustment = Math.Round(item.PlatformHoldingAdjustment, 2);
+                Console.WriteLine($"[OCR平台持有收益校准] code={exist.FundCode}, adjustment={exist.PlatformHoldingAdjustment:F2}, realizedProfit={exist.RealizedProfit:F2}, costPrice={item.CostPrice:F6}, shares={item.HoldShares:F6}");
             }
 
             // 设置/清除 pending 状态
@@ -6744,8 +6750,10 @@ namespace 小白养基.Controllers
                         && hasCurrentOcrAmount;
                     double totalProfitPreview = hasOcrHoldingSnapshot && !isSoldOut
                         ? Math.Round(config.OcrHoldingIncome, 2)
-                        : Math.Round(marketValue - costBasis + displayedProfit, 2);
-                    if (hasOcrHoldingSnapshot && !isSoldOut)
+                        : Math.Round(
+                            marketValue - costBasis + displayedProfit + config.PlatformHoldingAdjustment,
+                            2);
+                    if (hasOcrHoldingSnapshot && !isSoldOut && config.CostAmount <= 0)
                     {
                         costBasis = PortfolioAccounting.ToDouble(PortfolioAccounting.HoldingCost(
                             PortfolioAccounting.Money(confirmedHoldAmount),
@@ -6905,6 +6913,7 @@ namespace 小白养基.Controllers
                         rawCostAmount = isCleared ? (double?)null : (rawCostBasis > 0 ? rawCostBasis : (double?)null),
                         confirmedCost = isCleared ? (double?)null : costBasis,
                         realizedProfit = config.RealizedProfit,
+                        platformHoldingAdjustment = config.PlatformHoldingAdjustment,
                         platformCumulativeProfit = config.PlatformCumulativeProfit,
                         displayedProfit,
                         displayedProfitSource,

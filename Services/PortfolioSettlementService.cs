@@ -359,6 +359,7 @@ namespace 小白养基.Services
                     fund.CostAmountSource = null;
                     fund.HoldSharesAreConfirmed = false;
                     fund.HoldSharesSource = null;
+                    fund.PlatformHoldingAdjustment = 0;
                     SetHoldAmount(fund, 0m);
                 }
                 fund.RealizedProfit = Math.Round(fund.RealizedProfit + profit, 2);

@@ -20,6 +20,7 @@ export interface FundTodayItem {
   rawCostAmount?: number | null;
   confirmedCost?: number | null;
   realizedProfit?: number;
+  platformHoldingAdjustment?: number;
   holdingIncome?: number;
   holdingRate?: number;
   holdingSource?: string;
@@ -107,8 +108,8 @@ export interface OcrImportPreviewItem {
   holdShares?: number;
   costAmountIsConfirmed?: boolean;
   holdSharesAreConfirmed?: boolean;
-  realizedProfit?: number;
-  realizedProfitIsConfirmed?: boolean;
+  platformHoldingAdjustment?: number;
+  platformHoldingAdjustmentIsConfirmed?: boolean;
   profitDate?: string;
   profitLabel?: string;
   calcMethod?: string;

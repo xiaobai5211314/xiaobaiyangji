@@ -25,8 +25,10 @@ namespace 小白养基.Models
         public bool CostAmountIsConfirmed { get; set; } = false; // 资产详情页或用户手工确认的精确成本
         [MaxLength(40)]
         public string? CostAmountSource { get; set; }
-        // 🚀 新增：落袋为安小金库（记录历史变现的利润）
+        // 仅记录已确认卖出产生的真实已实现收益。
         public double RealizedProfit { get; set; } = 0;
+        // 平台持有收益与“当前金额 - 成本金额 + 已实现收益”的口径校准差，不代表卖出落袋。
+        public double PlatformHoldingAdjustment { get; set; } = 0;
         // 平台累计收益（OCR 从蚂蚁基金识别的"累计收益"，赎回待确认时优先显示）
         public double PlatformCumulativeProfit { get; set; } = 0;
         // 🚀 之前的落袋小金库

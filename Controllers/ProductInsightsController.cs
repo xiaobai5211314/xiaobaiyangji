@@ -143,7 +143,9 @@ namespace 小白养基.Controllers
                 var cost = fund.CostAmount > 0 ? fund.CostAmount : fund.HoldAmount;
                 var dailyProfit = archive?.DailyProfit ?? fund.LastSettledProfit;
                 var dailyRate = archive?.DailyRate ?? fund.LastSettledRate;
-                var totalProfit = archive?.TotalProfit ?? Math.Round(assets - cost + fund.RealizedProfit, 2);
+                var totalProfit = archive?.TotalProfit ?? Math.Round(
+                    assets - cost + fund.RealizedProfit + fund.PlatformHoldingAdjustment,
+                    2);
                 var totalRate = archive?.TotalRate ?? (cost > 0 ? Math.Round(totalProfit / cost * 100, 2) : 0);
 
                 rows.Add(new InsightFundRow
@@ -159,6 +161,7 @@ namespace 小白养基.Controllers
                     TotalProfit = Math.Round(totalProfit, 2),
                     TotalRate = Math.Round(totalRate, 2),
                     RealizedProfit = Math.Round(fund.RealizedProfit, 2),
+                    PlatformHoldingAdjustment = Math.Round(fund.PlatformHoldingAdjustment, 2),
                     LastTradeDate = fund.LastTradeDate,
                     LastAddAmount = Math.Round(fund.LastAddAmount, 2),
                     LastSettledDate = fund.LastSettledDate,
@@ -392,6 +395,7 @@ namespace 小白养基.Controllers
             public double TotalProfit { get; set; }
             public double TotalRate { get; set; }
             public double RealizedProfit { get; set; }
+            public double PlatformHoldingAdjustment { get; set; }
             public string? LastTradeDate { get; set; }
             public double LastAddAmount { get; set; }
             public string? LastSettledDate { get; set; }

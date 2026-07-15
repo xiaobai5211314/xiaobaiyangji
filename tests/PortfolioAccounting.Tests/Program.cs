@@ -257,20 +257,42 @@ Equal(
 var semiconductorDetailCost = PortfolioAccounting.CostAmountFromCostPrice(
     costPrice: 1.6639m,
     shares: 6.01m);
-var semiconductorRealized = PortfolioAccounting.RealizedProfitFromPlatformHolding(
-    currentAssets: 20.73m,
+var semiconductorHoldingAdjustment = PortfolioAccounting.PlatformHoldingAdjustmentFromPlatformHolding(
+    currentAssets: 18.83m,
     costAmount: semiconductorDetailCost,
-    platformHoldingProfit: 11.70m);
+    realizedProfit: 0m,
+    platformHoldingProfit: 9.80m);
 Equal(10.00m, semiconductorDetailCost, "assetDetail.costAmount.fromCostPriceAndShares");
-Equal(0.97m, semiconductorRealized, "assetDetail.realizedProfit.preservesPlatformHoldingProfit");
+Equal(0.97m, semiconductorHoldingAdjustment, "assetDetail.platformAdjustment.preservesPlatformHoldingProfit");
 Equal(
-    11.70m,
+    9.80m,
     PortfolioAccounting.ResolveOfficialHoldingProfit(
-        currentAssets: 20.73m,
+        currentAssets: 18.83m,
         costAmount: semiconductorDetailCost,
-        realizedProfit: semiconductorRealized,
-        fallbackHoldingProfit: 0m),
-    "assetDetail.holdingProfit.includesRealizedProfit");
+        realizedProfit: 0m,
+        fallbackHoldingProfit: 0m,
+        platformHoldingAdjustment: semiconductorHoldingAdjustment),
+    "assetDetail.holdingProfit.includesPlatformAdjustmentWithoutRealizedProfit");
+Equal(
+    9.80m,
+    PortfolioAccounting.Money(18.83m - semiconductorDetailCost + semiconductorHoldingAdjustment),
+    "assetDetail.frontendAggregate.keepsConfirmedCostWithoutDoubleCountingAdjustment");
+
+var holdingAdjustmentWithActualSale = PortfolioAccounting.PlatformHoldingAdjustmentFromPlatformHolding(
+    currentAssets: 18m,
+    costAmount: 15m,
+    realizedProfit: 2m,
+    platformHoldingProfit: 4m);
+Equal(-1.00m, holdingAdjustmentWithActualSale, "assetDetail.platformAdjustment.excludesActualRealizedProfit");
+Equal(
+    4.00m,
+    PortfolioAccounting.ResolveOfficialHoldingProfit(
+        currentAssets: 18m,
+        costAmount: 15m,
+        realizedProfit: 2m,
+        fallbackHoldingProfit: 0m,
+        platformHoldingAdjustment: holdingAdjustmentWithActualSale),
+    "assetDetail.holdingProfit.keepsRealizedAndAdjustmentSeparate");
 
 var staleSnapshotWins = PortfolioAccounting.IsOcrSnapshotFreshForArchive(
     "2026-06-24",
@@ -580,7 +602,8 @@ var pendingSellFund = new MyFundConfig
     HoldAmount = 10000,
     HoldAmountPrecise = 10000m,
     CostAmount = 10000,
-    HoldShares = 10000
+    HoldShares = 10000,
+    PlatformHoldingAdjustment = 1.25
 };
 var pendingSellProfit = settlement.ReducePosition(pendingSellFund, 2500, null, "2026-06-18", "2026-06-22");
 Equal(0.00m, PortfolioAccounting.Money(pendingSellProfit), "manualSell.pending.noProfit");
@@ -595,7 +618,20 @@ Equal(7500.00m, PortfolioAccounting.Money(pendingSellFund.HoldAmount), "manualSe
 Equal(7500.00m, PortfolioAccounting.Money(pendingSellFund.HoldShares), "manualSell.confirmed.sharesReducedOnce");
 Equal(7500.00m, PortfolioAccounting.Money(pendingSellFund.CostAmount), "manualSell.confirmed.costReducedOnce");
 Equal(0.00m, PortfolioAccounting.Money(pendingSellFund.PendingSellShares), "manualSell.confirmed.pendingSharesCleared");
+Equal(1.25m, PortfolioAccounting.Money(pendingSellFund.PlatformHoldingAdjustment), "manualSell.partial.keepsPlatformAdjustment");
 if (pendingSellFund.LastTradeDate != "2026-06-18")
     throw new InvalidOperationException($"manualSell.confirmed.tradeDate: expected original 2026-06-18, actual {pendingSellFund.LastTradeDate}");
+
+var fullSellFund = new MyFundConfig
+{
+    HoldAmount = 100,
+    HoldAmountPrecise = 100m,
+    CostAmount = 80,
+    HoldShares = 10,
+    PlatformHoldingAdjustment = 0.97
+};
+settlement.ReducePosition(fullSellFund, 10, 120, "2026-07-15", "2026-07-15");
+Equal(40.00m, PortfolioAccounting.Money(fullSellFund.RealizedProfit), "manualSell.full.realizedProfit");
+Equal(0.00m, PortfolioAccounting.Money(fullSellFund.PlatformHoldingAdjustment), "manualSell.full.clearsPlatformAdjustment");
 
 Console.WriteLine("Portfolio accounting regression passed.");

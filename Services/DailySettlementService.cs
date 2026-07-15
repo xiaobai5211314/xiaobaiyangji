@@ -190,7 +190,8 @@ namespace 小白养基.Services
                         currentAssets,
                         PortfolioAccounting.Money(fund.CostAmount),
                         PortfolioAccounting.Money(fund.RealizedProfit),
-                        PortfolioAccounting.Money(fund.OcrHoldingIncome));
+                        PortfolioAccounting.Money(fund.OcrHoldingIncome),
+                        PortfolioAccounting.Money(fund.PlatformHoldingAdjustment));
                 decimal fundTotalCost = PortfolioAccounting.HoldingCost(currentAssets, totalProfit);
                 decimal totalRate = PortfolioAccounting.Percent(totalProfit, fundTotalCost);
 
