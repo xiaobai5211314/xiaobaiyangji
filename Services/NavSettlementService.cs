@@ -364,9 +364,11 @@ namespace 小白养基.Services
                                     exactProfit = Math.Round(effectiveShares * navSnapshot.NavDiff.Value, 4);
                                 }
 
-                                if (navSnapshot.TodayNav.HasValue && navSnapshot.TodayNav.Value > 0)
+                                if (navSnapshot.TodayNav.HasValue
+                                    && navSnapshot.TodayNav.Value > 0
+                                    && PortfolioSettlementService.HasReliableExactShares(holding))
                                 {
-                                    exactAssets = Math.Round(effectiveShares * navSnapshot.TodayNav.Value, 2);
+                                    exactAssets = Math.Round(effectiveShares * navSnapshot.TodayNav.Value, 4);
                                 }
                             }
 

@@ -21,7 +21,7 @@
       <view class="hero-row">
         <view>
           <text class="hero-title">{{ topList[0]?.name || '暂无板块数据' }}</text>
-          <text class="hero-subtitle">{{ sectorPayload.source || '板块基金池 · 实时估值均值' }}</text>
+          <text class="hero-subtitle">{{ sectorPayload.source || '主题基金池 · 估值/净值参考' }}</text>
         </view>
         <text :class="['hero-rate', 'finance-number', optionalProfitClass(topList[0]?.rate)]">
           {{ signedOptionalPercent(topList[0]?.rate) }}
@@ -36,11 +36,11 @@
           <text class="muted-text">Top {{ topList.length }}</text>
         </view>
         <view v-if="topList.length === 0" class="empty-mini">暂无涨幅数据</view>
-        <view v-for="(item, index) in topList.slice(0, 8)" :key="sectorKey(item, index, 'top')" class="board-row">
+        <view v-for="(item, index) in topList.slice(0, 8)" :key="sectorKey(item, index, 'top')" class="board-row" @tap="openSectorDetail(item)">
           <text class="rank-badge">{{ index + 1 }}</text>
           <view class="row-main">
             <text class="row-title">{{ item.name || '未知板块' }}</text>
-            <text class="row-sub">{{ sectorFundCount(item) }} 只基金</text>
+            <text class="row-sub">指数 {{ item.indexFundCount || 0 }} · 主动 {{ item.activeFundCount || 0 }}</text>
           </view>
           <text :class="['row-rate', 'finance-number', optionalProfitClass(item.rate)]">{{ signedOptionalPercent(item.rate) }}</text>
         </view>
@@ -52,21 +52,47 @@
           <text class="muted-text">Bottom {{ bottomList.length }}</text>
         </view>
         <view v-if="bottomList.length === 0" class="empty-mini">暂无跌幅数据</view>
-        <view v-for="(item, index) in bottomList.slice(0, 8)" :key="sectorKey(item, index, 'bottom')" class="board-row">
+        <view v-for="(item, index) in bottomList.slice(0, 8)" :key="sectorKey(item, index, 'bottom')" class="board-row" @tap="openSectorDetail(item)">
           <text class="rank-badge loss-badge">{{ index + 1 }}</text>
           <view class="row-main">
             <text class="row-title">{{ item.name || '未知板块' }}</text>
-            <text class="row-sub">{{ sectorFundCount(item) }} 只基金</text>
+            <text class="row-sub">指数 {{ item.indexFundCount || 0 }} · 主动 {{ item.activeFundCount || 0 }}</text>
           </view>
           <text :class="['row-rate', 'finance-number', optionalProfitClass(item.rate)]">{{ signedOptionalPercent(item.rate) }}</text>
         </view>
       </view>
     </view>
 
+    <view class="list-head catalog-head">
+      <view>
+        <text class="section-title">全部主题基金</text>
+        <text class="list-subtitle">覆盖指数与主动混合/股票基金，点击查看明细</text>
+      </view>
+      <text class="muted-text">{{ catalogList.length }} 个</text>
+    </view>
+    <view class="glass-card catalog-card">
+      <input v-model="sectorSearch" class="catalog-search" type="text" placeholder="搜索航天、卫星、低空经济等主题" />
+      <view v-if="catalogList.length === 0" class="empty-mini">没有匹配主题</view>
+      <view v-for="(item, index) in catalogList" :key="sectorKey(item, index, 'catalog')" class="catalog-row" @tap="openSectorDetail(item)">
+        <view class="row-main">
+          <text class="row-title">{{ item.name || '未知主题' }}</text>
+          <text class="row-sub">共 {{ sectorFundCount(item) }} 只 · 指数 {{ item.indexFundCount || 0 }} · 主动 {{ item.activeFundCount || 0 }}</text>
+        </view>
+        <text :class="['row-rate', 'finance-number', optionalProfitClass(item.rate)]">{{ signedOptionalPercent(item.rate) }}</text>
+      </view>
+    </view>
+
+    <view class="list-head capital-heading">
+      <view>
+        <text class="section-title">股票行业主力资金</text>
+        <text class="list-subtitle">股票行业口径，不是场外基金申购赎回</text>
+      </view>
+    </view>
+
     <view class="board-grid">
       <view class="glass-card board-card">
         <view class="board-head">
-          <text class="section-title compact-title">流入榜</text>
+          <text class="section-title compact-title">行业净流入</text>
           <text class="muted-text">{{ flowPayload.updatedAt || '' }}</text>
         </view>
         <view v-if="inflowList.length === 0" class="empty-mini">暂无流入数据</view>
@@ -85,7 +111,7 @@
 
       <view class="glass-card board-card">
         <view class="board-head">
-          <text class="section-title compact-title">流出榜</text>
+          <text class="section-title compact-title">行业净流出</text>
           <text class="muted-text">{{ flowPayload.source || '' }}</text>
         </view>
         <view v-if="outflowList.length === 0" class="empty-mini">暂无流出数据</view>
@@ -134,6 +160,43 @@
       </view>
     </view>
 
+    <view v-if="detailOpen" class="detail-mask" @tap.self="closeSectorDetail">
+      <view class="detail-sheet">
+        <view class="detail-head">
+          <view class="detail-title-wrap">
+            <text class="detail-title">{{ detailPayload.name || selectedSector?.name || '主题基金' }}</text>
+            <text class="detail-sub">{{ detailPayload.rateScope || '行情参考' }} · 共 {{ detailPayload.fundCount || 0 }} 只</text>
+          </view>
+          <button class="detail-close" @tap="closeSectorDetail">×</button>
+        </view>
+        <view class="detail-tabs">
+          <button :class="['detail-tab', detailGroup === 'all' ? 'active' : '']" @tap="switchDetailGroup('all')">全部 {{ detailGroupCount('all') }}</button>
+          <button :class="['detail-tab', detailGroup === 'index' ? 'active' : '']" @tap="switchDetailGroup('index')">指数 {{ detailGroupCount('index') }}</button>
+          <button :class="['detail-tab', detailGroup === 'active' ? 'active' : '']" @tap="switchDetailGroup('active')">主动 {{ detailGroupCount('active') }}</button>
+        </view>
+        <view class="detail-search-row">
+          <input v-model="detailSearch" class="detail-search" type="text" confirm-type="search" placeholder="搜索名称、代码或类型" @confirm="searchDetailFunds" />
+          <button class="detail-search-btn" @tap="searchDetailFunds">搜索</button>
+        </view>
+        <scroll-view scroll-y class="detail-list">
+          <view v-if="detailLoading && detailFunds.length === 0" class="detail-empty">正在读取主题基金...</view>
+          <view v-else-if="detailFunds.length === 0" class="detail-empty">暂无匹配基金</view>
+          <view v-for="fund in detailFunds" :key="fund.code" class="detail-fund-row">
+            <view class="detail-fund-main">
+              <text class="detail-fund-name">{{ fund.name || '未知基金' }}</text>
+              <text class="detail-fund-type">{{ fund.code || '--' }} · {{ fund.fundType || '类型待核实' }}</text>
+              <text :class="['detail-quote', quoteStatusClass(fund)]">{{ (fund.quoteLabel || '暂无可用行情') + (fund.updatedAt ? (' · ' + fund.updatedAt) : '') }}</text>
+            </view>
+            <view class="detail-rate-col">
+              <text :class="['detail-rate', optionalProfitClass(fund.rate)]">{{ signedOptionalPercent(fund.rate) }}</text>
+              <text :class="['detail-month', optionalProfitClass(fund.monthRate)]">近1月 {{ fund.monthRate == null ? '--' : signedOptionalPercent(fund.monthRate) }}</text>
+            </view>
+          </view>
+          <button v-if="detailPayload.hasMore" class="load-more" :disabled="detailLoading" @tap="loadSectorDetail(true)">{{ detailLoading ? '加载中...' : '加载更多' }}</button>
+        </scroll-view>
+      </view>
+    </view>
+
     <view class="safe-tabbar-space" />
     <AppTabBar active="sector" />
   </view>
@@ -147,10 +210,14 @@ import {
   filterIndustryCapitalFlowRows,
   getCapitalFlow,
   getGlobalIndices,
+  getSectorFunds,
   getSectors,
   type CapitalFlowResponse,
   type CapitalFlowRow,
   type GlobalIndexItem,
+  type SectorFundGroup,
+  type SectorFundQuote,
+  type SectorFundResponse,
   type SectorRadarResponse,
   type SectorSummary
 } from '../../services/api/sector';
@@ -166,6 +233,14 @@ const PAGE_CACHE_TTL = 60000;
 const loadedAt = ref(0);
 const isStaleData = ref(false);
 const staleUpdatedAt = ref('');
+const sectorSearch = ref('');
+const detailOpen = ref(false);
+const detailLoading = ref(false);
+const selectedSector = ref<SectorSummary | null>(null);
+const detailGroup = ref<SectorFundGroup>('all');
+const detailSearch = ref('');
+const detailFunds = ref<SectorFundQuote[]>([]);
+const detailPayload = ref<SectorFundResponse>({ funds: [], groupCounts: { all: 0, index: 0, active: 0 } });
 const DEBUG_FIELD_AUDIT =
   (import.meta as ImportMeta & { env?: { VITE_DEBUG_MARKET_INDEX?: string } }).env?.VITE_DEBUG_MARKET_INDEX === 'true';
 
@@ -177,6 +252,12 @@ const topList = computed(() => {
 const bottomList = computed(() => {
   const source = sectorPayload.value.bottom?.length ? sectorPayload.value.bottom : allSectors.value;
   return [...source].sort((a, b) => Number(a.rate || 0) - Number(b.rate || 0));
+});
+const catalogList = computed(() => {
+  const keyword = sectorSearch.value.trim().toLowerCase();
+  const source = [...allSectors.value].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN'));
+  if (!keyword) return source;
+  return source.filter((item) => `${item.name || ''} ${item.key || ''}`.toLowerCase().includes(keyword));
 });
 const flowRows = computed(() => flowPayload.value.rows || []);
 const inflowList = computed(() => {
@@ -303,6 +384,67 @@ function numericOrDash(value: unknown) {
 
 function sectorKey(item: SectorSummary, index: number, prefix: string) {
   return `${prefix}-${item.key || item.name || 'sector'}-${index}`;
+}
+
+async function openSectorDetail(item: SectorSummary) {
+  selectedSector.value = item;
+  detailGroup.value = 'all';
+  detailSearch.value = '';
+  detailFunds.value = [];
+  detailPayload.value = { funds: [], groupCounts: { all: 0, index: 0, active: 0 } };
+  detailOpen.value = true;
+  await loadSectorDetail(false);
+}
+
+async function loadSectorDetail(append: boolean) {
+  if (!selectedSector.value || detailLoading.value) return;
+  const key = String(selectedSector.value.key || selectedSector.value.name || '');
+  if (!key) return;
+  detailLoading.value = true;
+  try {
+    const nextPage = append ? Number(detailPayload.value.page || 1) + 1 : 1;
+    const payload = await getSectorFunds(key, {
+      page: nextPage,
+      pageSize: 20,
+      fundGroup: detailGroup.value,
+      query: detailSearch.value,
+      silent: true
+    });
+    const rows = Array.isArray(payload.funds) ? payload.funds : [];
+    detailFunds.value = append ? detailFunds.value.concat(rows) : rows;
+    detailPayload.value = payload;
+  } catch (error) {
+    console.warn('[sector:funds]', error);
+    uni.showToast({ title: '主题基金加载失败', icon: 'none' });
+  } finally {
+    detailLoading.value = false;
+  }
+}
+
+function switchDetailGroup(group: SectorFundGroup) {
+  if (detailGroup.value === group) return;
+  detailGroup.value = group;
+  detailFunds.value = [];
+  loadSectorDetail(false);
+}
+
+function searchDetailFunds() {
+  detailFunds.value = [];
+  loadSectorDetail(false);
+}
+
+function closeSectorDetail() {
+  detailOpen.value = false;
+}
+
+function detailGroupCount(group: SectorFundGroup) {
+  return Number(detailPayload.value.groupCounts?.[group] || 0);
+}
+
+function quoteStatusClass(item: SectorFundQuote) {
+  if (item.quoteStatus === 'live-estimate') return 'quote-live';
+  if (item.quoteStatus === 'latest-nav') return 'quote-nav';
+  return 'quote-muted';
 }
 
 function flowKey(item: CapitalFlowRow, index: number, prefix: string) {
@@ -676,5 +818,207 @@ function logGlobalIndicesAudit(rows: GlobalIndexItem[]) {
   border: 1rpx solid rgba(255, 255, 255, 0.12);
   font-size: 21rpx;
   font-weight: 900;
+}
+
+.catalog-head,
+.capital-heading {
+  margin-top: 2rpx;
+}
+
+.catalog-card {
+  padding: 24rpx 28rpx;
+}
+
+.catalog-search,
+.detail-search {
+  height: 76rpx;
+  padding: 0 24rpx;
+  border: 1rpx solid var(--border-color);
+  border-radius: 18rpx;
+  color: var(--text-primary);
+  background: var(--input-bg);
+  font-size: 25rpx;
+  box-sizing: border-box;
+}
+
+.catalog-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  min-height: 102rpx;
+  padding: 16rpx 2rpx;
+  border-bottom: 1rpx solid rgba(148, 163, 184, 0.12);
+}
+
+.detail-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(3, 7, 18, 0.68);
+}
+
+.detail-sheet {
+  width: 100%;
+  height: 86vh;
+  padding: 28rpx 28rpx calc(30rpx + env(safe-area-inset-bottom));
+  border-radius: 34rpx 34rpx 0 0;
+  border-top: 1rpx solid var(--border-color);
+  background: var(--page-bg);
+  box-sizing: border-box;
+}
+
+.detail-head,
+.detail-search-row,
+.detail-fund-row {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+}
+
+.detail-head {
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.detail-title-wrap,
+.detail-fund-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.detail-title,
+.detail-sub,
+.detail-fund-name,
+.detail-fund-type,
+.detail-quote {
+  display: block;
+}
+
+.detail-title {
+  color: var(--text-primary);
+  font-size: 34rpx;
+  font-weight: 900;
+}
+
+.detail-sub {
+  margin-top: 6rpx;
+  color: var(--text-muted);
+  font-size: 22rpx;
+}
+
+.detail-close {
+  width: 64rpx;
+  height: 64rpx;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--text-primary);
+  background: var(--control-bg);
+  font-size: 40rpx;
+  line-height: 64rpx;
+}
+
+.detail-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.detail-tab,
+.detail-search-btn,
+.load-more {
+  margin: 0;
+  border: 1rpx solid var(--border-color);
+  color: var(--text-secondary);
+  background: var(--control-bg);
+  font-size: 23rpx;
+  font-weight: 800;
+}
+
+.detail-tab.active,
+.detail-search-btn {
+  color: var(--button-primary-text);
+  border-color: transparent;
+  background: var(--button-primary-bg);
+}
+
+.detail-search-row {
+  margin-bottom: 16rpx;
+}
+
+.detail-search {
+  min-width: 0;
+  flex: 1;
+}
+
+.detail-search-btn {
+  width: 116rpx;
+  height: 76rpx;
+  line-height: 76rpx;
+  padding: 0;
+}
+
+.detail-list {
+  height: calc(86vh - 310rpx - env(safe-area-inset-bottom));
+}
+
+.detail-fund-row {
+  justify-content: space-between;
+  min-height: 126rpx;
+  padding: 18rpx 4rpx;
+  border-bottom: 1rpx solid rgba(148, 163, 184, 0.14);
+}
+
+.detail-fund-name {
+  color: var(--text-primary);
+  font-size: 27rpx;
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-fund-type,
+.detail-quote {
+  margin-top: 5rpx;
+  color: var(--text-muted);
+  font-size: 20rpx;
+}
+
+.quote-live { color: #38bdf8; }
+.quote-nav { color: #f59e0b; }
+.quote-muted { color: var(--text-muted); }
+
+.detail-rate-col {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8rpx;
+}
+
+.detail-rate {
+  font-size: 28rpx;
+  font-weight: 900;
+}
+
+.detail-month {
+  font-size: 21rpx;
+}
+
+.detail-empty {
+  padding: 80rpx 0;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.load-more {
+  width: 100%;
+  margin-top: 20rpx;
 }
 </style>

@@ -197,6 +197,10 @@ namespace 小白养基.Services
                 : fund.HoldShares;
         }
 
+        public static bool HasReliableExactShares(MyFundConfig fund)
+            => fund.HoldSharesAreConfirmed
+               || string.Equals(fund.HoldSharesSource, ShareSourcePurchaseNavDerived, StringComparison.OrdinalIgnoreCase);
+
         public static bool CapturePendingBuyShares(MyFundConfig fund, string settleDate, double? purchaseNav)
         {
             if (!string.Equals(fund.PendingTradeStatus, "pending_buy", StringComparison.OrdinalIgnoreCase)
@@ -236,7 +240,12 @@ namespace 小白养基.Services
             return true;
         }
 
-        public bool ApplyOneDaySettlement(MyFundConfig fund, double actualRate, string settleDate, double? exactProfit = null)
+        public bool ApplyOneDaySettlement(
+            MyFundConfig fund,
+            double actualRate,
+            string settleDate,
+            double? exactProfit = null,
+            double? exactAssets = null)
         {
             double baseAmount = GetDailyBaseAmount(fund, settleDate);
             decimal settledProfitBasis = fund.OcrYesterdayDate == settleDate
@@ -246,7 +255,8 @@ namespace 小白养基.Services
             decimal settledLedgerAmount = PortfolioAccounting.ResolveSettledLedgerAmount(
                 Convert.ToDecimal(baseAmount),
                 settledProfitBasis,
-                Convert.ToDecimal(GetActivePendingBuyAmount(fund, settleDate)));
+                Convert.ToDecimal(GetActivePendingBuyAmount(fund, settleDate)),
+                exactAssets.HasValue ? Convert.ToDecimal(exactAssets.Value) : null);
             double settledDisplayAmount = PortfolioAccounting.ToDouble(settledLedgerAmount);
 
             bool changed = fund.LastSettledDate != settleDate ||

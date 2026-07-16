@@ -246,6 +246,76 @@ Equal(
     "settlement.displayAmount.prefersRoundedProfitRollForwardOverShareNavPennyDrift");
 
 Equal(
+    35017.13m,
+    PortfolioAccounting.ResolveSettledDisplayAmount(
+        baseAmount: 35060.95m,
+        settledProfit: 383.42m,
+        activePendingBuyAmount: 0m,
+        exactConfirmedAssets: 35017.1269m),
+    "settlement.displayAmount.selfHealsMaterialRollingBaseDrift");
+
+var july15OfficialReconciliation = PortfolioAccounting.ResolveOfficialHoldingAmount(
+    snapshotDisplayAmount: 35444.37m,
+    officialConfirmedAmount: 35017.13m,
+    rolledConfirmedAmount: 35444.37m,
+    pendingBuyAmount: 0m,
+    useCurrentOcrSnapshot: true);
+Equal(35017.13m, july15OfficialReconciliation.DisplayAmount, "official.currentOcr.selfHealsMaterialDrift");
+Equal(35017.13m, july15OfficialReconciliation.ConfirmedAmount, "official.currentOcr.selfHealsConfirmedAmount");
+
+var stalePreciseBasisFund = new MyFundConfig
+{
+    HoldAmount = 34633.71,
+    HoldAmountPrecise = 35060.9500m,
+    LastSettledDate = "2026-07-14",
+    LastSettledProfit = 43.82,
+    LastSettledProfitPrecise = 43.8200m
+};
+var stalePreciseBasisSettlement = new PortfolioSettlementService();
+if (!stalePreciseBasisSettlement.ApplyOneDaySettlement(
+        stalePreciseBasisFund,
+        actualRate: 1.11,
+        settleDate: "2026-07-15",
+        exactProfit: 383.42,
+        exactAssets: 35017.1269))
+{
+    throw new InvalidOperationException("settlement.stalePreciseBasis: expected exact official amount to repair the stale precise ledger");
+}
+Equal(35017.13m, PortfolioAccounting.Money(stalePreciseBasisFund.HoldAmount), "settlement.stalePreciseBasis.displayAmount");
+Equal(35017.1269m, PortfolioAccounting.LedgerMoney(stalePreciseBasisFund.HoldAmountPrecise), "settlement.stalePreciseBasis.ledgerAmount");
+
+Equal(
+    -3651.12m,
+    PortfolioAccounting.ResolveOfficialHoldingProfit(
+        currentAssets: july15OfficialReconciliation.ConfirmedAmount,
+        costAmount: 38668.25m,
+        realizedProfit: 0m,
+        fallbackHoldingProfit: -4034.54m),
+    "official.currentOcr.holdingProfitRollsAfterNavConfirmation");
+
+var july15AntSummary = PortfolioAccounting.Calculate(
+    new[]
+    {
+        new ConfirmedHoldingMoney(43207.65m, 521.33m, -7709.27m),
+        new ConfirmedHoldingMoney(35017.13m, 43.82m, -3651.12m),
+        new ConfirmedHoldingMoney(20738.79m, 29.43m, -261.21m),
+        new ConfirmedHoldingMoney(51.03m, -1.10m, -48.97m),
+        new ConfirmedHoldingMoney(17.89m, 0.19m, 8.86m),
+        new ConfirmedHoldingMoney(3.10m, 0.02m, -6.90m)
+    },
+    0m);
+Equal(99035.59m, july15AntSummary.AntConfirmedAmount, "ant[2026-07-15].confirmedAmount");
+Equal(593.69m, july15AntSummary.ConfirmedYesterdayProfit, "ant[2026-07-15].yesterdayProfit");
+Equal(-11668.61m, july15AntSummary.AntHoldingProfit, "ant[2026-07-15].holdingProfit");
+
+if (!PortfolioSettlementService.HasReliableExactShares(new MyFundConfig { HoldSharesAreConfirmed = true }))
+    throw new InvalidOperationException("shares.reliable.platformConfirmed: expected reliable exact shares");
+if (!PortfolioSettlementService.HasReliableExactShares(new MyFundConfig { HoldSharesSource = PortfolioSettlementService.ShareSourcePurchaseNavDerived }))
+    throw new InvalidOperationException("shares.reliable.purchaseNavDerived: expected reliable exact shares");
+if (PortfolioSettlementService.HasReliableExactShares(new MyFundConfig { HoldSharesSource = PortfolioSettlementService.ShareSourceOcrNavDerived }))
+    throw new InvalidOperationException("shares.reliable.ocrNavDerived: ordinary amount/nav-derived shares must not override platform amount");
+
+Equal(
     -6970.44m,
     PortfolioAccounting.ResolveOfficialHoldingProfit(
         currentAssets: 31697.81m,
@@ -633,5 +703,23 @@ var fullSellFund = new MyFundConfig
 settlement.ReducePosition(fullSellFund, 10, 120, "2026-07-15", "2026-07-15");
 Equal(40.00m, PortfolioAccounting.Money(fullSellFund.RealizedProfit), "manualSell.full.realizedProfit");
 Equal(0.00m, PortfolioAccounting.Money(fullSellFund.PlatformHoldingAdjustment), "manualSell.full.clearsPlatformAdjustment");
+
+var aerospaceSector = SectorFundCatalog.Resolve("aerospace");
+var satelliteSector = SectorFundCatalog.Resolve("卫星产业");
+var militarySector = SectorFundCatalog.Resolve("military");
+if (SectorFundCatalog.Definitions.Count < 70)
+    throw new InvalidOperationException($"sector.catalog.coverage: expected at least 70 themes, actual {SectorFundCatalog.Definitions.Count}");
+if (!SectorFundCatalog.IsMatch("长盛航天海工混合A", aerospaceSector))
+    throw new InvalidOperationException("sector.aerospace.activeFund: expected mixed aerospace fund to match");
+if (!SectorFundCatalog.IsMatch("博时中证卫星产业指数A", satelliteSector))
+    throw new InvalidOperationException("sector.satellite.indexFund: expected satellite index fund to match");
+if (SectorFundCatalog.IsMatch("长盛航天海工混合A", militarySector))
+    throw new InvalidOperationException("sector.military.boundary: aerospace-only fund must not be folded into military");
+if (SectorFundCatalog.ClassifyFundGroup("长盛航天海工混合A", "混合型-灵活") != SectorFundCatalog.GroupMixed)
+    throw new InvalidOperationException("sector.group.mixed: expected mixed fund classification");
+if (SectorFundCatalog.ClassifyFundGroup("博时中证卫星产业指数A", "指数型-股票") != SectorFundCatalog.GroupIndex)
+    throw new InvalidOperationException("sector.group.index: expected index fund classification");
+if (!SectorFundCatalog.MatchesGroup(SectorFundCatalog.GroupMixed, SectorFundCatalog.GroupActive))
+    throw new InvalidOperationException("sector.group.active: active filter must include mixed funds");
 
 Console.WriteLine("Portfolio accounting regression passed.");

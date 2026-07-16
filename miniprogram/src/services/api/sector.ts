@@ -5,6 +5,9 @@ export interface SectorSummary {
   name?: string;
   rate?: number;
   fundCount?: number;
+  indexFundCount?: number;
+  activeFundCount?: number;
+  freshQuoteCount?: number;
   streakDays?: number;
   holdingRank?: number;
   updatedAt?: string;
@@ -19,10 +22,44 @@ export interface SectorSummary {
 
 export interface SectorRadarResponse {
   source?: string;
+  rateScope?: string;
+  catalogCount?: number;
   updatedAt?: string;
   top?: SectorSummary[];
   bottom?: SectorSummary[];
   all?: SectorSummary[];
+}
+
+export type SectorFundGroup = 'all' | 'index' | 'active';
+
+export interface SectorFundQuote {
+  code?: string;
+  name?: string;
+  fundType?: string;
+  fundGroup?: string;
+  rate?: number;
+  monthRate?: number | null;
+  hasQuote?: boolean;
+  updatedAt?: string;
+  quoteStatus?: 'live-estimate' | 'latest-nav' | 'stale-estimate' | 'unavailable';
+  quoteLabel?: string;
+}
+
+export interface SectorFundResponse {
+  key?: string;
+  name?: string;
+  rate?: number;
+  fundCount?: number;
+  filteredFundCount?: number;
+  returnedCount?: number;
+  groupCounts?: { all?: number; index?: number; active?: number; mixed?: number; equity?: number; other?: number };
+  selectedGroup?: SectorFundGroup;
+  page?: number;
+  pageSize?: number;
+  hasMore?: boolean;
+  updatedAt?: string;
+  rateScope?: string;
+  funds?: SectorFundQuote[];
 }
 
 export interface CapitalFlowRow {
@@ -154,6 +191,24 @@ export function getSectors(force = false, silent = false) {
     loadingText: '读取板块',
     silent,
     fallbackData: { top: [], bottom: [], all: [] }
+  });
+}
+
+export function getSectorFunds(
+  sectorName: string,
+  options: { page?: number; pageSize?: number; fundGroup?: SectorFundGroup; query?: string; silent?: boolean } = {}
+) {
+  const query = [
+    `sectorName=${encodeURIComponent(sectorName)}`,
+    `page=${Math.max(1, Number(options.page || 1))}`,
+    `pageSize=${Math.min(60, Math.max(8, Number(options.pageSize || 20)))}`,
+    `fundGroup=${encodeURIComponent(options.fundGroup || 'all')}`
+  ];
+  if (options.query?.trim()) query.push(`query=${encodeURIComponent(options.query.trim())}`);
+  return get<SectorFundResponse>(`/api/fund/sector-funds?${query.join('&')}`, {
+    loadingText: '读取主题基金',
+    silent: options.silent ?? true,
+    fallbackData: { funds: [], groupCounts: { all: 0, index: 0, active: 0 } }
   });
 }
 

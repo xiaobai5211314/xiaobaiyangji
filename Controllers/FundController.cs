@@ -84,9 +84,10 @@ namespace 小白养基.Controllers
 
         public class FundInfoCache
         {
-            public string Code { get; set; }
-            public string Name { get; set; }
-            public string NormalizedName { get; set; }
+            public string Code { get; set; } = string.Empty;
+            public string Name { get; set; } = string.Empty;
+            public string NormalizedName { get; set; } = string.Empty;
+            public string Type { get; set; } = string.Empty;
         }
 
         private static List<FundInfoCache> _globalFundCache = null;
@@ -762,7 +763,7 @@ namespace 小白养基.Controllers
         {
             if (_globalFundCache != null && _exactMatchDict != null && _globalFundCache.Count > 0) return _globalFundCache;
 
-            string cachedData = null;
+            string? cachedData = null;
             try
             {
                 var options = ConfigurationOptions.Parse("localhost:6379");
@@ -770,7 +771,7 @@ namespace 小白养基.Controllers
                 options.SyncTimeout = 1500;
                 using var redis = ConnectionMultiplexer.Connect(options);
                 var db = redis.GetDatabase();
-                var redisValue = await db.StringGetAsync("global_fund_db_cache_v3");
+                var redisValue = await db.StringGetAsync("global_fund_db_cache_v4");
                 if (redisValue.HasValue) cachedData = redisValue.ToString();
             }
             catch (Exception ex)
@@ -780,29 +781,37 @@ namespace 小白养基.Controllers
 
             if (!string.IsNullOrEmpty(cachedData))
             {
-                _globalFundCache = JsonSerializer.Deserialize<List<FundInfoCache>>(cachedData);
-                BuildExactMatchDictionary(_globalFundCache);
-                return _globalFundCache;
+                var cachedFunds = JsonSerializer.Deserialize<List<FundInfoCache>>(cachedData);
+                if (cachedFunds is { Count: > 0 })
+                {
+                    _globalFundCache = cachedFunds;
+                    BuildExactMatchDictionary(cachedFunds);
+                    return cachedFunds;
+                }
             }
 
             try
             {
                 var client = _httpClientFactory.CreateClient("EastMoney");
-                string jsData = await client.GetStringAsync("http://fund.eastmoney.com/js/fundcode_search.js");
+                string jsData = await client.GetStringAsync("https://fund.eastmoney.com/js/fundcode_search.js");
 
                 int startIndex = jsData.IndexOf('[');
                 int endIndex = jsData.LastIndexOf(']');
                 if (startIndex > 0 && endIndex > 0)
                 {
                     string json = jsData.Substring(startIndex, endIndex - startIndex + 1);
-                    var rawList = JsonSerializer.Deserialize<List<List<string>>>(json);
+                    var rawList = JsonSerializer.Deserialize<List<List<string>>>(json) ?? new List<List<string>>();
 
-                    _globalFundCache = rawList.Select(x => new FundInfoCache
-                    {
-                        Code = x[0],
-                        Name = x[2],
-                        NormalizedName = NormalizeFundName(x[2])
-                    }).ToList();
+                    _globalFundCache = rawList
+                        .Where(x => x.Count >= 3 && !string.IsNullOrWhiteSpace(x[0]) && !string.IsNullOrWhiteSpace(x[2]))
+                        .Select(x => new FundInfoCache
+                        {
+                            Code = x[0],
+                            Name = x[2],
+                            NormalizedName = NormalizeFundName(x[2]),
+                            Type = x.Count > 3 ? x[3] ?? string.Empty : string.Empty
+                        })
+                        .ToList();
 
                     BuildExactMatchDictionary(_globalFundCache);
 
@@ -811,7 +820,7 @@ namespace 小白养基.Controllers
                         var options = ConfigurationOptions.Parse("localhost:6379");
                         options.ConnectTimeout = 1000;
                         using var redis = ConnectionMultiplexer.Connect(options);
-                        await redis.GetDatabase().StringSetAsync("global_fund_db_cache_v3", JsonSerializer.Serialize(_globalFundCache), TimeSpan.FromHours(24));
+                        await redis.GetDatabase().StringSetAsync("global_fund_db_cache_v4", JsonSerializer.Serialize(_globalFundCache), TimeSpan.FromHours(24));
                     }
                     catch { }
 
@@ -6625,8 +6634,12 @@ namespace 小白养基.Controllers
                     bool hasCurrentOcrAmount = PortfolioAccounting.IsOcrSnapshotCurrentForDisplay(
                         config.OcrSnapshotDate,
                         localTime.Date);
-                    double officialMarketValue = latestOfficialRecord?.Nav is > 0 && config.HoldShares > 0
-                        ? Math.Round(config.HoldShares * latestOfficialRecord.Nav.Value, 2)
+                    double effectiveSharesForOfficialAmount = GetEffectiveShares(config, fundEffectiveDash);
+                    bool hasReliableExactShares = PortfolioSettlementService.HasReliableExactShares(config);
+                    double officialMarketValue = latestOfficialRecord?.Nav is > 0
+                        && effectiveSharesForOfficialAmount > 0
+                        && hasReliableExactShares
+                        ? Math.Round(effectiveSharesForOfficialAmount * latestOfficialRecord.Nav.Value, 2)
                         : 0;
                     double settledMarketValue = hasCurrentOcrAmount && confirmedHoldAmount > 0
                         ? confirmedHoldAmount
@@ -6672,6 +6685,7 @@ namespace 小白养基.Controllers
 
                     double todayProfit;
                     double marketValue;
+                    bool officialAmountReconciled = false;
 
                     if (dataStatus == "official_today")
                     {
@@ -6685,6 +6699,9 @@ namespace 小白养基.Controllers
                             PortfolioAccounting.Money(todayBaseAmount + todayProfit),
                             PortfolioAccounting.Money(pendingBuyAmount),
                             hasCurrentOcrAmount);
+                        officialAmountReconciled = officialMarketValue > 0
+                            && Math.Abs(PortfolioAccounting.Money(officialMarketValue)
+                                - PortfolioAccounting.Money(confirmedHoldAmount)) > 0.01m;
                         double settledConfirmedAmount = PortfolioAccounting.ToDouble(officialAmount.ConfirmedAmount);
                         marketValue = PortfolioAccounting.ToDouble(officialAmount.DisplayAmount);
                         rawHoldAmount = marketValue;
@@ -6748,12 +6765,17 @@ namespace 小白养基.Controllers
 
                     bool hasOcrHoldingSnapshot = !string.IsNullOrWhiteSpace(config.OcrSnapshotDate)
                         && hasCurrentOcrAmount;
-                    double totalProfitPreview = hasOcrHoldingSnapshot && !isSoldOut
+                    bool useCurrentOcrHoldingSnapshot = hasOcrHoldingSnapshot
+                        && dataStatus != "official_today";
+                    double totalProfitPreview = useCurrentOcrHoldingSnapshot && !isSoldOut
                         ? Math.Round(config.OcrHoldingIncome, 2)
-                        : Math.Round(
-                            marketValue - costBasis + displayedProfit + config.PlatformHoldingAdjustment,
-                            2);
-                    if (hasOcrHoldingSnapshot && !isSoldOut && config.CostAmount <= 0)
+                        : PortfolioAccounting.ToDouble(PortfolioAccounting.ResolveOfficialHoldingProfit(
+                            PortfolioAccounting.Money(marketValue),
+                            PortfolioAccounting.Money(costBasis),
+                            PortfolioAccounting.Money(displayedProfit),
+                            PortfolioAccounting.Money(config.OcrHoldingIncome),
+                            PortfolioAccounting.Money(config.PlatformHoldingAdjustment)));
+                    if (useCurrentOcrHoldingSnapshot && !isSoldOut && config.CostAmount <= 0)
                     {
                         costBasis = PortfolioAccounting.ToDouble(PortfolioAccounting.HoldingCost(
                             PortfolioAccounting.Money(confirmedHoldAmount),
@@ -6764,7 +6786,7 @@ namespace 小白养基.Controllers
                             PortfolioAccounting.Money(isSoldOut ? displayedProfit : totalProfitPreview),
                             PortfolioAccounting.Money(costBasis)))
                         : 0;
-                    if (hasOcrHoldingSnapshot && !isSoldOut && Math.Abs(config.OcrHoldingRate) > 0.001)
+                    if (useCurrentOcrHoldingSnapshot && !isSoldOut && Math.Abs(config.OcrHoldingRate) > 0.001)
                     {
                         // 当前 OCR 快照来自平台展示页；个别小额持仓的平台收益率不一定等于市值/收益反推值。
                         existingReturnRateValue = Math.Round(config.OcrHoldingRate, 2);
@@ -6927,7 +6949,12 @@ namespace 小白养基.Controllers
                         lastSettledRate = config.LastSettledRate,
                         existingReturnRate = existingReturnRateValue,
                         holdingIncome = Math.Round(totalProfitPreview, 2),
-                        holdingSource = usingEffectiveArchive ? "daily_archive" : "computed",
+                        holdingSource = usingEffectiveArchive ? "daily_archive"
+                            : useCurrentOcrHoldingSnapshot ? "ocr_snapshot"
+                            : dataStatus == "official_today" && officialAmountReconciled ? "official_nav_reconciled"
+                            : dataStatus == "official_today" ? "official_nav_rolled"
+                            : "computed",
+                        officialAmountReconciled,
                         breakEvenRate = breakEvenRateValue,
                         reliabilityScore,
                         reliabilityLevel,
@@ -6983,6 +7010,10 @@ namespace 小白养基.Controllers
                             todayBaseAmount,
                             todayRateForSimulation,
                             usingEffectiveArchive,
+                            effectiveSharesForOfficialAmount,
+                            hasReliableExactShares,
+                            officialMarketValue,
+                            officialAmountReconciled,
                             archiveSource = usingEffectiveArchive ? effectiveFundArchive?.Source : null,
                         }
                     };
@@ -6995,6 +7026,7 @@ namespace 小白养基.Controllers
                 decimal todayPerformanceProfit = 0m, todayPerformanceBase = 0m;
                 bool hasTodayEstimate = false, hasTodayConfirmed = false;
                 bool hasLiveMarketAmount = false;
+                bool hasOfficialAmountReconciliation = false;
                 decimal summaryDisplayAmount = 0m, summaryConfirmedAmount = 0m, summaryPendingBuyAmount = 0m;
                 decimal summaryHoldingProfit = 0m;
                 foreach (var fund in finalResult)
@@ -7004,6 +7036,7 @@ namespace 小白养基.Controllers
                     summaryConfirmedAmount += PortfolioAccounting.Money(fund.confirmedAmount);
                     summaryPendingBuyAmount += PortfolioAccounting.Money(fund.pendingBuyAmount);
                     summaryHoldingProfit += PortfolioAccounting.Money(fund.holdingProfit);
+                    hasOfficialAmountReconciliation |= fund.officialAmountReconciled;
                     bool isEstimate = string.Equals(fund.profitSource, "estimate", StringComparison.OrdinalIgnoreCase);
                     bool isConfirmedToday = string.Equals(fund.profitSource, "nav_settlement", StringComparison.OrdinalIgnoreCase)
                         || string.Equals(fund.profitSource, "daily_archive", StringComparison.OrdinalIgnoreCase);
@@ -7099,7 +7132,9 @@ namespace 小白养基.Controllers
                 bool holdingSnapshotStale = antConfirmedAvailable
                     && !useCurrentSnapshotSummary
                     && Math.Abs(summaryConfirmedAmount - antConfirmedAmount) > 0.01m;
-                string summarySource = useCurrentSnapshotSummary
+                string summarySource = hasOfficialAmountReconciliation
+                    ? "official-nav-reconciled"
+                    : useCurrentSnapshotSummary
                     ? (currentSnapshotComplete ? "current-ocr-snapshot" : "current-ocr-snapshot-partial")
                     : antConfirmedAvailable
                     ? (latestPortfolioTotal!.Source ?? summarySettlementStatus)
@@ -7262,9 +7297,11 @@ namespace 小白养基.Controllers
                                     exactProfit = Math.Round(effectiveShares * snapshot.NavDiff.Value, 4);
                             }
 
-                            if (snapshot.TodayNav.HasValue && snapshot.TodayNav.Value > 0)
+                            if (snapshot.TodayNav.HasValue
+                                && snapshot.TodayNav.Value > 0
+                                && PortfolioSettlementService.HasReliableExactShares(fund))
                             {
-                                exactAssets = Math.Round(effectiveShares * snapshot.TodayNav.Value, 2);
+                                exactAssets = Math.Round(effectiveShares * snapshot.TodayNav.Value, 4);
                             }
                         }
 
@@ -7546,23 +7583,19 @@ namespace 小白养基.Controllers
             return Ok(resultLog);
         }
 
-        private sealed class SectorDefinition
-        {
-            public string Key { get; init; } = string.Empty;
-            public string Name { get; init; } = string.Empty;
-            public string[] Include { get; init; } = Array.Empty<string>();
-            public string[] Exclude { get; init; } = Array.Empty<string>();
-        }
-
         private sealed class SectorFundQuote
         {
             public string Code { get; init; } = string.Empty;
             public string Name { get; init; } = string.Empty;
+            public string FundType { get; init; } = string.Empty;
+            public string FundGroup { get; init; } = SectorFundCatalog.GroupOther;
             public double Rate { get; init; }
             public double? MonthRate { get; init; }
             public bool HasQuote { get; init; }
             public string UpdatedAt { get; init; } = string.Empty;
             public string RateSource { get; init; } = string.Empty;
+            public string QuoteStatus { get; init; } = "unavailable";
+            public string QuoteLabel { get; init; } = "暂无可用行情";
             public bool IsStale { get; init; }
             public bool IsZeroQuote { get; init; }
         }
@@ -7574,6 +7607,10 @@ namespace 小白养基.Controllers
             public double Rate { get; init; }
             public int FundCount { get; init; }
             public int QuotedCount { get; init; }
+            public int SampleCount { get; init; }
+            public int FreshQuoteCount { get; init; }
+            public int IndexFundCount { get; init; }
+            public int ActiveFundCount { get; init; }
             public int ZeroQuoteCount { get; init; }
             public int StaleQuoteCount { get; init; }
             public int StreakDays { get; init; }
@@ -7602,110 +7639,50 @@ namespace 小白养基.Controllers
 
         private sealed record SectorQuoteFallback(double Rate, string UpdatedAt, string RateSource, bool IsStale);
 
-        private static readonly IReadOnlyList<SectorDefinition> SectorDefinitions = new List<SectorDefinition>
-        {
-            new() { Key = "gold", Name = "黄金", Include = new[] { "黄金", "上海金", "黄金ETF", "黄金基金" }, Exclude = new[] { "黄金股" } },
-            new() { Key = "gold_stock", Name = "黄金股", Include = new[] { "黄金股", "有色金属", "贵金属" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "lithium", Name = "锂矿", Include = new[] { "锂", "锂矿", "锂电", "电池" }, Exclude = new[] { "货币", "债" } },
-            new() { Key = "rare_earth", Name = "稀土永磁", Include = new[] { "稀土", "永磁", "稀有金属" }, Exclude = new[] { "债" } },
-            new() { Key = "new_energy", Name = "新能源", Include = new[] { "新能源", "新能源车", "电动车", "电池", "碳中和" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "solid_battery", Name = "固态电池", Include = new[] { "固态电池", "电池", "锂电" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "storage", Name = "储能", Include = new[] { "储能", "电力设备", "新能源" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "nonferrous", Name = "有色金属", Include = new[] { "有色", "有色金属", "金属", "资源", "矿业" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "gem", Name = "创业板", Include = new[] { "创业板", "创业", "创业成长" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "steel", Name = "钢铁", Include = new[] { "钢铁" }, Exclude = Array.Empty<string>() },
-            new() { Key = "agri", Name = "农林牧渔", Include = new[] { "农业", "畜牧", "养殖", "农林牧渔", "粮食" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "media_game", Name = "传媒游戏", Include = new[] { "传媒", "游戏", "动漫", "影视", "文化", "娱乐" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "grid", Name = "电网设备", Include = new[] { "电网", "电力设备", "电力", "智能电网" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "home_appliance", Name = "家用电器", Include = new[] { "家电", "家用电器", "白色家电" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "pv", Name = "光伏", Include = new[] { "光伏", "太阳能", "新能源" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "double_innovation", Name = "双创50", Include = new[] { "双创", "科创创业", "科创50", "创业板" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "food_beverage", Name = "食品饮料", Include = new[] { "食品", "饮料", "白酒", "消费" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "innovative_drug", Name = "创新药", Include = new[] { "创新药", "医药", "生物医药", "港股通医药" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "oversea_medicine", Name = "海外医药", Include = new[] { "海外医药", "全球医药", "港股通医药", "恒生医疗", "中概互联医疗" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "medicine", Name = "医药", Include = new[] { "医药", "医疗", "生物", "药", "中药", "疫苗", "CRO" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "healthcare", Name = "医疗", Include = new[] { "医疗", "医药", "器械", "医美", "生物" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "nuclear", Name = "可控核聚变", Include = new[] { "核", "核电", "高端装备", "军工" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "semiconductor", Name = "半导体", Include = new[] { "半导体", "芯片", "集成电路", "科创芯片" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "semi_material", Name = "半导体材料设备", Include = new[] { "半导体材料", "半导体设备", "芯片设备", "芯片材料", "集成电路" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "bank", Name = "银行", Include = new[] { "银行" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "military", Name = "军工", Include = new[] { "军工", "国防", "航天", "航空", "高端装备" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "sp500", Name = "标普", Include = new[] { "标普", "S&P", "SP500", "美国500" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "asia_pacific", Name = "亚太", Include = new[] { "亚太", "日本", "越南", "印度", "东南亚" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "bond", Name = "债基", Include = new[] { "债", "债券", "纯债", "信用债", "中短债" }, Exclude = new[] { "可转债", "转债" } },
-            new() { Key = "convertible_bond", Name = "可转债", Include = new[] { "可转债", "转债" }, Exclude = Array.Empty<string>() },
-            new() { Key = "mixed_bond", Name = "混债", Include = new[] { "混债", "二级债", "一级债", "固收+", "固收加" }, Exclude = Array.Empty<string>() },
-            new() { Key = "money", Name = "货币基金", Include = new[] { "货币", "现金", "添利", "余额", "天天理财" }, Exclude = new[] { "股票", "混合" } },
-            new() { Key = "real_estate", Name = "地产", Include = new[] { "地产", "房地产", "沪深300地产", "地产等权" }, Exclude = new[] { "债", "货币" } },
-            new() { Key = "robot", Name = "机器人", Include = new[] { "机器人", "智能制造", "高端制造", "机床", "自动化", "工业母机", "人形机器人" }, Exclude = new[] { "债", "货币" } },
+        private static SectorCatalogEntry ResolveSector(string keyOrName)
+            => SectorFundCatalog.Resolve(keyOrName);
 
-new() { Key = "cpo", Name = "CPO", Include = new[] { "CPO", "光模块", "光通信", "通信设备", "数据中心", "算力" }, Exclude = new[] { "债", "货币" } },
-
-new() { Key = "communication", Name = "通信", Include = new[] { "通信", "通信设备", "5G", "光通信", "信息技术", "TMT" }, Exclude = new[] { "债", "货币" } },
-
-new() { Key = "hs_tech", Name = "恒生科技", Include = new[] { "恒生科技", "恒生互联网", "港股科技", "港股通科技", "中概互联", "港股互联网" }, Exclude = new[] { "债", "货币" } },
-
-new() { Key = "ai", Name = "人工智能", Include = new[] { "人工智能", "AI", "智能", "智能化", "算力", "大模型", "ChatGPT" }, Exclude = new[] { "债", "货币" } },
-
-new() { Key = "ai_app", Name = "AI应用", Include = new[] { "AI应用", "传媒", "游戏", "软件", "计算机", "云计算", "大数据", "数字经济" }, Exclude = new[] { "债", "货币" } },
-
-new() { Key = "big_tech", Name = "大科技", Include = new[] { "科技", "半导体", "芯片", "人工智能", "计算机", "通信", "电子", "软件", "云计算", "信息技术", "数字经济" }, Exclude = new[] { "债", "货币" } },
-
-new() { Key = "north_exchange", Name = "北证", Include = new[] { "北证", "北交所", "北证50", "专精特新" }, Exclude = new[] { "债", "货币" } },
-
-new() { Key = "consumer_electronics", Name = "消费电子", Include = new[] { "消费电子", "电子", "苹果", "智能终端", "智能汽车", "半导体", "芯片" }, Exclude = new[] { "债", "货币" } },
-
-new() { Key = "cloud", Name = "云计算", Include = new[] { "云计算", "计算机", "软件", "大数据", "数据中心", "算力", "信创" }, Exclude = new[] { "债", "货币" } },
-
-new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运输", "运输", "物流", "航运", "航空", "港口", "高速公路" }, Exclude = new[] { "债", "货币" } }
-        };
-
-        private static bool ContainsAny(string text, IEnumerable<string> words)
-        {
-            foreach (var word in words)
-            {
-                if (!string.IsNullOrWhiteSpace(word) && text.Contains(word, StringComparison.OrdinalIgnoreCase)) return true;
-            }
-            return false;
-        }
-
-        private static int ScoreFundForSector(string fundName, SectorDefinition def)
-        {
-            var name = fundName ?? string.Empty;
-            int score = 0;
-            if (name.Contains(def.Name, StringComparison.OrdinalIgnoreCase)) score += 80;
-            foreach (var kw in def.Include)
-            {
-                if (name.Contains(kw, StringComparison.OrdinalIgnoreCase)) score += Math.Min(40, kw.Length * 8);
-            }
-            if (name.Contains("ETF", StringComparison.OrdinalIgnoreCase)) score += 25;
-            if (name.Contains("联接", StringComparison.OrdinalIgnoreCase)) score += 20;
-            if (name.Contains("指数", StringComparison.OrdinalIgnoreCase)) score += 15;
-            if (name.Contains("C", StringComparison.OrdinalIgnoreCase)) score += 3;
-            if (name.Contains("货币", StringComparison.OrdinalIgnoreCase) && def.Key != "money") score -= 200;
-            if (name.Contains("债", StringComparison.OrdinalIgnoreCase) && def.Key != "bond" && def.Key != "convertible_bond" && def.Key != "mixed_bond") score -= 120;
-            return score;
-        }
-
-        private static SectorDefinition ResolveSector(string keyOrName)
-        {
-            var clean = (keyOrName ?? string.Empty).Trim();
-            return SectorDefinitions.FirstOrDefault(s => s.Key.Equals(clean, StringComparison.OrdinalIgnoreCase) || s.Name.Equals(clean, StringComparison.OrdinalIgnoreCase))
-                   ?? SectorDefinitions.FirstOrDefault(s => clean.Contains(s.Name, StringComparison.OrdinalIgnoreCase))
-                   ?? new SectorDefinition { Key = clean, Name = clean, Include = new[] { clean }, Exclude = Array.Empty<string>() };
-        }
-
-        private static List<FundInfoCache> MatchFundsBySector(IEnumerable<FundInfoCache> allFunds, SectorDefinition def, int limit)
+        private static List<FundInfoCache> MatchAllFundsBySector(
+            IEnumerable<FundInfoCache> allFunds,
+            SectorCatalogEntry def)
         {
             return allFunds
                 .Where(f => !string.IsNullOrWhiteSpace(f.Code) && !string.IsNullOrWhiteSpace(f.Name))
-                .Where(f => ContainsAny(f.Name, def.Include) && !ContainsAny(f.Name, def.Exclude))
-                .Select(f => new { Fund = f, Score = ScoreFundForSector(f.Name, def) })
+                .Where(f => SectorFundCatalog.IsMatch(f.Name, def))
+                .Select(f => new { Fund = f, Score = SectorFundCatalog.Score(f.Name, f.Type, def) })
                 .Where(x => x.Score > 0)
                 .OrderByDescending(x => x.Score)
                 .ThenBy(x => x.Fund.Name.Length)
-                .Take(limit)
+                .ThenBy(x => x.Fund.Code)
                 .Select(x => x.Fund)
+                .ToList();
+        }
+
+        private static List<FundInfoCache> MatchFundsBySector(
+            IEnumerable<FundInfoCache> allFunds,
+            SectorCatalogEntry def,
+            int limit)
+            => MatchAllFundsBySector(allFunds, def).Take(limit).ToList();
+
+        private static List<FundInfoCache> SelectSectorRadarSample(
+            IReadOnlyList<FundInfoCache> matched,
+            int maxCount = 14)
+        {
+            var indexFunds = matched
+                .Where(f => SectorFundCatalog.ClassifyFundGroup(f.Name, f.Type) == SectorFundCatalog.GroupIndex)
+                .Take(maxCount / 2);
+            var activeFunds = matched
+                .Where(f => SectorFundCatalog.MatchesGroup(
+                    SectorFundCatalog.ClassifyFundGroup(f.Name, f.Type),
+                    SectorFundCatalog.GroupActive))
+                .Take(maxCount / 2);
+
+            return indexFunds
+                .Concat(activeFunds)
+                .Concat(matched)
+                .GroupBy(f => f.Code, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .Take(maxCount)
                 .ToList();
         }
 
@@ -7719,7 +7696,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             bool isZeroQuote = false;
             try
             {
-                string gzUrl = $"http://fundgz.1234567.com.cn/js/{fund.Code}.js?rt={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+                string gzUrl = $"https://fundgz.1234567.com.cn/js/{fund.Code}.js?rt={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
                 string gzRes = await client.GetStringAsync(gzUrl);
                 var match = Regex.Match(gzRes, @"jsonpgz\((.*?)\);");
                 if (match.Success)
@@ -7777,15 +7754,34 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 monthRate = await FetchFundMonthRateAsync(client, fund.Code);
             }
 
+            var quoteStatus = !hasQuote
+                ? "unavailable"
+                : rateSource == "fundgz" && !isStale
+                    ? "live-estimate"
+                    : rateSource.StartsWith("nav_", StringComparison.OrdinalIgnoreCase)
+                        ? "latest-nav"
+                        : "stale-estimate";
+            var quoteLabel = quoteStatus switch
+            {
+                "live-estimate" => "当日盘中估值",
+                "latest-nav" => "最近净值涨跌",
+                "stale-estimate" => "历史估值参考",
+                _ => "暂无可用行情"
+            };
+
             return new SectorFundQuote
             {
                 Code = fund.Code,
                 Name = fund.Name,
+                FundType = fund.Type,
+                FundGroup = SectorFundCatalog.ClassifyFundGroup(fund.Name, fund.Type),
                 Rate = rate,
                 MonthRate = monthRate,
                 HasQuote = hasQuote,
                 UpdatedAt = updatedAt,
                 RateSource = rateSource,
+                QuoteStatus = quoteStatus,
+                QuoteLabel = quoteLabel,
                 IsStale = isStale,
                 IsZeroQuote = isZeroQuote
             };
@@ -7808,9 +7804,9 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
         {
             try
             {
-                string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize=2&_={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+                string url = $"https://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize=2&_={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
                 using var req = new HttpRequestMessage(HttpMethod.Get, url);
-                req.Headers.Referrer = new Uri("http://fundf10.eastmoney.com/");
+                req.Headers.Referrer = new Uri("https://fundf10.eastmoney.com/");
                 var res = await client.SendAsync(req);
                 if (!res.IsSuccessStatusCode) return null;
                 string body = await res.Content.ReadAsStringAsync();
@@ -7846,9 +7842,9 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
         {
             try
             {
-                string url = $"http://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize=28";
+                string url = $"https://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize=28";
                 using var req = new HttpRequestMessage(HttpMethod.Get, url);
-                req.Headers.Referrer = new Uri("http://fundf10.eastmoney.com/");
+                req.Headers.Referrer = new Uri("https://fundf10.eastmoney.com/");
                 var res = await client.SendAsync(req);
                 if (!res.IsSuccessStatusCode) return null;
                 string body = await res.Content.ReadAsStringAsync();
@@ -7868,10 +7864,15 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             return null;
         }
 
-        private async Task<List<SectorFundQuote>> BuildSectorQuotesAsync(SectorDefinition def, int fundLimit, bool withMonthRate)
+        private async Task<List<SectorFundQuote>> BuildSectorQuotesAsync(
+            IEnumerable<FundInfoCache> funds,
+            bool withMonthRate)
         {
-            var allFunds = await GetAllFundsAsync();
-            var matched = MatchFundsBySector(allFunds, def, fundLimit);
+            var matched = funds
+                .Where(f => !string.IsNullOrWhiteSpace(f.Code))
+                .GroupBy(f => f.Code, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .ToList();
             if (matched.Count == 0) return new List<SectorFundQuote>();
 
             var client = _httpClientFactory.CreateClient("EastMoneyQuote");
@@ -7892,12 +7893,23 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 .ToList();
         }
 
+        private async Task<List<SectorFundQuote>> BuildSectorQuotesAsync(
+            SectorCatalogEntry def,
+            int fundLimit,
+            bool withMonthRate)
+        {
+            var allFunds = await GetAllFundsAsync();
+            return await BuildSectorQuotesAsync(
+                MatchFundsBySector(allFunds, def, fundLimit),
+                withMonthRate);
+        }
+
         [HttpGet("sectors")]
         public async Task<IActionResult> GetSectors([FromQuery] bool force = false)
         {
-            const string redisKey = "api:fund:sectors:v2";
-            const string freshKey = "FundSectorRadarV6";
-            const string staleKey = "FundSectorRadarV6_Stale";
+            const string redisKey = "api:fund:sectors:v3";
+            const string freshKey = "FundSectorRadarV7";
+            const string staleKey = "FundSectorRadarV7_Stale";
 
             var jsonOptions = new JsonSerializerOptions
             {
@@ -7967,7 +7979,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             // 1b. 普通请求：Redis 没命中，读数据库缓存。
             if (!force)
             {
-                var (dbData, dbSource) = await _marketCache.TryGetAsync<object>("sector_radar_v3");
+                var (dbData, dbSource) = await _marketCache.TryGetAsync<object>("sector_radar_v4");
                 if (dbData != null && dbSource != null)
                 {
                     SetCacheHeader(dbSource);
@@ -8057,7 +8069,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
                 await TrySetRedisAsync(payloadJson, payloadTtl);
 
-                try { await _marketCache.SetAsync("sector_radar_v3", payload, payloadTtl, TimeSpan.FromDays(3), "build"); } catch { }
+                try { await _marketCache.SetAsync("sector_radar_v4", payload, payloadTtl, TimeSpan.FromDays(3), "build"); } catch { }
 
                 SetCacheHeader("build", payloadTtl);
                 return Content(payloadJson, "application/json");
@@ -8076,7 +8088,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 // 9b. 内存 stale 也没有，尝试数据库 stale。
                 try
                 {
-                    var (dbStale, _) = await _marketCache.TryGetStaleAsync<object>("sector_radar_v3", TimeSpan.FromDays(3));
+                    var (dbStale, _) = await _marketCache.TryGetStaleAsync<object>("sector_radar_v4", TimeSpan.FromDays(3));
                     if (dbStale != null)
                     {
                         SetCacheHeader("db-stale-fallback");
@@ -8115,8 +8127,8 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
         private void SetSectorRadarCache(object payload)
         {
-            _cache.Set("FundSectorRadarV6", payload, GetExternalDataFreshTtl());
-            _cache.Set("FundSectorRadarV6_Stale", payload, _staleExternalDataTtl);
+            _cache.Set("FundSectorRadarV7", payload, GetExternalDataFreshTtl());
+            _cache.Set("FundSectorRadarV7_Stale", payload, _staleExternalDataTtl);
         }
 
         private async Task<object> BuildSectorRadarPayloadAsync()
@@ -8130,40 +8142,74 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0 Safari/537.36");
             client.DefaultRequestVersion = new Version(1, 1);
 
+            var sectorRows = SectorFundCatalog.Definitions
+                .Select(def =>
+                {
+                    var matched = MatchAllFundsBySector(allFunds, def);
+                    return new
+                    {
+                        Def = def,
+                        Matched = matched,
+                        Sample = SelectSectorRadarSample(matched)
+                    };
+                })
+                .Where(row => row.Matched.Count > 0 && row.Sample.Count > 0)
+                .ToList();
+
+            var sampleFunds = sectorRows
+                .SelectMany(row => row.Sample)
+                .GroupBy(f => f.Code, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .ToList();
+            using var limiter = new SemaphoreSlim(12);
+            var quoteTasks = sampleFunds.Select(async fund =>
+            {
+                await limiter.WaitAsync();
+                try { return await FetchFundQuoteAsync(client, fund, false); }
+                finally { limiter.Release(); }
+            });
+            var quoteLookup = (await Task.WhenAll(quoteTasks))
+                .GroupBy(q => q.Code, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
             var summaries = new List<SectorSummaryDto>();
             int rank = 1;
-            foreach (var def in SectorDefinitions)
+            foreach (var row in sectorRows)
             {
-                var matched = MatchFundsBySector(allFunds, def, 22);
-                if (matched.Count == 0) continue;
-
-                using var limiter = new SemaphoreSlim(8);
-                var quoteTasks = matched.Take(18).Select(async fund =>
-                {
-                    await limiter.WaitAsync();
-                    try { return await FetchFundQuoteAsync(client, fund, false); }
-                    finally { limiter.Release(); }
-                });
-
-                var allQuotes = (await Task.WhenAll(quoteTasks)).ToList();
+                var allQuotes = row.Sample
+                    .Where(f => quoteLookup.ContainsKey(f.Code))
+                    .Select(f => quoteLookup[f.Code])
+                    .ToList();
                 var quotes = allQuotes.Where(q => q.HasQuote).ToList();
                 if (quotes.Count == 0) continue;
 
-                double avgRate = Math.Round(quotes.Average(q => q.Rate), 2);
+                var freshQuotes = quotes.Where(q => q.QuoteStatus == "live-estimate").ToList();
+                var aggregationQuotes = freshQuotes.Count > 0 ? freshQuotes : quotes;
+                double avgRate = Math.Round(aggregationQuotes.Average(q => q.Rate), 2);
                 int zeroQuoteCount = allQuotes.Count(q => q.IsZeroQuote || (q.HasQuote && Math.Abs(q.Rate) < 0.000001));
                 int staleQuoteCount = allQuotes.Count(q => q.IsStale);
+                int indexFundCount = row.Matched.Count(f =>
+                    SectorFundCatalog.ClassifyFundGroup(f.Name, f.Type) == SectorFundCatalog.GroupIndex);
+                int activeFundCount = row.Matched.Count(f =>
+                    SectorFundCatalog.MatchesGroup(
+                        SectorFundCatalog.ClassifyFundGroup(f.Name, f.Type),
+                        SectorFundCatalog.GroupActive));
                 summaries.Add(new SectorSummaryDto
                 {
-                    Key = def.Key,
-                    Name = def.Name,
+                    Key = row.Def.Key,
+                    Name = row.Def.Name,
                     Rate = avgRate,
-                    FundCount = matched.Count,
+                    FundCount = row.Matched.Count,
                     QuotedCount = quotes.Count,
+                    SampleCount = allQuotes.Count,
+                    FreshQuoteCount = freshQuotes.Count,
+                    IndexFundCount = indexFundCount,
+                    ActiveFundCount = activeFundCount,
                     ZeroQuoteCount = zeroQuoteCount,
                     StaleQuoteCount = staleQuoteCount,
                     StreakDays = avgRate > 0.005 ? 1 : (avgRate < -0.005 ? -1 : 0),
                     HoldingRank = rank++,
-                    UpdatedAt = quotes.Select(q => q.UpdatedAt).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t)) ?? ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
+                    UpdatedAt = aggregationQuotes.Select(q => q.UpdatedAt).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t)) ?? ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
                     PreviewFunds = quotes.OrderByDescending(q => q.Rate).Take(3).ToList()
                 });
             }
@@ -8171,7 +8217,9 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             var ordered = summaries.OrderByDescending(s => s.Rate).ToList();
             return new
             {
-                source = "东方财富/天天基金估算 + 本地基金名称主题归类",
+                source = "天天基金基金代码库 + 当日盘中估值/最近净值 + 本地主题归类",
+                rateScope = "交易日优先汇总当日盘中估值；无当日估值时降级为最近披露净值涨跌",
+                catalogCount = SectorFundCatalog.Definitions.Count,
                 updatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
                 top = ordered.Take(30).ToList(),
                 bottom = ordered.OrderBy(s => s.Rate).Take(30).ToList(),
@@ -8828,7 +8876,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             return result;
         }
 
-        private async Task<CapitalFlowRowDto?> TryGetSectorCapitalFlowAsync(SectorDefinition def)
+        private async Task<CapitalFlowRowDto?> TryGetSectorCapitalFlowAsync(SectorCatalogEntry def)
         {
             var cacheKey = $"SectorCapitalFlowV1_{def.Key}";
             if (_cache.TryGetValue<CapitalFlowRowDto>(cacheKey, out var cached))
@@ -8867,7 +8915,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             }
         }
 
-        private static CapitalFlowRowDto? SelectBestSectorCapitalFlowRow(SectorDefinition def, IEnumerable<CapitalFlowRowDto> rows)
+        private static CapitalFlowRowDto? SelectBestSectorCapitalFlowRow(SectorCatalogEntry def, IEnumerable<CapitalFlowRowDto> rows)
         {
             return rows
                 .Select(row => new { Row = row, Score = ScoreCapitalFlowRowForSector(row, def) })
@@ -8878,7 +8926,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 ?.Row;
         }
 
-        private static int ScoreCapitalFlowRowForSector(CapitalFlowRowDto row, SectorDefinition def)
+        private static int ScoreCapitalFlowRowForSector(CapitalFlowRowDto row, SectorCatalogEntry def)
         {
             var rowName = NormalizeSectorFlowMatchName(row.Name);
             var sectorName = NormalizeSectorFlowMatchName(def.Name);
@@ -8919,7 +8967,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
         }
 
         private static SectorSignalDto BuildSectorSignal(
-            SectorDefinition def,
+            SectorCatalogEntry def,
             double avgRate,
             IReadOnlyList<SectorFundQuote> quotes,
             CapitalFlowRowDto? sectorFlow)
@@ -9034,20 +9082,34 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
         {
             // 兼容旧前端：secCode 现在既可以传板块 key，也可以传板块名。
             if (string.IsNullOrWhiteSpace(secCode)) return BadRequest("缺少板块识别码");
-            return await GetSectorFunds(secCode, 20, false);
+            return await GetSectorFunds(secCode, 20, false, 1, 20, SectorFundCatalog.GroupAll, null);
         }
 
         [HttpGet("sector-funds")]
-        public async Task<IActionResult> GetSectorFunds([FromQuery] string sectorName, [FromQuery] int limit = 20, [FromQuery] bool force = false)
+        public async Task<IActionResult> GetSectorFunds(
+            [FromQuery] string sectorName,
+            [FromQuery] int limit = 20,
+            [FromQuery] bool force = false,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 0,
+            [FromQuery] string fundGroup = SectorFundCatalog.GroupAll,
+            [FromQuery] string? query = null)
         {
             if (string.IsNullOrWhiteSpace(sectorName)) return BadRequest("缺少板块名称");
-            limit = Math.Clamp(limit, 5, 40);
-            var def = ResolveSector(sectorName);
-            string cacheKey = $"SectorFundsV7_{def.Key}_{limit}";
-            string dbCacheKey = $"sector_funds_v4_{def.Key}_{limit}";
-            if (!force && _cache.TryGetValue(cacheKey, out object cached)) return Ok(cached);
+            limit = Math.Clamp(limit, 5, 60);
+            page = Math.Max(1, page);
+            pageSize = Math.Clamp(pageSize <= 0 ? limit : pageSize, 8, 60);
+            fundGroup = SectorFundCatalog.NormalizeGroup(fundGroup);
+            query = (query ?? string.Empty).Trim();
+            if (query.Length > 40) query = query[..40];
 
-            if (!force)
+            var def = ResolveSector(sectorName);
+            bool cacheable = string.IsNullOrWhiteSpace(query);
+            string cacheKey = $"SectorFundsV8_{def.Key}_{fundGroup}_{page}_{pageSize}";
+            string dbCacheKey = $"sector_funds_v5_{def.Key}_{fundGroup}_{page}_{pageSize}";
+            if (cacheable && !force && _cache.TryGetValue(cacheKey, out object cached)) return Ok(cached);
+
+            if (cacheable && !force)
             {
                 var (dbData, _) = await _marketCache.TryGetAsync<object>(dbCacheKey);
                 if (dbData != null)
@@ -9059,28 +9121,74 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
 
             try
             {
-                var quotesTask = BuildSectorQuotesAsync(def, limit, withMonthRate: true);
+                var allFunds = await GetAllFundsAsync();
+                var allMatched = MatchAllFundsBySector(allFunds, def);
+                var filtered = allMatched
+                    .Where(f => SectorFundCatalog.MatchesGroup(
+                        SectorFundCatalog.ClassifyFundGroup(f.Name, f.Type),
+                        fundGroup))
+                    .Where(f => string.IsNullOrWhiteSpace(query) ||
+                                f.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                                f.Code.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                                f.Type.Contains(query, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                var pageFunds = filtered
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+
+                var quotesTask = BuildSectorQuotesAsync(pageFunds, withMonthRate: true);
                 var sectorFlowTask = TryGetSectorCapitalFlowAsync(def);
                 await Task.WhenAll(quotesTask, sectorFlowTask);
 
                 var quotes = quotesTask.Result;
                 var sectorFlow = sectorFlowTask.Result;
                 var available = quotes.Where(q => q.HasQuote).ToList();
-                double avgRate = available.Count > 0 ? Math.Round(available.Average(q => q.Rate), 2) : 0;
+                var freshAvailable = available.Where(q => q.QuoteStatus == "live-estimate").ToList();
+                var aggregationQuotes = freshAvailable.Count > 0 ? freshAvailable : available;
+                double avgRate = aggregationQuotes.Count > 0 ? Math.Round(aggregationQuotes.Average(q => q.Rate), 2) : 0;
                 var sectorSignal = BuildSectorSignal(def, avgRate, quotes, sectorFlow);
+                var groupCounts = new
+                {
+                    all = allMatched.Count,
+                    index = allMatched.Count(f => SectorFundCatalog.ClassifyFundGroup(f.Name, f.Type) == SectorFundCatalog.GroupIndex),
+                    active = allMatched.Count(f => SectorFundCatalog.MatchesGroup(
+                        SectorFundCatalog.ClassifyFundGroup(f.Name, f.Type),
+                        SectorFundCatalog.GroupActive)),
+                    mixed = allMatched.Count(f => SectorFundCatalog.ClassifyFundGroup(f.Name, f.Type) == SectorFundCatalog.GroupMixed),
+                    equity = allMatched.Count(f => SectorFundCatalog.ClassifyFundGroup(f.Name, f.Type) == SectorFundCatalog.GroupEquity),
+                    other = allMatched.Count(f => SectorFundCatalog.ClassifyFundGroup(f.Name, f.Type) == SectorFundCatalog.GroupOther)
+                };
                 var payload = new
                 {
                     key = def.Key,
                     name = def.Name,
                     rate = avgRate,
-                    fundCount = quotes.Count,
-                    updatedAt = available.Select(q => q.UpdatedAt).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t)) ?? ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
+                    fundCount = allMatched.Count,
+                    filteredFundCount = filtered.Count,
+                    returnedCount = quotes.Count,
+                    groupCounts,
+                    selectedGroup = fundGroup,
+                    query,
+                    page,
+                    pageSize,
+                    totalPages = Math.Max(1, (int)Math.Ceiling(filtered.Count / (double)pageSize)),
+                    hasMore = page * pageSize < filtered.Count,
+                    freshQuoteCount = freshAvailable.Count,
+                    latestNavCount = available.Count(q => q.QuoteStatus == "latest-nav"),
+                    staleQuoteCount = available.Count(q => q.QuoteStatus == "stale-estimate"),
+                    updatedAt = aggregationQuotes.Select(q => q.UpdatedAt).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t)) ?? ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
+                    source = "天天基金基金代码库；盘中估值与最近净值分开标识",
+                    rateScope = freshAvailable.Count > 0 ? "当日盘中估值" : "最近披露净值涨跌",
                     sectorFlow,
                     sectorSignal,
                     funds = quotes.OrderByDescending(q => q.Rate).ToList()
                 };
-                _cache.Set(cacheKey, payload, TimeSpan.FromMinutes(3));
-                try { await _marketCache.SetAsync(dbCacheKey, payload, TimeSpan.FromMinutes(10), TimeSpan.FromDays(3), "build"); } catch { }
+                if (cacheable)
+                {
+                    _cache.Set(cacheKey, payload, TimeSpan.FromMinutes(3));
+                    try { await _marketCache.SetAsync(dbCacheKey, payload, TimeSpan.FromMinutes(10), TimeSpan.FromDays(3), "build"); } catch { }
+                }
                 return Ok(payload);
             }
             catch (Exception ex)
@@ -9088,11 +9196,14 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 Console.WriteLine($"[sector-funds] build failed for {def.Key}: {ex.Message}");
                 try
                 {
-                    var (dbStale, _) = await _marketCache.TryGetStaleAsync<object>(dbCacheKey, TimeSpan.FromDays(3));
-                    if (dbStale != null)
+                    if (cacheable)
                     {
-                        _cache.Set(cacheKey, dbStale, TimeSpan.FromMinutes(3));
-                        return Ok(dbStale);
+                        var (dbStale, _) = await _marketCache.TryGetStaleAsync<object>(dbCacheKey, TimeSpan.FromDays(3));
+                        if (dbStale != null)
+                        {
+                            _cache.Set(cacheKey, dbStale, TimeSpan.FromMinutes(3));
+                            return Ok(dbStale);
+                        }
                     }
                 }
                 catch { }
@@ -9291,7 +9402,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
                 }
             }
 
-            foreach (var def in SectorDefinitions)
+            foreach (var def in SectorFundCatalog.Definitions)
             {
                 if (def.Include.Any(k => name.Contains(k, StringComparison.OrdinalIgnoreCase)))
                 {
@@ -9951,7 +10062,7 @@ new() { Key = "transport", Name = "交通运输", Include = new[] { "交通运�
             double total = funds.Sum(f => Math.Max(0, f.HoldAmount));
             if (total <= 0) return Ok(new { totalAmount = 0, exposures = Array.Empty<object>() });
 
-            var exposures = SectorDefinitions.Select(def =>
+            var exposures = SectorFundCatalog.Definitions.Select(def =>
             {
                 var matched = funds.Where(f => def.Include.Any(k => f.FundName.Contains(k, StringComparison.OrdinalIgnoreCase)) &&
                                                !def.Exclude.Any(k => f.FundName.Contains(k, StringComparison.OrdinalIgnoreCase))).ToList();

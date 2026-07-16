@@ -124,14 +124,25 @@ namespace 小白养基.Services
             bool useCurrentOcrSnapshot)
         {
             var pending = Math.Max(0m, Money(pendingBuyAmount));
+            var official = officialConfirmedAmount > 0m
+                ? Money(officialConfirmedAmount)
+                : 0m;
             if (useCurrentOcrSnapshot && snapshotDisplayAmount > 0m)
             {
                 var display = Money(snapshotDisplayAmount);
-                return new EstimatedHoldingAmount(display, Math.Max(0m, Money(display - pending)));
+                var snapshotConfirmed = Math.Max(0m, Money(display - pending));
+
+                // Keep the platform snapshot for one-cent display rounding. A larger
+                // divergence means the rolling base is stale or was settled twice;
+                // confirmed shares x official NAV is then the safer self-healing value.
+                if (official > 0m && Math.Abs(official - snapshotConfirmed) > 0.01m)
+                    return new EstimatedHoldingAmount(Money(official + pending), official);
+
+                return new EstimatedHoldingAmount(display, snapshotConfirmed);
             }
 
-            var confirmed = officialConfirmedAmount > 0m
-                ? Money(officialConfirmedAmount)
+            var confirmed = official > 0m
+                ? official
                 : Math.Max(0m, Money(rolledConfirmedAmount));
             return new EstimatedHoldingAmount(Money(confirmed + pending), confirmed);
         }
@@ -154,7 +165,14 @@ namespace 小白养基.Services
             // Official NAV settlement rolls from the prior platform amount plus
             // confirmed profit. Keep four decimals internally, then round only
             // the display/archive boundary to two decimals.
-            var confirmedAssets = LedgerMoney(LedgerMoney(baseAmount) + LedgerMoney(settledProfit));
+            var rolledConfirmedAssets = LedgerMoney(LedgerMoney(baseAmount) + LedgerMoney(settledProfit));
+            var confirmedAssets = rolledConfirmedAssets;
+            if (exactConfirmedAssets.HasValue && exactConfirmedAssets.Value > 0m)
+            {
+                var exactAssets = LedgerMoney(exactConfirmedAssets.Value);
+                if (Math.Abs(exactAssets - rolledConfirmedAssets) > 0.01m)
+                    confirmedAssets = exactAssets;
+            }
 
             return LedgerMoney(Math.Max(0m, confirmedAssets) + Math.Max(0m, LedgerMoney(activePendingBuyAmount)));
         }
