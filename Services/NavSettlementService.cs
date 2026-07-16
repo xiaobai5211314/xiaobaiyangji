@@ -55,13 +55,13 @@ namespace 小白养基.Services
         private static DateTime GetPreviousTradeDate(DateTime date)
             => MarketCalendar.GetPreviousTradingDate(date.AddDays(-1));
 
-        private static double GetActivePendingBuyAmount(MyFundConfig fund, string settleDate)
-            => PortfolioSettlementService.GetActivePendingBuyAmount(fund, settleDate);
+        private static double GetReturnExcludedPendingBuyAmount(MyFundConfig fund, string settleDate)
+            => PortfolioSettlementService.GetReturnExcludedPendingBuyAmount(fund, settleDate);
 
         private static double GetEffectiveBaseAmount(MyFundConfig fund, string settleDate)
         {
             decimal baseAmount = PortfolioSettlementService.GetHoldAmountBasis(fund);
-            baseAmount -= PortfolioAccounting.LedgerMoney(GetActivePendingBuyAmount(fund, settleDate));
+            baseAmount -= PortfolioAccounting.LedgerMoney(GetReturnExcludedPendingBuyAmount(fund, settleDate));
             if (fund.LastTradeDate == settleDate && fund.LastAddAmount < 0)
             {
                 baseAmount -= PortfolioAccounting.LedgerMoney(fund.LastAddAmount);
@@ -71,7 +71,7 @@ namespace 小白养基.Services
 
         private static double GetPendingTradeAmount(MyFundConfig fund, string settleDate)
         {
-            double pending = GetActivePendingBuyAmount(fund, settleDate);
+            double pending = GetReturnExcludedPendingBuyAmount(fund, settleDate);
             if (fund.LastTradeDate == settleDate && fund.LastAddAmount < 0)
             {
                 pending += fund.LastAddAmount;
@@ -210,11 +210,11 @@ namespace 小白养基.Services
                 ? PortfolioAccounting.LedgerMoney(fund.OcrYesterdayIncome)
                 : PortfolioAccounting.LedgerMoney(exactProfit ?? (baseAmount * actualRate / 100.0));
             double settledProfit = PortfolioAccounting.ToDouble(settledProfitBasis);
-            double activePendingBuyAmount = GetActivePendingBuyAmount(fund, settleDate);
+            double returnExcludedPendingBuyAmount = GetReturnExcludedPendingBuyAmount(fund, settleDate);
             decimal settledLedgerAmount = PortfolioAccounting.ResolveSettledLedgerAmount(
                     Convert.ToDecimal(baseAmount),
                     settledProfitBasis,
-                    Convert.ToDecimal(activePendingBuyAmount),
+                    Convert.ToDecimal(returnExcludedPendingBuyAmount),
                     exactAssets.HasValue ? Convert.ToDecimal(exactAssets.Value) : null);
             double settledDisplayAmount = PortfolioAccounting.ToDouble(settledLedgerAmount);
 

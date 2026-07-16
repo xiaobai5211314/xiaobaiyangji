@@ -245,6 +245,9 @@ namespace 小白养基.Controllers
         private static double GetActivePendingBuyAmount(MyFundConfig fund, string settleDate, string? asOfDate = null)
             => PortfolioSettlementService.GetActivePendingBuyAmount(fund, settleDate, asOfDate);
 
+        private static double GetReturnExcludedPendingBuyAmount(MyFundConfig fund, string settleDate)
+            => PortfolioSettlementService.GetReturnExcludedPendingBuyAmount(fund, settleDate);
+
         private static bool HasLegacyOcrPendingSignal(MyFundConfig fund, string settleDate, string? asOfDate = null)
         {
             if (fund.PendingBuyAmount > 0) return false;
@@ -298,9 +301,7 @@ namespace 小白养基.Controllers
         private static bool IsPendingTradeOrderActive(Models.FundTradeOrder order, string settleDate, string? asOfDate = null)
         {
             if (!order.Status.Equals("Pending", StringComparison.OrdinalIgnoreCase)) return false;
-            var confirmDate = order.ConfirmDate ?? order.FirstProfitDate;
-            if (string.IsNullOrWhiteSpace(confirmDate)) return true;
-            return IsPendingConfirmAfter(confirmDate, settleDate, asOfDate);
+            return IsPendingDateEffective(order.TradeDate, settleDate, asOfDate);
         }
 
         private static void MarkPendingBuy(MyFundConfig fund, double amount, string tradeDate, string source, string? confirmDate = null)
@@ -341,7 +342,7 @@ namespace 小白养基.Controllers
         private static double GetEffectiveBaseAmount(MyFundConfig fund, string settleDate, double? resolvedPendingBuyAmount = null)
         {
             decimal baseAmount = PortfolioSettlementService.GetHoldAmountBasis(fund);
-            double pendingBuy = resolvedPendingBuyAmount ?? GetActivePendingBuyAmount(fund, settleDate);
+            double pendingBuy = resolvedPendingBuyAmount ?? GetReturnExcludedPendingBuyAmount(fund, settleDate);
             baseAmount -= PortfolioAccounting.LedgerMoney(pendingBuy);
             if (fund.LastTradeDate == settleDate && fund.LastAddAmount < 0)
             {
@@ -352,7 +353,7 @@ namespace 小白养基.Controllers
 
         private static double GetPendingTradeAmount(MyFundConfig fund, string settleDate, double? resolvedPendingBuyAmount = null)
         {
-            double pending = resolvedPendingBuyAmount ?? GetActivePendingBuyAmount(fund, settleDate);
+            double pending = resolvedPendingBuyAmount ?? GetReturnExcludedPendingBuyAmount(fund, settleDate);
             if (fund.LastTradeDate == settleDate && fund.LastAddAmount < 0)
             {
                 pending += fund.LastAddAmount;
@@ -524,11 +525,11 @@ namespace 小白养基.Controllers
                 ? PortfolioAccounting.LedgerMoney(fund.OcrYesterdayIncome)
                 : PortfolioAccounting.LedgerMoney(exactProfit ?? (baseAmount * actualRate / 100.0));
             double settledProfit = PortfolioAccounting.ToDouble(settledProfitBasis);
-            double activePendingBuyAmount = GetActivePendingBuyAmount(fund, settleDate);
+            double returnExcludedPendingBuyAmount = GetReturnExcludedPendingBuyAmount(fund, settleDate);
             decimal settledLedgerAmount = PortfolioAccounting.ResolveSettledLedgerAmount(
                     Convert.ToDecimal(baseAmount),
                     settledProfitBasis,
-                    Convert.ToDecimal(activePendingBuyAmount),
+                    Convert.ToDecimal(returnExcludedPendingBuyAmount),
                     exactAssets.HasValue ? Convert.ToDecimal(exactAssets.Value) : null);
             double settledDisplayAmount = PortfolioAccounting.ToDouble(settledLedgerAmount);
 
@@ -6627,28 +6628,46 @@ namespace 小白养基.Controllers
                     double activePendingBuyAmount = GetActivePendingBuyAmount(config, todayDash, naturalDate);
                     double? previousArchiveAssets = FindPreviousArchiveAssets(config, archiveHistoryDict, dateInfo.EffectiveDateStart);
                     double pendingBuyAmount = ResolvePendingBuyAmount(config, todayDash, previousArchiveAssets, naturalDate);
+                    double returnExcludedPendingBuyAmount = GetReturnExcludedPendingBuyAmount(config, naturalDate);
+                    double returnParticipatingPendingBuyAmount = Math.Max(
+                        0,
+                        Math.Round(pendingBuyAmount - returnExcludedPendingBuyAmount, 2));
                     bool legacyPendingFallback = activePendingBuyAmount <= 0 && pendingBuyAmount > 0;
                     string? resolvedPendingStatus = legacyPendingFallback ? "pending_buy" : config.PendingTradeStatus;
                     string? resolvedPendingSource = legacyPendingFallback ? "legacy_ocr_pending_fallback" : config.PendingSource;
                     bool pendingBuy = pendingBuyAmount > 0;
                     double rawHoldAmount = Math.Max(0, config.HoldAmount);
                     double confirmedHoldAmount = Math.Max(0, Math.Round(rawHoldAmount - pendingBuyAmount, 2));
-                    double todayBaseAmount = GetDailyBaseAmount(config, todayDash, pendingBuyAmount);
+                    double todayBaseAmount = GetDailyBaseAmount(config, todayDash, returnExcludedPendingBuyAmount);
 
                     bool hasCurrentOcrAmount = PortfolioAccounting.IsOcrSnapshotCurrentForDisplay(
                         config.OcrSnapshotDate,
                         localTime.Date);
                     double effectiveSharesForOfficialAmount = GetEffectiveShares(config, fundEffectiveDash);
                     bool hasReliableExactShares = PortfolioSettlementService.HasReliableExactShares(config);
+                    double returnExcludedPendingForEffectiveDate =
+                        GetReturnExcludedPendingBuyAmount(config, fundEffectiveDash);
+                    bool effectiveSharesIncludePendingBuy =
+                        returnParticipatingPendingBuyAmount > 0
+                        && returnExcludedPendingForEffectiveDate <= 0
+                        && config.PendingBuyShares > 0;
                     double officialMarketValue = latestOfficialRecord?.Nav is > 0
                         && effectiveSharesForOfficialAmount > 0
                         && hasReliableExactShares
                         ? Math.Round(effectiveSharesForOfficialAmount * latestOfficialRecord.Nav.Value, 2)
                         : 0;
+                    double officialConfirmedMarketValue = Math.Max(
+                        0,
+                        Math.Round(
+                            officialMarketValue
+                            - (effectiveSharesIncludePendingBuy
+                                ? returnParticipatingPendingBuyAmount
+                                : 0),
+                            2));
                     double settledMarketValue = hasCurrentOcrAmount && confirmedHoldAmount > 0
                         ? confirmedHoldAmount
-                        : officialMarketValue > 0
-                            ? officialMarketValue
+                        : officialConfirmedMarketValue > 0
+                            ? officialConfirmedMarketValue
                             : confirmedHoldAmount;
 
                     var dataPoints = new List<object[]>();
@@ -6699,12 +6718,13 @@ namespace 小白养基.Controllers
                             config.LastSettledDate == todayDash ? PortfolioAccounting.Money(config.LastSettledProfit) : null));
                         var officialAmount = PortfolioAccounting.ResolveOfficialHoldingAmount(
                             PortfolioAccounting.Money(rawHoldAmount),
-                            PortfolioAccounting.Money(officialMarketValue),
-                            PortfolioAccounting.Money(todayBaseAmount + todayProfit),
+                            PortfolioAccounting.Money(officialConfirmedMarketValue),
+                            PortfolioAccounting.Money(
+                                todayBaseAmount + todayProfit - returnParticipatingPendingBuyAmount),
                             PortfolioAccounting.Money(pendingBuyAmount),
                             hasCurrentOcrAmount);
-                        officialAmountReconciled = officialMarketValue > 0
-                            && Math.Abs(PortfolioAccounting.Money(officialMarketValue)
+                        officialAmountReconciled = officialConfirmedMarketValue > 0
+                            && Math.Abs(PortfolioAccounting.Money(officialConfirmedMarketValue)
                                 - PortfolioAccounting.Money(confirmedHoldAmount)) > 0.01m;
                         double settledConfirmedAmount = PortfolioAccounting.ToDouble(officialAmount.ConfirmedAmount);
                         marketValue = PortfolioAccounting.ToDouble(officialAmount.DisplayAmount);
@@ -6728,7 +6748,15 @@ namespace 小白养基.Controllers
                     else
                     {
                         todayProfit = 0;
-                        marketValue = settledMarketValue;
+                        var carriedAmount = PortfolioAccounting.ResolveEstimatedHoldingAmount(
+                            PortfolioAccounting.Money(rawHoldAmount),
+                            PortfolioAccounting.Money(settledMarketValue),
+                            0m,
+                            PortfolioAccounting.Money(pendingBuyAmount),
+                            hasCurrentOcrAmount);
+                        marketValue = PortfolioAccounting.ToDouble(carriedAmount.DisplayAmount);
+                        confirmedHoldAmount = PortfolioAccounting.ToDouble(carriedAmount.ConfirmedAmount);
+                        rawHoldAmount = marketValue;
                     }
 
                     double todayRateForDisplay = todayBaseAmount > 0
@@ -6811,22 +6839,22 @@ namespace 小白养基.Controllers
                         && effectiveArchiveByCode.TryGetValue(config.FundCode, out effectiveFundArchive);
                     if (usingEffectiveArchive && effectiveFundArchive != null)
                     {
-                        rawHoldAmount = Math.Max(0, Math.Round(effectiveFundArchive.Assets, 2));
-                        confirmedHoldAmount = rawHoldAmount;
-                        pendingBuyAmount = 0;
-                        pendingBuy = false;
-                        resolvedPendingStatus = null;
-                        resolvedPendingSource = null;
+                        confirmedHoldAmount = Math.Max(0, Math.Round(effectiveFundArchive.Assets, 2));
+                        rawHoldAmount = PortfolioAccounting.ToDouble(PortfolioAccounting.Money(
+                            confirmedHoldAmount + pendingBuyAmount));
                         marketValue = rawHoldAmount;
-                        costBasis = PortfolioAccounting.ToDouble(PortfolioAccounting.HoldingCost(
-                            PortfolioAccounting.Money(rawHoldAmount),
-                            PortfolioAccounting.Money(effectiveFundArchive.TotalProfit)));
+                        costBasis = PortfolioAccounting.ToDouble(
+                            PortfolioSettlementService.GetConfirmedCostAmount(
+                                config,
+                                todayDash,
+                                PortfolioAccounting.Money(rawHoldAmount),
+                                naturalDate));
                         totalProfitPreview = Math.Round(effectiveFundArchive.TotalProfit, 2);
                         existingReturnRateValue = Convert.ToDouble(PortfolioAccounting.Percent(
                             PortfolioAccounting.Money(totalProfitPreview),
                             PortfolioAccounting.Money(costBasis)));
-                        breakEvenRateValue = marketValue > 0 && totalProfitPreview < 0
-                            ? Math.Round(-totalProfitPreview / marketValue * 100.0, 2)
+                        breakEvenRateValue = confirmedHoldAmount > 0 && totalProfitPreview < 0
+                            ? Math.Round(-totalProfitPreview / confirmedHoldAmount * 100.0, 2)
                             : 0;
 
                         if (isCurrentNaturalFundDate)
@@ -6835,7 +6863,7 @@ namespace 小白养基.Controllers
                             todayRate = Math.Round(effectiveFundArchive.DailyRate, 2);
                             todayRateForDisplay = todayRate;
                             todayRateForSimulation = todayRate;
-                            todayBaseAmount = Math.Max(0, Math.Round(rawHoldAmount - todayProfit, 2));
+                            todayBaseAmount = Math.Max(0, Math.Round(confirmedHoldAmount - todayProfit, 2));
                             previousMarketValue = todayBaseAmount;
                             dataStatus = "official_today";
                             isSettled = true;
@@ -6867,8 +6895,8 @@ namespace 小白养基.Controllers
                             todayRate = 0;
                             todayRateForDisplay = 0;
                             todayRateForSimulation = 0;
-                            todayBaseAmount = rawHoldAmount;
-                            previousMarketValue = rawHoldAmount;
+                            todayBaseAmount = confirmedHoldAmount;
+                            previousMarketValue = confirmedHoldAmount;
                             dataStatus = "official_latest";
                             isSettled = false;
                             isCarryForward = true;
@@ -6942,7 +6970,12 @@ namespace 小白养基.Controllers
                         pendingTradeStatus = resolvedPendingStatus,
                         pendingConfirmDate = config.PendingConfirmDate,
                         pendingSource = resolvedPendingSource,
-                        pendingNote = pendingBuy ? "买入待确认，不参与今日收益" : string.Empty,
+                        pendingNote = pendingBuy
+                            ? returnExcludedPendingBuyAmount > 0
+                                ? "买入待确认，不参与今日收益"
+                                : "买入待确认，已进入收益计算，等待平台结转"
+                            : string.Empty,
+                        pendingParticipatesInToday = pendingBuy && returnExcludedPendingBuyAmount <= 0,
                         rawCostAmount = isCleared ? (double?)null : (rawCostBasis > 0 ? rawCostBasis : (double?)null),
                         confirmedCost = isCleared ? (double?)null : costBasis,
                         realizedProfit = config.RealizedProfit,
@@ -7006,6 +7039,8 @@ namespace 小白养基.Controllers
                             confirmedAmount = confirmedHoldAmount,
                             pendingBuyAmount = pendingBuy ? pendingBuyAmount : 0,
                             activePendingBuyAmount,
+                            returnExcludedPendingBuyAmount,
+                            returnParticipatingPendingBuyAmount,
                             legacyPendingFallback,
                             previousArchiveAssets,
                             pendingTradeStatus = config.PendingTradeStatus,
@@ -7023,7 +7058,10 @@ namespace 小白养基.Controllers
                             usingEffectiveArchive,
                             effectiveSharesForOfficialAmount,
                             hasReliableExactShares,
+                            returnExcludedPendingForEffectiveDate,
+                            effectiveSharesIncludePendingBuy,
                             officialMarketValue,
+                            officialConfirmedMarketValue,
                             officialAmountReconciled,
                             archiveSource = usingEffectiveArchive ? effectiveFundArchive?.Source : null,
                         }
@@ -7124,15 +7162,20 @@ namespace 小白养基.Controllers
                     hasTodayConfirmed = false;
                 }
                 bool todayPerformanceAvailable = todayPolicy.Available;
+                decimal todayPerformanceRateBase = todayPerformanceBase > 0m
+                    ? PortfolioAccounting.Money(todayPerformanceBase)
+                    : antConfirmedAmount;
                 decimal todayPerformanceRate = todayPerformanceAvailable
-                    ? PortfolioAccounting.PortfolioTodayEstimateRate(todayPerformanceProfit, antConfirmedAmount)
+                    ? PortfolioAccounting.PortfolioTodayEstimateRate(
+                        todayPerformanceProfit,
+                        todayPerformanceRateBase)
                     : 0m;
                 string todayPerformanceStatus = todayPolicy.Status;
                 string todayProfitLabel = todayPolicy.ProfitLabel;
                 string todayRateLabel = todayPolicy.RateLabel;
                 bool intradayAvailable = antConfirmedAvailable && intradayQuotedBase > 0m;
                 decimal intradayRate = intradayAvailable
-                    ? PortfolioAccounting.PortfolioTodayEstimateRate(intradayProfit, antConfirmedAmount)
+                    ? PortfolioAccounting.PortfolioTodayEstimateRate(intradayProfit, intradayQuotedBase)
                     : 0m;
                 decimal intradayEstimatedAssets = antConfirmedAvailable && intradayAvailable
                     ? PortfolioAccounting.Money(antConfirmedAmount + intradayProfit)
@@ -7166,7 +7209,7 @@ namespace 小白养基.Controllers
                     confirmedHoldingTotalAmount = antConfirmedAmount,
                     todayPendingBuyTotal = PortfolioAccounting.Money(summaryPendingBuyAmount),
                     totalTodayProfit = todayPerformanceProfit,
-                    totalTodayBaseAmount = antConfirmedAmount,
+                    totalTodayBaseAmount = todayPerformanceRateBase,
                     intradayQuotedBaseAmount = intradayQuotedBase,
                     totalTodayRate = todayPerformanceRate,
                     todayPerformanceProfit,
@@ -7414,11 +7457,14 @@ namespace 小白养基.Controllers
         [HttpPost("add-position")]
         public async Task<IActionResult> AddPosition([FromForm] string username, [FromForm] string code, [FromForm] double addAmount, [FromForm] string? tradeDate, [FromForm] string? rawDate, [FromForm] string? timeSlot)
         {
-            if (string.IsNullOrEmpty(username)) return Unauthorized("未授权");
+            if (string.IsNullOrEmpty(username))
+                return Unauthorized(new { success = false, msg = "未授权" });
+
             try
             {
                 var fund = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && f.FundCode == code);
-                if (fund == null) return BadRequest("未找到基金");
+                if (fund == null)
+                    return BadRequest(new { success = false, msg = "未找到基金" });
 
                 var timing = ResolveTradeTimingFromSubmission(fund, rawDate, timeSlot, tradeDate);
                 _portfolioSettlement.AddPosition(fund, addAmount, timing.TradeDate, timing.ConfirmDate);
@@ -7437,9 +7483,18 @@ namespace 小白养基.Controllers
                     timingEstimated = true
                 });
             }
-            catch (ArgumentOutOfRangeException ex) { return BadRequest(ex.Message); }
-            catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
-            catch (Exception ex) { return StatusCode(500, $"加仓异常: {ex.Message}"); }
+            catch (ArgumentOutOfRangeException ex)
+            {
+                return BadRequest(new { success = false, msg = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, msg = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, msg = $"加仓异常: {ex.Message}" });
+            }
         }
 
         // 🚀 2. 战术减仓接口：日期支持，金额可选 (留空则系统自动按份额比例算)

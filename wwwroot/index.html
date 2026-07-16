@@ -1174,6 +1174,39 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             box-sizing: border-box;
         }
 
+        .modal-pending-notice,
+        .modal-feedback-error {
+            margin: 0 0 14px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            line-height: 1.55;
+        }
+
+        .modal-pending-notice {
+            color: #fbbf24;
+            background: rgba(245, 158, 11, 0.10);
+            border: 1px solid rgba(245, 158, 11, 0.35);
+        }
+
+        .modal-feedback-error {
+            color: #fecaca;
+            background: rgba(239, 68, 68, 0.12);
+            border: 1px solid rgba(239, 68, 68, 0.42);
+        }
+
+        :root[data-theme="light"] .modal-pending-notice {
+            color: #8a4b00;
+            background: #fff7e6;
+            border-color: #e9a23b;
+        }
+
+        :root[data-theme="light"] .modal-feedback-error {
+            color: #991b1b;
+            background: #fff1f2;
+            border-color: #fda4af;
+        }
+
         #chart-container {
             width: calc(100vw - 30px);
             height: calc(100vh - 280px);
@@ -5725,13 +5758,18 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 </div>
             </div>
 
-            <div v-if="addModal.show" class="modal-mask" @click.self="addModal.show = false">
+            <div v-if="addModal.show" class="modal-mask" @click.self="closeAddModal">
                 <div class="modal-content">
                     <h3 style="margin-top: 0; color: #3b82f6;">💰 加仓</h3>
                     <p style="font-size: 13px; color:var(--text-muted); margin-bottom: 15px; display: flex; justify-content: space-between; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 6px;">
                         <span>当前市值: <strong style="color:var(--text-main);">{{ addModal.currentAmount }}</strong></span>
                         <span>持仓本金: <strong style="color:var(--text-muted);">{{ addModal.currentCost }}</strong></span>
                     </p>
+                    <div v-if="Number(addModal.pendingAmount || 0) > 0" class="modal-pending-notice">
+                        已有 {{ Number(addModal.pendingAmount).toFixed(2) }} 元买入待确认
+                        <template v-if="addModal.pendingTradeDate">（交易日 {{ addModal.pendingTradeDate }}）</template>。
+                        原记录仍在，平台确认前请勿重复添加。
+                    </div>
 
                     <div style="font-size: 12px; color:var(--text-muted); margin-bottom: 5px;">原平台买入时间</div>
                     <div style="display: flex; gap: 10px; margin-bottom: 15px;">
@@ -5748,9 +5786,12 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                     <div style="font-size: 12px; color:var(--text-muted); margin-bottom: 5px;">加仓金额 (¥)</div>
                     <input v-model="addModal.amount" type="number" placeholder="只需输入金额，如: 1000" class="modal-input">
+                    <div v-if="addModal.error" class="modal-feedback-error" role="alert">{{ addModal.error }}</div>
                     <div style="display: flex; gap: 10px; margin-top: 10px;">
-                        <button class="btn btn-primary" @click="handleAddPosition" style="flex: 1; justify-content: center;">确认加仓</button>
-                        <button class="btn" @click="addModal.show = false" style="flex: 1; justify-content: center;">取消</button>
+                        <button type="button" class="btn btn-primary" @click="handleAddPosition" :disabled="addModal.submitting" style="flex: 1; justify-content: center;">
+                            {{ addModal.submitting ? '正在提交...' : '确认加仓' }}
+                        </button>
+                        <button type="button" class="btn" @click="closeAddModal" :disabled="addModal.submitting" style="flex: 1; justify-content: center;">取消</button>
                     </div>
                 </div>
             </div>
@@ -9056,14 +9097,97 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 onMounted(() => { if (currentUser.value) { isLoggedIn.value = true; fetchUserProfile(); initDashboard(); } document.addEventListener('visibilitychange', handleVisibilityChange); window.addEventListener('touchstart', onPullStart, { passive: true }); window.addEventListener('touchmove', onPullMove, { passive: false }); window.addEventListener('touchend', onPullEnd, { passive: true }); });
 
                 const todayStr = new Date(new Date().getTime() + 8 * 3600 * 1000).toISOString().split('T')[0];
-                const addModal = reactive({ show: false, code: '', name: '', amount: '', rawDate: todayStr, timeSlot: 'before', currentAmount: 0, currentCost: 0 });
+                const addModal = reactive({
+                    show: false,
+                    code: '',
+                    name: '',
+                    amount: '',
+                    rawDate: todayStr,
+                    timeSlot: 'before',
+                    currentAmount: 0,
+                    currentCost: 0,
+                    pendingAmount: 0,
+                    pendingTradeDate: '',
+                    pendingConfirmDate: '',
+                    submitting: false,
+                    error: ''
+                });
                 const reduceModal = reactive({ show: false, code: '', name: '', shares: '', amount: '', rawDate: todayStr, timeSlot: 'before', currentAmount: 0, currentShares: 0 });
 
                 const calculateTradeDate = (rawDateStr, timeSlot) => rawDateStr;
 
-                const openAddModal = (fund) => { addModal.show = true; addModal.code = fund.code; addModal.name = fund.name; addModal.amount = ''; addModal.currentAmount = fund.amount; addModal.currentCost = fund.cost > 0 ? fund.cost : '未设置'; const now = new Date(); addModal.rawDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`; addModal.timeSlot = now.getHours() >= 15 ? 'after' : 'before'; };
+                const closeAddModal = () => {
+                    if (addModal.submitting) return;
+                    addModal.show = false;
+                    addModal.error = '';
+                };
 
-                const handleAddPosition = async () => { if (!addModal.amount) return showToast("请输入加仓金额", "error"); const fd = new FormData(); fd.append('username', currentUser.value); fd.append('code', addModal.code); fd.append('addAmount', addModal.amount); fd.append('rawDate', addModal.rawDate); fd.append('timeSlot', addModal.timeSlot); try { const res = await fetch(API_BASE + '/api/Fund/add-position', { method: 'POST', body: fd }); const result = await res.json(); if (res.ok) { showToast(result.msg, "success"); addModal.show = false; fetchData({ force: true, silent: true }); } else showToast(result.msg || "加仓失败", "error"); } catch (e) { showToast("网络异常", "error"); } };
+                const openAddModal = (fund) => {
+                    addModal.show = true;
+                    addModal.code = fund.code;
+                    addModal.name = fund.name;
+                    addModal.amount = '';
+                    addModal.currentAmount = fund.amount;
+                    addModal.currentCost = fund.cost > 0 ? fund.cost : '未设置';
+                    addModal.pendingAmount = Number(fund.pendingBuyAmount || 0);
+                    addModal.pendingTradeDate = fund.pendingTradeDate || '';
+                    addModal.pendingConfirmDate = fund.pendingConfirmDate || '';
+                    addModal.submitting = false;
+                    addModal.error = '';
+                    const now = new Date();
+                    addModal.rawDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                    addModal.timeSlot = now.getHours() >= 15 ? 'after' : 'before';
+                };
+
+                const handleAddPosition = async () => {
+                    if (addModal.submitting) return;
+
+                    const amount = Number(addModal.amount);
+                    if (!Number.isFinite(amount) || amount <= 0) {
+                        addModal.error = '请输入大于 0 的加仓金额。';
+                        showToast(addModal.error, 'error');
+                        return;
+                    }
+
+                    const fd = new FormData();
+                    fd.append('username', currentUser.value);
+                    fd.append('code', addModal.code);
+                    fd.append('addAmount', String(amount));
+                    fd.append('rawDate', addModal.rawDate);
+                    fd.append('timeSlot', addModal.timeSlot);
+                    addModal.submitting = true;
+                    addModal.error = '';
+
+                    try {
+                        const res = await fetch(API_BASE + '/api/Fund/add-position', { method: 'POST', body: fd });
+                        const responseText = await res.text();
+                        let result = {};
+                        if (responseText) {
+                            try {
+                                result = JSON.parse(responseText);
+                            } catch {
+                                result = { msg: responseText };
+                            }
+                        }
+
+                        if (res.ok) {
+                            showToast(result.msg || '加仓记录已保存', 'success');
+                            addModal.show = false;
+                            await fetchData({ force: true, silent: true });
+                            return;
+                        }
+
+                        const message = result.msg || result.message || `加仓失败（HTTP ${res.status}）`;
+                        addModal.error = message;
+                        showToast(message, 'error');
+                    } catch (e) {
+                        const detail = e && e.message ? `：${e.message}` : '';
+                        addModal.error = `提交失败，请检查网络后重试${detail}`;
+                        showToast(addModal.error, 'error');
+                    } finally {
+                        addModal.submitting = false;
+                    }
+                };
 
                 const openReduceModal = (fund) => { reduceModal.show = true; reduceModal.code = fund.code; reduceModal.name = fund.name; reduceModal.shares = ''; reduceModal.amount = ''; reduceModal.currentAmount = fund.amount; reduceModal.currentShares = fund.shares || 0; const now = new Date(); reduceModal.rawDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`; reduceModal.timeSlot = now.getHours() >= 15 ? 'after' : 'before'; };
 
@@ -9086,7 +9210,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     analysisMonth, selectedAnalysisDate, analysisViewMode, analysisDetailMode, analysisLoading, analysisRecords, analysisCalendarDays, selectedDayFundRecords, selectedDayTotalProfitRecords, confirmedDailyBattleReport, analysisProfitTop, analysisLossTop, analysisMonthTotal, analysisMonthHasLegacy, analysisMonthHasPendingNav, fetchAnalysis, refreshAnalysisPage, goAnalysisToday, todayDashStr,
                     assetMode, setAssetMode, stockHoldings, stockWatchList, stockSearchKeyword, stockSearchResults, stockOcrLoading, stockOcrPreview, selectedStock, stockKlinePeriod, stockKlinePeriods, stockChartRef, stockChartStatus, triggerStockOcr, handleStockOcrUpload, confirmStockOcr, loadStockDashboard, searchStocks, addStockWatch, openStockHoldingEditor, deleteStockHolding, deleteStockWatch, openStockDetail, switchStockKline, recalculateStockOcrItem, formatOcrNumber, signedOcrNumber, profitColor, dailyBattleReport, confidenceRows, confidenceMap, getConfidence, portfolioExposure, newsImpactSummary, recoveryWatchList, recoveryModal, customRecoveryPlan, openRecoveryModal, formatFinitePercent, calibrationRows,
                     globalIndices, viewIndexHistory, archiveModal, fetchMyArchives, ocrModal, ocrPreviewTotal, isConfirmingOcrImport,
-                    reduceModal, openReduceModal, handleReducePosition, addModal, openAddModal, handleAddPosition
+                    reduceModal, openReduceModal, handleReducePosition, addModal, openAddModal, closeAddModal, handleAddPosition
                 };
             }
         }).mount('#app');

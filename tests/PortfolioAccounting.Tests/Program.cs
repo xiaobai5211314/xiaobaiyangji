@@ -85,8 +85,9 @@ var pendingAfterConfirm = new MyFundConfig
     PendingConfirmDate = "2026-06-19",
     PendingTradeStatus = "pending_buy"
 };
-Equal(0.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(pendingAfterConfirm, "2026-06-19")), "pending.confirmDate.notActiveOnConfirmDate");
-Equal(0.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(pendingAfterConfirm, "2026-06-18", "2026-06-19")), "pending.confirmDate.notActiveOnNaturalConfirmDate");
+Equal(1000.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(pendingAfterConfirm, "2026-06-19")), "pending.confirmDate.remainsOutstanding");
+Equal(1000.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(pendingAfterConfirm, "2026-06-18", "2026-06-19")), "pending.confirmDate.remainsVisibleUntilActuallyConfirmed");
+Equal(0.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetReturnExcludedPendingBuyAmount(pendingAfterConfirm, "2026-06-19")), "pending.confirmDate.startsParticipatingInReturns");
 
 var cancelledPending = new MyFundConfig
 {
@@ -105,7 +106,8 @@ var futurePending = new MyFundConfig
     PendingConfirmDate = "2026-06-20",
     PendingTradeStatus = "pending_buy"
 };
-Equal(0.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(futurePending, "2026-06-18")), "pending.futureTrade.notActiveBeforeTradeDate");
+Equal(1000.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(futurePending, "2026-06-18")), "pending.futureTrade.outstandingImmediately");
+Equal(1000.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetReturnExcludedPendingBuyAmount(futurePending, "2026-06-18")), "pending.futureTrade.excludedFromReturns");
 
 Equal(-1121.92m, PortfolioAccounting.OfficialTodayProfit(88340.36m, -1.27m), "officialTodayProfit.excludesPendingBuy");
 Equal(-105.50m, PortfolioAccounting.OfficialTodayProfit(88340.36m, -1.27m, -105.50m), "officialTodayProfit.prefersExactSettledProfit");
@@ -317,15 +319,47 @@ var july16PendingBuyFund = new MyFundConfig
     CostAmountIsConfirmed = false,
     CostAmountSource = PortfolioSettlementService.CostSourcePurchaseAmount,
     PendingBuyAmount = 5000,
+    PendingBuyShares = 3550.3799,
     PendingTradeDate = "2026-07-16",
     PendingConfirmDate = "2026-07-17",
-    PendingTradeStatus = "pending_buy"
+    PendingTradeStatus = "pending_buy",
+    HoldShares = 33512.0022,
+    HoldSharesAreConfirmed = false,
+    HoldSharesSource = PortfolioSettlementService.ShareSourcePurchaseNavDerived
 };
 var july16ConfirmedCost = PortfolioSettlementService.GetConfirmedCostAmount(
     july16PendingBuyFund,
     "2026-07-16",
     PortfolioAccounting.Money(july16PendingBuyFund.HoldAmount));
 Equal(50916.92m, july16ConfirmedCost, "pendingBuy.confirmedCost.excludesUnconfirmedPurchasePrincipalOnce");
+Equal(5000.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(july16PendingBuyFund, "2026-07-17")), "pendingBuy.20260717.expectedConfirmDate.mustRemainOutstanding");
+Equal(0.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetReturnExcludedPendingBuyAmount(july16PendingBuyFund, "2026-07-17")), "pendingBuy.20260717.firstProfitDate.mustEnterReturnBase");
+Equal(29961.6223m, Convert.ToDecimal(PortfolioSettlementService.GetEffectiveShares(july16PendingBuyFund, "2026-07-16")), "pendingBuy.tradeDate.effectiveShares.excludePending");
+Equal(33512.0022m, Convert.ToDecimal(PortfolioSettlementService.GetEffectiveShares(july16PendingBuyFund, "2026-07-17")), "pendingBuy.firstProfitDate.effectiveShares.includePending");
+Equal(
+    50916.92m,
+    PortfolioSettlementService.GetConfirmedCostAmount(
+        july16PendingBuyFund,
+        "2026-07-16",
+        PortfolioAccounting.Money(july16PendingBuyFund.HoldAmount),
+        "2026-07-17"),
+    "pendingBuy.20260717.confirmedCost.mustStillExcludeOutstandingPrincipal");
+var firstProfitDayEstimate = PortfolioAccounting.ResolveEstimatedHoldingAmount(
+    47194.95m,
+    42194.95m,
+    471.95m,
+    5000.00m,
+    false);
+Equal(47666.90m, firstProfitDayEstimate.DisplayAmount, "pendingBuy.firstProfitDay.estimate.mustNotAddPrincipalTwice");
+Equal(42666.90m, firstProfitDayEstimate.ConfirmedAmount, "pendingBuy.firstProfitDay.estimate.confirmedSplit");
+var firstProfitDayOfficial = PortfolioAccounting.ResolveOfficialHoldingAmount(
+    47194.95m,
+    42666.90m,
+    42666.90m,
+    5000.00m,
+    false);
+Equal(47666.90m, firstProfitDayOfficial.DisplayAmount, "pendingBuy.firstProfitDay.official.mustNotAddPrincipalTwice");
+Equal(42666.90m, firstProfitDayOfficial.ConfirmedAmount, "pendingBuy.firstProfitDay.official.confirmedSplit");
 Equal(
     -8721.97m,
     PortfolioAccounting.ResolveOfficialHoldingProfit(
@@ -626,7 +660,9 @@ var qdiiPending = new MyFundConfig
     PendingTradeStatus = "pending_buy"
 };
 Equal(1000.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(qdiiPending, "2026-06-22")), "pending.qdii.beforeConfirm.active");
-Equal(0.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(qdiiPending, "2026-06-23")), "pending.qdii.confirmDate.notActive");
+Equal(1000.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(qdiiPending, "2026-06-23")), "pending.qdii.confirmDate.remainsOutstanding");
+Equal(1000.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(qdiiPending, "2026-06-22", "2026-06-23")), "pending.qdii.confirmDate.remainsVisibleUntilActuallyConfirmed");
+Equal(0.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetReturnExcludedPendingBuyAmount(qdiiPending, "2026-06-23")), "pending.qdii.firstProfitDate.participatesInReturns");
 
 var staleLegacyPending = new MyFundConfig
 {
@@ -638,7 +674,7 @@ var staleLegacyPending = new MyFundConfig
     LastTradeDate = "2026-06-19",
     LastAddAmount = 1000.00
 };
-Equal(0.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(staleLegacyPending, "2026-06-18", "2026-06-19")), "pending.legacy.confirmReached.notActive");
+Equal(1000.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(staleLegacyPending, "2026-06-18", "2026-06-19")), "pending.explicitStatus.confirmDateDoesNotHideDisplay");
 
 var manualAddFund = new MyFundConfig
 {
@@ -666,6 +702,18 @@ if (manualAddFund.CostAmountIsConfirmed
     || manualAddFund.CostAmountSource != PortfolioSettlementService.CostSourcePurchaseAmount)
     throw new InvalidOperationException("manualAdd.costSource: purchase amount must remain marked as transaction-derived");
 Equal(10000.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetEffectiveShares(manualAddFund, "2026-06-19")), "manualAdd.beforeConfirm.excludesPendingShares");
+Equal(2000.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetActivePendingBuyAmount(manualAddFund, "2026-06-18", "2026-06-22")), "manualAdd.confirmDate.displayStillShowsPending");
+var duplicateAddRejected = false;
+try
+{
+    settlement.AddPosition(manualAddFund, 500, "2026-06-22", "2026-06-23");
+}
+catch (InvalidOperationException ex)
+{
+    duplicateAddRejected = ex.Message.Contains("原记录仍在", StringComparison.Ordinal);
+}
+if (!duplicateAddRejected)
+    throw new InvalidOperationException("manualAdd.duplicatePending: expected a visible duplicate-record explanation");
 if (!PortfolioSettlementService.ConfirmPendingBuyIfDue(manualAddFund, "2026-06-22"))
     throw new InvalidOperationException("manualAdd.confirmPending: expected pending buy to confirm");
 Equal(0.00m, PortfolioAccounting.Money(manualAddFund.PendingBuyAmount), "manualAdd.confirmed.pendingAmountCleared");

@@ -40,13 +40,14 @@ namespace 小白养基.Services
                 && string.CompareOrdinal(pendingDate, asOfDate) <= 0;
         }
 
-        private static bool IsPendingConfirmReached(string? confirmDate, string settleDate, string? asOfDate = null)
+        private static bool IsPendingConfirmReachedForSettlement(string? confirmDate, string settleDate, string? asOfDate = null)
         {
             if (string.IsNullOrWhiteSpace(confirmDate)) return false;
-            if (!string.IsNullOrWhiteSpace(asOfDate))
-            {
-                return string.CompareOrdinal(confirmDate, asOfDate) <= 0;
-            }
+
+            // asOfDate is supplied by current-display queries. The estimated confirmation
+            // date alone is not proof that the platform has completed the transaction.
+            if (!string.IsNullOrWhiteSpace(asOfDate)) return false;
+
             return string.CompareOrdinal(confirmDate, settleDate) <= 0;
         }
 
@@ -54,17 +55,26 @@ namespace 小白养基.Services
         {
             double explicitPending = fund.PendingBuyAmount > 0
                 && IsPendingStatusActive(fund.PendingTradeStatus)
-                && IsPendingDateEffective(fund.PendingTradeDate, settleDate, asOfDate)
-                && !IsPendingConfirmReached(fund.PendingConfirmDate, settleDate, asOfDate)
                 ? fund.PendingBuyAmount
                 : 0;
-            double legacyTodayAdd = (fund.LastTradeDate == settleDate
+            double legacyTodayAdd = explicitPending <= 0
+                && (fund.LastTradeDate == settleDate
                     || (!string.IsNullOrWhiteSpace(asOfDate) && fund.LastTradeDate == asOfDate))
-                && !IsPendingConfirmReached(fund.PendingConfirmDate, settleDate, asOfDate)
+                && !IsPendingConfirmReachedForSettlement(fund.PendingConfirmDate, settleDate, asOfDate)
                 && fund.LastAddAmount > 0
                 ? fund.LastAddAmount
                 : 0;
             return Math.Round(Math.Max(explicitPending, legacyTodayAdd), 2);
+        }
+
+        public static double GetReturnExcludedPendingBuyAmount(MyFundConfig fund, string settleDate)
+        {
+            double outstandingPending = GetActivePendingBuyAmount(fund, settleDate);
+            if (outstandingPending <= 0) return 0;
+
+            return IsPendingConfirmReachedForSettlement(fund.PendingConfirmDate, settleDate)
+                ? 0
+                : outstandingPending;
         }
 
         public static decimal GetConfirmedCostAmount(
@@ -185,7 +195,7 @@ namespace 小白养基.Services
         public double GetEffectiveBaseAmount(MyFundConfig fund, string settleDate)
         {
             decimal baseAmount = GetHoldAmountBasis(fund);
-            baseAmount -= PortfolioAccounting.LedgerMoney(GetActivePendingBuyAmount(fund, settleDate));
+            baseAmount -= PortfolioAccounting.LedgerMoney(GetReturnExcludedPendingBuyAmount(fund, settleDate));
             if (fund.LastTradeDate == settleDate && fund.LastAddAmount < 0)
             {
                 baseAmount -= PortfolioAccounting.LedgerMoney(fund.LastAddAmount);
@@ -195,7 +205,7 @@ namespace 小白养基.Services
 
         public double GetPendingTradeAmount(MyFundConfig fund, string settleDate)
         {
-            double pending = GetActivePendingBuyAmount(fund, settleDate);
+            double pending = GetReturnExcludedPendingBuyAmount(fund, settleDate);
             if (fund.LastTradeDate == settleDate && fund.LastAddAmount < 0)
             {
                 pending += fund.LastAddAmount;
@@ -220,7 +230,7 @@ namespace 小白养基.Services
         {
             if (fund.HoldShares <= 0) return 0;
 
-            var activePendingBuy = GetActivePendingBuyAmount(fund, settleDate);
+            var activePendingBuy = GetReturnExcludedPendingBuyAmount(fund, settleDate);
             return activePendingBuy > 0 && fund.PendingBuyShares > 0
                 ? Math.Max(0, fund.HoldShares - fund.PendingBuyShares)
                 : fund.HoldShares;
@@ -284,7 +294,7 @@ namespace 小白养基.Services
             decimal settledLedgerAmount = PortfolioAccounting.ResolveSettledLedgerAmount(
                 Convert.ToDecimal(baseAmount),
                 settledProfitBasis,
-                Convert.ToDecimal(GetActivePendingBuyAmount(fund, settleDate)),
+                Convert.ToDecimal(GetReturnExcludedPendingBuyAmount(fund, settleDate)),
                 exactAssets.HasValue ? Convert.ToDecimal(exactAssets.Value) : null);
             double settledDisplayAmount = PortfolioAccounting.ToDouble(settledLedgerAmount);
 
@@ -313,13 +323,15 @@ namespace 小白养基.Services
                 && fund.PendingBuyAmount > 0
                 && existingPending <= 0)
             {
-                throw new InvalidOperationException("上一笔买入尚未完成份额结转，请等待官方净值清算。");
+                throw new InvalidOperationException(
+                    $"已有买入待确认（{fund.PendingTradeDate ?? "日期待核实"}，{fund.PendingBuyAmount:F2} 元），原记录仍在，请勿重复加仓；平台确认后系统会自动结转。");
             }
             if (existingPending > 0
                 && (!string.Equals(fund.PendingTradeDate, tradeDate, StringComparison.Ordinal)
                     || fund.PendingBuyShares > 0))
             {
-                throw new InvalidOperationException("已有其他买入待确认，请等待确认后再记录下一笔加仓。");
+                throw new InvalidOperationException(
+                    $"已有买入待确认（{fund.PendingTradeDate ?? "日期待核实"}，{fund.PendingBuyAmount:F2} 元），原记录仍在，请勿重复加仓；平台确认后系统会自动结转。");
             }
 
             SetHoldAmount(fund, GetHoldAmountBasis(fund) + PortfolioAccounting.LedgerMoney(addAmount));
