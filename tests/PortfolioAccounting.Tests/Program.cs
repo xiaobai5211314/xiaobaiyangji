@@ -308,6 +308,91 @@ Equal(99035.59m, july15AntSummary.AntConfirmedAmount, "ant[2026-07-15].confirmed
 Equal(593.69m, july15AntSummary.ConfirmedYesterdayProfit, "ant[2026-07-15].yesterdayProfit");
 Equal(-11668.61m, july15AntSummary.AntHoldingProfit, "ant[2026-07-15].holdingProfit");
 
+var july16PendingBuyFund = new MyFundConfig
+{
+    FundCode = "017968",
+    HoldAmount = 47194.95,
+    HoldAmountPrecise = 47194.9527m,
+    CostAmount = 55916.92,
+    CostAmountIsConfirmed = false,
+    CostAmountSource = PortfolioSettlementService.CostSourcePurchaseAmount,
+    PendingBuyAmount = 5000,
+    PendingTradeDate = "2026-07-16",
+    PendingConfirmDate = "2026-07-17",
+    PendingTradeStatus = "pending_buy"
+};
+var july16ConfirmedCost = PortfolioSettlementService.GetConfirmedCostAmount(
+    july16PendingBuyFund,
+    "2026-07-16",
+    PortfolioAccounting.Money(july16PendingBuyFund.HoldAmount));
+Equal(50916.92m, july16ConfirmedCost, "pendingBuy.confirmedCost.excludesUnconfirmedPurchasePrincipalOnce");
+Equal(
+    -8721.97m,
+    PortfolioAccounting.ResolveOfficialHoldingProfit(
+        currentAssets: 42194.95m,
+        costAmount: july16ConfirmedCost),
+    "pendingBuy.holdingProfit.excludesUnconfirmedPurchasePrincipal");
+
+var detailPageConfirmedCost = new MyFundConfig
+{
+    CostAmount = 50916.92,
+    CostAmountIsConfirmed = true,
+    CostAmountSource = PortfolioSettlementService.CostSourceOcrAssetDetail,
+    PendingBuyAmount = 5000,
+    PendingTradeDate = "2026-07-16",
+    PendingConfirmDate = "2026-07-17",
+    PendingTradeStatus = "pending_buy"
+};
+Equal(
+    50916.92m,
+    PortfolioSettlementService.GetConfirmedCostAmount(
+        detailPageConfirmedCost,
+        "2026-07-16",
+        47194.95m),
+    "pendingBuy.confirmedDetailCost.mustNotSubtractPendingTwice");
+
+var pendingBuyWithoutCost = new MyFundConfig
+{
+    HoldAmount = 5000,
+    CostAmount = 0,
+    PendingBuyAmount = 5000,
+    PendingTradeDate = "2026-07-16",
+    PendingConfirmDate = "2026-07-17",
+    PendingTradeStatus = "pending_buy"
+};
+Equal(
+    0m,
+    PortfolioSettlementService.GetConfirmedCostAmount(
+        pendingBuyWithoutCost,
+        "2026-07-16",
+        PortfolioSettlementService.GetHoldAmountBasis(pendingBuyWithoutCost)),
+    "pendingBuy.newPositionWithoutCost.mustExcludePendingOnce");
+
+var july16AntSummary = PortfolioAccounting.Calculate(
+    new[]
+    {
+        new ConfirmedHoldingMoney(42194.95m, -1012.70m, -8721.97m),
+        new ConfirmedHoldingMoney(35668.94m, 651.81m, -2999.31m),
+        new ConfirmedHoldingMoney(21126.76m, 387.97m, 126.76m),
+        new ConfirmedHoldingMoney(49.77m, -1.27m, -50.23m),
+        new ConfirmedHoldingMoney(16.92m, -0.97m, 7.89m),
+        new ConfirmedHoldingMoney(3.16m, 0.06m, -6.84m)
+    },
+    0m);
+Equal(99060.50m, july16AntSummary.AntConfirmedAmount, "ant[2026-07-16].confirmedAmount");
+Equal(-11643.70m, july16AntSummary.AntHoldingProfit, "ant[2026-07-16].holdingProfit");
+Equal(110704.20m, july16AntSummary.AntHoldingCost, "ant[2026-07-16].holdingCost");
+Equal(-10.52m, july16AntSummary.AntHoldingRate, "ant[2026-07-16].holdingRate");
+Equal(
+    104060.50m,
+    PortfolioAccounting.ResolveAccountTotalAmount(
+        snapshotDisplayAmount: 0m,
+        confirmedAmount: july16AntSummary.AntConfirmedAmount,
+        pendingBuyAmount: 5000m,
+        useCurrentSnapshotSummary: false,
+        antConfirmedAvailable: true),
+    "ant[2026-07-16].displayAmount.includesPendingBuyOnce");
+
 if (!PortfolioSettlementService.HasReliableExactShares(new MyFundConfig { HoldSharesAreConfirmed = true }))
     throw new InvalidOperationException("shares.reliable.platformConfirmed: expected reliable exact shares");
 if (!PortfolioSettlementService.HasReliableExactShares(new MyFundConfig { HoldSharesSource = PortfolioSettlementService.ShareSourcePurchaseNavDerived }))

@@ -295,8 +295,12 @@ export function buildPortfolioMetrics(rawFunds: FundTodayItem[], now = new Date(
     // 直接使用 API 的 holdingProfit 和 holdingRate
     const apiHoldingProfit = finiteNumber(fund.holdingProfit) ?? finiteNumber(fund.holdingIncome) ?? finiteNumber(fund.estimatedProfit);
     const estimatedProfitValue = apiHoldingProfit ?? 0;
-    const breakEvenRateValue =
-      validCost && validCost > todayAmountValue && todayAmountValue > 0 ? ((validCost / todayAmountValue - 1) * 100) : 0;
+    const apiBreakEvenRate = finiteNumber(fund.breakEvenRate);
+    const breakEvenRateValue = apiBreakEvenRate !== null
+      ? Math.max(0, apiBreakEvenRate)
+      : validCost && validCost > currentAmount && currentAmount > 0
+        ? ((validCost / currentAmount - 1) * 100)
+        : 0;
     const apiExistingReturnRate = finiteNumber(fund.holdingRate) ?? finiteNumber(fund.existingReturnRate);
     const existingReturnRateValue = apiExistingReturnRate ?? 0;
 

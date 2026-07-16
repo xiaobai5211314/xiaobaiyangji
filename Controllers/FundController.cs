@@ -695,11 +695,15 @@ namespace 小白养基.Controllers
                 decimal currentAssets = confirmedHoldAmount;
                 decimal baseAmount = Math.Max(0m, currentAssets - dailyProfit);
                 decimal dailyRate = PortfolioAccounting.Percent(dailyProfit, baseAmount);
+                decimal confirmedCost = PortfolioSettlementService.GetConfirmedCostAmount(
+                    fund,
+                    dateDash,
+                    PortfolioSettlementService.GetHoldAmountBasis(fund));
                 decimal totalProfit = hasOcrSnapshot
                     ? PortfolioAccounting.Money(fund.OcrHoldingIncome)
                     : PortfolioAccounting.ResolveOfficialHoldingProfit(
                         currentAssets,
-                        PortfolioAccounting.Money(fund.CostAmount),
+                        confirmedCost,
                         PortfolioAccounting.Money(fund.RealizedProfit),
                         PortfolioAccounting.Money(fund.OcrHoldingIncome),
                         PortfolioAccounting.Money(fund.PlatformHoldingAdjustment));
@@ -6736,7 +6740,12 @@ namespace 小白养基.Controllers
                         : "none";
 
                     double rawCostBasis = config.CostAmount > 0 ? config.CostAmount : rawHoldAmount;
-                    double costBasis = Math.Max(0, Math.Round(rawCostBasis - pendingBuyAmount, 2));
+                    double costBasis = PortfolioAccounting.ToDouble(
+                        PortfolioSettlementService.GetConfirmedCostAmount(
+                            config,
+                            todayDash,
+                            PortfolioAccounting.Money(rawHoldAmount),
+                            naturalDate));
                     bool pendingRedeem = PortfolioSettlementService.IsPendingRedeem(config);
                     double soldCost = PortfolioSettlementService.GetSoldCost(config);
                     if (config.HoldShares <= 0 && pendingRedeem && soldCost > 0)
@@ -6770,7 +6779,7 @@ namespace 小白养基.Controllers
                     double totalProfitPreview = useCurrentOcrHoldingSnapshot && !isSoldOut
                         ? Math.Round(config.OcrHoldingIncome, 2)
                         : PortfolioAccounting.ToDouble(PortfolioAccounting.ResolveOfficialHoldingProfit(
-                            PortfolioAccounting.Money(marketValue),
+                            PortfolioAccounting.Money(confirmedHoldAmount),
                             PortfolioAccounting.Money(costBasis),
                             PortfolioAccounting.Money(displayedProfit),
                             PortfolioAccounting.Money(config.OcrHoldingIncome),
@@ -6791,7 +6800,9 @@ namespace 小白养基.Controllers
                         // 当前 OCR 快照来自平台展示页；个别小额持仓的平台收益率不一定等于市值/收益反推值。
                         existingReturnRateValue = Math.Round(config.OcrHoldingRate, 2);
                     }
-                    double breakEvenRateValue = !isCleared && marketValue > 1 && totalProfitPreview < 0 ? Math.Round(-totalProfitPreview / marketValue * 100.0, 2) : 0;
+                    double breakEvenRateValue = !isCleared && confirmedHoldAmount > 1 && totalProfitPreview < 0
+                        ? Math.Round(-totalProfitPreview / confirmedHoldAmount * 100.0, 2)
+                        : 0;
 
                     DailyArchive? effectiveFundArchive = null;
                     bool usingEffectiveArchive = canUseEffectiveArchive
@@ -6960,10 +6971,10 @@ namespace 小白养基.Controllers
                         reliabilityLevel,
                         breakEvenSimulator = new[]
                         {
-                            new { scenario = "+1%", projectedAssets = Math.Round(marketValue * 1.01, 2), projectedProfit = Math.Round(marketValue * 1.01 - costBasis + displayedProfit, 2) },
-                            new { scenario = "+3%", projectedAssets = Math.Round(marketValue * 1.03, 2), projectedProfit = Math.Round(marketValue * 1.03 - costBasis + displayedProfit, 2) },
-                            new { scenario = "+5%", projectedAssets = Math.Round(marketValue * 1.05, 2), projectedProfit = Math.Round(marketValue * 1.05 - costBasis + displayedProfit, 2) },
-                            new { scenario = "-3%", projectedAssets = Math.Round(marketValue * 0.97, 2), projectedProfit = Math.Round(marketValue * 0.97 - costBasis + displayedProfit, 2) }
+                            new { scenario = "+1%", projectedAssets = Math.Round(confirmedHoldAmount * 1.01, 2), projectedProfit = Math.Round(confirmedHoldAmount * 1.01 - costBasis + displayedProfit + config.PlatformHoldingAdjustment, 2) },
+                            new { scenario = "+3%", projectedAssets = Math.Round(confirmedHoldAmount * 1.03, 2), projectedProfit = Math.Round(confirmedHoldAmount * 1.03 - costBasis + displayedProfit + config.PlatformHoldingAdjustment, 2) },
+                            new { scenario = "+5%", projectedAssets = Math.Round(confirmedHoldAmount * 1.05, 2), projectedProfit = Math.Round(confirmedHoldAmount * 1.05 - costBasis + displayedProfit + config.PlatformHoldingAdjustment, 2) },
+                            new { scenario = "-3%", projectedAssets = Math.Round(confirmedHoldAmount * 0.97, 2), projectedProfit = Math.Round(confirmedHoldAmount * 0.97 - costBasis + displayedProfit + config.PlatformHoldingAdjustment, 2) }
                         },
                         diffRate = lastRecord != null ? lastRecord.DiffRate : 0,
                         calibrationOffset = 0,

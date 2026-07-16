@@ -67,6 +67,35 @@ namespace 小白养基.Services
             return Math.Round(Math.Max(explicitPending, legacyTodayAdd), 2);
         }
 
+        public static decimal GetConfirmedCostAmount(
+            MyFundConfig fund,
+            string settleDate,
+            decimal fallbackDisplayAmount = 0m,
+            string? asOfDate = null)
+        {
+            var cost = fund.CostAmount > 0
+                ? PortfolioAccounting.Money(fund.CostAmount)
+                : Math.Max(0m, PortfolioAccounting.Money(fallbackDisplayAmount));
+            var pending = Math.Max(
+                0m,
+                PortfolioAccounting.Money(GetActivePendingBuyAmount(fund, settleDate, asOfDate)));
+
+            // Manual buys temporarily add the submitted amount to CostAmount before
+            // the registrar confirms shares. OCR/detail-page costs already describe
+            // the confirmed position and must not have pending principal deducted twice.
+            bool costIncludesPending = pending > 0m
+                && (fund.CostAmount <= 0
+                    || (!fund.CostAmountIsConfirmed
+                        && string.Equals(
+                            fund.CostAmountSource,
+                            CostSourcePurchaseAmount,
+                            StringComparison.OrdinalIgnoreCase)));
+
+            return costIncludesPending
+                ? Math.Max(0m, PortfolioAccounting.Money(cost - pending))
+                : cost;
+        }
+
         public static decimal GetHoldAmountBasis(MyFundConfig fund)
         {
             return fund.HoldAmountPrecise > 0m
