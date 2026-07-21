@@ -7971,30 +7971,39 @@ namespace 小白养基.Controllers
         {
             // 场外基金全市场涨跌幅排行榜（不按板块分类，直接列涨幅榜升降序）
             // 数据源：东方财富 fund.eastmoney.com/data/rankhandler.aspx
-            limit = Math.Clamp(limit, 10, 200);
-            page = Math.Max(1, page);
-
-            var orderNorm = order.Equals("asc", StringComparison.OrdinalIgnoreCase) ? "asc" : "desc";
-            var (fundTypeCode, fundTypeLabel) = (type.ToLowerInvariant()) switch
-            {
-                "equity" => ("gp", "股票型"),
-                "mixed" => ("hh", "混合型"),
-                "bond" => ("zq", "债券型"),
-                "index" => ("zs", "指数型"),
-                "qdii" => ("qdii", "QDII"),
-                "lof" => ("lof", "LOF"),
-                "fof" => ("fof", "FOF"),
-                _ => ("all", "全部")
-            };
-
-            var http = _httpClientFactory.CreateClient("EastMoney");
-            var url = $"https://fund.eastmoney.com/data/rankhandler.aspx?op=ph&dt=kf&ft={fundTypeCode}&rs=&gs=0&sc=rzdf&st={orderNorm}&pi={page}&pn={limit}&dx=1&v={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+            // 显式声明 JSON 响应类型，确保任何异常路径都返回合法 JSON，
+            // 避免前端 res.json() 失败而显示“网络错误，请稍后重试”。
+            Response.ContentType = "application/json; charset=utf-8";
 
             try
             {
+                limit = Math.Clamp(limit, 10, 200);
+                page = Math.Max(1, page);
+
+                var orderNorm = order.Equals("asc", StringComparison.OrdinalIgnoreCase) ? "asc" : "desc";
+                var (fundTypeCode, fundTypeLabel) = (type.ToLowerInvariant()) switch
+                {
+                    "equity" => ("gp", "股票型"),
+                    "mixed" => ("hh", "混合型"),
+                    "bond" => ("zq", "债券型"),
+                    "index" => ("zs", "指数型"),
+                    "qdii" => ("qdii", "QDII"),
+                    "lof" => ("lof", "LOF"),
+                    "fof" => ("fof", "FOF"),
+                    _ => ("all", "全部")
+                };
+
+                var http = _httpClientFactory.CreateClient("EastMoney");
+                var url = $"https://fund.eastmoney.com/data/rankhandler.aspx?op=ph&dt=kf&ft={fundTypeCode}&rs=&gs=0&sc=rzdf&st={orderNorm}&pi={page}&pn={limit}&dx=1&v={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+
                 var text = await http.GetStringAsync(url);
                 // 解析 var rankData = {datas:["code,name,...","..."],allRecords:12345,...}
                 var dataMatch = Regex.Match(text, @"datas:\[(.*?)\]", RegexOptions.Singleline);
+                if (!dataMatch.Success)
+                {
+                    // 兼容 JSON / JSONP 变体： {"datas":[...]}
+                    dataMatch = Regex.Match(text, @"""datas""\s*:\s*\[(.*?)\]", RegexOptions.Singleline);
+                }
                 if (!dataMatch.Success)
                 {
                     return Ok(new { success = false, message = "东方财富返回格式异常" });
@@ -8028,6 +8037,10 @@ namespace 小白养基.Controllers
                 }
 
                 var totalMatch = Regex.Match(text, @"allRecords:(\d+)");
+                if (!totalMatch.Success)
+                {
+                    totalMatch = Regex.Match(text, @"""allRecords""\s*:\s*(\d+)");
+                }
                 var totalCount = totalMatch.Success && int.TryParse(totalMatch.Groups[1].Value, out var tc) ? tc : rows.Count;
 
                 return Ok(new
@@ -8421,12 +8434,53 @@ namespace 小白养基.Controllers
         private static bool IsIndustryCapitalFlowRow(CapitalFlowRowDto row)
             => IsIndustryCapitalFlowRow(row, out _);
 
+        // 罗马数字（半角 I..X 与全角 Ⅰ..Ⅹ）。行业板块名不应包含罗马数字，
+        // 含罗马数字的多为概念/主题（如“白酒Ⅱ”“银行Ⅱ”“证券Ⅱ”），应过滤掉。
+        private static readonly string[] RomanNumerals =
+        {
+            "VII", "VIII", "III", "II", "IV", "IX", "VI", "V", "I", "X",
+            "Ⅶ", "Ⅷ", "Ⅲ", "Ⅱ", "Ⅳ", "Ⅸ", "Ⅵ", "Ⅴ", "Ⅰ", "Ⅹ"
+        };
+
+        /// <summary>
+        /// 判断行业名称是否包含罗马数字（半角 I..X 或全角 Ⅰ..Ⅹ）。
+        /// 命中即视为概念/主题而非真实行业。
+        /// </summary>
+        private static bool ContainsRomanNumeral(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return false;
+            }
+
+            // 同时检测原始名与 NFKC 归一化名：全角罗马数字（如 Ⅱ）经 NFKC 会分解为半角 "II"，
+            // 归一化后只需匹配半角序列即可，但仍显式包含全角字符以覆盖边界情况。
+            var normalized = name.Normalize(NormalizationForm.FormKC);
+            foreach (var rn in RomanNumerals)
+            {
+                if (name.Contains(rn, StringComparison.Ordinal)
+                    || normalized.Contains(rn, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private static bool IsIndustryCapitalFlowRow(CapitalFlowRowDto row, out string reason)
         {
             reason = string.Empty;
             if (string.IsNullOrWhiteSpace(row.Name))
             {
                 reason = "empty-name";
+                return false;
+            }
+
+            // 含罗马数字（如“白酒Ⅱ”“银行Ⅱ”“证券Ⅱ”）视为概念/主题，直接过滤。
+            if (ContainsRomanNumeral(row.Name))
+            {
+                reason = $"roman-numeral:{row.Name}";
                 return false;
             }
 

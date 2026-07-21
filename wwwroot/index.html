@@ -51,8 +51,8 @@
             --button-radius: 12px;
             --card-radius: 14px;
         /* === Typography Scale === */
-        --font-display: "Microsoft YaHei", "微软雅黑", "PingFang SC", "PingFang HK", -apple-system, BlinkMacSystemFont, sans-serif;
-        --font-body: "Microsoft YaHei", "微软雅黑", "PingFang SC", "PingFang HK", -apple-system, BlinkMacSystemFont, sans-serif;
+        --font-display: "Microsoft YaHei", "微软雅黑", "PingFang SC", sans-serif;
+        --font-body: "Microsoft YaHei", "微软雅黑", "PingFang SC", sans-serif;
         --font-number: "DIN Alternate", "DIN", "Microsoft YaHei", "PingFang SC", "Helvetica Neue", sans-serif;
         --text-size-xs: 0.7rem;
         --text-size-sm: 0.8rem;
@@ -148,7 +148,7 @@
             padding: 0;
             background: var(--page-bg);
             color: var(--text-main);
-            font-family: "Microsoft YaHei", "微软雅黑", "PingFang SC", "苹方", "PingFang HK", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-family: "Microsoft YaHei", "微软雅黑", "PingFang SC", sans-serif;
             overflow-x: hidden;
             min-height: 100vh;
             overscroll-behavior-y: contain;
@@ -346,9 +346,9 @@
         }
 
         .btn-danger {
-            background: rgba(239, 68, 68, 0.15);
-            border-color: rgba(239, 68, 68, 0.3);
-            color: #ef4444;
+            background: #ef4444;
+            border-color: #ef4444;
+            color: #ffffff;
         }
 
         .btn-ocr {
@@ -361,6 +361,13 @@
             color: var(--text-muted);
             cursor: not-allowed;
             opacity: 1;
+        }
+
+        /* 暗色/彩虹主题下，基础 .btn 背景为近白色（rgba(255,255,255,.92)），
+           若沿用浅色文字会导致“浅色文字压在半透明白背景上”几乎不可读。
+           显式给定深色文字，保证可读性（亮色主题已有对应覆盖）。 */
+        :root:not([data-theme="light"]) .btn:not(.btn-primary):not(.btn-ocr):not(.btn-success):not(.btn-danger):not(.theme-choice-btn) {
+            color: #1d1d1f;
         }
 
         :root[data-theme="rainbow"] .btn:disabled {
@@ -566,6 +573,20 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         html[data-theme="light"] .modal-content [style*="color:#f8fafc"] {
             color: #1d1d1f !important;
             -webkit-text-fill-color: #1d1d1f !important;
+        }
+
+        /* 亮色主题下，涨幅榜红/绿数字压在白底卡片上对比度不足（尤其绿色 #10b981），
+           加深配色以保证可读性；暗色主题本就对比充足，无需处理。 */
+        html[data-theme="light"] .glass-panel [style*="color:#10b981"],
+        html[data-theme="light"] .glass-panel [style*="color: #10b981"] {
+            color: #0a8f4f !important;
+            -webkit-text-fill-color: #0a8f4f !important;
+        }
+
+        html[data-theme="light"] .glass-panel [style*="color:#ff4d4f"],
+        html[data-theme="light"] .glass-panel [style*="color: #ff4d4f"] {
+            color: #cf1322 !important;
+            -webkit-text-fill-color: #cf1322 !important;
         }
 
         html[data-theme="light"] .fund-card [style*="color:#cbd5e1"],
@@ -1151,6 +1172,8 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         }
 
         .modal-content {
+            position: relative;
+            z-index: 1;
             background: #1e293b;
             border: 1px solid rgba(255,255,255,0.1);
             border-radius: 16px;
