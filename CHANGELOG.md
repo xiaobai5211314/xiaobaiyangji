@@ -7,6 +7,8 @@
 - `FundGz` HttpClient 增加 `Referer: https://finance.sina.com.cn` 请求头，满足新浪接口的防盗链要求。
 - 同步替换 `FundController` 三处天天基金调用：`AddFund`（添加基金获取基金名）、`AutoSettle`（自动清算获取估算涨跌幅）、`FetchFundQuoteAsync`（主题基金估值展示）。
 - 字段映射：新浪响应 `[0]基金名 [1]时间 [2]估算净值 [6]估算涨跌幅% [7]日期` 对应原 `name / gztime / gszzl`。
+- 收紧主力资金分类：`IsIndustryCapitalFlowRow` 原逻辑"未在白名单的默认通过"导致"保险II"/"XX服务"等非标准行业名混入。改为默认拒绝，新增申万二级"II"/"Ⅲ"后缀去尾匹配白名单逻辑（如"保险II"→"保险"匹配白名单）。
+- 新增场外基金全市场涨跌幅排行榜 API `GET /api/fund/market-ranking`：支持 `order=desc|asc`（升降序）、`type=all|equity|mixed|bond|index|qdii|lof|fof`（基金类型）、`limit`（每页数量，10-200）、`page`（页码）。数据源东方财富 `rankhandler.aspx`，返回基金代码、名称、单位净值、当日涨跌幅、近1周/1月/3月/6月/1年/今年以来涨幅。
 
 ## 2026-07-17
 

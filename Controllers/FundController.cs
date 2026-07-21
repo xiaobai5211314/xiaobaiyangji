@@ -7962,6 +7962,93 @@ namespace 小白养基.Controllers
                 withMonthRate);
         }
 
+        [HttpGet("market-ranking")]
+        public async Task<IActionResult> GetMarketFundRanking(
+            [FromQuery] string order = "desc",
+            [FromQuery] string type = "all",
+            [FromQuery] int limit = 50,
+            [FromQuery] int page = 1)
+        {
+            // 场外基金全市场涨跌幅排行榜（不按板块分类，直接列涨幅榜升降序）
+            // 数据源：东方财富 fund.eastmoney.com/data/rankhandler.aspx
+            limit = Math.Clamp(limit, 10, 200);
+            page = Math.Max(1, page);
+
+            var orderNorm = order.Equals("asc", StringComparison.OrdinalIgnoreCase) ? "asc" : "desc";
+            var (fundTypeCode, fundTypeLabel) = (type.ToLowerInvariant()) switch
+            {
+                "equity" => ("gp", "股票型"),
+                "mixed" => ("hh", "混合型"),
+                "bond" => ("zq", "债券型"),
+                "index" => ("zs", "指数型"),
+                "qdii" => ("qdii", "QDII"),
+                "lof" => ("lof", "LOF"),
+                "fof" => ("fof", "FOF"),
+                _ => ("all", "全部")
+            };
+
+            var http = _httpClientFactory.CreateClient("EastMoney");
+            var url = $"https://fund.eastmoney.com/data/rankhandler.aspx?op=ph&dt=kf&ft={fundTypeCode}&rs=&gs=0&sc=rzdf&st={orderNorm}&pi={page}&pn={limit}&dx=1&v={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+
+            try
+            {
+                var text = await http.GetStringAsync(url);
+                // 解析 var rankData = {datas:["code,name,...","..."],allRecords:12345,...}
+                var dataMatch = Regex.Match(text, @"datas:\[(.*?)\]", RegexOptions.Singleline);
+                if (!dataMatch.Success)
+                {
+                    return Ok(new { success = false, message = "东方财富返回格式异常" });
+                }
+
+                var rows = new List<object>();
+                var items = dataMatch.Groups[1].Value
+                    .Split("\",\"", StringSplitOptions.RemoveEmptyEntries);
+
+                foreach (var item in items)
+                {
+                    var clean = item.Trim('"');
+                    var f = clean.Split(',');
+                    if (f.Length < 7) continue;
+
+                    rows.Add(new
+                    {
+                        code = f[0],
+                        name = f[1],
+                        date = f.Length > 3 ? f[3] : "",
+                        unitNav = double.TryParse(f.Length > 4 ? f[4] : "0", out var un) ? un : 0,
+                        accumNav = double.TryParse(f.Length > 5 ? f[5] : "0", out var an) ? an : 0,
+                        dailyRate = double.TryParse(f[6], out var dr) ? dr : 0,
+                        weekRate = double.TryParse(f.Length > 7 ? f[7] : "0", out var wr) ? wr : 0,
+                        monthRate = double.TryParse(f.Length > 8 ? f[8] : "0", out var mr) ? mr : 0,
+                        threeMonthRate = double.TryParse(f.Length > 9 ? f[9] : "0", out var tmr) ? tmr : 0,
+                        sixMonthRate = double.TryParse(f.Length > 10 ? f[10] : "0", out var smr) ? smr : 0,
+                        yearRate = double.TryParse(f.Length > 11 ? f[11] : "0", out var yr) ? yr : 0,
+                        ytdRate = double.TryParse(f.Length > 14 ? f[14] : "0", out var ytd) ? ytd : 0
+                    });
+                }
+
+                var totalMatch = Regex.Match(text, @"allRecords:(\d+)");
+                var totalCount = totalMatch.Success && int.TryParse(totalMatch.Groups[1].Value, out var tc) ? tc : rows.Count;
+
+                return Ok(new
+                {
+                    success = true,
+                    source = "东方财富基金排行榜",
+                    updatedAt = ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
+                    order = orderNorm,
+                    fundType = fundTypeLabel,
+                    page = page,
+                    pageSize = limit,
+                    totalCount = totalCount,
+                    rows = rows
+                });
+            }
+            catch (Exception ex)
+            {
+                return Ok(new { success = false, message = $"获取基金排行榜失败: {ex.Message}" });
+            }
+        }
+
         [HttpGet("sectors")]
         public async Task<IActionResult> GetSectors([FromQuery] bool force = false)
         {
@@ -8371,11 +8458,26 @@ namespace 小白养基.Controllers
                 }
             }
 
-            // The upstream source uses EastMoney industry sectors (fs=m:90+t:2).
-            // The whitelist is only a fast-pass list; unknown industry names should remain visible
-            // unless they match the strong non-industry blacklist above.
-            reason = $"industry-source-default-pass:{normalizedName}";
-            return true;
+            // 收紧：申万二级带 "II"/"Ⅲ" 后缀的，去掉后缀再匹配白名单
+            // 例如 "保险II" → "保险"、"多元金融II" → "多元金融"
+            if (normalizedName.Length > 2)
+            {
+                var trimmedII = normalizedName
+                    .Replace("II", string.Empty, StringComparison.OrdinalIgnoreCase)
+                    .Replace("Ⅲ", string.Empty, StringComparison.OrdinalIgnoreCase)
+                    .Trim();
+                if (!string.IsNullOrEmpty(trimmedII) && trimmedII != normalizedName &&
+                    CapitalFlowIndustryWhitelist.Contains(trimmedII))
+                {
+                    return true;
+                }
+            }
+
+            // 收紧：默认拒绝未在白名单的名称。
+            // 原逻辑是"数据源是行业板块所以默认通过"，但实际会混入"XX服务""XX概念"等
+            // 非标准行业名。改为默认拒绝，只放行白名单 + 后缀变体。
+            reason = $"industry-not-in-whitelist:{normalizedName}";
+            return false;
         }
 
         private static List<CapitalFlowRowDto> FilterIndustryCapitalFlowRows(
