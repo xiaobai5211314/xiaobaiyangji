@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-07-21（2）
+
+- 修复场外涨幅榜「网络错误」：`fetchMarketRanking` 原用裸 `fetch('/api/fund/market-ranking?...')` 相对路径，从 CDN 域名 `guzhicdn.21212121.xyz` 打开时请求打到 CDN 自身（无后端）→ 404 → 解析失败 → 一直转圈/报错。改为 `apiFetch(url)`（自动拼 `API_BASE='https://guzhi.21212121.xyz'`），CDN 下也能正确请求源站。（`wwwroot/index.html`）
+- 修复浅色主题文字对比度：`.radar-badge` / `.performance-status.win` / `.metric-up` / `.performance-status.loss` / `.metric-down` 等 CSS 类硬编码 `#ff4d4f` / `#10b981`，而原浅色主题覆盖规则只匹配内联 `style=` 属性（匹配不到 CSS 类），导致白底下红绿色文字发虚。新增 `:root[data-theme="light"]` 类选择器覆盖，使用深色值 `#b91c2b` / `#006b46`，仅浅色主题生效。（`wwwroot/index.html`）
+- 恢复完整字体回退链：`--font-display` / `--font-body` 及 body 的 `font-family` 补回 `-apple-system, BlinkMacSystemFont, "Segoe UI"`，兼容 Mac/iOS 系统字体（Windows 上自动忽略，无副作用）。（`wwwroot/index.html`）
+- 说明：涨幅榜 `dailyRate` 来自东方财富全市场数据，与持仓页 `todayRate`（后端按持仓计算）数据来源不同属正常现象，并非 bug；CDN 旧版 HTML 缓存可能导致 guzhicdn 与 guzhi 显示不一致，本次推送前端会触发又拍云缓存刷新。
+
 ## 2026-07-21
 
 - 修复今日收益全为 0：天天基金估值接口 `fundgz.1234567.com.cn` 已永久下线（301 重定向到 `fund.eastmoney.com/notfound.html`），导致 `FundScraperService` 抓不到估值数据。改用新浪基金接口 `hq.sinajs.cn/list=fu_{code}` 作为数据源。

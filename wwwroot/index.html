@@ -51,8 +51,8 @@
             --button-radius: 12px;
             --card-radius: 14px;
         /* === Typography Scale === */
-        --font-display: "Microsoft YaHei", "微软雅黑", "PingFang SC", sans-serif;
-        --font-body: "Microsoft YaHei", "微软雅黑", "PingFang SC", sans-serif;
+        --font-display: "Microsoft YaHei", "微软雅黑", -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif;
+        --font-body: "Microsoft YaHei", "微软雅黑", -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif;
         --font-number: "DIN Alternate", "DIN", "Microsoft YaHei", "PingFang SC", "Helvetica Neue", sans-serif;
         --text-size-xs: 0.7rem;
         --text-size-sm: 0.8rem;
@@ -148,7 +148,7 @@
             padding: 0;
             background: var(--page-bg);
             color: var(--text-main);
-            font-family: "Microsoft YaHei", "微软雅黑", "PingFang SC", sans-serif;
+            font-family: "Microsoft YaHei", "微软雅黑", -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif;
             overflow-x: hidden;
             min-height: 100vh;
             overscroll-behavior-y: contain;
@@ -693,6 +693,24 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
         html[data-theme="light"] [style*="color: #f59e0b"] {
             color: #855600 !important;
             -webkit-text-fill-color: #855600 !important;
+        }
+
+        /* 浅色主题：覆盖硬编码红绿色的类选择器（非内联 style），确保白底对比度 */
+        :root[data-theme="light"] .radar-badge {
+            color: #b91c2b !important;
+            -webkit-text-fill-color: #b91c2b !important;
+        }
+
+        :root[data-theme="light"] .performance-status.win,
+        :root[data-theme="light"] .metric-up {
+            color: #b91c2b !important;
+            -webkit-text-fill-color: #b91c2b !important;
+        }
+
+        :root[data-theme="light"] .performance-status.loss,
+        :root[data-theme="light"] .metric-down {
+            color: #006b46 !important;
+            -webkit-text-fill-color: #006b46 !important;
         }
 
         .fund-list-container {
@@ -8642,7 +8660,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     marketRankingError.value = '';
                     try {
                         const url = `/api/fund/market-ranking?order=${marketRankingOrder.value}&type=${marketRankingType.value}&limit=100&page=1&_t=${Date.now()}`;
-                        const res = await fetch(url, { cache: 'no-store' });
+                        const res = await apiFetch(url, { cache: 'no-store' });
                         const data = await res.json();
                         if (data && data.success) {
                             marketRankingList.value = data.rows || [];
