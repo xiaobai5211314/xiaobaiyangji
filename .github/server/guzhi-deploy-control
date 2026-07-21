@@ -47,33 +47,42 @@ case "$cmd" in
     systemctl stop "$SERVICE_NAME" || true
     systemctl kill --kill-who=all "$SERVICE_NAME" 2>/dev/null || true
     systemctl reset-failed "$SERVICE_NAME" 2>/dev/null || true
-    for i in $(seq 1 20); do
+
+    # 强制清理任何占用端口的进程（包括手动 nohup 启动、不在 systemd 托管内的进程）
+    for sig in TERM KILL; do
+      pids="$( {
+        ss -lntp | grep ":${PORT}" | grep -oP 'pid=\K[0-9]+' || true
+        pgrep -f "$APP_DLL_PGREP" || true
+      } | sort -u | tr '\n' ' ' )"
+      if [ -n "$pids" ]; then
+        echo "释放端口 ${PORT}: ${sig} 进程 $pids"
+        if [ "$sig" = "TERM" ]; then
+          kill $pids || true
+        else
+          kill -9 $pids || true
+        fi
+        sleep 1
+      fi
+    done
+
+    # 使用 fuser 作为兜底（如系统已安装）
+    if command -v fuser >/dev/null 2>&1; then
+      fuser -k "${PORT}/tcp" 2>/dev/null || true
+      sleep 1
+    fi
+
+    # 等待端口释放
+    for i in $(seq 1 30); do
       if ! ss -lntp | grep -q ":${PORT}"; then
+        echo "端口 ${PORT} 已释放"
         exit 0
       fi
       sleep 0.2
     done
 
-    pids="$({
-      ss -lntp | grep ":${PORT}" | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p'
-      pgrep -f "$APP_DLL_PGREP" || true
-    } | sort -u || true)"
-    if [ -n "$pids" ]; then
-      echo "kill 端口 ${PORT} 进程：$pids"
-      kill $pids || true
-      sleep 1
-    fi
-
-    if ss -lntp | grep -q ":${PORT}"; then
-      pids="$({
-        ss -lntp | grep ":${PORT}" | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p'
-        pgrep -f "$APP_DLL_PGREP" || true
-      } | sort -u || true)"
-      if [ -n "$pids" ]; then
-        echo "kill -9 端口 ${PORT} 进程：$pids"
-        kill -9 $pids || true
-      fi
-    fi
+    echo "错误：端口 ${PORT} 仍被占用"
+    ss -lntp | grep ":${PORT}" || true
+    exit 1
     ;;
   *)
     echo "用法：$0 {daemon-reload|enable|start|stop|restart|status|is-active|logs|port-info|port-in-use|release-port}"

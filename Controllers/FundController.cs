@@ -7971,10 +7971,6 @@ namespace 小白养基.Controllers
         {
             // 场外基金全市场涨跌幅排行榜（不按板块分类，直接列涨幅榜升降序）
             // 数据源：东方财富 fund.eastmoney.com/data/rankhandler.aspx
-            // 显式声明 JSON 响应类型，确保任何异常路径都返回合法 JSON，
-            // 避免前端 res.json() 失败而显示“网络错误，请稍后重试”。
-            Response.ContentType = "application/json; charset=utf-8";
-
             try
             {
                 limit = Math.Clamp(limit, 10, 200);
@@ -8006,7 +8002,7 @@ namespace 小白养基.Controllers
                 }
                 if (!dataMatch.Success)
                 {
-                    return Ok(new { success = false, message = "东方财富返回格式异常" });
+                    return new JsonResult(new { success = false, message = "东方财富返回格式异常" });
                 }
 
                 var rows = new List<object>();
@@ -8043,7 +8039,7 @@ namespace 小白养基.Controllers
                 }
                 var totalCount = totalMatch.Success && int.TryParse(totalMatch.Groups[1].Value, out var tc) ? tc : rows.Count;
 
-                return Ok(new
+                return new JsonResult(new
                 {
                     success = true,
                     source = "东方财富基金排行榜",
@@ -8058,7 +8054,7 @@ namespace 小白养基.Controllers
             }
             catch (Exception ex)
             {
-                return Ok(new { success = false, message = $"获取基金排行榜失败: {ex.Message}" });
+                return new JsonResult(new { success = false, message = $"获取基金排行榜失败: {ex.Message}" });
             }
         }
 
