@@ -236,6 +236,12 @@ namespace 小白养基.Services
             if (skippedCount > 0)
                 Console.WriteLine($"[settle-daily] {username} {dateDash}: 跳过 {skippedCount} 只基金（无有效数据），写入 {rows.Count} 条");
 
+            // 不变式守卫：剔除"单基金行被错写成 TOTAL 汇总值"的损坏数据，必要时重算 TOTAL。
+            var sanitized = DailyArchiveService.SanitizeArchiveRows(rows);
+            if (sanitized.DroppedCount > 0)
+                Console.WriteLine($"[settle-daily][guard] {dateDash}: " + string.Join(" | ", sanitized.Warnings));
+            rows = sanitized.Rows;
+
             return rows;
         }
 

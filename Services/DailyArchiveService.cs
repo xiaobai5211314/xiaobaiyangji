@@ -41,6 +41,55 @@ namespace 小白养基.Services
             return "legacy";
         }
 
+        /// <summary>
+        /// 不变式守卫：剔除"单基金行被错写成 TOTAL 汇总值"的损坏数据。
+        /// 多基金组合下，若某基金行 Assets 约等于 TOTAL Assets（抄写指纹），判定为损坏并剔除；
+        /// 剔除后若存在有效基金行，则用剩余基金重算 TOTAL，使其 = Σ基金Assets（保持内部一致，绝不落库伪造的 -4.32% 之类）。
+        /// 单基金组合（只有 1 只基金）视为合法，不触发守卫。
+        /// </summary>
+        public static (List<DailyArchive> Rows, int DroppedCount, List<string> Warnings)
+            SanitizeArchiveRows(List<DailyArchive> input)
+        {
+            var warnings = new List<string>();
+            if (input == null) return (new List<DailyArchive>(), 0, warnings);
+
+            var totalRow = input.FirstOrDefault(r => r.FundCode == "TOTAL");
+            var fundRows = input.Where(r => r.FundCode != "TOTAL").ToList();
+
+            // 单基金组合（0 或 1 只基金）视为合法，不触发守卫。
+            if (totalRow != null && fundRows.Count > 1)
+            {
+                // 抄写指纹：某单基金行 Assets 约等于 TOTAL Assets，说明把汇总值错抄进了单基金行。
+                var corrupt = fundRows
+                    .Where(f => Math.Abs((decimal)f.Assets - (decimal)totalRow.Assets) < 0.01m)
+                    .ToList();
+
+                foreach (var f in corrupt)
+                {
+                    fundRows.Remove(f);
+                    warnings.Add(
+                        $"ARCHIVE_GUARD: fund {f.FundCode} row assets {f.Assets} equals TOTAL assets {totalRow.Assets} (corrupt copy of summary) — dropped");
+                }
+
+                if (corrupt.Count > 0)
+                {
+                    // 用剩余基金重算 TOTAL，使其 = Σ基金Assets，保持内部一致。
+                    var sumAssets = fundRows.Sum(f => (decimal)f.Assets);
+                    var sumProfit = fundRows.Sum(f => (decimal)f.DailyProfit);
+                    var baseAmt = Math.Max(0m, sumAssets - sumProfit);
+                    totalRow.Assets = (double)sumAssets;
+                    totalRow.DailyProfit = (double)sumProfit;
+                    totalRow.DailyRate = (double)PortfolioAccounting.Percent(sumProfit, baseAmt);
+                    totalRow.Source = "guard-recomputed-total";
+                }
+            }
+
+            var result = fundRows.ToList();
+            if (totalRow != null) result.Add(totalRow);
+
+            return (result, warnings.Count, warnings);
+        }
+
         public static DailyArchive? PickLatestPortfolioSummaryTotal(IEnumerable<DailyArchive> rows)
         {
             return rows

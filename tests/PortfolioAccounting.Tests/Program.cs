@@ -856,3 +856,85 @@ if (!SectorFundCatalog.MatchesGroup(SectorFundCatalog.GroupMixed, SectorFundCata
     throw new InvalidOperationException("sector.group.active: active filter must include mixed funds");
 
 Console.WriteLine("Portfolio accounting regression passed.");
+
+// ===== 数据损坏不变式守卫（ARCHIVE_GUARD）回归测试 =====
+var today = DateTime.Today;
+var archiveGuardCorruptCode = "017968";
+var archiveGuardAssets = new Dictionary<string, (double Assets, double DailyProfit)>
+{
+    [archiveGuardCorruptCode] = (1000.00, -1883.37),
+    ["110011"] = (2000.00, 100.00),
+    ["110022"] = (3000.00, 200.00),
+    ["110033"] = (4000.00, 300.00),
+    ["110044"] = (5000.00, 400.00),
+    ["110055"] = (6000.00, 500.00),
+};
+var archiveGuardInput = new List<DailyArchive>();
+foreach (var kv in archiveGuardAssets)
+{
+    archiveGuardInput.Add(new DailyArchive
+    {
+        Username = "test",
+        FundCode = kv.Key,
+        RecordDate = today,
+        Assets = kv.Value.Assets,
+        DailyProfit = kv.Value.DailyProfit,
+        DailyRate = 0.0,
+        Source = "alipay-confirmed",
+        IsFinal = true,
+        UpdatedAt = DateTime.UtcNow
+    });
+}
+// 损坏指纹：TOTAL Assets 等于被错抄的基金 017968 的 Assets。
+archiveGuardInput.Add(new DailyArchive
+{
+    Username = "test",
+    FundCode = "TOTAL",
+    RecordDate = today,
+    Assets = archiveGuardAssets[archiveGuardCorruptCode].Assets,
+    DailyProfit = -1883.37,
+    DailyRate = -4.32,
+    Source = "alipay-confirmed-total",
+    IsFinal = true,
+    UpdatedAt = DateTime.UtcNow
+});
+
+// 用例 A：多基金抄写指纹应被剔除 + 重算 TOTAL。
+var archiveGuardResult = DailyArchiveService.SanitizeArchiveRows(archiveGuardInput);
+if (archiveGuardResult.DroppedCount != 1)
+    throw new InvalidOperationException($"archiveGuard.caseA.dropped: expected 1, actual {archiveGuardResult.DroppedCount}");
+if (archiveGuardResult.Rows.Any(r => r.FundCode == archiveGuardCorruptCode))
+    throw new InvalidOperationException("archiveGuard.caseA: corrupt fund row must be dropped");
+var archiveGuardTotal = archiveGuardResult.Rows.FirstOrDefault(r => r.FundCode == "TOTAL");
+if (archiveGuardTotal == null)
+    throw new InvalidOperationException("archiveGuard.caseA: TOTAL row must remain");
+if (archiveGuardTotal.Source != "guard-recomputed-total")
+    throw new InvalidOperationException($"archiveGuard.caseA.source: expected guard-recomputed-total, actual {archiveGuardTotal.Source}");
+// 重算后 TOTAL.Assets == 其余 5 只基金 Assets 之和（20000.00）。
+Equal(20000.00m, PortfolioAccounting.Money((decimal)archiveGuardTotal.Assets), "archiveGuard.caseA.totalAssets");
+
+// 用例 B：单基金组合合法，不触发守卫。
+var archiveGuardSingle = new List<DailyArchive>
+{
+    new DailyArchive
+    {
+        Username = "test", FundCode = "017968", RecordDate = today,
+        Assets = 1234.56, DailyProfit = -10.0, DailyRate = -0.81,
+        Source = "alipay-confirmed", IsFinal = true, UpdatedAt = DateTime.UtcNow
+    },
+    new DailyArchive
+    {
+        Username = "test", FundCode = "TOTAL", RecordDate = today,
+        Assets = 1234.56, DailyProfit = -10.0, DailyRate = -0.81,
+        Source = "alipay-confirmed-total", IsFinal = true, UpdatedAt = DateTime.UtcNow
+    }
+};
+var archiveGuardSingleResult = DailyArchiveService.SanitizeArchiveRows(archiveGuardSingle);
+if (archiveGuardSingleResult.DroppedCount != 0)
+    throw new InvalidOperationException($"archiveGuard.caseB.dropped: expected 0 for single-fund portfolio, actual {archiveGuardSingleResult.DroppedCount}");
+if (!archiveGuardSingleResult.Rows.Any(r => r.FundCode == "017968"))
+    throw new InvalidOperationException("archiveGuard.caseB: single fund row must be preserved");
+if (archiveGuardSingleResult.Rows.Count != 2)
+    throw new InvalidOperationException($"archiveGuard.caseB.count: expected 2, actual {archiveGuardSingleResult.Rows.Count}");
+
+Console.WriteLine("Archive guard regression passed.");

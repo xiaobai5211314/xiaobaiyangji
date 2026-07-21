@@ -9975,7 +9975,14 @@ namespace 小白养基.Controllers
                 }
 
                 // 核心修复：不要因为 TOTAL 已存在就直接 return。
-                // 旧逻辑会导致“总持仓有今日记录，但单只基金今日记录缺失”，也会保留已写坏的 TOTAL 金额。
+                // 旧逻辑会导致"总持仓有今日记录，但单只基金今日记录缺失"，也会保留已写坏的 TOTAL 金额。
+
+                // 不变式守卫：剔除"单基金行被错写成 TOTAL 汇总值"的损坏数据，必要时重算 TOTAL。
+                var sanitized = DailyArchiveService.SanitizeArchiveRows(incoming);
+                if (sanitized.DroppedCount > 0)
+                    Console.WriteLine($"[save-archive][guard] {req.Username} {req.DateStr}: " + string.Join(" | ", sanitized.Warnings));
+                incoming = sanitized.Rows;
+
                 await UpsertDailyArchivesAsync(req.Username, date, incoming);
                 await _context.SaveChangesAsync();
                 ClearTodayCache(req.Username);
