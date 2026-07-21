@@ -938,3 +938,64 @@ if (archiveGuardSingleResult.Rows.Count != 2)
     throw new InvalidOperationException($"archiveGuard.caseB.count: expected 2, actual {archiveGuardSingleResult.Rows.Count}");
 
 Console.WriteLine("Archive guard regression passed.");
+
+// ===== 数据损坏不变式守卫（经写入汇聚点 / nav-missing）回归测试 =====
+// 用例 C：守卫在写入汇聚点生效 —— 多基金组合，一只基金 Assets≈TOTAL（损坏抄写指纹），
+// 剔除损坏行并重算 TOTAL 为剩余基金 Assets 之和（容差 0.01）。
+var caseCInput = new List<DailyArchive>
+{
+    new DailyArchive { Username = "test", FundCode = "110011", RecordDate = today, Assets = 2000.00, DailyProfit = 100.00, DailyRate = 5.0, Source = "alipay-confirmed", IsFinal = true, UpdatedAt = DateTime.UtcNow },
+    new DailyArchive { Username = "test", FundCode = "110022", RecordDate = today, Assets = 3000.00, DailyProfit = 200.00, DailyRate = 6.0, Source = "alipay-confirmed", IsFinal = true, UpdatedAt = DateTime.UtcNow },
+    new DailyArchive { Username = "test", FundCode = "110033", RecordDate = today, Assets = 5000.00, DailyProfit = 400.00, DailyRate = 8.0, Source = "alipay-confirmed", IsFinal = true, UpdatedAt = DateTime.UtcNow },
+    // 损坏指纹：110044 的 Assets 等于 TOTAL 汇总值。
+    new DailyArchive { Username = "test", FundCode = "110044", RecordDate = today, Assets = 10000.00, DailyProfit = 700.00, DailyRate = 7.0, Source = "alipay-confirmed", IsFinal = true, UpdatedAt = DateTime.UtcNow },
+    new DailyArchive { Username = "test", FundCode = "TOTAL", RecordDate = today, Assets = 10000.00, DailyProfit = 1400.00, DailyRate = 7.0, Source = "alipay-confirmed-total", IsFinal = true, UpdatedAt = DateTime.UtcNow },
+};
+var caseCResult = DailyArchiveService.SanitizeArchiveRows(caseCInput);
+if (caseCResult.DroppedCount != 1)
+    throw new InvalidOperationException($"archiveGuard.caseC.dropped: expected 1, actual {caseCResult.DroppedCount}");
+if (caseCResult.Rows.Any(r => r.FundCode == "110044"))
+    throw new InvalidOperationException("archiveGuard.caseC: corrupt fund 110044 must be dropped");
+var caseCTotal = caseCResult.Rows.FirstOrDefault(r => r.FundCode == "TOTAL");
+if (caseCTotal == null)
+    throw new InvalidOperationException("archiveGuard.caseC: TOTAL row must remain");
+if (caseCTotal.Source != "guard-recomputed-total")
+    throw new InvalidOperationException($"archiveGuard.caseC.source: expected guard-recomputed-total, actual {caseCTotal.Source}");
+// 重算后 TOTAL.Assets == 剩余 3 只基金 Assets 之和 10000.00（容差 0.01）。
+if (Math.Abs(caseCTotal.Assets - 10000.00) > 0.01)
+    throw new InvalidOperationException($"archiveGuard.caseC.totalAssets: expected ~10000.00, actual {caseCTotal.Assets}");
+
+// 用例 D：nav-missing 标记行（assets=0）不应被守卫误删，且 TOTAL 仅汇总有效基金。
+var caseDInput = new List<DailyArchive>
+{
+    new DailyArchive { Username = "test", FundCode = "110011", RecordDate = today, Assets = 2000.00, DailyProfit = 100.00, DailyRate = 5.0, Source = "alipay-confirmed", IsFinal = true, UpdatedAt = DateTime.UtcNow },
+    new DailyArchive { Username = "test", FundCode = "110022", RecordDate = today, Assets = 3000.00, DailyProfit = 200.00, DailyRate = 6.0, Source = "alipay-confirmed", IsFinal = true, UpdatedAt = DateTime.UtcNow },
+    new DailyArchive { Username = "test", FundCode = "110033", RecordDate = today, Assets = 0, DailyProfit = 0, DailyRate = 0, TotalProfit = 0, TotalRate = 0, Source = "nav-missing", IsFinal = false, UpdatedAt = DateTime.UtcNow },
+    new DailyArchive { Username = "test", FundCode = "TOTAL", RecordDate = today, Assets = 5000.00, DailyProfit = 300.00, DailyRate = 6.0, Source = "alipay-confirmed-total", IsFinal = true, UpdatedAt = DateTime.UtcNow },
+};
+var caseDResult = DailyArchiveService.SanitizeArchiveRows(caseDInput);
+if (caseDResult.DroppedCount != 0)
+    throw new InvalidOperationException($"archiveGuard.caseD.dropped: expected 0, actual {caseDResult.DroppedCount}");
+if (!caseDResult.Rows.Any(r => r.FundCode == "110033" && r.Source == "nav-missing"))
+    throw new InvalidOperationException("archiveGuard.caseD: nav-missing row must be preserved");
+var caseDTotal = caseDResult.Rows.FirstOrDefault(r => r.FundCode == "TOTAL");
+if (caseDTotal == null)
+    throw new InvalidOperationException("archiveGuard.caseD: TOTAL row must remain");
+// TOTAL 应保持 5000（仅汇总有效基金，不含 nav-missing 的 0）。
+if (Math.Abs(caseDTotal.Assets - 5000.00) > 0.01)
+    throw new InvalidOperationException($"archiveGuard.caseD.totalAssets: expected ~5000.00, actual {caseDTotal.Assets}");
+
+// 用例 D2：全部基金净值缺失（TOTAL=0，多只 nav-missing）——守卫不应把 assets=0 误判为抄写指纹而误删。
+var caseD2Input = new List<DailyArchive>
+{
+    new DailyArchive { Username = "test", FundCode = "110011", RecordDate = today, Assets = 0, DailyProfit = 0, DailyRate = 0, TotalProfit = 0, TotalRate = 0, Source = "nav-missing", IsFinal = false, UpdatedAt = DateTime.UtcNow },
+    new DailyArchive { Username = "test", FundCode = "110022", RecordDate = today, Assets = 0, DailyProfit = 0, DailyRate = 0, TotalProfit = 0, TotalRate = 0, Source = "nav-missing", IsFinal = false, UpdatedAt = DateTime.UtcNow },
+    new DailyArchive { Username = "test", FundCode = "TOTAL", RecordDate = today, Assets = 0, DailyProfit = 0, DailyRate = 0, TotalProfit = 0, TotalRate = 0, Source = "nav-missing-total", IsFinal = false, UpdatedAt = DateTime.UtcNow },
+};
+var caseD2Result = DailyArchiveService.SanitizeArchiveRows(caseD2Input);
+if (caseD2Result.DroppedCount != 0)
+    throw new InvalidOperationException($"archiveGuard.caseD2.dropped: expected 0 (all-missing edge), actual {caseD2Result.DroppedCount}");
+if (!caseD2Result.Rows.Any(r => r.FundCode == "110011" && r.Source == "nav-missing"))
+    throw new InvalidOperationException("archiveGuard.caseD2: nav-missing fund must be preserved when TOTAL=0");
+
+Console.WriteLine("Archive guard (write-path / nav-missing) regression passed.");

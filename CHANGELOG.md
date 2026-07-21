@@ -8,6 +8,14 @@
 
 - 新增 DailyArchive 数据损坏不变式守卫，从代码层面根治「单基金行被错写成 TOTAL 汇总值」类问题（即 07-20 −4.32% 损坏的根因类别，杜绝再发生）：新增 `DailyArchiveService.SanitizeArchiveRows`——多基金组合下，若某基金行 `Assets` ≈ TOTAL `Assets`（抄写指纹），判定为损坏并剔除该坏行，并用剩余有效基金重算 TOTAL 使其 = Σ基金Assets（保持内部一致，绝不落库伪造的 −4.32% 之类）；单基金组合（仅 1 只基金）视为合法、不触发守卫。该守卫在 `DailySettlementService.BuildArchiveRows`（结算落库前）与 `FundController.SaveArchive`（客户端预览落库前）两处写入路径统一接入。回归测试新增用例 A（6 基金含损坏 TOTAL → 剔除 1 行、TOTAL 重算为剩余 5 只之和、source=guard-recomputed-total）与用例 B（单基金组合不触发、不误伤）。对生产库 dabai521 全历史 537 条归档做扫描，除已修复的 07-20 外未发现其他同类损坏。（`Services/DailyArchiveService.cs`、`Services/DailySettlementService.cs`、`Controllers/FundController.cs`、`tests/PortfolioAccounting.Tests/Program.cs`）
 
+- 安全加固（堵漏网写入路径 + 净值缺失显式标记 + 生产 JWT 密钥）：
+  - 将不变式守卫 `SanitizeArchiveRows` 下沉到 `Controllers/FundController.cs` 的 `UpsertDailyArchivesAsync`（所有写入的汇聚点），覆盖上次漏网的 `BuildArchiveRowsFromCurrentHoldings` 前台结算路径；`SettleDaily`/`SaveArchive`/OCR 归档经此汇聚点自动净化，零漏网。
+  - `settle-daily`（`BuildArchiveRowsFromCurrentHoldings` 与 `DailySettlementService.BuildArchiveRows`）在基金官方净值缺失时写 `Source="nav-missing"` 标记行（不计入 TOTAL），前端当日明细显示「净值缺失」，不再静默跳过导致该基金当日记录消失。
+  - 配套：`SanitizeArchiveRows` 损坏检测条件加 `TOTAL.Assets > 0.01` 守护（避免全部净值缺失 TOTAL=0 时误删 nav-missing 行）；`DailyArchiveService.UpsertAsync` 允许 `nav-missing` 显式标记行落库（仍拦截其他假 0 数据）。
+  - `appsettings.Production.json` 新增 `Auth:TokenSecret` 真实强随机密钥，消除占位符漏洞（旧 token 部署后失效，请重新登录）。
+  - 回归测试新增用例 C（守卫经写入路径生效：多基金一只损坏→剔除+重算 TOTAL）、用例 D/D2（nav-missing 不被误删、TOTAL=0 全缺失不误删）。`dotnet build` 0 错误，测试全 PASS。
+  - 注意：本批次改动触发 CI 后端+前端部署，上线后守卫在生产生效；生产 JWT 密钥明文进入 git 历史（项目既有 Production 配置随仓库部署模式），若需更严格建议改用环境变量注入并滚动密钥。
+
 ## 2026-07-21（5）
 
 - 板块「方向」列改为显示真实连续涨跌天数（连涨 N 天 / 连跌 N 天）。此前 `SectorSummaryDto.StreakDays` 只存 ±1/0 的当日方向标记，前端板块行情列表（L5510）只显示"连涨/连跌"纯文字、雷达弹窗（L5951）虽显示"N天"但数据错（恒为 0/1）。根因：`GetSectors` 是公开接口（前端不带 token、Redis 共享缓存），无法按 per-user 持仓反推（原方案 B 不可行），故采用公开口径——基于东方财富基金历史净值计算所有用户一致的连续天数。新增 `SectorNavDay` record、`FetchFundNavHistoryAsync`（调 `api.fund.eastmoney.com/f10/lsjz`，带 `Referer: https://fundf10.eastmoney.com/`）、`FetchFundNavHistoryCachedAsync`（IMemoryCache 缓存 8h + `SemaphoreSlim(12)` + 4s 超时）、`ComputeSectorStreakDays`（按日期对齐求每日均值、从最新日往前数连续同号天数：连涨为正、连跌为负、≈0 或历史<2 天为 0）；`BuildSectorRadarPayloadAsync` 汇总循环替换原 ±1/0 为真实计算，每板块限前 20 只匹配基金、跨板块基金去重。前端 L5510 由纯文字改为与 L5951 完全一致的 `{{ item.streakDays>0?'+':'' }}{{ item.streakDays || 0 }}天`，两处风格统一。公开接口/鉴权、`Rate` 字段（当日涨跌幅）、Redis+内存多级缓存均不变；历史净值接口失败/限流仅导致该列显示 0 天，不阻塞板块列表主流程。`dotnet build` 0 错误 0 警告，QA 验证 NoOne 全 PASS。（`Controllers/FundController.cs`、`wwwroot/index.html`）

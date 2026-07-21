@@ -57,7 +57,9 @@ namespace 小白养基.Services
             var fundRows = input.Where(r => r.FundCode != "TOTAL").ToList();
 
             // 单基金组合（0 或 1 只基金）视为合法，不触发守卫。
-            if (totalRow != null && fundRows.Count > 1)
+            // 仅当 TOTAL 为真实正数汇总时才检测抄写指纹：TOTAL=0 时不存在可抄写的汇总值，
+            // 避免把全部 assets=0 的 nav-missing 标记行误判为损坏而误删。
+            if (totalRow != null && fundRows.Count > 1 && totalRow.Assets > 0.01)
             {
                 // 抄写指纹：某单基金行 Assets 约等于 TOTAL Assets，说明把汇总值错抄进了单基金行。
                 var corrupt = fundRows
@@ -220,8 +222,8 @@ namespace 小白养基.Services
                     }
                     else
                     {
-                        // 没有任何有效数据时不创建假 0 档案。
-                        if (!HasFinancialData(item)) continue;
+                        // 没有任何有效数据时不创建假 0 档案；但 nav-missing 是显式标记行，必须落库。
+                        if (!HasFinancialData(item) && item.Source != "nav-missing") continue;
                         _dbContext.DailyArchives.Add(item);
                         changed++;
                     }

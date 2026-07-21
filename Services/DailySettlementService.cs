@@ -174,8 +174,25 @@ namespace 小白养基.Services
                 bool hasOfficialSettlement = fund.LastSettledDate == dateDash;
                 if (!hasOcrSnapshot && !hasOfficialSettlement)
                 {
+                    // 净值缺失：写 nav-missing 标记行而非静默跳过，前端可显示"净值缺失"。
+                    // 不计入 TOTAL（即不加入 confirmedMoney）。
+                    rows.Add(new DailyArchive
+                    {
+                        Username = username,
+                        FundCode = fund.FundCode,
+                        FundName = fund.FundName,
+                        RecordDate = date,
+                        Assets = 0,
+                        DailyProfit = 0,
+                        DailyRate = 0,
+                        TotalProfit = 0,
+                        TotalRate = 0,
+                        Source = "nav-missing",
+                        IsFinal = false,
+                        UpdatedAt = DateTime.UtcNow
+                    });
                     skippedCount++;
-                    Console.WriteLine($"[settle-daily] 跳过 {fund.FundCode} {dateDash}：既无蚂蚁确认快照，也无官方净值结算");
+                    Console.WriteLine($"[settle-daily] 跳过 {fund.FundCode} {dateDash}：既无蚂蚁确认快照，也无官方净值结算（已写 nav-missing 标记行）");
                     continue;
                 }
 

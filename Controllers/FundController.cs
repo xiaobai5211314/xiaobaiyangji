@@ -15,6 +15,7 @@ using 小白养基.Services;
 using Color = SixLabors.ImageSharp.Color;
 using Image = SixLabors.ImageSharp.Image;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 
 namespace 小白养基.Controllers
 {
@@ -28,6 +29,7 @@ namespace 小白养基.Controllers
         private readonly IBaiduOcrService _ocrService;
         private readonly PortfolioSettlementService _portfolioSettlement;
         private readonly DailyArchiveService _dailyArchiveService;
+        private readonly ILogger<FundController> _logger;
 
         static FundController()
         {
@@ -126,6 +128,7 @@ namespace 小白养基.Controllers
       IBaiduOcrService ocrService,
       PortfolioSettlementService portfolioSettlement,
       DailyArchiveService dailyArchiveService,
+      ILogger<FundController> logger,
       IConnectionMultiplexer redis,
       MarketCacheService marketCache)
         {
@@ -135,6 +138,7 @@ namespace 小白养基.Controllers
             _ocrService = ocrService;
             _portfolioSettlement = portfolioSettlement;
             _dailyArchiveService = dailyArchiveService;
+            _logger = logger;
             _redis = redis;
             _marketCache = marketCache;
         }
@@ -578,7 +582,18 @@ namespace 小白养基.Controllers
 
         private async Task UpsertDailyArchivesAsync(string username, DateTime date, IEnumerable<DailyArchive> incoming)
         {
-            await _dailyArchiveService.UpsertAsync(username, date, incoming);
+            // 不变式守卫下沉到写入汇聚点：所有经此方法落库的路径（BuildArchiveRowsFromCurrentHoldings /
+            // SettleDaily / SaveArchive / OCR 归档）都先净化，堵住上次漏网的写入路径。
+            var list = incoming.ToList();
+            var sanitized = DailyArchiveService.SanitizeArchiveRows(list);
+            if (sanitized.DroppedCount > 0)
+                _logger.LogWarning(
+                    "UpsertDailyArchivesAsync [{User} {Date}] 剔除 {Count} 条损坏基金行: {Warnings}",
+                    username,
+                    date.ToString("yyyy-MM-dd"),
+                    sanitized.DroppedCount,
+                    string.Join(" | ", sanitized.Warnings));
+            await _dailyArchiveService.UpsertAsync(username, date, sanitized.Rows);
         }
 
         private static object ToArchiveResponse(DailyArchive a)
@@ -689,7 +704,27 @@ namespace 小白养基.Controllers
 
                 bool hasOcrSnapshot = fund.OcrYesterdayDate == dateDash;
                 bool hasOfficialSettlement = fund.LastSettledDate == dateDash;
-                if (!hasOcrSnapshot && !hasOfficialSettlement) continue;
+                if (!hasOcrSnapshot && !hasOfficialSettlement)
+                {
+                    // 净值缺失：写 nav-missing 标记行而非静默跳过，前端可显示"净值缺失"。
+                    // 不计入 TOTAL（即不加入 confirmedMoney）。
+                    rows.Add(new DailyArchive
+                    {
+                        Username = username,
+                        FundCode = fund.FundCode,
+                        FundName = fund.FundName,
+                        RecordDate = date,
+                        Assets = 0,
+                        DailyProfit = 0,
+                        DailyRate = 0,
+                        TotalProfit = 0,
+                        TotalRate = 0,
+                        Source = "nav-missing",
+                        IsFinal = false,
+                        UpdatedAt = DateTime.UtcNow
+                    });
+                    continue;
+                }
 
                 decimal dailyProfit = PortfolioAccounting.Money(
                     hasOcrSnapshot ? fund.OcrYesterdayIncome : fund.LastSettledProfit);
