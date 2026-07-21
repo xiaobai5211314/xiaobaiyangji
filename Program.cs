@@ -161,6 +161,7 @@ app.Use(async (context, next) =>
         path.StartsWith("/api/fund/sector-funds", StringComparison.OrdinalIgnoreCase) ||
         path.StartsWith("/api/fund/sector-details", StringComparison.OrdinalIgnoreCase) ||
         path.StartsWith("/api/fund/capital-flow", StringComparison.OrdinalIgnoreCase) ||
+        path.StartsWith("/api/fund/market-ranking", StringComparison.OrdinalIgnoreCase) ||
         path.StartsWith("/api/influencer-posts/latest", StringComparison.OrdinalIgnoreCase) ||
         !path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase);
 

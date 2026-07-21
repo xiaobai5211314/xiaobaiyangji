@@ -8458,13 +8458,14 @@ namespace 小白养基.Controllers
                 }
             }
 
-            // 收紧：申万二级带 "II"/"Ⅲ" 后缀的，去掉后缀再匹配白名单
-            // 例如 "保险II" → "保险"、"多元金融II" → "多元金融"
+            // 收紧：申万二级带 "II"/"Ⅲ"/"Ⅱ"(全角) 后缀的，去掉后缀再匹配白名单
+            // 例如 "保险II" → "保险"、"白酒Ⅱ" → "白酒"、"多元金融Ⅱ" → "多元金融"
             if (normalizedName.Length > 2)
             {
                 var trimmedII = normalizedName
                     .Replace("II", string.Empty, StringComparison.OrdinalIgnoreCase)
                     .Replace("Ⅲ", string.Empty, StringComparison.OrdinalIgnoreCase)
+                    .Replace("Ⅱ", string.Empty, StringComparison.OrdinalIgnoreCase)
                     .Trim();
                 if (!string.IsNullOrEmpty(trimmedII) && trimmedII != normalizedName &&
                     CapitalFlowIndustryWhitelist.Contains(trimmedII))

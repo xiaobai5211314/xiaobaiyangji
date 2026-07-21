@@ -5424,9 +5424,44 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 </div>
                 <div class="sector-page-layout">
                     <div class="glass-panel" style="padding:16px;">
-                        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px;"><button @click="sectorMode='top'" :class="['btn', sectorMode==='top' ? 'btn-danger' : '']" style="justify-content:center;border-radius:14px;">领涨</button><button @click="sectorMode='bottom'" :class="['btn', sectorMode==='bottom' ? 'btn-success' : '']" style="justify-content:center;border-radius:14px;">领跌</button><button @click="sectorMode='all'" :class="['btn', sectorMode==='all' ? 'btn-primary' : '']" style="justify-content:center;border-radius:14px;">全部主题</button></div>
+                        <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:10px;"><button @click="sectorMode='top'" :class="['btn', sectorMode==='top' ? 'btn-danger' : '']" style="justify-content:center;border-radius:14px;">领涨</button><button @click="sectorMode='bottom'" :class="['btn', sectorMode==='bottom' ? 'btn-success' : '']" style="justify-content:center;border-radius:14px;">领跌</button><button @click="sectorMode='all'" :class="['btn', sectorMode==='all' ? 'btn-primary' : '']" style="justify-content:center;border-radius:14px;">全部主题</button><button @click="sectorMode='market'; fetchMarketRanking()" :class="['btn', sectorMode==='market' ? 'btn-primary' : '']" style="justify-content:center;border-radius:14px;">场外涨幅榜</button></div>
                         <input v-model.trim="sectorSearch" class="modal-input" type="search" placeholder="搜索航天、卫星、低空经济等主题" style="margin-bottom:12px;">
                         <div v-if="isSectorLoading" style="color:var(--text-muted);text-align:center;padding:50px 0;">📡 正在扫描板块基金池...</div>
+                        <div v-else-if="sectorMode==='market'">
+                            <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+                                <select v-model="marketRankingType" @change="fetchMarketRanking()" class="modal-input" style="width:auto;">
+                                    <option value="all">全部</option>
+                                    <option value="equity">股票型</option>
+                                    <option value="mixed">混合型</option>
+                                    <option value="bond">债券型</option>
+                                    <option value="index">指数型</option>
+                                    <option value="qdii">QDII</option>
+                                    <option value="lof">LOF</option>
+                                    <option value="fof">FOF</option>
+                                </select>
+                                <button @click="marketRankingOrder='desc'; fetchMarketRanking()" :class="['btn', marketRankingOrder==='desc' ? 'btn-danger' : '']" style="border-radius:14px;justify-content:center;">涨幅↓</button>
+                                <button @click="marketRankingOrder='asc'; fetchMarketRanking()" :class="['btn', marketRankingOrder==='asc' ? 'btn-success' : '']" style="border-radius:14px;justify-content:center;">涨幅↑</button>
+                                <input v-model.trim="marketRankingSearch" class="modal-input" type="search" placeholder="搜索基金名/代码" style="flex:1;min-width:120px;">
+                            </div>
+                            <div v-if="marketRankingLoading" style="color:var(--text-muted);text-align:center;padding:40px 0;">📡 正在拉取全市场基金...</div>
+                            <div v-else-if="marketRankingError" style="color:#ff4d4f;text-align:center;padding:40px 0;">{{ marketRankingError }}</div>
+                            <div v-else style="overflow-y:auto;flex:1;">
+                                <div class="sector-table-head"><span>基金名称</span><span style="text-align:right;">单位净值</span><span style="text-align:right;">当日涨跌</span><span style="text-align:right;">代码</span></div>
+                                <div v-for="(item,index) in marketRankingList.filter(m => !marketRankingSearch || (item.name||'').includes(marketRankingSearch) || (item.code||'').includes(marketRankingSearch))" :key="item.code" style="display:grid;grid-template-columns:1.4fr 0.8fr 0.8fr 0.7fr;gap:8px;align-items:center;padding:14px 6px;border-bottom:1px solid rgba(255,255,255,0.06);">
+                                    <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+                                        <span :style="{color:'#888',fontSize:'13px',fontWeight:'bold',width:'22px'}">{{ index + 1 }}</span>
+                                        <div style="display:flex;flex-direction:column;min-width:0;">
+                                            <span style="color:var(--text-main);fontWeight:bold;fontSize:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.name }}</span>
+                                            <span style="fontSize:11px;color:var(--text-muted);">近1月 {{ item.monthRate>0?'+':'' }}{{ item.monthRate }}%</span>
+                                        </div>
+                                    </div>
+                                    <span :style="{textAlign:'right',fontFamily:'Courier New',fontSize:'15px',color:'var(--text-main)'}">{{ item.unitNav }}</span>
+                                    <span :style="{textAlign:'right',color:item.dailyRate>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New',fontSize:'18px'}">{{ item.dailyRate>0?'+':'' }}{{ item.dailyRate }}%</span>
+                                    <span style="text-align:right;color:var(--text-muted);fontWeight:bold;">{{ item.code }}</span>
+                                </div>
+                                <div style="text-align:center;color:var(--text-muted);fontSize:12px;padding:12px 0;">共 {{ marketRankingTotal }} 只基金 · 来源 {{ marketRankingSource }}</div>
+                            </div>
+                        </div>
                         <div v-else>
                             <div class="sector-table-head"><span>板块名称</span><span style="text-align:right;">涨跌幅</span><span style="text-align:right;">方向</span><span style="text-align:right;">基金数</span></div>
                             <div v-for="(item,index) in visibleSectorList" :key="item.key || item.name" class="sector-row" @click="fetchSectorDetails(item)">
@@ -6942,6 +6977,17 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                 const selectedSectorDetail = ref(null);
                 const sectorDetailGroup = ref('all');
                 const sectorDetailSearch = ref('');
+
+                // 场外基金全市场涨幅榜（不按板块分类，直接列全市场涨跌）
+                const marketRankingList = ref([]);
+                const marketRankingLoading = ref(false);
+                const marketRankingError = ref('');
+                const marketRankingOrder = ref('desc');
+                const marketRankingType = ref('all');
+                const marketRankingSource = ref('');
+                const marketRankingTotal = ref(0);
+                const marketRankingSearch = ref('');
+                const marketRankingUpdatedAt = ref('');
                 const sectorDetailMeta = reactive({
                     rate: 0,
                     fundCount: 0,
@@ -8568,6 +8614,28 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         clearTimeout(timeoutId);
                     }
                 };
+                const fetchMarketRanking = async () => {
+                    marketRankingLoading.value = true;
+                    marketRankingError.value = '';
+                    try {
+                        const url = `/api/fund/market-ranking?order=${marketRankingOrder.value}&type=${marketRankingType.value}&limit=100&page=1&_t=${Date.now()}`;
+                        const res = await fetch(url, { cache: 'no-store' });
+                        const data = await res.json();
+                        if (data && data.success) {
+                            marketRankingList.value = data.rows || [];
+                            marketRankingSource.value = data.source || '';
+                            marketRankingTotal.value = data.totalCount || 0;
+                            marketRankingUpdatedAt.value = data.updatedAt || '';
+                        } else {
+                            marketRankingError.value = (data && data.message) || '获取失败';
+                        }
+                    } catch (e) {
+                        marketRankingError.value = '网络错误，请稍后重试';
+                    } finally {
+                        marketRankingLoading.value = false;
+                    }
+                };
+
                 const refreshSectorPage = async (force = true) => {
                     if (isSectorLoading.value || isCapitalLoading.value) return;
 
@@ -9203,7 +9271,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     influencerPostsDisplay, selectedInfluencerPost, selectedInfluencerReplies, influencerPostsLoading, influencerPostsStatus, influencerPostsUpdatedAt, loadInfluencerPosts, formatInfluencerPostTime, formatInfluencerCount, getInfluencerReplyCount, openInfluencerPostDetail, closeInfluencerPostDetail, openInfluencerSource,
                     handleLogin, handleRegister, handleLogout, saveUserProfile, handleAddFund, handleDeleteFund, triggerUpload, triggerSmartOcr, handleFileUpload, setOcrPendingMode, confirmOcrImport, triggerAvatarUpload, handleAvatarUpload, clearAvatar,
                     openEditModal, handleSaveDetails, totalTodayRate, showSectorRadar, isSectorLoading, fetchSectors,
-                    sectorTopList, sectorBottomList, sectorAllList, visibleSectorList, sectorMode, sectorSearch, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, capitalFlowError, isCapitalLoading, fetchCapitalFlow,
+                    sectorTopList, sectorBottomList, sectorAllList, visibleSectorList, sectorMode, sectorSearch, sectorSource, sectorUpdatedAt, capitalFlowRows, capitalFlowInRows, capitalFlowOutRows, capitalFlowSource, capitalFlowUpdatedAt, capitalFlowError, isCapitalLoading, fetchCapitalFlow, marketRankingList, marketRankingLoading, marketRankingError, marketRankingOrder, marketRankingType, marketRankingSource, marketRankingTotal, marketRankingSearch, marketRankingUpdatedAt, fetchMarketRanking,
                     showSectorDetails, detailsTitle, detailsList, sectorDetailMeta, sectorDetailGroup, sectorDetailSearch, isDetailsLoading, expandedSectors, toggleSector,
                     fetchSectorDetails, setSectorDetailGroup, searchSectorDetails, loadMoreSectorDetails, sectorSignalColor, historyModal, fetchHistory, showGlobalIndices, isIndicesLoading, fetchGlobalIndices, formatIndexPoint, formatIndexRate, getFundStatusBadgeText, getFundStatusBadgeClass, getRateDisplayMeta,
                     showNewsPanel, isNewsLoading, newsMode, newsOnlyImportant, newsList, newsSource, newsUpdatedAt, groupedNews, openNewsPanel, fetchNews, switchNewsMode, openNewsItem,
