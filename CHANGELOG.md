@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2026-07-21（3）
+
+- 修复首页「今日收益率」两处显示不一致：顶部 Summary 卡片的「今日确认收益率」与日总收益曲线区的「今日收益率」数值对不上（差约 2.1 个百分点）。根因是 `GetTodayPerformanceCurveAsync` 今日收益率的分母 `totalPrincipal` 原来优先使用 `DailyArchive TOTAL.Assets`（可能含待确认买入），与 Summary 采用的确认持仓口径不一致。改为统一使用 `quotedPrincipal`（由各基金确认持仓金额之和构成，已排除待确认买入），符合 ADR 0001「收益率分母必须使用确认持仓金额」规则。同步删除该方法内仅服务于该 fallback 分支、改动后已无引用的 `DailyArchive TOTAL` 查询块。仅影响 today 周期，历史周期（7d/1m/3m/1y）走独立路径不受影响。（`Controllers/FundController.cs`）
+
 ## 2026-07-21（2）
 
 - 修复场外涨幅榜「网络错误」：`fetchMarketRanking` 原用裸 `fetch('/api/fund/market-ranking?...')` 相对路径，从 CDN 域名 `guzhicdn.21212121.xyz` 打开时请求打到 CDN 自身（无后端）→ 404 → 解析失败 → 一直转圈/报错。改为 `apiFetch(url)`（自动拼 `API_BASE='https://guzhi.21212121.xyz'`），CDN 下也能正确请求源站。（`wwwroot/index.html`）

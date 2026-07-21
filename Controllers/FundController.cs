@@ -4351,19 +4351,14 @@ namespace 小白养基.Controllers
 
             var series = BuildTodayPerformanceSeries(myFunds, todayRecords, archiveHistoryDict, today, todayDash, naturalDate);
             var quotedPrincipal = PortfolioAccounting.Money(series.Sum(s => PortfolioAccounting.Money(s.Amount)));
-            var latestConfirmedTotalCandidates = await _context.DailyArchives
-                .AsNoTracking()
-                .Where(a => a.Username == username
-                            && a.FundCode == "TOTAL"
-                            && a.RecordDate < localTime.Date.AddDays(1))
-                .OrderByDescending(a => a.RecordDate)
-                .ThenByDescending(a => a.UpdatedAt)
-                .ThenByDescending(a => a.Id)
-                .ToListAsync();
-            var latestPortfolioTotal = DailyArchiveService.PickLatestPortfolioSummaryTotal(latestConfirmedTotalCandidates);
-            var totalPrincipal = latestPortfolioTotal != null
-                ? PortfolioAccounting.Money(latestPortfolioTotal.Assets)
-                : quotedPrincipal;
+            // 修复口径不一致（今日收益率 Bug）：
+            // 今日收益率分母必须与首页 Summary 的 todayPerformanceRateBase 保持一致（ADR 0001），
+            // 使用“确认持仓金额之和”，排除待确认买入（pendingBuy）的影响。
+            // quotedPrincipal 由 BuildTodayPerformanceSeries 汇总各基金 amount 得到，
+            // 其中每个 amount 已通过 GetDailyBaseAmount 排除 pendingBuy，口径与 Summary 一致。
+            // 原先优先使用 latestPortfolioTotal.Assets（DailyArchive TOTAL，可能含待确认买入）
+            // 会导致分母偏大、收益率偏小，与 Summary 不一致。
+            var totalPrincipal = quotedPrincipal;
             var timeline = series
                 .SelectMany(s => s.Points.Select(p => p.Time))
                 .Distinct()
