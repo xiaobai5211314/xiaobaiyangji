@@ -5,6 +5,11 @@ using 小白养基.Models;
 
 namespace 小白养基.Services
 {
+    // 新浪基金估值接口返回结构（hq.sinajs.cn/list=fu_{code}）
+    // 响应格式: var hq_str_fu_017968="基金名,HH:mm:ss,估算净值,昨日净值,昨日累计,?,估算涨跌幅%,yyyy-MM-dd,?,昨日涨跌幅%";
+    // 字段索引: [0]基金名 [1]时间 [2]估算净值 [3]昨日净值 [6]估算涨跌幅% [7]日期
+    public record SinaFundQuote(string FundName, double EstimatedRate, DateTime FetchTime);
+
     public class FundScraperService : BackgroundService
     {
         private readonly IServiceProvider _serviceProvider;
@@ -105,42 +110,68 @@ namespace 小白养基.Services
             _logger.LogInformation("本轮写入 {Count} 条估值记录", newRows.Count);
         }
 
-        private async Task<FundData?> FetchOneAsync(string fundCode, string fundName, CancellationToken stoppingToken)
+        /// <summary>
+        /// 通过新浪 hq.sinajs.cn/list=fu_{code} 抓取基金实时估值。
+        /// 替代已下线的天天基金 fundgz.1234567.com.cn 接口。
+        /// 返回 null 表示抓取失败或基金不在新浪数据库。
+        /// </summary>
+        public static async Task<SinaFundQuote?> TryFetchSinaQuoteAsync(HttpClient client, string fundCode, CancellationToken ct)
         {
             try
             {
-                string url = $"http://fundgz.1234567.com.cn/js/{fundCode}.js?rt={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
-                string response = await _httpClient.GetStringAsync(url, stoppingToken);
-                var match = Regex.Match(response, @"jsonpgz\((.*?)\);");
+                string url = $"https://hq.sinajs.cn/list=fu_{fundCode}";
+                using var resp = await client.GetAsync(url, ct);
+                resp.EnsureSuccessStatusCode();
+                var bytes = await resp.Content.ReadAsByteArrayAsync(ct);
+                // 新浪返回 GB18030 编码，参考 StockQuoteService.GetStringGbAsync
+                string response;
+                try { response = System.Text.Encoding.GetEncoding("GB18030").GetString(bytes); }
+                catch { response = System.Text.Encoding.UTF8.GetString(bytes); }
+
+                var match = Regex.Match(response, $@"var hq_str_fu_{Regex.Escape(fundCode)}=""([^""]+)""");
                 if (!match.Success) return null;
 
-                using var json = JsonDocument.Parse(match.Groups[1].Value);
-                var root = json.RootElement;
+                var fields = match.Groups[1].Value.Split(',');
+                if (fields.Length < 8) return null;
 
-                if (!double.TryParse(root.GetProperty("gszzl").GetString() ?? "0", out double rate))
+                string fundName = fields[0];
+                string timeStr = fields[1];   // HH:mm:ss
+                string dateStr = fields[7];   // yyyy-MM-dd
+
+                if (!double.TryParse(fields[6], out double rate))
                 {
                     rate = 0;
                 }
 
-                string timeStr = root.GetProperty("gztime").GetString() ?? DateTime.Now.ToString("yyyy-MM-dd HH:mm");
-                if (!DateTime.TryParse(timeStr, out DateTime parsedTime))
+                if (!DateTime.TryParse($"{dateStr} {timeStr}", out DateTime parsedTime))
                 {
                     parsedTime = DateTime.Now;
                 }
 
-                return new FundData
-                {
-                    FundCode = fundCode,
-                    FundName = fundName,
-                    EstimatedRate = rate,
-                    FetchTime = parsedTime
-                };
+                return new SinaFundQuote(fundName, rate, parsedTime);
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogWarning(ex, "抓取 {Code} 失败", fundCode);
                 return null;
             }
+        }
+
+        private async Task<FundData?> FetchOneAsync(string fundCode, string fundName, CancellationToken stoppingToken)
+        {
+            var quote = await TryFetchSinaQuoteAsync(_httpClient, fundCode, stoppingToken);
+            if (quote == null)
+            {
+                _logger.LogWarning("抓取 {Code} 失败（新浪 fu_ 接口无数据）", fundCode);
+                return null;
+            }
+
+            return new FundData
+            {
+                FundCode = fundCode,
+                FundName = fundName,
+                EstimatedRate = quote.EstimatedRate,
+                FetchTime = quote.FetchTime
+            };
         }
     }
 }

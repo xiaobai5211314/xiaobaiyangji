@@ -81,6 +81,9 @@ builder.Services.AddHttpClient("FundGz", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(6);
     client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0");
+    // 天天基金 fundgz.1234567.com.cn 已永久下线（301 → eastmoney notfound），改用新浪 hq.sinajs.cn/list=fu_{code}
+    // 新浪接口要求 Referer: https://finance.sina.com.cn，否则返回空
+    client.DefaultRequestHeaders.TryAddWithoutValidation("Referer", "https://finance.sina.com.cn");
 });
 
 builder.Services.AddHttpClient("EastMoney", client =>

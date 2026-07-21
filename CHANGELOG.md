@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2026-07-21
+
+- 修复今日收益全为 0：天天基金估值接口 `fundgz.1234567.com.cn` 已永久下线（301 重定向到 `fund.eastmoney.com/notfound.html`），导致 `FundScraperService` 抓不到估值数据。改用新浪基金接口 `hq.sinajs.cn/list=fu_{code}` 作为数据源。
+- 新增 `SinaFundQuote` 记录类型与 `FundScraperService.TryFetchSinaQuoteAsync` 静态方法，统一处理新浪 GB18030 编码响应与字段解析（基金名、估算涨跌幅、估算时间）。
+- `FundGz` HttpClient 增加 `Referer: https://finance.sina.com.cn` 请求头，满足新浪接口的防盗链要求。
+- 同步替换 `FundController` 三处天天基金调用：`AddFund`（添加基金获取基金名）、`AutoSettle`（自动清算获取估算涨跌幅）、`FetchFundQuoteAsync`（主题基金估值展示）。
+- 字段映射：新浪响应 `[0]基金名 [1]时间 [2]估算净值 [6]估算涨跌幅% [7]日期` 对应原 `name / gztime / gszzl`。
+
 ## 2026-07-17
 
 - 修复手工加仓跨过预计确认日后从页面消失：`PendingTradeStatus` 现在独立控制交易生命周期，`PendingConfirmDate` / `FirstProfitDate` 只控制收益参与时间；实际结转、OCR 明确归零或取消前，待确认金额继续显示并阻止重复登记。

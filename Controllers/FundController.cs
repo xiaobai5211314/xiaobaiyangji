@@ -3713,13 +3713,11 @@ namespace 小白养基.Controllers
             var client = _httpClientFactory.CreateClient("FundGz");
             try
             {
-                string url = $"http://fundgz.1234567.com.cn/js/{code}.js";
-                string response = await client.GetStringAsync(url);
-                var match = Regex.Match(response, @"jsonpgz\((.*?)\);");
-                if (match.Success)
+                // 天天基金 fundgz.1234567.com.cn 已永久下线，改用新浪 fu_ 接口
+                var quote = await Services.FundScraperService.TryFetchSinaQuoteAsync(client, code, HttpContext.RequestAborted);
+                if (quote != null)
                 {
-                    var root = JsonDocument.Parse(match.Groups[1].Value).RootElement;
-                    string name = root.GetProperty("name").GetString() ?? "未知";
+                    string name = quote.FundName;
 
                     var exist = await _context.MyFunds.FirstOrDefaultAsync(f => f.Username == username && f.FundCode == code);
                     var todayDash = ChinaDateDash();
@@ -3792,11 +3790,11 @@ namespace 小白养基.Controllers
                 {
                     try
                     {
-                        string url = $"http://fundgz.1234567.com.cn/js/{fund.FundCode}.js?rt={DateTime.Now.Ticks}";
-                        string jsData = await client.GetStringAsync(url);
-                        var match = Regex.Match(jsData, @"\""gszzl\"":\""([^\""]+)\""");
-                        if (match.Success && double.TryParse(match.Groups[1].Value, out double rate))
+                        // 天天基金 fundgz.1234567.com.cn 已永久下线，改用新浪 fu_ 接口
+                        var quote = await Services.FundScraperService.TryFetchSinaQuoteAsync(client, fund.FundCode, HttpContext.RequestAborted);
+                        if (quote != null)
                         {
+                            double rate = quote.EstimatedRate;
                             var settleDate = ChinaDateDash();
                             if (ApplyOneDaySettlement(fund, rate, settleDate))
                             {
@@ -7762,20 +7760,18 @@ namespace 小白养基.Controllers
             bool isZeroQuote = false;
             try
             {
-                string gzUrl = $"https://fundgz.1234567.com.cn/js/{fund.Code}.js?rt={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
-                string gzRes = await client.GetStringAsync(gzUrl);
-                var match = Regex.Match(gzRes, @"jsonpgz\((.*?)\);");
-                if (match.Success)
+                // 天天基金 fundgz.1234567.com.cn 已永久下线，改用新浪 fu_ 接口
+                var quote = await Services.FundScraperService.TryFetchSinaQuoteAsync(client, fund.Code, CancellationToken.None);
+                if (quote != null)
                 {
-                    using var doc = JsonDocument.Parse(match.Groups[1].Value);
-                    var root = doc.RootElement;
-                    if (root.TryGetProperty("gszzl", out var gszzl) && double.TryParse(gszzl.GetString(), out var parsedRate))
+                    rate = Math.Round(quote.EstimatedRate, 2);
+                    hasQuote = true;
+                    rateSource = "fundgz";
+                    updatedAt = quote.FetchTime.ToString("yyyy-MM-dd HH:mm");
+                    if (!string.IsNullOrWhiteSpace(quote.FundName))
                     {
-                        rate = Math.Round(parsedRate, 2);
-                        hasQuote = true;
-                        rateSource = "fundgz";
+                        fund.Name = quote.FundName;
                     }
-                    if (root.TryGetProperty("gztime", out var timeProp)) updatedAt = timeProp.GetString() ?? string.Empty;
                     var isTodayQuote = IsChinaTodayTimestamp(updatedAt);
                     isStale = !isTodayQuote;
                     if (hasQuote && Math.Abs(rate) < 0.000001 && !isTodayQuote)
@@ -7787,10 +7783,6 @@ namespace 小白养基.Controllers
                     else if (hasQuote && !isTodayQuote)
                     {
                         rateSource = "fundgz_stale";
-                    }
-                    if (root.TryGetProperty("name", out var nameProp) && !string.IsNullOrWhiteSpace(nameProp.GetString()))
-                    {
-                        fund.Name = nameProp.GetString()!;
                     }
                 }
             }
