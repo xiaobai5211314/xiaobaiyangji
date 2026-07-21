@@ -5507,7 +5507,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                             <div class="sector-table-head"><span>板块名称</span><span style="text-align:right;">涨跌幅</span><span style="text-align:right;">方向</span><span style="text-align:right;">基金数</span></div>
                             <div v-for="(item,index) in visibleSectorList" :key="item.key || item.name" class="sector-row" @click="fetchSectorDetails(item)">
                                 <div style="display:flex;align-items:center;gap:10px;min-width:0;"><span :style="{color: item.rate>=0 ? '#ef4444' : '#10b981',fontSize:'13px',fontWeight:'bold',width:'22px'}">{{ index + 1 }}</span><div style="display:flex;flex-direction:column;min-width:0;"><span style="color:var(--text-main);font-weight:bold;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.name }}</span><span style="font-size:11px;color:var(--text-muted);">{{ item.indexFundCount || 0 }}只指数 · {{ item.activeFundCount || 0 }}只主动</span></div></div>
-                                <span :style="{textAlign:'right',color:item.rate>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New',fontSize:'18px'}">{{ item.rate>0?'+':'' }}{{ item.rate }}%</span><span :style="{textAlign:'right',color:item.rate>=0?'#ff4d4f':'#10b981',fontWeight:'bold'}">{{ item.rate>=0?'连涨':'连跌' }}</span><span style="text-align:right;color:var(--text-muted);font-weight:bold;">{{ item.fundCount || item.quotedCount || 0 }}</span>
+                                <span :style="{textAlign:'right',color:item.rate>=0?'#ff4d4f':'#10b981',fontWeight:'900',fontFamily:'Courier New',fontSize:'18px'}">{{ item.rate>0?'+':'' }}{{ item.rate }}%</span><span :style="{textAlign:'right',color:item.streakDays>=0?'#ff4d4f':'#10b981',fontWeight:'bold'}">{{ item.streakDays>0?'+':'' }}{{ item.streakDays || 0 }}天</span><span style="text-align:right;color:var(--text-muted);font-weight:bold;">{{ item.fundCount || item.quotedCount || 0 }}</span>
                             </div>
                         </div>
                     </div>
@@ -5912,7 +5912,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             </div>
 
             <div v-if="showSectorRadar" class="modal-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.72);display:flex;justify-content:center;align-items:flex-end;z-index:1000;">
-                <div style="background:#1e293b;width:100%;height:90vh;border-radius:20px 20px 0 0;padding:20px;display:flex;flex-direction:column;box-sizing:border-box;">
+                <div style="background:var(--card-bg);width:100%;height:90vh;border-radius:20px 20px 0 0;padding:20px;display:flex;flex-direction:column;box-sizing:border-box;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
                         <div>
                             <h3 style="color:var(--text-main);margin:0;font-size:22px;">🎯 板块基金雷达</h3>
@@ -5933,13 +5933,13 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                     <div v-if="isSectorLoading" style="color:var(--text-muted);text-align:center;margin-top:50px;">📡 正在扫描板块基金池...</div>
                     <div v-else style="overflow-y:auto;flex:1;padding-right:4px;">
-                        <div style="display:grid;grid-template-columns:1.4fr 0.8fr 0.8fr 0.7fr;gap:8px;color:var(--text-muted);font-size:12px;padding:8px 6px;border-bottom:1px solid rgba(255,255,255,0.08);">
+                        <div style="display:grid;grid-template-columns:1.4fr 0.8fr 0.8fr 0.7fr;gap:8px;color:var(--text-muted);font-size:12px;padding:8px 6px;border-bottom:1px solid var(--card-border);">
                             <span>板块名称</span>
                             <span style="text-align:right;">涨跌幅</span>
                             <span style="text-align:right;">方向</span>
                             <span style="text-align:right;">基金数</span>
                         </div>
-                        <div v-for="(item,index) in visibleSectorList" :key="item.key || item.name" @click="fetchSectorDetails(item)" style="display:grid;grid-template-columns:1.4fr 0.8fr 0.8fr 0.7fr;gap:8px;align-items:center;padding:14px 6px;border-bottom:1px solid rgba(255,255,255,0.06);cursor:pointer;">
+                        <div v-for="(item,index) in visibleSectorList" :key="item.key || item.name" @click="fetchSectorDetails(item)" style="display:grid;grid-template-columns:1.4fr 0.8fr 0.8fr 0.7fr;gap:8px;align-items:center;padding:14px 6px;border-bottom:1px solid var(--card-border);cursor:pointer;">
                             <div style="display:flex;align-items:center;gap:10px;min-width:0;">
                                 <span :style="{color: item.rate>=0 ? '#ef4444' : '#10b981',fontSize:'13px',fontWeight:'bold',width:'22px'}">{{ index + 1 }}</span>
                                 <div style="display:flex;flex-direction:column;min-width:0;">
@@ -5957,9 +5957,9 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
             <div v-if="showSectorDetails" @click.self="showSectorDetails=false" class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.55); display: flex; justify-content: center; align-items: center; z-index: 2000;">
                 <div style="background:var(--card-bg);width:90%;max-width:620px;max-height:86vh;border-radius:15px;padding:20px;border:1px solid var(--card-border);box-shadow:0 10px 25px rgba(0,0,0,0.42);display:flex;flex-direction:column;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #334155; padding-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--card-border); padding-bottom: 10px;">
                         <div>
-                            <h3 style="color: #38bdf8; margin: 0; font-size: 18px;">📦 {{ detailsTitle }}</h3>
+                            <h3 style="color: var(--accent-blue); margin: 0; font-size: 18px;">📦 {{ detailsTitle }}</h3>
                             <div style="font-size:11px;color:var(--text-muted);margin-top:5px;">
                                 {{ sectorDetailMeta.rateScope || '行情参考' }} {{ sectorDetailMeta.rate > 0 ? '+' : '' }}{{ sectorDetailMeta.rate }}% · 共{{ sectorDetailMeta.fundCount }}只 · {{ sectorDetailMeta.updatedAt }}
                             </div>
@@ -5991,11 +5991,11 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         <div style="display:grid;grid-template-columns:minmax(0,1.6fr) 0.75fr 0.75fr;gap:8px;color:var(--text-muted);font-size:12px;margin-bottom:8px;padding:0 4px;">
                             <span>基金名称 / 代码</span><span style="text-align:right;">当日涨幅</span><span style="text-align:right;">近一月</span>
                         </div>
-                        <div v-for="fund in detailsList" :key="fund.code" style="display:grid;grid-template-columns:minmax(0,1.6fr) 0.75fr 0.75fr;gap:8px;align-items:center;padding:12px 4px;border-bottom:1px dashed rgba(255,255,255,0.06);">
+                        <div v-for="fund in detailsList" :key="fund.code" style="display:grid;grid-template-columns:minmax(0,1.6fr) 0.75fr 0.75fr;gap:8px;align-items:center;padding:12px 4px;border-bottom:1px dashed var(--card-border);">
                             <div style="display:flex;flex-direction:column;min-width:0;">
                                 <span style="color:var(--text-main);font-weight:bold;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ fund.name }}</span>
                                 <span style="color:var(--text-muted);font-size:11px;font-family:monospace;">{{ fund.code }} · {{ fund.fundType || '类型待核实' }}</span>
-                                <span :style="{fontSize:'10px',color:fund.quoteStatus==='live-estimate'?'#38bdf8':(fund.quoteStatus==='latest-nav'?'#f59e0b':'var(--text-muted)')}">{{ fund.quoteLabel || '暂无可用行情' }}<template v-if="fund.updatedAt"> · {{ fund.updatedAt }}</template></span>
+                                <span :style="{fontSize:'10px',color:fund.quoteStatus==='live-estimate'?'var(--td-color-info)':(fund.quoteStatus==='latest-nav'?'var(--td-color-warning)':'var(--text-muted)')}">{{ fund.quoteLabel || '暂无可用行情' }}<template v-if="fund.updatedAt"> · {{ fund.updatedAt }}</template></span>
                             </div>
                             <div :style="{ textAlign:'right', color: fund.rate >= 0 ? '#ff4d4f' : '#10b981', fontWeight:'900', fontFamily:'Courier New', fontSize:'16px' }">{{ fund.rate > 0 ? '+' : '' }}{{ fund.rate }}%</div>
                             <div :style="{ textAlign:'right', color: (fund.monthRate || 0) >= 0 ? '#ff4d4f' : '#10b981', fontWeight:'bold', fontFamily:'Courier New', fontSize:'15px' }">{{ fund.monthRate == null ? '--' : ((fund.monthRate > 0 ? '+' : '') + fund.monthRate + '%') }}</div>

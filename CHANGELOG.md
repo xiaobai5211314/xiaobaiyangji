@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 2026-07-22
+
+- 修正 2026-07-20 盈亏日历 TOTAL 收益率显示 −4.32% 的数据损坏：该日 017968（华富科技动能混合C）的归档行被错误写入了 TOTAL 汇总值（assets/profit/rate 与 TOTAL 行字节级相同），导致 TOTAL 行也展示为单只基金的错误数值，日历整体显示为 −4.32%。根因：07-20 当天该用户有一笔约 ¥3,379 的 017968 加仓，而系统当时缺少 07-20 官方净值（外部净值源未返回），结算回退写出损坏数据。以东方财富真实净值（07-17=1.3021、07-20=1.2459、07-21=1.3051，07-20→07-21 的 +4.75% 与未损坏的 07-21 归档行 dailyRate 完全吻合，验证来源可靠）结合系统 07-21 结算隐含的 07-20 基数（43752.61）重算：017968 07-20 → assets 43752.61、dailyProfit −1821.18、dailyRate −4.00%（含加仓成本基数口径）；TOTAL 07-20 → assets 99725.07、dailyProfit −354.86、dailyRate −0.35%。其余 5 只基金行未改动。经 `save-archive` 接口写入（source=client-preview），与 07-21 真实归档（assets 102485.66、dailyProfit 2760.6）勾稽一致（99725.07 + 2760.6 ≈ 102485.66）。说明：属历史数据修正，无代码变更；`get-archives` 对该日现返回正确 −0.35%。
+
+## 2026-07-21（5）
+
+- 板块「方向」列改为显示真实连续涨跌天数（连涨 N 天 / 连跌 N 天）。此前 `SectorSummaryDto.StreakDays` 只存 ±1/0 的当日方向标记，前端板块行情列表（L5510）只显示"连涨/连跌"纯文字、雷达弹窗（L5951）虽显示"N天"但数据错（恒为 0/1）。根因：`GetSectors` 是公开接口（前端不带 token、Redis 共享缓存），无法按 per-user 持仓反推（原方案 B 不可行），故采用公开口径——基于东方财富基金历史净值计算所有用户一致的连续天数。新增 `SectorNavDay` record、`FetchFundNavHistoryAsync`（调 `api.fund.eastmoney.com/f10/lsjz`，带 `Referer: https://fundf10.eastmoney.com/`）、`FetchFundNavHistoryCachedAsync`（IMemoryCache 缓存 8h + `SemaphoreSlim(12)` + 4s 超时）、`ComputeSectorStreakDays`（按日期对齐求每日均值、从最新日往前数连续同号天数：连涨为正、连跌为负、≈0 或历史<2 天为 0）；`BuildSectorRadarPayloadAsync` 汇总循环替换原 ±1/0 为真实计算，每板块限前 20 只匹配基金、跨板块基金去重。前端 L5510 由纯文字改为与 L5951 完全一致的 `{{ item.streakDays>0?'+':'' }}{{ item.streakDays || 0 }}天`，两处风格统一。公开接口/鉴权、`Rate` 字段（当日涨跌幅）、Redis+内存多级缓存均不变；历史净值接口失败/限流仅导致该列显示 0 天，不阻塞板块列表主流程。`dotnet build` 0 错误 0 警告，QA 验证 NoOne 全 PASS。（`Controllers/FundController.cs`、`wwwroot/index.html`）
+
+## 2026-07-21（4）
+
+- 修复浅色主题下「板块基金」弹窗文字看不清：弹窗标题 `#38bdf8`、盘中估值时间 `live-estimate #38bdf8`、最新净值时间 `latest-nav #f59e0b`、表头/行分隔线 `#334155`/`rgba(255,255,255,...)`、「板块基金雷达」弹窗背景 `#1e293b` 等多处硬编码亮色/深色，在浅色主题白底上对比度极低（标题与估值时间尤其明显）。根因是 4b74842 那次只覆盖了 `#f59e0b` 一处、漏掉 `#38bdf8`，导致标题与估值时间仍走浅青色。统一改用主题 token：`--accent-blue`（浅色=#007aff 深蓝）、`--td-color-info`（=#0066cc）、`--td-color-warning`（=#855600）、`--card-border`、`--card-bg`，浅色主题下全部解析为深/可见值，对比度 ≥ 4:1；深色主题（曜石流光）下这些 token 仍解析为浅色，视觉与修改前一致无损。仅改板块基金弹窗内联样式取值，未触动 JS 逻辑。（`wwwroot/index.html`）
+
 ## 2026-07-21（3）
 
 - 修复首页「今日收益率」两处显示不一致：顶部 Summary 卡片的「今日确认收益率」与日总收益曲线区的「今日收益率」数值对不上（差约 2.1 个百分点）。根因是 `GetTodayPerformanceCurveAsync` 今日收益率的分母 `totalPrincipal` 原来优先使用 `DailyArchive TOTAL.Assets`（可能含待确认买入），与 Summary 采用的确认持仓口径不一致。改为统一使用 `quotedPrincipal`（由各基金确认持仓金额之和构成，已排除待确认买入），符合 ADR 0001「收益率分母必须使用确认持仓金额」规则。同步删除该方法内仅服务于该 fallback 分支、改动后已无引用的 `DailyArchive TOTAL` 查询块。仅影响 today 周期，历史周期（7d/1m/3m/1y）走独立路径不受影响。（`Controllers/FundController.cs`）

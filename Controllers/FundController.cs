@@ -7698,6 +7698,13 @@ namespace 小白养基.Controllers
 
         private sealed record SectorQuoteFallback(double Rate, string UpdatedAt, string RateSource, bool IsStale);
 
+        /// <summary>
+        /// 单只基金某日的单位净值日增长率（%）。
+        /// </summary>
+        /// <param name="Date">交易日，格式 yyyy-MM-dd。</param>
+        /// <param name="Rate">当日单位净值日增长率（%）。</param>
+        private sealed record SectorNavDay(string Date, double Rate);
+
         private static SectorCatalogEntry ResolveSector(string keyOrName)
             => SectorFundCatalog.Resolve(keyOrName);
 
@@ -7915,6 +7922,135 @@ namespace 小白养基.Controllers
             }
             catch { }
             return null;
+        }
+
+        /// <summary>
+        /// 抓取某基金最近 days 天的单位净值日增长率序列（升序）。
+        /// 数据源：东方财富基金历史净值接口；失败/限流返回 null，调用方跳过该基金。
+        /// </summary>
+        private static async Task<List<SectorNavDay>?> FetchFundNavHistoryAsync(HttpClient client, string code, int days)
+        {
+            try
+            {
+                long ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                string url = $"https://api.fund.eastmoney.com/f10/lsjz?callback=&fundCode={code}&pageIndex=1&pageSize={days}&_={ts}";
+                using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                req.Headers.Referrer = new Uri("https://fundf10.eastmoney.com/");
+                if (!req.Headers.UserAgent.Any())
+                {
+                    req.Headers.TryAddWithoutValidation(
+                        "User-Agent",
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36");
+                }
+
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+                using var res = await client.SendAsync(req, cts.Token);
+                if (!res.IsSuccessStatusCode) return null;
+
+                string body = await res.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(body);
+                if (!doc.RootElement.TryGetProperty("Data", out var data)) return null;
+                if (!data.TryGetProperty("LSJZList", out var list) || list.ValueKind != JsonValueKind.Array) return null;
+
+                var series = new List<SectorNavDay>();
+                foreach (var item in list.EnumerateArray())
+                {
+                    string date = item.TryGetProperty("FSRQ", out var fsrq) ? fsrq.GetString() ?? string.Empty : string.Empty;
+                    if (string.IsNullOrWhiteSpace(date)) continue;
+                    // JZZZL 为空 / "--" / 解析失败 → 跳过该条目。
+                    if (!TryGetDouble(item, "JZZZL", out var rate)) continue;
+                    series.Add(new SectorNavDay(date, rate));
+                }
+
+                if (series.Count == 0) return null;
+
+                // 接口按日期倒序返回，统一转成升序便于跨基金按日期对齐。
+                series.Sort((a, b) => string.CompareOrdinal(a.Date, b.Date));
+                return series;
+            }
+            catch
+            {
+                // 外部接口异常/限流：返回 null，不参与板块均值，不阻塞主流程。
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 带内存缓存的历史净值抓取。成功结果缓存 8 小时，降低外部接口调用频率。
+        /// </summary>
+        private async Task<List<SectorNavDay>?> FetchFundNavHistoryCachedAsync(
+            HttpClient client, string code, int days, SemaphoreSlim limiter)
+        {
+            string cacheKey = $"SectorNavHistory:{code}:{days}";
+            var cached = _cache.Get<List<SectorNavDay>>(cacheKey);
+            if (cached != null && cached.Count > 0) return cached;
+
+            await limiter.WaitAsync();
+            try
+            {
+                // 二次检查：等待信号量期间可能已被其它并发请求填充。
+                var cached2 = _cache.Get<List<SectorNavDay>>(cacheKey);
+                if (cached2 != null && cached2.Count > 0) return cached2;
+
+                var series = await FetchFundNavHistoryAsync(client, code, days);
+                if (series != null)
+                {
+                    _cache.Set(cacheKey, series, TimeSpan.FromHours(8));
+                }
+
+                return series;
+            }
+            finally
+            {
+                limiter.Release();
+            }
+        }
+
+        /// <summary>
+        /// 计算板块连续同号（连涨/连跌）天数。
+        /// 取各匹配基金历史净值日增长率，按日期对齐后求每日均值，从最新日期往前数连续同号天数。
+        /// 返回正数表示连涨天数，负数表示连跌天数，0 表示近 0 或历史数据不足。
+        /// </summary>
+        private static int ComputeSectorStreakDays(
+            IReadOnlyList<string> fundCodes,
+            IReadOnlyDictionary<string, List<SectorNavDay>> navByCode)
+        {
+            if (fundCodes.Count == 0 || navByCode.Count == 0) return 0;
+
+            // 按日期归集所有匹配基金当日的日增长率；某基金某日缺数据则排除该基金当日。
+            var dateRates = new SortedDictionary<string, List<double>>(StringComparer.Ordinal);
+            foreach (var code in fundCodes)
+            {
+                if (!navByCode.TryGetValue(code, out var series) || series == null || series.Count == 0) continue;
+                foreach (var day in series)
+                {
+                    if (!dateRates.TryGetValue(day.Date, out var bucket))
+                    {
+                        bucket = new List<double>();
+                        dateRates[day.Date] = bucket;
+                    }
+
+                    bucket.Add(day.Rate);
+                }
+            }
+
+            if (dateRates.Count < 2) return 0;
+
+            var dailyAvg = dateRates.Values.Select(b => b.Average()).ToList();
+            double latest = dailyAvg[dailyAvg.Count - 1];
+            if (Math.Abs(latest) < 0.001) return 0;
+
+            int sign = latest > 0 ? 1 : -1;
+            int streak = 0;
+            for (int i = dailyAvg.Count - 1; i >= 0; i--)
+            {
+                double v = dailyAvg[i];
+                if (Math.Abs(v) < 0.001) break;      // 近 0 视为打断连涨/连跌
+                if ((v > 0 ? 1 : -1) != sign) break;  // 符号反转，连涨/连跌结束
+                streak++;
+            }
+
+            return sign > 0 ? streak : -streak;
         }
 
         private async Task<List<SectorFundQuote>> BuildSectorQuotesAsync(
@@ -8321,6 +8457,39 @@ namespace 小白养基.Controllers
                 .GroupBy(q => q.Code, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
+            // 预取板块匹配基金的历史净值日增长率序列（按基金代码缓存 + 并发受限），
+            // 用于计算真实的连涨/连跌天数（公开口径，所有用户一致）。
+            const int sectorStreakNavDays = 60;
+            const int sectorStreakFundLimit = 20;
+
+            var streakFundCodesBySector = sectorRows
+                .ToDictionary(
+                    row => row.Def.Key,
+                    row => row.Matched
+                        .Take(sectorStreakFundLimit)
+                        .Select(f => f.Code)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList(),
+                    StringComparer.OrdinalIgnoreCase);
+
+            var allStreakCodes = streakFundCodesBySector
+                .SelectMany(kv => kv.Value)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            using var navLimiter = new SemaphoreSlim(12);
+            var navResults = await Task.WhenAll(allStreakCodes.Select(async code =>
+            {
+                var series = await FetchFundNavHistoryCachedAsync(client, code, sectorStreakNavDays, navLimiter);
+                return new { Code = code, Series = series };
+            }));
+
+            var navByCode = new Dictionary<string, List<SectorNavDay>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var r in navResults)
+            {
+                if (r.Series != null && r.Series.Count > 0) navByCode[r.Code] = r.Series;
+            }
+
             var summaries = new List<SectorSummaryDto>();
             int rank = 1;
             foreach (var row in sectorRows)
@@ -8356,7 +8525,9 @@ namespace 小白养基.Controllers
                     ActiveFundCount = activeFundCount,
                     ZeroQuoteCount = zeroQuoteCount,
                     StaleQuoteCount = staleQuoteCount,
-                    StreakDays = avgRate > 0.005 ? 1 : (avgRate < -0.005 ? -1 : 0),
+                    StreakDays = ComputeSectorStreakDays(
+                        streakFundCodesBySector.TryGetValue(row.Def.Key, out var streakCodes) ? streakCodes : new List<string>(),
+                        navByCode),
                     HoldingRank = rank++,
                     UpdatedAt = aggregationQuotes.Select(q => q.UpdatedAt).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t)) ?? ChinaNow().ToString("yyyy-MM-dd HH:mm:ss"),
                     PreviewFunds = quotes.OrderByDescending(q => q.Rate).Take(3).ToList()
