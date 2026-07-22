@@ -2,6 +2,8 @@
 
 ## 2026-07-22
 
+- 前端缓存增强（板块 localStorage 顺延 + 资讯页静默刷新）：纯前端 `wwwroot/index.html` 改动，零后端。板块：`SECTOR_CACHE_DURATION` 180000→600000（内存复用 3min→10min）、`sector_fast_cache_v3` 磁盘快取窗口 30min→1h，刷新/重开更长窗口零等待。资讯：新增 `fetchNews` 的 `refresh` 选项，开页路径改为 `fetchNews(newsMode, false, {background:true, refresh:true})`——先瞬间显示本地旧数据（内存 ≤10min / 磁盘 ≤30min，`NEWS_CACHE_DURATION` 2min→10min、磁盘 15min→30min），再于后台静默拉新、就绪即更新，全程不转圈；手动 🔄(force) 与切模式/开面板路径保持原前台行为，`warmNewsCache()` 仍空操作保首屏速度。QA 静态复核 NoOne 通过。（`wwwroot/index.html`）
+
 - 大盘指数（全球大盘雷达）定时预热 + 资讯面板移动端布局修复：
   - 大盘指数预热：复用 `SectorRadarWarmupService`，在同一预热周期里顺带自 ping `GET {SelfBaseUrl}/api/fund/global-indices?force=true`，100% 复用该端点的 Redis(`api:fund:global-indices:v1`)+DB(`global_indices_1y_v2`) 多级缓存重建逻辑，公开接口无需 token、`force=true` 确保真正重建；与板块雷达一并启动即预热 + 周期预热，打开即热、零等待。复用同一命名 HttpClient `SectorWarmup`、同款容错（200 刷新/503 跳过/异常不崩溃）。`Services/SectorRadarWarmupService.cs` 改动、零新文件。
   - 资讯移动端遮挡修复：根因是单文件含 light/dark 两套主题各自 media query 块，原 light 768px 块缺 `.news-page-layout` 单栏覆盖、且两套 900px 块均缺失，导致 light 主题手机端及横屏/宽屏手机(769–900px)下右侧「资讯影响时间线」被双栏 Grid(`minmax(0,1fr) minmax(280px,.42fr)`)挤压遮挡。改动：light 900px/768px 及 dark 900px 三处 media query 补 `.news-page-layout { grid-template-columns: 1fr; }`，基础规则补 `overflow:hidden` 防溢出；现两套主题 ≤900px 与 ≤768px 均折叠单栏，右栏不再遮挡。`dotnet build` 0 错误，回归测试全 PASS。（`Services/SectorRadarWarmupService.cs`、`wwwroot/index.html`）

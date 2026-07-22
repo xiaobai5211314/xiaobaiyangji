@@ -7080,7 +7080,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                 // 资讯秒开缓存：先显示本地旧数据，再后台刷新。
                 // 7x24 和持仓资讯分开缓存，避免切页时白屏等接口。
-                const NEWS_CACHE_DURATION = 2 * 60 * 1000;
+                const NEWS_CACHE_DURATION = 10 * 60 * 1000;
                 let newsMemoryCache = new Map();
                 let newsWarmStarted = false;
                 const getNewsCacheKey = (mode = newsMode.value, important = newsOnlyImportant.value) => `news_cache_v2_${currentUser.value || 'guest'}_${mode}_${important ? 1 : 0}`;
@@ -7645,6 +7645,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
                 const fetchNews = async (mode = newsMode.value, force = false, options = {}) => {
                     const background = !!options.background;
+                    const refresh = !!options.refresh;
                     const targetMode = mode || 'global';
                     const key = getNewsCacheKey(targetMode, newsOnlyImportant.value);
                     const now = Date.now();
@@ -7655,14 +7656,14 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         const mem = newsMemoryCache.get(key);
                         if (mem && (now - mem.time) < NEWS_CACHE_DURATION) {
                             if (!background || (activePage.value === 'news' && newsMode.value === targetMode)) applyNewsPayload(mem.data);
-                            return;
+                            if (!refresh) return;
                         }
 
-                        const disk = readJsonCache(key, 15 * 60 * 1000);
+                        const disk = readJsonCache(key, 30 * 60 * 1000);
                         if (disk) {
                             newsMemoryCache.set(key, { time: now, data: disk });
                             if (!background || (activePage.value === 'news' && newsMode.value === targetMode)) applyNewsPayload(disk);
-                            if (background) return;
+                            if (background && !refresh) return;
                         }
                     }
 
@@ -8379,7 +8380,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     try { localStorage.setItem(key, JSON.stringify({ time: Date.now(), data })); } catch (e) { }
                 };
 
-                let sectorCache = null; let sectorCacheTime = 0; const SECTOR_CACHE_DURATION = 180000; const SECTOR_FAST_CACHE_KEY = 'sector_fast_cache_v3';
+                let sectorCache = null; let sectorCacheTime = 0; const SECTOR_CACHE_DURATION = 600000; const SECTOR_FAST_CACHE_KEY = 'sector_fast_cache_v3';
                 const fetchSectors = async (force = false, openModal = true) => {
                     const now = Date.now();
                     if (!force && sectorCache && (now - sectorCacheTime) < SECTOR_CACHE_DURATION) {
@@ -8391,7 +8392,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                         try { localStorage.removeItem('sector_fast_cache_v1'); localStorage.removeItem(SECTOR_FAST_CACHE_KEY); } catch (e) { }
                     }
                     if (!force && sectorTopList.value.length === 0) {
-                        const cached = readJsonCache(SECTOR_FAST_CACHE_KEY, 30 * 60 * 1000);
+                        const cached = readJsonCache(SECTOR_FAST_CACHE_KEY, 60 * 60 * 1000);
                         if (cached) applySectorPayload(cached);
                     }
                     if (openModal) showSectorRadar.value = true;
@@ -8838,7 +8839,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
                     activePage.value = page;
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                     if (page === 'sector') { await fetchSectors(false, false); fetchCapitalFlow(false); }
-                    if (page === 'news') fetchNews(newsMode.value, false);
+                    if (page === 'news') fetchNews(newsMode.value, false, { background: true, refresh: true });
                     if (page === 'analysis') { persistAnalysisPreferences(); await fetchAnalysis(true); }
                     if (page === 'tweets') await loadInfluencerPosts(false);
                     if (page === 'home') nextTick(() => {
