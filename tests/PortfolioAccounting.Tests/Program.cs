@@ -999,3 +999,25 @@ if (!caseD2Result.Rows.Any(r => r.FundCode == "110011" && r.Source == "nav-missi
     throw new InvalidOperationException("archiveGuard.caseD2: nav-missing fund must be preserved when TOTAL=0");
 
 Console.WriteLine("Archive guard (write-path / nav-missing) regression passed.");
+
+// ===== 板块雷达定时预热间隔（SectorRadarScheduleHelper）回归测试 =====
+// 交易时段（周一 10:00）→ 2min；非交易（周一 20:00、周六 10:00）→ 30min。
+var warmupTrading = SectorRadarScheduleHelper.GetWarmupInterval(new DateTime(2026, 7, 13, 10, 0, 0));
+if (warmupTrading != TimeSpan.FromMinutes(2))
+    throw new InvalidOperationException($"sectorWarmup.trading: expected 2min, actual {warmupTrading.TotalMinutes}min");
+
+var warmupEvening = SectorRadarScheduleHelper.GetWarmupInterval(new DateTime(2026, 7, 13, 20, 0, 0));
+if (warmupEvening != TimeSpan.FromMinutes(30))
+    throw new InvalidOperationException($"sectorWarmup.evening: expected 30min, actual {warmupEvening.TotalMinutes}min");
+
+var warmupWeekend = SectorRadarScheduleHelper.GetWarmupInterval(new DateTime(2026, 7, 11, 10, 0, 0));
+if (warmupWeekend != TimeSpan.FromMinutes(30))
+    throw new InvalidOperationException($"sectorWarmup.weekend: expected 30min, actual {warmupWeekend.TotalMinutes}min");
+
+// 边界：11:35 仍属交易时段（闭区间），12:54 属午休非交易。
+if (!SectorRadarScheduleHelper.IsTradingTime(new DateTime(2026, 7, 13, 11, 35, 0)))
+    throw new InvalidOperationException("sectorWarmup.boundary.1135: inclusive upper bound must be trading");
+if (SectorRadarScheduleHelper.IsTradingTime(new DateTime(2026, 7, 13, 12, 54, 0)))
+    throw new InvalidOperationException("sectorWarmup.boundary.1254: lunch break must not be trading");
+
+Console.WriteLine("Sector radar warmup interval regression passed.");

@@ -119,6 +119,11 @@ builder.Services.AddHttpClient("WeChatMiniProgram", client =>
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 
+builder.Services.AddHttpClient("SectorWarmup", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(180);
+});
+
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 {
     var options = ConfigurationOptions.Parse("localhost:6379");
@@ -137,6 +142,7 @@ builder.Services.AddHostedService<FundScraperService>();
 builder.Services.AddHostedService<NavSettlementService>();
 builder.Services.AddHostedService<DailySettlementService>();
 builder.Services.AddHostedService<InfluencerPostsSidecarService>();
+builder.Services.AddHostedService<SectorRadarWarmupService>();
 
 var app = builder.Build();
 
