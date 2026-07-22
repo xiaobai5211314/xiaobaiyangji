@@ -78,5 +78,33 @@ public sealed class SectorRadarWarmupService : BackgroundService
             // 单次失败不崩溃，下周期重试。
             Console.WriteLine($"[警告] 板块雷达预热失败: {ex.Message}");
         }
+
+        // 大盘指数（全球大盘雷达）预热：复用 GET /api/fund/global-indices 的
+        // Redis(api:fund:global-indices:v1) + DB(global_indices_1y_v2) 多级缓存重建逻辑，
+        // 公开接口、无需 token，force=true 确保真正重建而非命中缓存。
+        var indicesUrl = $"{baseUrl}/api/fund/global-indices?force=true";
+        try
+        {
+            using var indicesClient = _httpClientFactory.CreateClient("SectorWarmup");
+            using var indicesResp = await indicesClient.GetAsync(indicesUrl, stoppingToken);
+            if (indicesResp.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("[指数预热] 大盘指数缓存已刷新 ({StatusCode})", (int)indicesResp.StatusCode);
+            }
+            else
+            {
+                // 503 "refreshing" 是并发刷新中，属正常，跳过本周期。
+                _logger.LogWarning("[指数预热] 大盘指数预热端点返回 {StatusCode}，本周期跳过", (int)indicesResp.StatusCode);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 正常关闭。
+        }
+        catch (Exception ex)
+        {
+            // 单次失败不崩溃，下周期重试。
+            Console.WriteLine($"[警告] 大盘指数预热失败: {ex.Message}");
+        }
     }
 }

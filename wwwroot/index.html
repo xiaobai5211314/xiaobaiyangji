@@ -2279,6 +2279,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             .stock-search-input {
                 grid-column: 1 / 3;
             }
+
+            .news-page-layout {
+                grid-template-columns: 1fr;
+            }
         }
 
         @media screen and (max-width: 768px) {
@@ -2356,6 +2360,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
             .news-summary {
                 font-size: 14px;
+            }
+
+            .news-page-layout {
+                grid-template-columns: 1fr;
             }
         }
 
@@ -2533,6 +2541,7 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
             display: grid;
             grid-template-columns: minmax(0, 1fr) minmax(280px, .42fr);
             gap: 15px;
+            overflow: hidden;
         }
 
         .news-page-list {
@@ -2877,6 +2886,10 @@ html[data-theme="light"] .fund-card [style*="color: #f8fafc"],
 
             .stock-search-input {
                 grid-column: 1 / 3;
+            }
+
+            .news-page-layout {
+                grid-template-columns: 1fr;
             }
         }
 
