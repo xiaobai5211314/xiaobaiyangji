@@ -1,0 +1,34 @@
+sequenceDiagram
+    participant S as SectorRadarWarmupService
+    participant H as Kestrel (127.0.0.1:7084)
+    participant C as FundController.GetSectors
+    participant L as _sectorsRefreshLock
+    participant R as Redis
+    participant M as IMemoryCache
+    participant D as MarketCacheService
+
+    Note over S: ExecuteAsync 启动
+    S->>H: GET {baseUrl}/api/health (就绪轮询, 最多 ~60s)
+    H-->>S: 200 OK
+    loop 每个预热周期 (间隔 = GetWarmupInterval)
+        S->>H: GET /api/fund/sectors?force=true
+        H->>C: GetSectors(force=true)
+        Note over C: force=true 跳过 Redis/DB/内存 命中分支
+        C->>L: WaitAsync(0) 取锁
+        L-->>C: 获得锁
+        C->>C: BuildSectorRadarPayloadAsync()<br/>(全市场扫描 + 行情HTTP, ~10-30s)
+        C->>R: StringSetAsync(api:fund:sectors:v3, ttl=fresh)
+        C->>M: Set(FundSectorRadarV7, ttl=fresh)
+        C->>M: Set(FundSectorRadarV7_Stale, ttl=6h)
+        C->>D: SetAsync(sector_radar_v4)
+        C->>L: Release()
+        C-->>H: 200 JSON
+        H-->>S: 200 OK
+        S->>S: Task.Delay(GetWarmupInterval(), stoppingToken)
+    end
+
+    Note over S,C: 失败分支 (try/catch 包裹, 不崩溃)
+    S->>H: GET .../api/fund/sectors?force=true
+    H-->>S: 异常 / 非 200
+    S->>S: catch -> Console.WriteLine("[警告] 板块雷达预热失败: ...")
+    S->>S: 下一周期自动重试 (Task.Delay 30s 后继续)

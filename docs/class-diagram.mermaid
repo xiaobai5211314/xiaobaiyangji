@@ -1,0 +1,36 @@
+classDiagram
+    class SectorRadarWarmupService {
+        +BackgroundService
+        -HttpClient _httpClient
+        -string _selfBaseUrl
+        -ILogger~SectorRadarWarmupService~ _logger
+        +ExecuteAsync(CancellationToken stoppingToken) Task
+        -WarmupOnceAsync(CancellationToken stoppingToken) Task
+        -WaitForServerReadyAsync(CancellationToken stoppingToken) Task
+        -static GetWarmupInterval() TimeSpan
+        -static IsTradingTimeNow() bool
+        -static ChinaNow() DateTime
+    }
+
+    class SectorRadarScheduleHelper {
+        &lt;&lt;static&gt;&gt;
+        +TradingInterval TimeSpan = 2min
+        +OffTradingInterval TimeSpan = 30min
+        +ChinaNow() DateTime
+        +IsTradingTimeNow() bool
+        +GetWarmupInterval() TimeSpan
+    }
+
+    class FundController {
+        &lt;&lt;ASP.NET Controller&gt;&gt;
+        +GetSectors(bool force) Task~IActionResult~
+        -BuildSectorRadarPayloadAsync() Task~object~
+        -SetSectorRadarCache(object) void
+        -_sectorsRefreshLock SemaphoreSlim
+    }
+
+    SectorRadarWarmupService ..> IHttpClientFactory : 注入(构造, 取 SectorWarmup)
+    SectorRadarWarmupService ..> IConfiguration : 注入(构造, 读 SelfBaseUrl)
+    SectorRadarWarmupService ..> ILogger : 注入(构造)
+    SectorRadarWarmupService ..> SectorRadarScheduleHelper : 静态调用(周期判断)
+    SectorRadarWarmupService ..> FundController : HTTP 自 ping<br/>GET /api/fund/sectors?force=true
