@@ -106,5 +106,32 @@ public sealed class SectorRadarWarmupService : BackgroundService
             // 单次失败不崩溃，下周期重试。
             Console.WriteLine($"[警告] 大盘指数预热失败: {ex.Message}");
         }
+
+        // 资讯(7x24快讯)预热：复用 GET /api/fund/news 的 NewsV3 多级缓存重建逻辑。
+        // 仅预热公开 global 模式(username 为空)，holding 模式依赖 username 由前端缓存兜底。
+        var newsUrl = $"{baseUrl}/api/fund/news?mode=global&force=true";
+        try
+        {
+            using var newsClient = _httpClientFactory.CreateClient("SectorWarmup");
+            using var newsResp = await newsClient.GetAsync(newsUrl, stoppingToken);
+            if (newsResp.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("[资讯预热] 资讯缓存已刷新 ({StatusCode})", (int)newsResp.StatusCode);
+            }
+            else
+            {
+                // 503 "refreshing" 是并发刷新中，属正常，跳过本周期。
+                _logger.LogWarning("[资讯预热] 资讯预热端点返回 {StatusCode}，本周期跳过", (int)newsResp.StatusCode);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 正常关闭。
+        }
+        catch (Exception ex)
+        {
+            // 单次失败不崩溃，下周期重试。
+            Console.WriteLine($"[警告] 资讯预热失败: {ex.Message}");
+        }
     }
 }

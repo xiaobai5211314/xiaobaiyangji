@@ -2,6 +2,8 @@
 
 ## 2026-07-22
 
+- 资讯(7x24快讯)后端定时预热，闭环「打开即热」：在 `SectorRadarWarmupService` 同一预热周期里顺带自 ping `GET {SelfBaseUrl}/api/fund/news?mode=global&force=true`，复用 `GetNews` 的 `NewsV3` 多级缓存重建逻辑；仅预热公开 global 模式(username 空)，holding 模式依赖 username 由前端 30min localStorage 兜底。前置：因 news 原不在 JWT 免鉴白名单，自 ping 无 token 会被中间件返回 401，故在 `Program.cs` 白名单加 `path.StartsWith("/api/fund/news")`（与 sectors/global-indices 并列，对前端零副作用——控制器无 [Authorize]，带不带 token 返回一致）。稳态由 6h 内存 stale 兜底不撞 503，单次失败不崩溃下周期重试。主理人逐行核对 diff + 复跑 build 0 错误，QA 静态复核 NoOne 通过。（`Program.cs`、`Services/SectorRadarWarmupService.cs`）
+
 - 前端缓存增强（板块 localStorage 顺延 + 资讯页静默刷新）：纯前端 `wwwroot/index.html` 改动，零后端。板块：`SECTOR_CACHE_DURATION` 180000→600000（内存复用 3min→10min）、`sector_fast_cache_v3` 磁盘快取窗口 30min→1h，刷新/重开更长窗口零等待。资讯：新增 `fetchNews` 的 `refresh` 选项，开页路径改为 `fetchNews(newsMode, false, {background:true, refresh:true})`——先瞬间显示本地旧数据（内存 ≤10min / 磁盘 ≤30min，`NEWS_CACHE_DURATION` 2min→10min、磁盘 15min→30min），再于后台静默拉新、就绪即更新，全程不转圈；手动 🔄(force) 与切模式/开面板路径保持原前台行为，`warmNewsCache()` 仍空操作保首屏速度。QA 静态复核 NoOne 通过。（`wwwroot/index.html`）
 
 - 大盘指数（全球大盘雷达）定时预热 + 资讯面板移动端布局修复：
