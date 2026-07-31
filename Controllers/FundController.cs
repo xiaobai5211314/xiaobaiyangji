@@ -1264,6 +1264,9 @@ namespace 小白养基.Controllers
             public string FundName { get; set; } = "";
             public string Direction { get; set; } = "Buy";
             public double Amount { get; set; }
+            public double Shares { get; set; }
+            public double ConfirmedNav { get; set; }
+            public double Fee { get; set; }
             public string? TradeDate { get; set; }
             public string? TradeTime { get; set; }
             public string? CutoffDate { get; set; }
@@ -1316,6 +1319,9 @@ namespace 小白养基.Controllers
             try
             {
                 int saved = 0;
+                int updated = 0;
+                int settled = 0;
+                var warnings = new List<string>();
                 foreach (var item in request.Items)
                 {
                     if (item.Amount <= 0) continue;
@@ -1339,30 +1345,103 @@ namespace 小白养基.Controllers
                     var tradeTiming = !string.IsNullOrWhiteSpace(item.CutoffDate) && !string.IsNullOrWhiteSpace(item.ConfirmDate)
                         ? null
                         : ResolveTradeTimingFromTradeDate(fundName, item.TradeDate ?? ChinaDateDash(), item.TradeTime);
+                    string normalizedTradeDate = item.TradeDate ?? tradeTiming?.TradeDate ?? ChinaDateDash();
+                    string normalizedDirection = item.Direction.Equals("Sell", StringComparison.OrdinalIgnoreCase)
+                        ? "Sell"
+                        : "Buy";
+                    double normalizedAmount = Math.Round(item.Amount, 2);
+                    var existingOrder = await _context.FundTradeOrders
+                        .FirstOrDefaultAsync(order =>
+                            order.Username == username
+                            && order.FundCode == fundCode
+                            && order.Direction == normalizedDirection
+                            && order.TradeDate == normalizedTradeDate
+                            && order.TradeTime == item.TradeTime
+                            && Math.Abs(order.Amount - normalizedAmount) < 0.001);
 
-                    _context.FundTradeOrders.Add(new Models.FundTradeOrder
+                    var order = existingOrder ?? new Models.FundTradeOrder
                     {
                         Username = username,
                         FundCode = fundCode,
                         FundName = fundName,
-                        Direction = item.Direction,
-                        Amount = Math.Round(item.Amount, 2),
-                        TradeDate = item.TradeDate,
+                        Direction = normalizedDirection,
+                        Amount = normalizedAmount,
+                        TradeDate = normalizedTradeDate,
                         TradeTime = item.TradeTime,
-                        CutoffDate = item.CutoffDate ?? tradeTiming?.TradeDate ?? item.TradeDate,
-                        Status = item.Status,
-                        ConfirmDate = item.ConfirmDate ?? tradeTiming?.ConfirmDate ?? item.FirstProfitDate,
-                        FirstProfitDate = item.FirstProfitDate ?? tradeTiming?.FirstProfitDate,
                         Source = "ocr_transaction",
-                        RawText = item.RawText,
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    });
-                    saved++;
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    order.FundName = fundName;
+                    order.CutoffDate = item.CutoffDate ?? tradeTiming?.TradeDate ?? normalizedTradeDate;
+                    order.Status = item.Status;
+                    order.ConfirmDate = item.ConfirmDate ?? tradeTiming?.ConfirmDate ?? item.FirstProfitDate;
+                    order.FirstProfitDate = item.FirstProfitDate ?? tradeTiming?.FirstProfitDate;
+                    order.RawText = item.RawText;
+                    order.UpdatedAt = DateTime.UtcNow;
+                    if (existingOrder == null)
+                    {
+                        _context.FundTradeOrders.Add(order);
+                        saved++;
+                    }
+                    else
+                    {
+                        updated++;
+                    }
+
+                    if (item.Status.Equals("Confirmed", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var fund = await _context.MyFunds.FirstOrDefaultAsync(
+                            value => value.Username == username && value.FundCode == fundCode);
+                        if (fund == null)
+                        {
+                            warnings.Add($"{fundName}({fundCode}) 未找到当前持仓，交易仅保存为审计记录。");
+                            continue;
+                        }
+
+                        try
+                        {
+                            if (normalizedDirection == "Buy"
+                                && item.Shares > 0
+                                && PortfolioSettlementService.ConfirmPendingBuyWithPlatformShares(
+                                    fund,
+                                    item.Shares,
+                                    normalizedAmount,
+                                    order.ConfirmDate ?? normalizedTradeDate))
+                            {
+                                settled++;
+                            }
+                            else if (normalizedDirection == "Sell"
+                                     && item.Shares > 0
+                                     && (string.Equals(fund.PendingTradeStatus, "pending_sell", StringComparison.OrdinalIgnoreCase)
+                                         || string.Equals(fund.PendingTradeStatus, "shares_confirmed", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                _portfolioSettlement.ReducePosition(
+                                    fund,
+                                    item.Shares,
+                                    normalizedAmount,
+                                    normalizedTradeDate,
+                                    order.ConfirmDate ?? normalizedTradeDate);
+                                settled++;
+                            }
+                        }
+                        catch (InvalidOperationException ex)
+                        {
+                            warnings.Add($"{fundName}({fundCode}) 未自动结转：{ex.Message}");
+                        }
+                    }
                 }
                 await _context.SaveChangesAsync();
                 ClearTodayCache(username);
-                return Ok(new { success = true, saved, message = $"已导入 {saved} 笔交易记录。" });
+                return Ok(new
+                {
+                    success = true,
+                    saved,
+                    updated,
+                    settled,
+                    warnings,
+                    message = $"交易记录已同步：新增 {saved} 笔，更新 {updated} 笔，自动结转 {settled} 笔。"
+                });
             }
             catch (Exception ex)
             {
@@ -1446,18 +1525,10 @@ namespace 小白养基.Controllers
                 }
                 else
                 {
-                    // 无明确状态文字 → 按日期判断
+                    // 预计日期不是登记机构确认凭证；没有明确状态文字时继续保留 Pending。
                     string firstProfit = EstimateFirstProfitDate(fundName, tradeDate, tradeTime);
-                    if (string.CompareOrdinal(firstProfit, ChinaDateDash()) > 0)
-                    {
-                        status = "Pending";
-                        decisionReason = $"交易日{tradeDate}，预计{firstProfit}可查看收益";
-                    }
-                    else
-                    {
-                        status = "Confirmed";
-                        decisionReason = $"交易日{tradeDate}，已超过可查看收益日{firstProfit}";
-                    }
+                    status = "Pending";
+                    decisionReason = $"截图未明确显示交易成功，预计{firstProfit}仅作时间参考";
                 }
 
                 // 尝试匹配基金代码
@@ -1489,6 +1560,114 @@ namespace 小白养基.Controllers
                     DecisionReason = decisionReason
                 });
                 diagnostics.Add($"[交易] {direction} {fundName}({fundCode}) {amount}元 {tradeDate} {tradeTime} → {status}: {decisionReason}");
+            }
+
+            // 资产交易详情页通常按“标签 + 下一行数值”排版，无法命中上面的列表行正则。
+            // 只有同时识别到成功状态、实际金额和确认份额时，才作为可驱动持仓结算的凭证。
+            if (items.Count == 0
+                && Regex.IsMatch(fullText, @"(买入|卖出)成功", RegexOptions.IgnoreCase))
+            {
+                bool isSell = Regex.IsMatch(fullText, @"卖出成功", RegexOptions.IgnoreCase);
+                string direction = isSell ? "Sell" : "Buy";
+                string productLabel = isSell ? "卖出产品" : "买入产品";
+                string amountLabel = isSell ? "到账金额" : "(?:买入金额|付款金额)";
+                string sharesLabel = isSell ? "卖出份额" : "确认份额";
+
+                var nameMatch = Regex.Match(
+                    fullText,
+                    $@"{productLabel}\s*([^\r\n]+)",
+                    RegexOptions.IgnoreCase);
+                var amountMatch = Regex.Match(
+                    fullText,
+                    $@"{amountLabel}\s*([\d,]+(?:\.\d+)?)\s*元",
+                    RegexOptions.IgnoreCase);
+                var sharesMatch = Regex.Match(
+                    fullText,
+                    $@"{sharesLabel}\s*([\d,]+(?:\.\d+)?)\s*份",
+                    RegexOptions.IgnoreCase);
+                var navMatch = Regex.Match(
+                    fullText,
+                    @"确认净值\s*([\d,]+(?:\.\d+)?)",
+                    RegexOptions.IgnoreCase);
+                var feeMatch = Regex.Match(
+                    fullText,
+                    @"手续费\s*([\d,]+(?:\.\d+)?)\s*元",
+                    RegexOptions.IgnoreCase);
+                var tradeTimeMatch = Regex.Match(
+                    fullText,
+                    isSell
+                        ? @"卖出时间\s*(\d{4}[-/年]\d{1,2}[-/月]\d{1,2}日?)\s*(\d{2}:\d{2}:\d{2})?"
+                        : @"买入时间\s*(\d{4}[-/年]\d{1,2}[-/月]\d{1,2}日?)\s*(\d{2}:\d{2}:\d{2})?",
+                    RegexOptions.IgnoreCase);
+                var confirmTimeMatch = Regex.Match(
+                    fullText,
+                    @"(?:到账时间|确认时间)\s*(\d{4}[-/年]\d{1,2}[-/月]\d{1,2}日?)\s*(\d{2}:\d{2}:\d{2})?",
+                    RegexOptions.IgnoreCase);
+
+                static string NormalizeTransactionDate(string raw)
+                {
+                    string normalized = raw.Trim()
+                        .Replace("年", "-")
+                        .Replace("月", "-")
+                        .Replace("日", "")
+                        .Replace("/", "-");
+                    return DateTime.TryParse(normalized, out var parsed)
+                        ? parsed.ToString("yyyy-MM-dd")
+                        : normalized;
+                }
+
+                string fundName = nameMatch.Success ? nameMatch.Groups[1].Value.Trim() : string.Empty;
+                double.TryParse(amountMatch.Groups[1].Value.Replace(",", ""), out double amount);
+                double.TryParse(sharesMatch.Groups[1].Value.Replace(",", ""), out double shares);
+                double.TryParse(navMatch.Groups[1].Value.Replace(",", ""), out double confirmedNav);
+                double.TryParse(feeMatch.Groups[1].Value.Replace(",", ""), out double fee);
+                string tradeDate = tradeTimeMatch.Success
+                    ? NormalizeTransactionDate(tradeTimeMatch.Groups[1].Value)
+                    : ChinaDateDash();
+                string? tradeTime = tradeTimeMatch.Success && tradeTimeMatch.Groups[2].Success
+                    ? tradeTimeMatch.Groups[2].Value
+                    : null;
+                string? confirmDate = confirmTimeMatch.Success
+                    ? NormalizeTransactionDate(confirmTimeMatch.Groups[1].Value)
+                    : null;
+
+                if (!string.IsNullOrWhiteSpace(fundName) && amount > 0 && shares > 0)
+                {
+                    string fundCode = string.Empty;
+                    var allFunds = await GetAllFundsAsync();
+                    var match = MatchOcrFund(fundName, "", allFunds?.ToList() ?? new(), new(), new());
+                    if (match.fund != null && match.score > 70)
+                    {
+                        fundCode = match.fund.Code;
+                        fundName = match.fund.Name;
+                    }
+
+                    var tradeTiming = ResolveTradeTimingFromTradeDate(fundName, tradeDate, tradeTime);
+                    items.Add(new TransactionPreviewItem
+                    {
+                        FundCode = fundCode,
+                        FundName = fundName,
+                        Direction = direction,
+                        Amount = Math.Round(amount, 2),
+                        Shares = Math.Round(shares, 6),
+                        ConfirmedNav = Math.Round(confirmedNav, 6),
+                        Fee = Math.Round(fee, 2),
+                        TradeDate = tradeDate,
+                        TradeTime = tradeTime,
+                        CutoffDate = tradeTiming.TradeDate,
+                        ConfirmDate = confirmDate ?? tradeTiming.ConfirmDate,
+                        Status = "Confirmed",
+                        FirstProfitDate = tradeTiming.FirstProfitDate,
+                        RawText = fullText,
+                        DecisionReason = "详情页明确显示交易成功，并识别到实际金额与确认份额"
+                    });
+                    diagnostics.Add(
+                        $"[交易详情] {direction} {fundName}({fundCode}) amount={amount:F2} shares={shares:F6} nav={confirmedNav:F6} fee={fee:F2} → Confirmed");
+                }
+                else
+                {
+                    diagnostics.Add("[交易详情] 已识别成功状态，但缺少产品、实际金额或确认份额，未写入确认交易。");
+                }
             }
 
             if (items.Count == 0)
@@ -3560,6 +3739,20 @@ namespace 小白养基.Controllers
                 ? item.ConfirmedAmount
                 : Math.Max(0, item.HoldAmount - pendingAmount);
             bool isFullPending = pendingAmount > 0 && pendingAmount >= item.HoldAmount - 0.01;
+
+            if (item.HoldSharesAreConfirmed && item.HoldShares >= 0)
+            {
+                bool sellSharesConfirmed = PortfolioSettlementService.ConfirmPendingSellFromPlatformHolding(
+                    exist,
+                    item.HoldShares,
+                    item.HoldAmount,
+                    todayDash);
+                if (sellSharesConfirmed)
+                {
+                    Console.WriteLine(
+                        $"[OCR确认赎回份额] code={exist.FundCode}, remainingShares={item.HoldShares:F6}, remainingAmount={item.HoldAmount:F2}, actualProceeds=待核实");
+                }
+            }
 
             // HoldAmount 保留平台总资产（对齐蚂蚁），不做缩减
             if (item.HoldAmount > 0)

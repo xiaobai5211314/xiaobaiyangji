@@ -354,6 +354,13 @@ namespace 小白养基.Services
                             double? exactProfit = null;
                             double? exactAssets = null;
                             double? pendingBuyNav = TryGetNavForDate(dataArray, holding.PendingTradeDate);
+                            double? pendingSellNav = PortfolioSettlementService.IsPendingRedeem(holding)
+                                ? TryGetNavForDate(dataArray, holding.PendingTradeDate)
+                                : null;
+                            bool changed = PortfolioSettlementService.ConfirmPendingSellSharesIfDue(
+                                holding,
+                                actualSettleDate,
+                                pendingSellNav);
 
                             double effectiveShares = GetEffectiveShares(holding, actualSettleDate);
 
@@ -372,7 +379,7 @@ namespace 小白养基.Services
                                 }
                             }
 
-                            bool changed = ApplyOneDaySettlement(holding, actualRate, actualSettleDate, exactProfit, exactAssets);
+                            changed |= ApplyOneDaySettlement(holding, actualRate, actualSettleDate, exactProfit, exactAssets);
                             changed |= PortfolioSettlementService.CapturePendingBuyShares(
                                 holding,
                                 holding.PendingTradeDate ?? actualSettleDate,

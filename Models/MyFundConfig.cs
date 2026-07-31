@@ -46,6 +46,10 @@ namespace 小白养基.Models
         public double PendingBuyShares { get; set; } = 0;
         public double PendingSellAmount { get; set; } = 0;
         public double PendingSellShares { get; set; } = 0;
+        // 已提交赎回对应的成本。份额确认后继续保留，到账金额核实时只补已实现收益，不再重复扣份额。
+        public double PendingSellCostAmount { get; set; } = 0;
+        // 正式净值推导的赎回毛额，仅作到账核对参考，不等同于平台实际到账金额。
+        public double PendingSellEstimatedProceeds { get; set; } = 0;
         [MaxLength(20)]
         public string? PendingTradeDate { get; set; }
         [MaxLength(20)]

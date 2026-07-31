@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2026-07-31
+
+- 修复赎回连续数日停留在待确认、总持仓未扣除已确认卖出份额：`PortfolioSettlementService` 新增赎回两阶段幂等结算。预计确认日到达且原交易日正式净值可用后，系统自动结转剩余份额、金额和成本，状态进入 `shares_confirmed`；平台交易详情确认实际到账金额后只补记 `RealizedProfit`，不再二次扣减持仓。
+- 新增资产详情精确剩余份额结转和交易详情确认导入：资产详情 OCR 可用平台剩余份额/当前金额完成赎回份额结转；交易详情只有明确“买入成功/卖出成功”、实际金额和确认份额时才改变持仓。交易记录按用户、基金、方向、日期、时间和金额幂等保存，预计日期不再被误判为已确认。
+- 新增 `PendingSellCostAmount`、`PendingSellEstimatedProceeds` 数据库字段及安全迁移，用于隔离卖出成本、正式净值估算金额和实际到账金额；新增回归覆盖确认日前不结转、确认日自动结转、重复执行不重复扣减、到账后仅补记收益，以及平台精确份额确认。`dotnet build --no-restore` 为 0 警告 0 错误，`PortfolioAccounting.Tests` 全部通过。
+
 ## 2026-07-22
 
 - 资讯(7x24快讯)后端定时预热，闭环「打开即热」：在 `SectorRadarWarmupService` 同一预热周期里顺带自 ping `GET {SelfBaseUrl}/api/fund/news?mode=global&force=true`，复用 `GetNews` 的 `NewsV3` 多级缓存重建逻辑；仅预热公开 global 模式(username 空)，holding 模式依赖 username 由前端 30min localStorage 兜底。前置：因 news 原不在 JWT 免鉴白名单，自 ping 无 token 会被中间件返回 401，故在 `Program.cs` 白名单加 `path.StartsWith("/api/fund/news")`（与 sectors/global-indices 并列，对前端零副作用——控制器无 [Authorize]，带不带 token 返回一致）。稳态由 6h 内存 stale 兜底不撞 503，单次失败不崩溃下周期重试。主理人逐行核对 diff + 复跑 build 0 错误，QA 静态复核 NoOne 通过。（`Program.cs`、`Services/SectorRadarWarmupService.cs`）

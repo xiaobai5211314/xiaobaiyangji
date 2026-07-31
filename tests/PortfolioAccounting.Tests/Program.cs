@@ -719,6 +719,31 @@ if (!PortfolioSettlementService.ConfirmPendingBuyIfDue(manualAddFund, "2026-06-2
 Equal(0.00m, PortfolioAccounting.Money(manualAddFund.PendingBuyAmount), "manualAdd.confirmed.pendingAmountCleared");
 Equal(11000.00m, PortfolioAccounting.Money(PortfolioSettlementService.GetEffectiveShares(manualAddFund, "2026-06-22")), "manualAdd.confirmed.allSharesEffective");
 
+var platformConfirmedBuy = new MyFundConfig
+{
+    HoldAmount = 12000,
+    HoldAmountPrecise = 12000m,
+    CostAmount = 12000,
+    CostAmountSource = PortfolioSettlementService.CostSourcePurchaseAmount,
+    HoldShares = 10000,
+    PendingBuyAmount = 2000,
+    PendingTradeDate = "2026-06-18",
+    PendingConfirmDate = "2026-06-22",
+    PendingTradeStatus = "pending_buy",
+    LastAddAmount = 2000
+};
+if (!PortfolioSettlementService.ConfirmPendingBuyWithPlatformShares(
+        platformConfirmedBuy,
+        999.987654,
+        2000,
+        "2026-06-22"))
+    throw new InvalidOperationException("manualAdd.platformConfirmed: expected platform shares to confirm the pending buy");
+Equal(10999.987654m, Convert.ToDecimal(platformConfirmedBuy.HoldShares), "manualAdd.platformConfirmed.exactShares");
+Equal(0.00m, PortfolioAccounting.Money(platformConfirmedBuy.PendingBuyAmount), "manualAdd.platformConfirmed.pendingCleared");
+if (platformConfirmedBuy.PendingTradeStatus != "confirmed"
+    || platformConfirmedBuy.HoldSharesSource != PortfolioSettlementService.ShareSourcePurchaseConfirmed)
+    throw new InvalidOperationException("manualAdd.platformConfirmed.provenance: confirmation source was not persisted");
+
 var july13BeforeCutoff = FundTradeTiming.Resolve(new DateTime(2026, 7, 13), false, "示例混合基金");
 if (july13BeforeCutoff.TradeDate != "2026-07-13" || july13BeforeCutoff.ConfirmDate != "2026-07-14")
     throw new InvalidOperationException($"trade.normal.20260713.beforeCutoff: expected T=2026-07-13 confirm=2026-07-14, actual T={july13BeforeCutoff.TradeDate} confirm={july13BeforeCutoff.ConfirmDate}");
@@ -821,9 +846,63 @@ Equal(7500.00m, PortfolioAccounting.Money(pendingSellFund.HoldAmount), "manualSe
 Equal(7500.00m, PortfolioAccounting.Money(pendingSellFund.HoldShares), "manualSell.confirmed.sharesReducedOnce");
 Equal(7500.00m, PortfolioAccounting.Money(pendingSellFund.CostAmount), "manualSell.confirmed.costReducedOnce");
 Equal(0.00m, PortfolioAccounting.Money(pendingSellFund.PendingSellShares), "manualSell.confirmed.pendingSharesCleared");
-Equal(1.25m, PortfolioAccounting.Money(pendingSellFund.PlatformHoldingAdjustment), "manualSell.partial.keepsPlatformAdjustment");
+Equal(-198.75m, PortfolioAccounting.Money(pendingSellFund.PlatformHoldingAdjustment), "manualSell.partial.offsetsRealizedProfitFromHoldingProfit");
 if (pendingSellFund.LastTradeDate != "2026-06-18")
     throw new InvalidOperationException($"manualSell.confirmed.tradeDate: expected original 2026-06-18, actual {pendingSellFund.LastTradeDate}");
+
+var autoConfirmedSellFund = new MyFundConfig
+{
+    HoldAmount = 10000,
+    HoldAmountPrecise = 10000m,
+    CostAmount = 8000,
+    HoldShares = 10000
+};
+settlement.ReducePosition(autoConfirmedSellFund, 2500, null, "2026-06-18", "2026-06-19");
+if (PortfolioSettlementService.ConfirmPendingSellSharesIfDue(autoConfirmedSellFund, "2026-06-18", 1.08))
+    throw new InvalidOperationException("manualSell.autoConfirm.beforeDue: estimated confirmation date must not settle early");
+if (!PortfolioSettlementService.ConfirmPendingSellSharesIfDue(autoConfirmedSellFund, "2026-06-19", 1.08))
+    throw new InvalidOperationException("manualSell.autoConfirm.due: official trade NAV should settle the sold shares");
+Equal(7500.00m, Convert.ToDecimal(autoConfirmedSellFund.HoldShares), "manualSell.autoConfirm.remainingShares");
+Equal(8100.00m, PortfolioAccounting.Money(autoConfirmedSellFund.HoldAmount), "manualSell.autoConfirm.remainingTradeDateAmount");
+Equal(6000.00m, PortfolioAccounting.Money(autoConfirmedSellFund.CostAmount), "manualSell.autoConfirm.remainingCost");
+Equal(2000.00m, PortfolioAccounting.Money(autoConfirmedSellFund.PendingSellCostAmount), "manualSell.autoConfirm.soldCostPreserved");
+Equal(2700.00m, PortfolioAccounting.Money(autoConfirmedSellFund.PendingSellEstimatedProceeds), "manualSell.autoConfirm.estimatedProceeds");
+Equal(0.00m, PortfolioAccounting.Money(autoConfirmedSellFund.RealizedProfit), "manualSell.autoConfirm.noInventedRealizedProfit");
+if (autoConfirmedSellFund.PendingTradeStatus != "shares_confirmed")
+    throw new InvalidOperationException($"manualSell.autoConfirm.status: expected shares_confirmed, actual {autoConfirmedSellFund.PendingTradeStatus}");
+if (PortfolioSettlementService.ConfirmPendingSellSharesIfDue(autoConfirmedSellFund, "2026-06-20", 1.08))
+    throw new InvalidOperationException("manualSell.autoConfirm.idempotent: settled shares must not be deducted twice");
+
+var reconciledSellProfit = settlement.ReducePosition(
+    autoConfirmedSellFund,
+    2500,
+    2680,
+    "2026-06-18",
+    "2026-06-19");
+Equal(680.00m, PortfolioAccounting.Money(reconciledSellProfit), "manualSell.proceeds.realizedProfit");
+Equal(7500.00m, Convert.ToDecimal(autoConfirmedSellFund.HoldShares), "manualSell.proceeds.sharesNotReducedTwice");
+Equal(8100.00m, PortfolioAccounting.Money(autoConfirmedSellFund.HoldAmount), "manualSell.proceeds.amountNotReducedTwice");
+Equal(680.00m, PortfolioAccounting.Money(autoConfirmedSellFund.RealizedProfit), "manualSell.proceeds.realizedStoredOnce");
+Equal(-680.00m, PortfolioAccounting.Money(autoConfirmedSellFund.PlatformHoldingAdjustment), "manualSell.proceeds.holdingProfitNotInflated");
+Equal(0.00m, PortfolioAccounting.Money(autoConfirmedSellFund.PendingSellShares), "manualSell.proceeds.pendingCleared");
+
+var ocrConfirmedSellFund = new MyFundConfig
+{
+    HoldAmount = 10000,
+    HoldAmountPrecise = 10000m,
+    CostAmount = 8000,
+    HoldShares = 10000
+};
+settlement.ReducePosition(ocrConfirmedSellFund, 2500, null, "2026-06-18", "2026-06-19");
+if (!PortfolioSettlementService.ConfirmPendingSellFromPlatformHolding(
+        ocrConfirmedSellFund,
+        7500,
+        8025.55,
+        "2026-06-19"))
+    throw new InvalidOperationException("manualSell.ocrHolding: confirmed platform shares should settle the pending sell");
+Equal(8025.55m, PortfolioAccounting.Money(ocrConfirmedSellFund.HoldAmount), "manualSell.ocrHolding.platformAmount");
+Equal(7500.00m, Convert.ToDecimal(ocrConfirmedSellFund.HoldShares), "manualSell.ocrHolding.platformShares");
+Equal(0.00m, PortfolioAccounting.Money(ocrConfirmedSellFund.RealizedProfit), "manualSell.ocrHolding.noInventedRealizedProfit");
 
 var fullSellFund = new MyFundConfig
 {

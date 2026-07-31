@@ -7,10 +7,12 @@ namespace 小白养基.Services
         public const string ShareSourceOcrAssetDetail = "ocr_asset_detail";
         public const string ShareSourceOcrNavDerived = "ocr_nav_derived";
         public const string ShareSourcePurchaseNavDerived = "purchase_nav_derived";
+        public const string ShareSourcePurchaseConfirmed = "purchase_confirmed";
         public const string ShareSourceManual = "manual";
         public const string CostSourceOcrAssetDetail = "ocr_asset_detail";
         public const string CostSourceOcrHoldingDerived = "ocr_holding_derived";
         public const string CostSourcePurchaseAmount = "purchase_amount";
+        public const string CostSourcePurchaseConfirmed = "purchase_confirmed";
         public const string CostSourceManual = "manual";
 
         public static DateTime ChinaNow() => DateTime.UtcNow.AddHours(8);
@@ -279,6 +281,49 @@ namespace 小白养基.Services
             return true;
         }
 
+        public static bool ConfirmPendingBuyWithPlatformShares(
+            MyFundConfig fund,
+            double confirmedShares,
+            double? confirmedPurchaseAmount,
+            string confirmDate)
+        {
+            if (!string.Equals(fund.PendingTradeStatus, "pending_buy", StringComparison.OrdinalIgnoreCase)
+                || fund.PendingBuyAmount <= 0
+                || confirmedShares <= 0)
+            {
+                return false;
+            }
+
+            if (confirmedPurchaseAmount.GetValueOrDefault() > 0
+                && Math.Abs(confirmedPurchaseAmount.Value - fund.PendingBuyAmount) > 0.01)
+            {
+                throw new InvalidOperationException(
+                    $"确认买入金额必须与待确认金额 {fund.PendingBuyAmount:F2} 一致。");
+            }
+
+            double pendingDerivedShares = Math.Max(0, fund.PendingBuyShares);
+            double priorShares = Math.Max(0, fund.HoldShares - pendingDerivedShares);
+            bool allSharesConfirmed = fund.HoldSharesAreConfirmed || priorShares <= 0.000001;
+
+            fund.HoldShares = Math.Round(priorShares + confirmedShares, 6);
+            fund.HoldSharesAreConfirmed = allSharesConfirmed;
+            fund.HoldSharesSource = ShareSourcePurchaseConfirmed;
+            fund.PendingBuyAmount = 0;
+            fund.PendingBuyShares = 0;
+            fund.PendingTradeStatus = "confirmed";
+            fund.PendingConfirmDate = confirmDate;
+            fund.PendingSource = "platform_transaction_confirmed";
+            if (fund.LastAddAmount > 0) fund.LastAddAmount = 0;
+
+            if (confirmedPurchaseAmount.GetValueOrDefault() > 0
+                && string.Equals(fund.CostAmountSource, CostSourcePurchaseAmount, StringComparison.OrdinalIgnoreCase))
+            {
+                fund.CostAmountSource = CostSourcePurchaseConfirmed;
+            }
+
+            return true;
+        }
+
         public bool ApplyOneDaySettlement(
             MyFundConfig fund,
             double actualRate,
@@ -342,6 +387,8 @@ namespace 小白养基.Services
             fund.PendingBuyShares = 0;
             fund.PendingSellAmount = 0;
             fund.PendingSellShares = 0;
+            fund.PendingSellCostAmount = 0;
+            fund.PendingSellEstimatedProceeds = 0;
             fund.PendingTradeDate = tradeDate;
             fund.PendingTradeTime = ChinaNow().ToString("HH:mm:ss");
             fund.PendingTradeStatus = "pending_buy";
@@ -366,9 +413,132 @@ namespace 小白养基.Services
         public static double GetSoldCost(MyFundConfig fund)
             => IsPendingRedeem(fund) ? Math.Max(0, fund.PendingSellAmount) : 0;
 
+        public static bool ConfirmPendingSellSharesIfDue(
+            MyFundConfig fund,
+            string settleDate,
+            double? tradeNav)
+        {
+            if (!IsPendingRedeem(fund)
+                || string.IsNullOrWhiteSpace(fund.PendingConfirmDate)
+                || string.CompareOrdinal(fund.PendingConfirmDate, settleDate) > 0
+                || !tradeNav.HasValue
+                || tradeNav.Value <= 0)
+            {
+                return false;
+            }
+
+            double remainingShares = Math.Max(0, fund.HoldShares - fund.PendingSellShares);
+            double remainingAmount = Math.Round(remainingShares * tradeNav.Value, 4);
+            double estimatedProceeds = Math.Round(fund.PendingSellShares * tradeNav.Value, 2);
+            return ApplyPendingSellShareSettlement(
+                fund,
+                remainingShares,
+                remainingAmount,
+                estimatedProceeds,
+                settleDate,
+                "official_nav_share_settlement");
+        }
+
+        public static bool ConfirmPendingSellFromPlatformHolding(
+            MyFundConfig fund,
+            double confirmedRemainingShares,
+            double confirmedHoldAmount,
+            string confirmDate)
+        {
+            if (!IsPendingRedeem(fund)
+                || confirmedRemainingShares < 0
+                || confirmedHoldAmount < 0)
+            {
+                return false;
+            }
+
+            double expectedRemainingShares = Math.Max(0, fund.HoldShares - fund.PendingSellShares);
+            if (Math.Abs(expectedRemainingShares - confirmedRemainingShares) > 0.0001)
+            {
+                return false;
+            }
+
+            return ApplyPendingSellShareSettlement(
+                fund,
+                confirmedRemainingShares,
+                confirmedHoldAmount,
+                estimatedProceeds: 0,
+                confirmDate,
+                "ocr_asset_detail_sell_settlement");
+        }
+
+        private static bool ApplyPendingSellShareSettlement(
+            MyFundConfig fund,
+            double remainingShares,
+            double remainingAmount,
+            double estimatedProceeds,
+            string confirmDate,
+            string source)
+        {
+            double oldShares = fund.HoldShares;
+            if (oldShares <= 0 || fund.PendingSellShares <= 0) return false;
+
+            double soldCost = fund.CostAmount / oldShares * fund.PendingSellShares;
+            fund.PendingSellCostAmount = Math.Round(soldCost, 2);
+            fund.PendingSellEstimatedProceeds = Math.Round(Math.Max(0, estimatedProceeds), 2);
+            fund.PendingSellAmount = 0;
+            fund.HoldShares = Math.Round(Math.Max(0, remainingShares), 6);
+            fund.CostAmount = Math.Round(Math.Max(0, fund.CostAmount - soldCost), 2);
+            SetHoldAmount(fund, PortfolioAccounting.LedgerMoney(remainingAmount));
+            fund.PendingTradeStatus = "shares_confirmed";
+            fund.PendingConfirmDate = confirmDate;
+            fund.PendingSource = source;
+            fund.LastAddAmount = 0;
+
+            if (fund.HoldShares <= 0)
+            {
+                fund.CostAmount = 0;
+                fund.CostAmountIsConfirmed = false;
+                fund.CostAmountSource = null;
+                fund.HoldSharesAreConfirmed = false;
+                fund.HoldSharesSource = null;
+                fund.PlatformHoldingAdjustment = 0;
+                SetHoldAmount(fund, 0m);
+            }
+
+            return true;
+        }
+
         public double ReducePosition(MyFundConfig fund, double reduceShares, double? reduceAmount, string tradeDate, string? confirmDate = null)
         {
             if (reduceShares <= 0) throw new ArgumentOutOfRangeException(nameof(reduceShares), "减仓份额必须大于 0。");
+
+            bool confirmsSharesSettledSell = reduceAmount.GetValueOrDefault() > 0
+                && string.Equals(fund.PendingTradeStatus, "shares_confirmed", StringComparison.OrdinalIgnoreCase)
+                && fund.PendingSellShares > 0;
+            if (confirmsSharesSettledSell)
+            {
+                if (Math.Abs(reduceShares - fund.PendingSellShares) > 0.0001)
+                    throw new InvalidOperationException($"到账份额必须与已确认赎回份额 {fund.PendingSellShares:F4} 一致。");
+
+                double profit = reduceAmount!.Value - fund.PendingSellCostAmount;
+                fund.RealizedProfit = Math.Round(fund.RealizedProfit + profit, 2);
+                if (fund.HoldShares > 0)
+                {
+                    fund.PlatformHoldingAdjustment = Math.Round(fund.PlatformHoldingAdjustment - profit, 2);
+                }
+                else
+                {
+                    fund.PlatformHoldingAdjustment = 0;
+                }
+
+                fund.PendingSellAmount = 0;
+                fund.PendingSellShares = 0;
+                fund.PendingSellCostAmount = 0;
+                fund.PendingSellEstimatedProceeds = 0;
+                fund.PendingTradeStatus = "confirmed";
+                fund.PendingConfirmDate = string.IsNullOrWhiteSpace(confirmDate)
+                    ? fund.PendingConfirmDate
+                    : confirmDate;
+                fund.PendingSource = "platform_proceeds_confirmed";
+                return Math.Round(profit, 2);
+            }
+
             if (fund.HoldShares <= 0) throw new InvalidOperationException("当前基金未记录有效份额，无法按份额减仓。");
 
             bool confirmsPendingSell = reduceAmount.GetValueOrDefault() > 0
@@ -414,6 +584,10 @@ namespace 小白养基.Services
                     SetHoldAmount(fund, 0m);
                 }
                 fund.RealizedProfit = Math.Round(fund.RealizedProfit + profit, 2);
+                if (fund.HoldShares > 0)
+                {
+                    fund.PlatformHoldingAdjustment = Math.Round(fund.PlatformHoldingAdjustment - profit, 2);
+                }
 
                 if (fund.LastTradeDate == tradeDate)
                     fund.LastAddAmount = Math.Round(fund.LastAddAmount - confirmedAmount, 2);
@@ -424,6 +598,8 @@ namespace 小白养基.Services
                 }
                 fund.PendingSellAmount = 0;
                 fund.PendingSellShares = 0;
+                fund.PendingSellCostAmount = 0;
+                fund.PendingSellEstimatedProceeds = 0;
                 if (fund.PendingTradeStatus == "pending_sell")
                 {
                     fund.PendingTradeStatus = "confirmed";
@@ -440,6 +616,8 @@ namespace 小白养基.Services
                 // Keep confirmed shares/assets unchanged so the later confirmation can settle once.
                 fund.PendingSellAmount = Math.Round(Convert.ToDouble(unitAmount * Convert.ToDecimal(reduceShares)), 2);
                 fund.PendingSellShares = Math.Round(reduceShares, 4);
+                fund.PendingSellCostAmount = Math.Round(soldCost, 2);
+                fund.PendingSellEstimatedProceeds = 0;
                 fund.PendingTradeDate = tradeDate;
                 fund.PendingTradeTime = ChinaNow().ToString("HH:mm:ss");
                 fund.PendingTradeStatus = "pending_sell";
