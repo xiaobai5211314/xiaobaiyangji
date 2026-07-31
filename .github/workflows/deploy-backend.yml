@@ -64,9 +64,9 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          CSPROJ="$(find . -maxdepth 4 -name '*.csproj' | head -n 1)"
-          if [ -z "$CSPROJ" ]; then
-            echo "没找到 .csproj"
+          CSPROJ="./小白养基.csproj"
+          if [ ! -f "$CSPROJ" ]; then
+            echo "没找到正式后端项目：$CSPROJ"
             exit 1
           fi
           echo "CSPROJ=$CSPROJ" >> "$GITHUB_ENV"
